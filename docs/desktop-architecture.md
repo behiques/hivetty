@@ -1156,10 +1156,20 @@ In a dev build a link reaches a running app only: macOS ignores `setAsDefaultPro
   committed in `keys.ts` and refreshed by `pnpm licence:keys`. Prod's list stays empty until the prod cloud
   exists, so a packaged build accepts no lease.
 - `licence-state.ts` reports `unlicensed`, `licensed`, `grace` (the last renewal failed, the lease still
-  holds) or `lapsed {reason}`. Only `lapsed` will enforce (PR 2); a refusal lapses at once, and the lease's
-  own length is the offline grace.
+  holds) or `lapsed {reason}`. Only `lapsed` enforces; a refusal lapses at once, and the lease's own length
+  is the offline grace.
 - It renews at launch, every 24 h, on wake (`powerMonitor` `resume`), on `licence:refresh`, every 5 min while
   in grace, and every 5 s for up to 15 min under `licence:watch-purchase`. One renewal at a time, and one
   from before a sign-out never lands.
 - Main reads `licence()` (and `onLicenceChange`); the licence calls answer from `LICENCE_CALLS` and are
   `PROCESS_LOCAL`, `licence:changed` is `LOCAL_ONLY_EVENTS`; the renderer reads `useLicence()`.
+- Entering `lapsed` stops work in place, and leaving it continues that work (`suspend.ts`, installed in
+  `ipc/index.ts`). The lapse flag goes up first. Then run containers get `<runtime> pause`, the pty-host gets
+  `suspend-all` (a descendant walk, SIGSTOP to each process group), and each headless run's group gets SIGSTOP
+  (runs spawn detached, so each leads one). While lapsed, spawns, restarts and runs are refused, and a due
+  schedule re-arms without running, so renewal never catches it up. Leaving `lapsed` sends `resume-all` with a
+  notice written into every terminal, SIGCONT to the runs and `unpause`, then lowers the flag. A stopped run's
+  stall watchdog waits rather than firing. Quit releases everything first (`releaseForQuit`, capped at 5 s),
+  and the pty-host's own `shutdown` continues before it kills. Limits: a setsid'd or double-forked process
+  escapes the walk. An interactive container session only has its `docker exec` client stopped (D3). In
+  `pnpm dev`, a terminal Ctrl-C no longer reaches headless runs. `unlicensed` enforces nothing until HIVE-265.

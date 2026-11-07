@@ -83,6 +83,14 @@ export function createPtyHost({
         sessions.resume(command.sessionId);
         return;
 
+      case 'suspend-all':
+        void sessions.suspendAll();
+        return;
+
+      case 'resume-all':
+        void sessions.resumeAll(command.notice);
+        return;
+
       case 'shutdown':
         /**
          * Kill everything, *then* exit.
@@ -92,16 +100,21 @@ export function createPtyHost({
          * whole path exists to prevent. The supervisor is holding the app's
          * quit open while this runs, and will force-kill if it takes too long.
          */
-        void Promise.resolve(sessions.killAll()).then(
-          () => exit(0),
-          (cause: unknown) => {
-            emit({
-              type: 'error',
-              message: `shutdown failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-            });
-            exit(1);
-          },
-        );
+        // Continue first (HIVE-267): a stopped process cannot run its SIGHUP handler.
+        // A failed continue must not cost the kill.
+        void Promise.resolve(sessions.resumeAll())
+          .catch(() => undefined)
+          .then(() => sessions.killAll())
+          .then(
+            () => exit(0),
+            (cause: unknown) => {
+              emit({
+                type: 'error',
+                message: `shutdown failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+              });
+              exit(1);
+            },
+          );
         return;
     }
   });

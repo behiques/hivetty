@@ -197,6 +197,18 @@ export function createSessionManager(
     emit({ type: 'error', sessionId, message });
   }
 
+  /**
+   * HIVE-267: the groups a licence lapse stopped, in the order it stopped them. SIGCONT goes to exactly these,
+   * in the same order, so a process that could not fork while stopped is all there is to continue.
+   * shortcut: a process that leaves the shell's tree (setsid, or a double fork reparented to launchd) escapes
+   * the walk and keeps running; upgrade to a per-session cgroup-like handle if that ever matters.
+   */
+  let stoppedGroups: number[] = [];
+  /** Suspend and resume run one at a time: a resume during suspend's `ps` must not leave groups stopped. */
+  let suspension: Promise<void> = Promise.resolve();
+
+  const notice = (text: string): string => `\r\n\x1b[2m[HiveTTY] ${text}\x1b[0m\r\n`;
+
   /** Signal a group, tolerating a process that is already gone. */
   function signalGroup(pgid: number, sig: NodeJS.Signals): void {
     try {
@@ -431,6 +443,18 @@ export function createSessionManager(
     void settled.finally(() => inFlight.delete(settled));
   }
 
+  /**
+   * HIVE-267: a session killed while a lapse has it stopped. The hangup is queued, not delivered, until the
+   * group continues, so continue it right after the signal and forget it. Otherwise the shell never hangs up
+   * its jobs and the teardown waits out its whole grace before SIGKILL.
+   */
+  function continueStopped(targets: readonly Session[], snapshot: readonly Descendant[]): void {
+    if (stoppedGroups.length === 0) return;
+    const mine = new Set([...targets.map((session) => session.pid), ...snapshot.map((d) => d.pgid)]);
+    for (const pgid of stoppedGroups) if (mine.has(pgid)) signalGroup(pgid, 'SIGCONT');
+    stoppedGroups = stoppedGroups.filter((pgid) => !mine.has(pgid));
+  }
+
   /** The one teardown both `kill` and `killAll` run. */
   async function teardown(
     targets: readonly Session[],
@@ -463,6 +487,7 @@ export function createSessionManager(
       });
 
     for (const session of targets) signalGroup(session.pid, sig);
+    continueStopped(targets, snapshot);
 
     await waitForExit(targets, deadline);
 
@@ -704,6 +729,37 @@ export function createSessionManager(
        * teardown, so the set only drains.
        */
       while (inFlight.size > 0) await Promise.all([...inFlight]);
+    },
+
+    suspendAll() {
+      suspension = suspension.then(async () => {
+        if (stoppedGroups.length > 0) return;
+        const shells = [...sessions.values()]
+          .filter((session) => session.status === 'live')
+          .map((session) => session.pid);
+        if (shells.length === 0) return;
+        const tree = await control.descendants(shells).catch(() => [] as Descendant[]);
+        const groups = [...new Set([...shells, ...tree.map((d) => d.pgid)])];
+        for (const pgid of groups) signalGroup(pgid, 'SIGSTOP');
+        stoppedGroups = groups;
+      });
+      return suspension;
+    },
+
+    resumeAll(text) {
+      suspension = suspension.then(() => {
+        if (stoppedGroups.length === 0) return;
+        for (const pgid of stoppedGroups) signalGroup(pgid, 'SIGCONT');
+        stoppedGroups = [];
+        if (text === undefined) return;
+        const chunk = notice(text);
+        for (const session of sessions.values()) {
+          if (session.status !== 'live') continue;
+          session.buffer.push(chunk);
+          session.emit({ type: 'data', sessionId: session.sessionId, chunk });
+        }
+      });
+      return suspension;
     },
 
     replay(sessionId) {

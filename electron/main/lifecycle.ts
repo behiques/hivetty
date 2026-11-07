@@ -4,9 +4,13 @@ import { APP_NAME } from '@shared/app-name';
 
 import { showAboutWindow } from './about';
 import { appWindows, primaryWindow } from './aux-windows';
+import { releaseForQuit } from './licence/suspend';
 import { installApplicationMenu } from './menu';
 import { runShutdown } from './shutdown';
 import { checkForUpdatesInteractively } from './updates';
+
+/** HIVE-267: how long quit waits for a licence suspension to be released before it shuts down anyway. */
+const RELEASE_BUDGET_MS = 5_000;
 
 /**
  * App lifecycle wiring (story 081).
@@ -183,6 +187,13 @@ export function registerLifecycle({
     if (quitting) return;
     quitting = true;
     event.preventDefault();
-    void runShutdown().finally(() => app.quit());
+    /*
+      HIVE-267: continue anything a licence lapse stopped *before* the shutdown hooks run. They run concurrently,
+      and a stopped process cannot act on SIGTERM or SIGHUP until it is continued. Capped, so a hung `docker
+      unpause` cannot hold the quit.
+    */
+    const budget = new Promise<void>((resolve) => setTimeout(resolve, RELEASE_BUDGET_MS));
+    const released = Promise.race([releaseForQuit(), budget]);
+    void released.then(() => runShutdown()).finally(() => app.quit());
   });
 }

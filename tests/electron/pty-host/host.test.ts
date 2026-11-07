@@ -61,6 +61,8 @@ function recordingSessions() {
     pause: vi.fn(),
     resume: vi.fn(),
     killAll: vi.fn(),
+    suspendAll: vi.fn(),
+    resumeAll: vi.fn(),
   };
 }
 
@@ -180,5 +182,56 @@ describe('shutdown', () => {
     expect(sent).toEqual([
       { type: 'error', message: expect.stringContaining('pty would not die') },
     ]);
+  });
+});
+
+describe('suspend-all / resume-all (HIVE-267)', () => {
+  it('routes suspend-all and resume-all to the sessions, carrying the notice', () => {
+    const { port, send } = fakePort();
+    const sessions = recordingSessions();
+    createPtyHost({ port, sessions, exit: vi.fn() });
+
+    send({ type: 'suspend-all' });
+    send({ type: 'resume-all', notice: 'n' });
+    send({ type: 'resume-all' });
+
+    expect(sessions.suspendAll).toHaveBeenCalledTimes(1);
+    expect(sessions.resumeAll.mock.calls).toEqual([['n'], [undefined]]);
+  });
+
+  it('shutdown continues every stopped group, without a notice, before it kills', async () => {
+    const { port, send } = fakePort();
+    const sessions = recordingSessions();
+    const order: string[] = [];
+    sessions.resumeAll.mockImplementation((...args: unknown[]) => {
+      order.push(`resumeAll:${String(args[0])}`);
+      return Promise.resolve();
+    });
+    sessions.killAll.mockImplementation(() => {
+      order.push('killAll');
+      return Promise.resolve();
+    });
+    const exit = vi.fn(() => order.push('exit'));
+    createPtyHost({ port, sessions, exit });
+
+    send({ type: 'shutdown' });
+    await vi.waitFor(() => expect(exit).toHaveBeenCalled());
+
+    expect(order).toEqual(['resumeAll:undefined', 'killAll', 'exit']);
+  });
+
+  it('a continue that fails still kills and exits cleanly', async () => {
+    const { port, send } = fakePort();
+    const sessions = recordingSessions();
+    sessions.resumeAll.mockRejectedValue(new Error('ps exploded'));
+    sessions.killAll.mockResolvedValue(undefined);
+    const exit = vi.fn();
+    createPtyHost({ port, sessions, exit });
+
+    send({ type: 'shutdown' });
+    await vi.waitFor(() => expect(exit).toHaveBeenCalled());
+
+    expect(sessions.killAll).toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledWith(0);
   });
 });

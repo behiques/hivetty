@@ -85,6 +85,17 @@ interface ResumeCommand {
   sessionId: string;
 }
 
+/** HIVE-267: SIGSTOP every session's process groups (a licence lapse). Not `pause`, which is flow control. */
+interface SuspendAllCommand {
+  type: 'suspend-all';
+}
+
+/** HIVE-267: SIGCONT what `suspend-all` stopped, then write `notice` into each terminal. */
+interface ResumeAllCommand {
+  type: 'resume-all';
+  notice?: string;
+}
+
 /** Kill every session and exit. Sent on app quit (story 081's shutdown hook). */
 interface ShutdownCommand {
   type: 'shutdown';
@@ -98,6 +109,8 @@ export type HostCommand =
   | KillCommand
   | PauseCommand
   | ResumeCommand
+  | SuspendAllCommand
+  | ResumeAllCommand
   | ShutdownCommand
   // Both halves of the heartbeat travel in both directions, so either side can
   // ask and either side can answer. Without `PongMessage` here, main could

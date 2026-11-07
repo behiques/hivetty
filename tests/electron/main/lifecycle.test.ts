@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Lifecycle behaviour, with `electron` mocked (story 081).
@@ -44,6 +44,7 @@ const { registerLifecycle, resetQuitting } = await import(
 const { onShutdown, resetShutdownHooks } = await import(
   '../../../electron/main/shutdown'
 );
+const { installSuspender } = await import('../../../electron/main/licence/suspend');
 
 /** Fire every handler registered for an event. */
 const fire = async (event: string, ...args: unknown[]) => {
@@ -302,6 +303,60 @@ describe('before-quit', () => {
 
     // Re-entry must NOT cancel the quit, or the app can never exit.
     expect(second.preventDefault).not.toHaveBeenCalled();
+  });
+});
+
+describe('before-quit releases a licence suspension first (HIVE-267)', () => {
+  const suspenderReleasing = (releaseForQuit: () => Promise<void>) => {
+    installSuspender({ onState: async () => undefined, lapsed: () => true, releaseForQuit, releaseNow: () => undefined });
+  };
+
+  afterEach(() => {
+    installSuspender(null);
+    vi.useRealTimers();
+  });
+
+  it('continues stopped work before any shutdown hook starts', async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    suspenderReleasing(
+      () =>
+        new Promise<void>((resolve) => {
+          release = () => {
+            order.push('released');
+            resolve();
+          };
+        }),
+    );
+    onShutdown(() => {
+      order.push('hook');
+    });
+
+    await register({ createWindow: vi.fn(), platform: 'darwin' });
+    await fire('before-quit', { preventDefault: vi.fn() });
+    await Promise.resolve();
+    expect(order).toEqual([]);
+
+    release();
+    await vi.waitFor(() => expect(appMock.quit).toHaveBeenCalled());
+    expect(order).toEqual(['released', 'hook']);
+  });
+
+  it('a release that never settles still lets quit proceed after its budget', async () => {
+    vi.useFakeTimers();
+    const hook = vi.fn();
+    suspenderReleasing(() => new Promise<void>(() => undefined));
+    onShutdown(hook);
+
+    await register({ createWindow: vi.fn(), platform: 'darwin' });
+    await fire('before-quit', { preventDefault: vi.fn() });
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(hook).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(hook).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(appMock.quit).toHaveBeenCalled();
   });
 });
 

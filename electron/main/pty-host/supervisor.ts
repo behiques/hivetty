@@ -83,6 +83,10 @@ export interface PtyHostSupervisor {
    */
   pause(sessionId: string): void;
   resume(sessionId: string): void;
+  /** HIVE-267: stop every session's process groups (a licence lapse). A no-op with no host. */
+  suspendAll(): void;
+  /** HIVE-267: continue what `suspendAll` stopped, writing `notice` into each terminal. A no-op with no host. */
+  resumeAll(notice?: string): void;
 
   onData(listener: Listener<DataMessage>): () => void;
   onExit(listener: Listener<ExitMessage>): () => void;
@@ -370,6 +374,14 @@ export function createPtyHostSupervisor(
     resume(sessionId) {
       if (!sessions.has(sessionId)) return;
       post({ type: 'resume', sessionId });
+    },
+
+    suspendAll() {
+      post({ type: 'suspend-all' });
+    },
+
+    resumeAll(notice) {
+      post({ type: 'resume-all', ...(notice === undefined ? {} : { notice }) });
     },
 
     onData: data.add,

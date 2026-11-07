@@ -63,6 +63,53 @@ vi.mock('electron', () => ({
   session: { defaultSession: { webRequest: { onHeadersReceived: vi.fn() } } },
 }));
 
+/** HIVE-267: what the suspender asked of the pty-host. */
+const hostSuspendAll = vi.hoisted(() => vi.fn());
+const hostResumeAll = vi.hoisted(() => vi.fn());
+
+/** HIVE-267: the licence the composition reads, and the listener it subscribed. */
+const licenceSeam = vi.hoisted(() => ({
+  state: { kind: 'unlicensed' } as import('../../../../electron/shared/licence-contract').LicenceState,
+  listeners: new Set<(state: import('../../../../electron/shared/licence-contract').LicenceState) => void>(),
+}));
+
+vi.mock('../../../../electron/main/licence', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../electron/main/licence')>()),
+  licence: () => licenceSeam.state,
+  onLicenceChange: (listener: (state: import('../../../../electron/shared/licence-contract').LicenceState) => void) => {
+    licenceSeam.listeners.add(listener);
+    return () => licenceSeam.listeners.delete(listener);
+  },
+}));
+
+/** HIVE-267: the deps the composition handed the real scheduler and sessions, captured on the way through. */
+const passedThrough = vi.hoisted(() => ({
+  scheduler: undefined as { lapsed?: () => boolean } | undefined,
+  sessions: undefined as { lapsed?: () => boolean } | undefined,
+}));
+
+vi.mock('../../../../electron/main/agents/scheduler', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../../electron/main/agents/scheduler')>();
+  return {
+    ...real,
+    createScheduler: (deps: Parameters<typeof real.createScheduler>[0]) => {
+      passedThrough.scheduler = deps;
+      return real.createScheduler(deps);
+    },
+  };
+});
+
+vi.mock('../../../../electron/main/sessions', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../../electron/main/sessions')>();
+  return {
+    ...real,
+    createSessions: (deps: Parameters<typeof real.createSessions>[0]) => {
+      passedThrough.sessions = deps;
+      return real.createSessions(deps);
+    },
+  };
+});
+
 vi.mock('../../../../electron/main/pty-host', () => ({
   registerPtyHost: () => ({
     spawn: vi.fn(),
@@ -71,6 +118,8 @@ vi.mock('../../../../electron/main/pty-host', () => ({
     kill: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
+    suspendAll: hostSuspendAll,
+    resumeAll: hostResumeAll,
     onData: () => () => {},
     onExit: () => () => {},
     onSpawned: () => () => {},
@@ -208,6 +257,7 @@ const trackerRun = vi.fn(() => ({ started: true as const, run: 'run-1' }));
 const trackerKill = vi.fn(() => true);
 const trackerKillAll = vi.fn();
 const trackerCloseAll = vi.fn();
+const trackerSignalAll = vi.fn();
 let liveRuns: string[] = [];
 /** What `liveRuns(name)` answers, for whichever name is asked (HIVE-128). */
 let liveRunSummaries: LiveRunSummary[] = [];
@@ -223,6 +273,8 @@ vi.mock('../../../../electron/main/agents/runs', () => ({
       closeAll: trackerCloseAll,
       live: () => liveRuns,
       liveRuns: (_name: string) => liveRunSummaries,
+      signalAll: trackerSignalAll,
+      containers: () => [],
     };
   },
 }));
@@ -1249,5 +1301,67 @@ describe('what the registry was handed (HIVE-115)', () => {
    */
   it('gives it a way to move the run bookkeeping a folder does not hold', () => {
     expect(runtimeOptions?.runFiles).toBeDefined();
+  });
+});
+
+describe('the licence suspender (HIVE-267)', () => {
+  const LAPSED = { kind: 'lapsed', reason: 'offline' } as const;
+  const emit = async (state: import('../../../../electron/shared/licence-contract').LicenceState) => {
+    for (const listener of licenceSeam.listeners) listener(state);
+    await settle();
+  };
+
+  afterEach(() => {
+    licenceSeam.state = { kind: 'unlicensed' };
+  });
+
+  it('hands the run tracker, the scheduler and sessions the one lapse gate', async () => {
+    expect(trackerDeps?.lapsed?.()).toBe(false);
+    expect(passedThrough.scheduler?.lapsed?.()).toBe(false);
+    expect(passedThrough.sessions?.lapsed?.()).toBe(false);
+
+    await emit(LAPSED);
+
+    expect(trackerDeps?.lapsed?.()).toBe(true);
+    expect(passedThrough.scheduler?.lapsed?.()).toBe(true);
+    expect(passedThrough.sessions?.lapsed?.()).toBe(true);
+  });
+
+  it('a lapse stops the pty-host and the runs, and renewal continues them', async () => {
+    await emit(LAPSED);
+    expect(hostSuspendAll).toHaveBeenCalledTimes(1);
+    expect(trackerSignalAll).toHaveBeenCalledWith('SIGSTOP');
+
+    await emit({ kind: 'licensed', plan: 'team', features: [], limits: {}, exp: 1 });
+    expect(hostResumeAll).toHaveBeenCalledWith('Resumed after licence renewal.');
+    expect(trackerSignalAll).toHaveBeenCalledWith('SIGCONT');
+    expect(trackerDeps?.lapsed?.()).toBe(false);
+  });
+
+  it('a launch that is already lapsed refuses from the start', async () => {
+    resetIpcHandlers();
+    licenceSeam.state = LAPSED;
+    registerIpcHandlers();
+    await settle();
+
+    expect(trackerDeps?.lapsed?.()).toBe(true);
+  });
+
+  it('reset continues what a lapse stopped before it closes the runs, then unsubscribes and uninstalls', async () => {
+    await emit(LAPSED);
+    const order: string[] = [];
+    hostResumeAll.mockImplementation(() => order.push('pty:cont'));
+    trackerSignalAll.mockImplementation((signal: string) => order.push(`runs:${signal}`));
+    trackerCloseAll.mockImplementation(() => order.push('closeAll'));
+
+    resetIpcHandlers();
+
+    expect(order).toEqual(['pty:cont', 'runs:SIGCONT', 'closeAll']);
+    expect(licenceSeam.listeners.size).toBe(0);
+    expect(trackerDeps?.lapsed?.()).toBe(false);
+
+    registerIpcHandlers();
+    await settle();
+    expect(licenceSeam.listeners.size).toBe(1);
   });
 });

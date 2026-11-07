@@ -28,4 +28,11 @@ export interface SessionOperations {
   resume(sessionId: string): void;
   /** Kill every session's process group. Awaited on shutdown. */
   killAll(): Promise<void> | void;
+  /**
+   * SIGSTOP every live session's process groups (HIVE-267, a licence lapse).
+   * Not `pause`, which is flow control on the fd.
+   */
+  suspendAll(): Promise<void> | void;
+  /** SIGCONT what `suspendAll` stopped, then write `notice` into each live terminal. */
+  resumeAll(notice?: string): Promise<void> | void;
 }
