@@ -95,7 +95,7 @@ describe('licence state at launch', () => {
   it('is lapsed {offline} with a lease that has only expired', () => {
     const { machine } = harness({ stored: signer.sign(claimsFor({ exp: NOW_S - 1 })) });
     machine.start();
-    expect(machine.state()).toEqual({ kind: 'lapsed', reason: 'offline' });
+    expect(machine.state()).toEqual({ kind: 'lapsed', reason: 'offline', checkedAt: NOW_S });
   });
 
   it('is lapsed {signed_out} when signed out with a lease on file, skipping the device check', () => {
@@ -258,7 +258,7 @@ describe('licence clocks', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(h.machine.state().kind).toBe('grace');
     await vi.advanceTimersByTimeAsync(3600_000);
-    expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'offline' });
+    expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'offline', checkedAt: NOW_S + 3600 });
   });
 
   it('a 30-day lease lapses on day 30, not early (no setTimeout overflow)', async () => {
@@ -267,7 +267,7 @@ describe('licence clocks', () => {
     await vi.advanceTimersByTimeAsync(29 * 86_400_000);
     expect(h.machine.state().kind).toBe('grace');
     await vi.advanceTimersByTimeAsync(86_400_000);
-    expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'offline' });
+    expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'offline', checkedAt: NOW_S + 30 * 86_400 });
   });
 
   it('grace retries every 5 min, and stops once licensed', async () => {
@@ -440,5 +440,54 @@ describe('signing back in (Tasks 5-7 review)', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(seen).toEqual([]);
     expect(h.machine.state()).toEqual({ kind: 'lapsed', reason: 'payment_failed' });
+  });
+});
+
+describe('offline lapses (HIVE-265)', () => {
+  it('an expired lease at launch lapses offline with checkedAt = now', () => {
+    const { machine } = harness({ stored: signer.sign(claimsFor({ exp: NOW_S - 60 })) });
+    machine.start();
+    expect(machine.state()).toEqual({ kind: 'lapsed', reason: 'offline', checkedAt: NOW_S });
+  });
+
+  it('a failed renewal while lapsed offline moves checkedAt on', async () => {
+    const { machine } = harness({ stored: signer.sign(claimsFor({ exp: NOW_S - 60 })) });
+    machine.start();
+    await vi.advanceTimersByTimeAsync(GRACE_RETRY_MS);
+    expect(machine.state()).toEqual({ kind: 'lapsed', reason: 'offline', checkedAt: NOW_S + GRACE_RETRY_MS / 1000 });
+  });
+
+  it('retries every 5 min while lapsed offline, and a lease clears the lapse', async () => {
+    const lease = signer.sign(claimsFor());
+    const { machine, renew } = harness({
+      stored: signer.sign(claimsFor({ exp: NOW_S - 60 })),
+      renew: [
+        { kind: 'failed', detail: 'offline' },
+        { kind: 'failed', detail: 'offline' },
+        { kind: 'lease', jws: lease },
+      ],
+    });
+    machine.start(); // renewal 1, at launch
+    await vi.advanceTimersByTimeAsync(GRACE_RETRY_MS); // renewal 2
+    expect(renew).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(GRACE_RETRY_MS); // renewal 3
+    expect(machine.state()).toMatchObject({ kind: 'licensed' });
+  });
+
+  it('the expiry timer lapses offline with checkedAt', async () => {
+    const { machine } = harness({ stored: signer.sign(claimsFor({ exp: NOW_S + 60 })) });
+    machine.start();
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(machine.state()).toMatchObject({ kind: 'lapsed', reason: 'offline', checkedAt: expect.any(Number) });
+  });
+
+  it('a refusal carries no checkedAt', async () => {
+    const { machine } = harness({
+      stored: signer.sign(claimsFor()),
+      renew: [{ kind: 'refused', reason: 'trial_ended' }],
+    });
+    machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(machine.state()).toEqual({ kind: 'lapsed', reason: 'trial_ended' });
   });
 });
