@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@components/ui/dialog';
+import { Hint } from '@components/ui/hint';
 import { browseServerDirectory } from '@lib/project-config';
 import type { BrowseListing } from '@shared/config-contract';
 
@@ -230,32 +231,33 @@ export function DirectoryPicker({
                   realpath is not.
                 */
                 <li key={entry.name}>
-                  <button
-                    type="button"
-                    disabled={unreadable}
-                    title={unreadable ? 'this folder cannot be read' : undefined}
-                    onClick={() => void browse(entry.path)}
-                    className="flex w-full items-center gap-2 rounded border border-transparent px-2 py-1.5 text-left text-ink hover:bg-hover disabled:opacity-50 disabled:hover:bg-transparent"
-                  >
-                    <Folder
-                      aria-hidden="true"
-                      className="size-3.5 shrink-0 text-subtle"
-                    />
-                    <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                    <span className="shrink-0 text-micro text-subtle">
-                      {unreadable
-                        ? 'no access'
-                        : entry.childCount === 0
-                          ? 'empty'
-                          : `${entry.childCount} items`}
-                    </span>
-                    {!unreadable && (
-                      <CaretRight
+                  <Hint label={unreadable ? 'this folder cannot be read' : undefined}>
+                    <button
+                      type="button"
+                      disabled={unreadable}
+                      onClick={() => void browse(entry.path)}
+                      className="flex w-full items-center gap-2 rounded border border-transparent px-2 py-1.5 text-left text-ink hover:bg-hover disabled:opacity-50 disabled:hover:bg-transparent"
+                    >
+                      <Folder
                         aria-hidden="true"
-                        className="size-3 shrink-0 text-subtle"
+                        className="size-3.5 shrink-0 text-subtle"
                       />
-                    )}
-                  </button>
+                      <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+                      <span className="shrink-0 text-micro text-subtle">
+                        {unreadable
+                          ? 'no access'
+                          : entry.childCount === 0
+                            ? 'empty'
+                            : `${entry.childCount} items`}
+                      </span>
+                      {!unreadable && (
+                        <CaretRight
+                          aria-hidden="true"
+                          className="size-3 shrink-0 text-subtle"
+                        />
+                      )}
+                    </button>
+                  </Hint>
                 </li>
               );
             })}

@@ -96,7 +96,7 @@ test('a quiet session whose ask an agent holds reads idle (sweeper), with who in
     // It hands a job to the agent: still idle, and now says who has it.
     await post(session, LEDGER_POST_PATH, { to: 'sweeper', kind: 'ask', body: 'Sweep HIVE-1', meta: { ticket: 'HIVE-1' } }, '200');
     await expect(status).toHaveText('idle (sweeper)');
-    await expect(status).toHaveAttribute('title', 'Waiting on sweeper');
+    await expect(status).toHaveAttribute('aria-description', 'Waiting on sweeper');
   } finally {
     await app.close();
   }

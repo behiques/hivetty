@@ -14,6 +14,7 @@ import type { AgentSummary } from '@shared/agent-contract';
 import { emptySnapshot } from '@shared/config-contract';
 
 import { shippedStatus } from '../../../support/shipped';
+import { getByHint } from '@tests/support/hint';
 
 const GOOD = `---
 name: slack-watcher
@@ -317,7 +318,7 @@ describe('AgentsSection: which CLIs each agent runs on (HIVE-379)', () => {
 
     await screen.findByRole('button', { name: /multi/ });
     expect(marks('multi')).toEqual(['codex', 'claude-code']);
-    expect(within(row('multi')).getByTitle('Runs on Codex, Claude Code')).toBeInTheDocument();
+    expect(getByHint(row('multi'), 'Runs on Codex, Claude Code')).toBeInTheDocument();
     expect(row('multi')).toHaveAccessibleName(/Runs on Codex, Claude Code/);
   });
 

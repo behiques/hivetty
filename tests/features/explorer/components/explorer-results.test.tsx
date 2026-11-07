@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ExplorerResults } from '@features/explorer/components/explorer-results';
+import { getByHint } from '@tests/support/hint';
 
 /**
  * What a search answers with.
@@ -48,10 +49,10 @@ describe('text results', () => {
       <ExplorerResults hits={[textHit()]} query="on-danger" onOpenFile={vi.fn()} />,
     );
 
-    await userEvent.click(screen.getByTitle('src/components/ui/badge.tsx'));
+    await userEvent.click(getByHint(document.body, 'src/components/ui/badge.tsx'));
     expect(screen.queryByText('6')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByTitle('src/components/ui/badge.tsx'));
+    await userEvent.click(getByHint(document.body, 'src/components/ui/badge.tsx'));
     expect(screen.getByText('6')).toBeInTheDocument();
   });
 
@@ -114,7 +115,7 @@ describe('name results', () => {
       <ExplorerResults hits={[nameHit()]} query="badge" onOpenFile={onOpenFile} />,
     );
 
-    await userEvent.click(screen.getByTitle('src/components/ui/badge.tsx'));
+    await userEvent.click(getByHint(document.body, 'src/components/ui/badge.tsx'));
 
     expect(onOpenFile).toHaveBeenCalledWith(
       'src/components/ui/badge.tsx',

@@ -26,6 +26,7 @@ import {
 } from '@/lib/skills';
 
 import { Button } from '@components/ui/button';
+import { Hint } from '@components/ui/hint';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { REMOTE_DISABLED_REASON } from '@config/runtime';
 import { CliSkillsRow } from '@features/settings/components/cli-skills-row';
@@ -564,15 +565,16 @@ export function SkillsSection() {
 
   /** The Import skill button, in the list and in the empty state alike. */
   const importButton = (className: string) => (
-    <button
-      type="button"
-      onClick={importSkillPackage}
-      disabled={!importSkill}
-      title={importSkill ? undefined : REMOTE_DISABLED_REASON.importSkill}
-      className={`${className} disabled:cursor-not-allowed disabled:opacity-50`}
-    >
-      Import skill
-    </button>
+    <Hint label={importSkill ? undefined : REMOTE_DISABLED_REASON.importSkill}>
+      <button
+        type="button"
+        onClick={importSkillPackage}
+        disabled={!importSkill}
+        className={`${className} disabled:cursor-not-allowed disabled:opacity-50`}
+      >
+        Import skill
+      </button>
+    </Hint>
   );
 
   const newSkill = (): void => {

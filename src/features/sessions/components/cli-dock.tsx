@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { cn } from '@/lib/utils';
 
 import { CliMark } from '@components/ui/cli-mark';
+import { Hint } from '@components/ui/hint';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
@@ -18,7 +19,7 @@ const STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -
  * stop, arrows choose as they move and wrap, Home and End jump to the ends.
  *
  * An unavailable CLI (HIVE-375: missing, or turned off in Settings) stays drawn, dimmed, with its reason as its
- * name; a click on it does nothing and the keys step past it.
+ * name and its hover hint; a click on it does nothing and the keys step past it.
  */
 export function CliDock({
   value,
@@ -48,52 +49,52 @@ export function CliDock({
           const reason = unavailable[cli];
           const label = reason === undefined ? CLI_NAMES[cli] : `${CLI_NAMES[cli]}: ${reason}`;
           return (
-            <button
-              key={cli}
-              ref={(node) => {
-                if (node) refs.current.set(cli, node);
-                else refs.current.delete(cli);
-              }}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              aria-label={label}
-              aria-disabled={reason === undefined ? undefined : true}
-              title={label}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => {
-                if (reason === undefined) onChange(cli);
-              }}
-              onKeyDown={(event) => {
-                const step = STEP[event.key];
-                const total = open.length;
-                // An unavailable current CLI is not in `open`: step from its start.
-                const index = Math.max(open.indexOf(cli), 0);
-                const target =
-                  total === 0
-                    ? undefined
-                    : step !== undefined
-                      ? open[(index + step + total) % total]
-                      : event.key === 'Home'
-                        ? open[0]
-                        : event.key === 'End'
-                          ? open[total - 1]
-                          : undefined;
-                if (target === undefined) return;
-                event.preventDefault();
-                choose(target);
-              }}
-              className={cn(
-                'grid size-14 place-items-center rounded-2xl border outline-none focus-visible:ring-1 focus-visible:ring-brand motion-safe:transition-transform',
-                selected
-                  ? 'border-brand bg-chip text-ink motion-safe:-translate-y-0.5'
-                  : 'border-border bg-term-input text-muted hover:bg-hover hover:text-ink',
-                reason !== undefined &&
-                  'cursor-not-allowed border-dashed opacity-45 hover:bg-term-input hover:text-muted',
-              )}
-            >
-              <CliMark cli={cli} className="size-[26px]" />
-            </button>
+            <Hint key={cli} label={reason === undefined ? label : `${CLI_NAMES[cli]} isn't available: ${reason}`}>
+              <button
+                ref={(node) => {
+                  if (node) refs.current.set(cli, node);
+                  else refs.current.delete(cli);
+                }}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={label}
+                aria-disabled={reason === undefined ? undefined : true}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => {
+                  if (reason === undefined) onChange(cli);
+                }}
+                onKeyDown={(event) => {
+                  const step = STEP[event.key];
+                  const total = open.length;
+                  // An unavailable current CLI is not in `open`: step from its start.
+                  const index = Math.max(open.indexOf(cli), 0);
+                  const target =
+                    total === 0
+                      ? undefined
+                      : step !== undefined
+                        ? open[(index + step + total) % total]
+                        : event.key === 'Home'
+                          ? open[0]
+                          : event.key === 'End'
+                            ? open[total - 1]
+                            : undefined;
+                  if (target === undefined) return;
+                  event.preventDefault();
+                  choose(target);
+                }}
+                className={cn(
+                  'grid size-14 place-items-center rounded-2xl border outline-none focus-visible:ring-1 focus-visible:ring-brand motion-safe:transition-transform',
+                  selected
+                    ? 'border-brand bg-chip text-ink motion-safe:-translate-y-0.5'
+                    : 'border-border bg-term-input text-muted hover:bg-hover hover:text-ink',
+                  reason !== undefined &&
+                    'cursor-not-allowed border-dashed opacity-45 hover:bg-term-input hover:text-muted',
+                )}
+              >
+                <CliMark cli={cli} className="size-[26px]" />
+              </button>
+            </Hint>
           );
         })}
       </div>
@@ -107,11 +108,6 @@ export function CliDock({
           {caption}
         </span>
       )}
-      {HARNESS_IDS.filter((cli) => unavailable[cli] !== undefined).map((cli) => (
-        <span key={cli} className="max-w-[380px] text-center text-ui-sm text-subtle">
-          {`${CLI_NAMES[cli]} isn't available: ${unavailable[cli]!}`}
-        </span>
-      ))}
     </div>
   );
 }

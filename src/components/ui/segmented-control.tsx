@@ -2,6 +2,7 @@ import { useId, useRef } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 
 /**
@@ -212,104 +213,104 @@ export function SegmentedControl<T extends string>({
         const name = option.alert === true ? `${option.label}, failing` : undefined;
 
         return (
-          <button
-            key={option.value}
-            ref={(node) => {
-              if (node) refs.current.set(option.value, node);
-              else refs.current.delete(option.value);
-            }}
-            type="button"
-            role="radio"
-            id={`${groupId}-${option.value}`}
-            aria-checked={selected}
-            // The alert dot is drawn aria-hidden; its words ride on the name.
-            // A glyph has no text, so an icon segment always carries its name here.
-            aria-label={option.icon === undefined ? name : (name ?? option.label)}
-            title={option.icon === undefined ? undefined : option.label}
-            disabled={dead}
-            // Roving tabindex: one stop for the whole group, not one per option.
-            tabIndex={option.value === tabStop ? 0 : -1}
-            onClick={() => onChange(option.value)}
-            onKeyDown={(event) => {
-              switch (event.key) {
-                case 'ArrowRight':
-                case 'ArrowDown':
-                  event.preventDefault();
-                  move(1);
-                  break;
-                case 'ArrowLeft':
-                case 'ArrowUp':
-                  event.preventDefault();
-                  move(-1);
-                  break;
-                /*
-                  First and last *selectable*, not first and last. The APG puts
-                  Home/End on the ends of the reachable set, and in the
-                  notifications pane the dead option is the last one — so
-                  passing `options[length - 1]` made End a no-op in every row on
-                  a machine with no notification daemon.
-                */
-                case 'Home':
-                  event.preventDefault();
-                  jump(selectable[0]);
-                  break;
-                case 'End':
-                  event.preventDefault();
-                  jump(selectable.at(-1));
-                  break;
-                default:
-                  break;
-              }
-            }}
-            className={cn(
-              option.icon === undefined
-                ? 'rounded-full px-3 py-1 text-control outline-none'
-                : 'relative grid size-[22px] place-items-center rounded-md outline-none',
-              /*
-                One line, always: a wrapped label makes the group taller and
-                every segment in it taller with it, which is how a long path
-                turned `all Edit` into two lines.
-
-                Only the widest segment may then shrink, and `min-w-0` is the
-                half that does the work — without it a flex item refuses to go
-                below its own text, so `truncate` would have nothing to
-                truncate to. The label stays whole in the DOM either way, so
-                the option's accessible name is never the elided one.
-              */
-              'whitespace-nowrap',
-              // A glyph has no text to elide, so an icon segment never shrinks.
-              !wrap && option === widest && option.icon === undefined ? 'min-w-0 truncate' : 'shrink-0',
-              'focus-visible:ring-1 focus-visible:ring-brand',
-              selected
-                ? 'bg-active text-ink'
-                : cn(option.icon === undefined ? 'text-muted' : 'text-subtle', 'hover:bg-hover hover:text-ink'),
-              dead && 'cursor-not-allowed',
-              /*
-                The hover overrides must not reach the *selected* segment.
-                `:hover` still matches a disabled button, so on the row whose
-                selection is the dead option these would paint over `bg-active`
-                and mute the ink — the row would read as having nothing chosen
-                for as long as the pointer rested on it.
-              */
-              dead && !selected && 'hover:bg-transparent hover:text-muted',
-              // Only the individually dead one dims itself; `disabled` already
-              // fades the whole group, and fading twice reads as a third state.
-              !disabled && dead && 'opacity-50',
-            )}
-          >
-            {option.icon === undefined ? option.label : <Icon name={option.icon} size={14} />}
-            {option.alert === true ? (
-              <span
-                aria-hidden
-                // Beside a label it trails the text; on a glyph it sits in the corner.
-                className={
-                  option.icon === undefined
-                    ? 'ml-1.5 inline-block size-1.5 shrink-0 rounded-full bg-red'
-                    : 'absolute top-0.5 right-0.5 inline-block size-1.5 shrink-0 rounded-full bg-red'
+          <Hint key={option.value} label={option.icon === undefined ? undefined : option.label}>
+            <button
+              ref={(node) => {
+                if (node) refs.current.set(option.value, node);
+                else refs.current.delete(option.value);
+              }}
+              type="button"
+              role="radio"
+              id={`${groupId}-${option.value}`}
+              aria-checked={selected}
+              // The alert dot is drawn aria-hidden; its words ride on the name.
+              // A glyph has no text, so an icon segment always carries its name here.
+              aria-label={option.icon === undefined ? name : (name ?? option.label)}
+              disabled={dead}
+              // Roving tabindex: one stop for the whole group, not one per option.
+              tabIndex={option.value === tabStop ? 0 : -1}
+              onClick={() => onChange(option.value)}
+              onKeyDown={(event) => {
+                switch (event.key) {
+                  case 'ArrowRight':
+                  case 'ArrowDown':
+                    event.preventDefault();
+                    move(1);
+                    break;
+                  case 'ArrowLeft':
+                  case 'ArrowUp':
+                    event.preventDefault();
+                    move(-1);
+                    break;
+                  /*
+                    First and last *selectable*, not first and last. The APG puts
+                    Home/End on the ends of the reachable set, and in the
+                    notifications pane the dead option is the last one — so
+                    passing `options[length - 1]` made End a no-op in every row on
+                    a machine with no notification daemon.
+                  */
+                  case 'Home':
+                    event.preventDefault();
+                    jump(selectable[0]);
+                    break;
+                  case 'End':
+                    event.preventDefault();
+                    jump(selectable.at(-1));
+                    break;
+                  default:
+                    break;
                 }
-              />
-            ) : null}
-          </button>
+              }}
+              className={cn(
+                option.icon === undefined
+                  ? 'rounded-full px-3 py-1 text-control outline-none'
+                  : 'relative grid size-[22px] place-items-center rounded-md outline-none',
+                /*
+                  One line, always: a wrapped label makes the group taller and
+                  every segment in it taller with it, which is how a long path
+                  turned `all Edit` into two lines.
+  
+                  Only the widest segment may then shrink, and `min-w-0` is the
+                  half that does the work — without it a flex item refuses to go
+                  below its own text, so `truncate` would have nothing to
+                  truncate to. The label stays whole in the DOM either way, so
+                  the option's accessible name is never the elided one.
+                */
+                'whitespace-nowrap',
+                // A glyph has no text to elide, so an icon segment never shrinks.
+                !wrap && option === widest && option.icon === undefined ? 'min-w-0 truncate' : 'shrink-0',
+                'focus-visible:ring-1 focus-visible:ring-brand',
+                selected
+                  ? 'bg-active text-ink'
+                  : cn(option.icon === undefined ? 'text-muted' : 'text-subtle', 'hover:bg-hover hover:text-ink'),
+                dead && 'cursor-not-allowed',
+                /*
+                  The hover overrides must not reach the *selected* segment.
+                  `:hover` still matches a disabled button, so on the row whose
+                  selection is the dead option these would paint over `bg-active`
+                  and mute the ink — the row would read as having nothing chosen
+                  for as long as the pointer rested on it.
+                */
+                dead && !selected && 'hover:bg-transparent hover:text-muted',
+                // Only the individually dead one dims itself; `disabled` already
+                // fades the whole group, and fading twice reads as a third state.
+                !disabled && dead && 'opacity-50',
+              )}
+            >
+              {option.icon === undefined ? option.label : <Icon name={option.icon} size={14} />}
+              {option.alert === true ? (
+                <span
+                  aria-hidden
+                  // Beside a label it trails the text; on a glyph it sits in the corner.
+                  className={
+                    option.icon === undefined
+                      ? 'ml-1.5 inline-block size-1.5 shrink-0 rounded-full bg-red'
+                      : 'absolute top-0.5 right-0.5 inline-block size-1.5 shrink-0 rounded-full bg-red'
+                  }
+                />
+              ) : null}
+            </button>
+          </Hint>
         );
       })}
     </div>

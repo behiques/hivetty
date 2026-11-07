@@ -1,6 +1,7 @@
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 import { cn } from '@/lib/utils';
 
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 import { useDirectory } from '@features/explorer/hooks/use-directory';
 import { fileIconName, folderIconName } from '@lib/explorer/file-icon';
@@ -87,61 +88,62 @@ export function TreeNode({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => (isDir ? toggle(projectId, relPath) : onOpenFile(relPath))}
-        {...(isDir ? { 'aria-expanded': expanded } : {})}
-        {...(isActive ? { 'aria-current': 'true' as const } : {})}
-        title={relPath}
-        style={{ paddingLeft: `${8 + depth * 12}px` }}
-        className={cn(
-          'flex w-full items-center gap-1.5 rounded-md py-[3px] pr-2 text-left hover:bg-hover',
-          isActive && 'bg-active',
-        )}
-      >
-        {/*
-          The caret slot is present on files too, as an empty box of the same
-          width. Without it every file name sits 11px left of its sibling
-          directories and the tree loses its vertical rhythm at each level.
-        */}
-        {isDir ? (
-          <Icon
-            name={expanded ? 'ph-caret-down' : 'ph-caret-right'}
-            size={11}
-            className="shrink-0 text-subtle"
-          />
-        ) : (
-          <span className="w-[11px] shrink-0" />
-        )}
-
-        <Icon
-          name={isDir ? folderIconName(expanded) : fileIconName(entry.name)}
-          size={14}
-          className={cn('shrink-0', isActive ? 'text-brand' : 'text-subtle')}
-        />
-
-        <span
+      <Hint label={relPath}>
+        <button
+          type="button"
+          onClick={() => (isDir ? toggle(projectId, relPath) : onOpenFile(relPath))}
+          {...(isDir ? { 'aria-expanded': expanded } : {})}
+          {...(isActive ? { 'aria-current': 'true' as const } : {})}
+          style={{ paddingLeft: `${8 + depth * 12}px` }}
           className={cn(
-            'truncate tabular-nums text-control',
-            isActive ? 'text-ink' : 'text-muted',
+            'flex w-full items-center gap-1.5 rounded-md py-[3px] pr-2 text-left hover:bg-hover',
+            isActive && 'bg-active',
           )}
         >
-          {entry.name}
-        </span>
-
-        {mark === undefined ? null : (
-          <i
-            role="img"
-            aria-label={mark === 'A' ? 'added this session' : 'modified this session'}
+          {/*
+            The caret slot is present on files too, as an empty box of the same
+            width. Without it every file name sits 11px left of its sibling
+            directories and the tree loses its vertical rhythm at each level.
+          */}
+          {isDir ? (
+            <Icon
+              name={expanded ? 'ph-caret-down' : 'ph-caret-right'}
+              size={11}
+              className="shrink-0 text-subtle"
+            />
+          ) : (
+            <span className="w-[11px] shrink-0" />
+          )}
+  
+          <Icon
+            name={isDir ? folderIconName(expanded) : fileIconName(entry.name)}
+            size={14}
+            className={cn('shrink-0', isActive ? 'text-brand' : 'text-subtle')}
+          />
+  
+          <span
             className={cn(
-              'ml-auto w-3.5 shrink-0 text-center tabular-nums text-micro font-semibold not-italic',
-              mark === 'A' ? 'text-green' : 'text-brand',
+              'truncate tabular-nums text-control',
+              isActive ? 'text-ink' : 'text-muted',
             )}
           >
-            {mark}
-          </i>
-        )}
-      </button>
+            {entry.name}
+          </span>
+  
+          {mark === undefined ? null : (
+            <i
+              role="img"
+              aria-label={mark === 'A' ? 'added this session' : 'modified this session'}
+              className={cn(
+                'ml-auto w-3.5 shrink-0 text-center tabular-nums text-micro font-semibold not-italic',
+                mark === 'A' ? 'text-green' : 'text-brand',
+              )}
+            >
+              {mark}
+            </i>
+          )}
+        </button>
+      </Hint>
 
       {isDir && expanded ? (
         <>

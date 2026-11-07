@@ -36,9 +36,9 @@ describe('ProjectKey', () => {
 
   it('carries a tooltip when one is given, and none when it is not', () => {
     const { rerender } = render(<ProjectKey value="hive" title="type this" />);
-    expect(screen.getByText('hive')).toHaveAttribute('title', 'type this');
+    expect(screen.getByText('hive')).toHaveAttribute('aria-description', 'type this');
 
     rerender(<ProjectKey value="hive" />);
-    expect(screen.getByText('hive')).not.toHaveAttribute('title');
+    expect(screen.getByText('hive')).not.toHaveAttribute('aria-description');
   });
 });

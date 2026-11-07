@@ -50,7 +50,7 @@ describe('ShipTrack', () => {
     expect(within(band).getByText('Approval').closest('li')).toHaveAttribute('data-state', 'next');
     const note = within(band).getByText(/fixer · 1h 20m · On it: adding the registered-agent check/);
     // It truncates on a narrow stage, so its whole line is on hover.
-    expect(note).toHaveAttribute('title', note.textContent);
+    expect(note).toHaveAttribute('aria-description', note.textContent);
     // Its own line under the stops, however wide the stage.
     expect(note.closest('[data-note]')).toHaveClass('basis-full');
   });

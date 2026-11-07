@@ -215,7 +215,7 @@ describe('AgentPage — Run now', () => {
     await waitFor(() => expect(useEditorStore.getState().agentDrafts.watcher).toBeDefined());
     await userEvent.type(screen.getByRole('textbox', { name: 'description' }), '!');
 
-    expect(runNow()).toHaveAttribute('title', 'Save first — a wake reads the file, not this buffer.');
+    expect(runNow()).toHaveAttribute('aria-description', 'Save first — a wake reads the file, not this buffer.');
     await userEvent.click(runNow());
 
     expect(await screen.findByRole('status')).toHaveTextContent(

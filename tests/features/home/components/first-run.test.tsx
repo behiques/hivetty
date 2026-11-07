@@ -47,6 +47,6 @@ describe('FirstRun', () => {
     render(<FirstRun />);
     const button = screen.getByRole('button', { name: 'New session' });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('title', 'Add a project first');
+    expect(button).toHaveAttribute('aria-description', 'Add a project first');
   });
 });

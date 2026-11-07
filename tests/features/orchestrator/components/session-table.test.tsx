@@ -10,6 +10,7 @@ import { SessionTable } from '@features/orchestrator/components/session-table';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
+import { getByHint } from '@tests/support/hint';
 
 /**
  * The **session** rows, one entry per row.
@@ -233,7 +234,7 @@ describe('SessionTable', () => {
      * the one that carries the value as a tooltip — which it does precisely
      * because the column truncates.
      */
-    expect(within(row).getByTitle('—')).toBeInTheDocument();
+    expect(getByHint(row, '—')).toBeInTheDocument();
     expect(within(row).queryByText(`feat/${id}`)).not.toBeInTheDocument();
   });
 
@@ -245,7 +246,7 @@ describe('SessionTable', () => {
     // signal to a colour-blind user and none at all to a screen reader.
     const link = within(shellOf(row)).getByRole('link');
 
-    expect(link).toHaveAttribute('title', '#482 · open — open on GitHub');
+    expect(link).toHaveAttribute('aria-description', '#482 · open — open on GitHub');
     /*
       On the link's own accessible name, and *not* in an `sr-only` span beside
       the number: `aria-label` replaces an element's content for accessibility,
@@ -266,7 +267,7 @@ describe('SessionTable', () => {
       open. The em dash is scoped to the PR cell by `title`: the BRANCH column
       renders its own for an unobserved branch (HIVE-78).
     */
-    const cell = within(shellOf(leadForm!)).getByTitle('no pull request');
+    const cell = getByHint(shellOf(leadForm!), 'no pull request');
 
     expect(cell).toHaveTextContent('—');
     expect(within(shellOf(leadForm!)).queryByRole('link')).toBeNull();
@@ -306,8 +307,7 @@ describe('SessionTable', () => {
       'href',
       'https://github.com/demo/nova-web/pull/118',
     );
-    expect(link).toHaveAttribute(
-      'title',
+    expect(link).toHaveAttribute('aria-description',
       '#118 · last seen on this session — open on GitHub',
     );
     expect(link).toHaveAccessibleName(/last seen on this session$/);
@@ -426,8 +426,7 @@ describe('SessionTable', () => {
       terminate();
 
       expect(webhooks()).toBeDisabled();
-      expect(webhooks()).toHaveAttribute(
-        'title',
+      expect(webhooks()).toHaveAttribute('aria-description',
         'webhooks has terminated — its process is gone',
       );
 
@@ -602,8 +601,7 @@ describe('SessionTable', () => {
         .getAllByRole('button')
         .find((button) => within(button).queryByText('old-01') !== null)!;
       expect(row).toBeDisabled();
-      expect(row).toHaveAttribute(
-        'title',
+      expect(row).toHaveAttribute('aria-description',
         'old-01 was open when HiveTTY last closed — resume to pick it back up',
       );
 

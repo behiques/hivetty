@@ -87,7 +87,7 @@ describe('TerminalMenu', () => {
     expect(missing).toHaveAttribute('aria-disabled', 'true');
     // Visible text, not a `title`: a disabled item has pointer-events off, so a tooltip never shows.
     expect(missing).toHaveTextContent('config.json');
-    expect(missing).not.toHaveAttribute('title');
+    expect(missing).not.toHaveAttribute('aria-description');
     expect(screen.getByRole('menuitem', { name: /boxed · host/ })).not.toHaveTextContent('config.json');
     expect(screen.getByRole('menuitem', { name: /boxed · host/ })).toBeInTheDocument();
   });

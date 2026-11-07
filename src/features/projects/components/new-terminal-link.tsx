@@ -1,5 +1,6 @@
 import { Terminal as TerminalGlyph } from '@phosphor-icons/react';
 
+import { Hint } from '@components/ui/hint';
 import { useProjectAccess, useProjectContainerised } from '@hooks/use-project-config';
 import { useSpawnTerminal } from '@stores/hive-store';
 
@@ -48,21 +49,22 @@ export function NewTerminalLink({
       : 'Opens a login shell at the project root');
 
   return (
-    <button
-      type="button"
-      onClick={() => spawnTerminal(projectId)}
-      /*
-        The same gate the session link uses, and for the same reason: a project
-        whose entry does not resolve has no directory to start a shell in. One
-        path in, closed by `disabled` — a second check here would be a branch
-        nothing can reach.
-      */
-      disabled={!access.spawnable}
-      title={title}
-      aria-label={`Terminal in ${projectName}${containerised ? ' · host' : ''}`}
-      className="rounded-full p-1 text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-transparent"
-    >
-      <TerminalGlyph size={13} weight="bold" aria-hidden="true" />
-    </button>
+    <Hint label={title}>
+      <button
+        type="button"
+        onClick={() => spawnTerminal(projectId)}
+        /*
+          The same gate the session link uses, and for the same reason: a project
+          whose entry does not resolve has no directory to start a shell in. One
+          path in, closed by `disabled` — a second check here would be a branch
+          nothing can reach.
+        */
+        disabled={!access.spawnable}
+        aria-label={`Terminal in ${projectName}${containerised ? ' · host' : ''}`}
+        className="rounded-full p-1 text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-transparent"
+      >
+        <TerminalGlyph size={13} weight="bold" aria-hidden="true" />
+      </button>
+    </Hint>
   );
 }

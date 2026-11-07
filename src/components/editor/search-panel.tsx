@@ -14,6 +14,7 @@ import type { KeyboardEvent, ReactNode, RefObject } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { MENU_SURFACE } from '@components/ui/dropdown-menu';
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 import { cn } from '@lib/utils';
 
@@ -246,24 +247,24 @@ function SearchPanel({ view, subscribe }: SearchPanelProps) {
           /* CodeMirror focuses whatever carries this when the panel opens. */
           mainField
           trailing={TOGGLES.map((toggle) => (
-            <button
-              key={toggle.key}
-              type="button"
-              title={toggle.title}
-              aria-label={toggle.title}
-              aria-pressed={query[toggle.key]}
-              onClick={() => amend({ [toggle.key]: !query[toggle.key] })}
-              className={[
-                'grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-micro font-semibold',
-                query[toggle.key]
-                  ? 'bg-active text-brand'
-                  : 'text-subtle hover:bg-hover hover:text-muted',
-              ].join(' ')}
-            >
-              <span className={toggle.underline ? 'underline' : undefined}>
-                {toggle.label}
-              </span>
-            </button>
+            <Hint key={toggle.key} label={toggle.title}>
+              <button
+                type="button"
+                aria-label={toggle.title}
+                aria-pressed={query[toggle.key]}
+                onClick={() => amend({ [toggle.key]: !query[toggle.key] })}
+                className={[
+                  'grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-micro font-semibold',
+                  query[toggle.key]
+                    ? 'bg-active text-brand'
+                    : 'text-subtle hover:bg-hover hover:text-muted',
+                ].join(' ')}
+              >
+                <span className={toggle.underline ? 'underline' : undefined}>
+                  {toggle.label}
+                </span>
+              </button>
+            </Hint>
           ))}
         />
 
@@ -395,16 +396,17 @@ function IconButton({
   disabled?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      disabled={disabled}
-      className="grid h-[21px] w-[21px] shrink-0 place-items-center rounded-full text-muted hover:bg-hover hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
-    >
-      <Icon name={name} size={12} />
-    </button>
+    <Hint label={label}>
+      <button
+        type="button"
+        aria-label={label}
+        onClick={onClick}
+        disabled={disabled}
+        className="grid h-[21px] w-[21px] shrink-0 place-items-center rounded-full text-muted hover:bg-hover hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
+      >
+        <Icon name={name} size={12} />
+      </button>
+    </Hint>
   );
 }
 

@@ -3,6 +3,7 @@ import { branchLabel, entityLabel, isSession, terminalOf } from '@/types/entity'
 
 import { Badge } from '@components/ui/badge';
 import { CliMark } from '@components/ui/cli-mark';
+import { Hint } from '@components/ui/hint';
 import { StatusComb } from '@components/ui/status-comb';
 import { statusLabel, statusText } from '@components/ui/status-dot';
 import { Tag } from '@components/ui/tag';
@@ -80,21 +81,22 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
           </Tag>
         )}
         <span className="flex-1" />
-        <span
-          className={cn(
-            'shrink-0 text-ui-sm',
-            statusText(entity.status, entity.idleDetail),
-          )}
-          title={delegateTitle ?? undefined}
-        >
-          {/*
-            Round two's panel says a session that finished for you is yours
-            again, until opening it sweeps the row (HIVE-198). Idle's tone.
-          */}
-          {compact && yoursAgain && entity.status === 'idle' && delegate === null
-            ? 'yours again'
-            : statusLabel(entity.status, entity.idleDetail, delegate)}
-        </span>
+        <Hint label={delegateTitle ?? undefined}>
+          <span
+            className={cn(
+              'shrink-0 text-ui-sm',
+              statusText(entity.status, entity.idleDetail),
+            )}
+          >
+            {/*
+              Round two's panel says a session that finished for you is yours
+              again, until opening it sweeps the row (HIVE-198). Idle's tone.
+            */}
+            {compact && yoursAgain && entity.status === 'idle' && delegate === null
+              ? 'yours again'
+              : statusLabel(entity.status, entity.idleDetail, delegate)}
+          </span>
+        </Hint>
         {/*
           The session's plan progress (HIVE-182), after the status label: the
           dot and the label keep priority, and the count is only ever extra.

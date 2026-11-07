@@ -1,5 +1,6 @@
 import { Plus } from '@phosphor-icons/react';
 
+import { Hint } from '@components/ui/hint';
 import { useNewSessionPick } from '@hooks/use-new-session-pick';
 import { useProjectAccess } from '@hooks/use-project-config';
 import { useSpawnSession } from '@stores/hive-store';
@@ -53,23 +54,7 @@ export function NewSessionLink({
   const { cli, model, effort, ready, noneAvailable, skipped, caption } = useNewSessionPick(false, projectId);
 
   return (
-    <button
-      type="button"
-      // Empty task, exactly as the picker passes: the session opens ready and
-      // the first message gives it its job (story 043).
-      onClick={() => spawnSession(projectId, '', cli, model, effort)}
-      // Off until the account's Codex list answers, so the click never starts on the fallback.
-      disabled={!access.spawnable || !ready}
-      /*
-        The refusal when there is one; otherwise what the click is about to
-        commit to.
-
-        This control spends a choice the user cannot see from here — the
-        picker's steppers are the source, and the picker is not open. Naming
-        the pair costs a tooltip and removes the only thing the picker offered
-        that this does not: sight of the model before you start on it.
-      */
-      title={
+    <Hint label={
         access.reason ??
         (noneAvailable
           ? 'No CLI is available for sessions'
@@ -79,11 +64,19 @@ export function NewSessionLink({
               ? caption
               : `Starts on ${model} · ${effort}`
             : 'Reading your Codex models…')
-      }
-      aria-label={`New session in ${projectName}`}
-      className="rounded-full p-1 text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-transparent"
-    >
-      <Plus size={13} weight="bold" aria-hidden="true" />
-    </button>
+      }>
+      <button
+        type="button"
+        // Empty task, exactly as the picker passes: the session opens ready and
+        // the first message gives it its job (story 043).
+        onClick={() => spawnSession(projectId, '', cli, model, effort)}
+        // Off until the account's Codex list answers, so the click never starts on the fallback.
+        disabled={!access.spawnable || !ready}
+        aria-label={`New session in ${projectName}`}
+        className="rounded-full p-1 text-muted hover:bg-hover hover:text-ink disabled:cursor-not-allowed disabled:text-subtle disabled:hover:bg-transparent"
+      >
+        <Plus size={13} weight="bold" aria-hidden="true" />
+      </button>
+    </Hint>
   );
 }

@@ -4,6 +4,7 @@ import { memo } from 'react';
 import { cn } from '@/lib/utils';
 import type { HatcheryRow } from '@/types/pull-request';
 
+import { Hint } from '@components/ui/hint';
 import { Flap } from '@features/pull-requests/components/flap';
 import { FLAP_TEXT } from '@features/shared/flap-tone';
 
@@ -21,35 +22,36 @@ function Row({ row, open, onOpen }: PrRowProps) {
   const draft = DRAFT_FLAPS.has(hatch.flap);
 
   return (
-    <button
-      type="button"
-      aria-current={open ? 'true' : undefined}
-      aria-label={`#${String(pr.n)} ${pr.title}, ${hatch.flap}: ${hatch.github}`}
-      title={hatch.github}
-      onClick={() => onOpen(row)}
-      className={cn(
-        'flex w-full min-w-0 gap-2.5 rounded-lg px-2 py-[9px] text-left focus-visible:outline-2 focus-visible:outline-brand',
-        open ? 'bg-active' : 'hover:bg-hover',
-      )}
-    >
-      {/* Phosphor has no draft-PR glyph; the light weight stands in (R1). */}
-      <GitPullRequest
-        size={16}
-        weight={draft ? 'light' : 'regular'}
-        data-glyph={draft ? 'draft' : 'pr'}
-        aria-hidden
-        className={cn('mt-0.5 shrink-0', FLAP_TEXT[hatch.tone])}
-      />
-      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <span className="flex items-center gap-2.5">
-          <span className="min-w-0 flex-1 truncate text-ui text-ink">{pr.title}</span>
-          <Flap hatch={hatch} />
+    <Hint label={hatch.github}>
+      <button
+        type="button"
+        aria-current={open ? 'true' : undefined}
+        aria-label={`#${String(pr.n)} ${pr.title}, ${hatch.flap}: ${hatch.github}`}
+        onClick={() => onOpen(row)}
+        className={cn(
+          'flex w-full min-w-0 gap-2.5 rounded-lg px-2 py-[9px] text-left focus-visible:outline-2 focus-visible:outline-brand',
+          open ? 'bg-active' : 'hover:bg-hover',
+        )}
+      >
+        {/* Phosphor has no draft-PR glyph; the light weight stands in (R1). */}
+        <GitPullRequest
+          size={16}
+          weight={draft ? 'light' : 'regular'}
+          data-glyph={draft ? 'draft' : 'pr'}
+          aria-hidden
+          className={cn('mt-0.5 shrink-0', FLAP_TEXT[hatch.tone])}
+        />
+        <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <span className="flex items-center gap-2.5">
+            <span className="min-w-0 flex-1 truncate text-ui text-ink">{pr.title}</span>
+            <Flap hatch={hatch} />
+          </span>
+          <span className="truncate tabular-nums text-ui-sm text-muted">
+            #{pr.n} · {pr.repo}
+          </span>
         </span>
-        <span className="truncate tabular-nums text-ui-sm text-muted">
-          #{pr.n} · {pr.repo}
-        </span>
-      </span>
-    </button>
+      </button>
+    </Hint>
   );
 }
 

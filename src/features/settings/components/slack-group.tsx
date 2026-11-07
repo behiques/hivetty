@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@components/ui/button';
+import { Hint } from '@components/ui/hint';
 import { SecretField } from '@components/ui/secret-field';
 import { Switch } from '@components/ui/switch';
 import { TextField } from '@components/ui/text-field';
@@ -640,13 +641,13 @@ function RealTimeFields({
           </span>
           {socket.kind === 'connected' &&
             socket.unresolved.map((name) => (
-              <span
-                key={name}
-                className="rounded bg-chip px-1.5 py-0.5 tabular-nums text-micro text-amber-text"
-                title="Named in wake.on, but Slack could not resolve it to a channel."
-              >
-                {name} → unresolved
-              </span>
+              <Hint key={name} label="Named in wake.on, but Slack could not resolve it to a channel.">
+                <span
+                  className="rounded bg-chip px-1.5 py-0.5 tabular-nums text-micro text-amber-text"
+                >
+                  {name} → unresolved
+                </span>
+              </Hint>
             ))}
         </div>
       </div>

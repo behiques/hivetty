@@ -8,6 +8,7 @@ import { dayKey, type AgentSummary } from '@shared/agent-contract';
 import { isAgent, type Agent } from '@/types/entity';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
+import { getByHint } from '@tests/support/hint';
 
 /**
  * The agent view (HIVE-116).
@@ -247,7 +248,7 @@ describe('AgentView', () => {
       expect(screen.getByText(/#r17/)).toBeInTheDocument();
       expect(screen.getByText(/asking/)).toBeInTheDocument();
       // …and the live run is drawn under the id main gave it.
-      expect(screen.getByTitle('standing run')).toHaveTextContent('#live-1');
+      expect(getByHint(document.body, 'standing run')).toHaveTextContent('#live-1');
       expect(screen.getByText('running')).toBeInTheDocument();
     });
 

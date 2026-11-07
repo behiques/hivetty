@@ -22,7 +22,7 @@ library** — every added primitive is code we own and must keep.
 | Primitive | Why it is here |
 | --- | --- |
 | `dialog` | the new-session picker overlay (story 044) |
-| `tooltip` | the meta-bar back button (story 040) |
+| `tooltip` | every hover hint, through the `Hint` atom: no native `title` anywhere |
 | `dropdown-menu` | model / effort selection (story 044) |
 | `popover` | the round-two connection item (HIVE-196) |
 
@@ -165,6 +165,7 @@ contract for their owning story, not existing code.
 
 | Atom | File | Owner | Props | State |
 | --- | --- | --- | --- | --- |
+| `Hint` | `ui/hint.tsx` | — | `label?: ReactNode`, `children: ReactElement` (the trigger, merged via `asChild`; no `label` draws it alone) | **built** |
 | `Chip` | `ui/chip.tsx` | 021 (also 040) | `children: ReactNode`, `tone?: Tone`, `title?: string`, `className?: string` | **built** |
 | `Badge` | `ui/badge.tsx` | **021** (also 030, 050, HIVE-182) | `count: number`, `tone?: BadgeTone` (`danger` \| `brand` \| `muted` \| `green`), `text?: string`, `label?: string`, `className?: string` | **built** |
 | `Tag` | `ui/tag.tsx` | **052** | `children: ReactNode`, `tone: 'brand' \| 'green' \| 'amber' \| 'red' \| 'subtle'`, `surface?: 'panel' \| 'raised'`, `title?: string`, `className?: string` | **built** |

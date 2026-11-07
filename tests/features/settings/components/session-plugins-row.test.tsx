@@ -72,7 +72,7 @@ describe('SessionPluginsRow (HIVE-176, HIVE-177)', () => {
     render(<SessionPluginsRow />);
 
     const chip = screen.getByText('4 plugins');
-    expect(chip).toHaveAttribute('title', 'code-review, context7, github, slack');
+    expect(chip).toHaveAttribute('aria-description', 'code-review, context7, github, slack');
     expect(screen.queryByText('context7')).not.toBeInTheDocument();
   });
 

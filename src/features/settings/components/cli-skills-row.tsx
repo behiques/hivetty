@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@components/ui/dialog';
+import { Hint } from '@components/ui/hint';
 import { TextField } from '@components/ui/text-field';
 import { useCliSkills } from '@hooks/use-skills';
 import { CLI_NAMES } from '@lib/harness/cli-names';
@@ -92,9 +93,11 @@ export function CliSkillsRow() {
                     <h3 className="text-ui-sm font-semibold uppercase tracking-wide text-term-head">
                       {CLI_NAMES[entry.cli]} · {entry.shown.length}
                     </h3>
-                    <span title={entry.places} className="min-w-0 truncate text-ui-sm text-subtle">
-                      {entry.places}
-                    </span>
+                    <Hint label={entry.places}>
+                      <span className="min-w-0 truncate text-ui-sm text-subtle">
+                        {entry.places}
+                      </span>
+                    </Hint>
                   </div>
                   <ul className="flex flex-col gap-0.5">
                     {entry.shown.map((name) => (

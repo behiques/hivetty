@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ViewToggle } from '@features/editor/components/view-toggle';
 import { useAppearanceStore } from '@stores/appearance-store';
 import { fileKey, useEditorStore } from '@stores/editor-store';
+import { hintOf } from '@tests/support/hint';
 
 const { readFile } = vi.hoisted(() => ({ readFile: vi.fn() }));
 vi.mock('@lib/explorer/fs-client', async (importOriginal) => ({
@@ -44,7 +45,7 @@ describe('ViewToggle', () => {
     for (const name of ['Source', 'Preview', 'Split']) {
       const radio = screen.getByRole('radio', { name });
       expect(radio.textContent).toBe('');
-      expect(radio).toHaveAttribute('title', name);
+      expect(await hintOf(radio)).toBe(name);
       expect(radio.querySelector('svg')).toBeInTheDocument();
     }
   });

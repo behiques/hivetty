@@ -1,3 +1,4 @@
+import { Hint } from '@components/ui/hint';
 import { SearchBox } from '@components/ui/search-box';
 import type { FsSearchMode } from '@shared/fs-contract';
 import {
@@ -61,24 +62,24 @@ export function ExplorerSearchRow({ status }: ExplorerSearchRowProps) {
             className="inline-flex overflow-hidden rounded-full border border-border"
           >
             {MODES.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={mode === option.value}
-                title={option.hint}
-                onClick={() => {
-                  setMode(option.value);
-                }}
-                className={[
-                  'px-2 py-0.5 text-micro',
-                  mode === option.value
-                    ? 'bg-active text-brand'
-                    : 'text-muted hover:bg-hover hover:text-ink',
-                ].join(' ')}
-              >
-                {option.label}
-              </button>
+              <Hint key={option.value} label={option.hint}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === option.value}
+                  onClick={() => {
+                    setMode(option.value);
+                  }}
+                  className={[
+                    'px-2 py-0.5 text-micro',
+                    mode === option.value
+                      ? 'bg-active text-brand'
+                      : 'text-muted hover:bg-hover hover:text-ink',
+                  ].join(' ')}
+                >
+                  {option.label}
+                </button>
+              </Hint>
             ))}
           </div>
 

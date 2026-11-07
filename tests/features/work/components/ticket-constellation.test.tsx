@@ -119,7 +119,7 @@ describe('TicketConstellation (HIVE-202)', () => {
     const caption = screen.getByText("HIVE-161 · The Hive's workflow");
     expect(caption).toHaveClass('truncate');
     expect(caption.closest('svg')).toBeNull();
-    expect(caption.parentElement).toHaveAttribute('title', "HIVE-161 · The Hive's workflow · 9/14");
+    expect(caption.parentElement).toHaveAttribute('aria-description', "HIVE-161 · The Hive's workflow · 9/14");
     expect(caption.parentElement).toHaveTextContent(/9\/14$/);
     expect(view.container.querySelector('svg')).not.toHaveTextContent('HIVE-161');
   });

@@ -1,6 +1,7 @@
 import { Plus } from '@phosphor-icons/react';
 
 import { Button } from '@components/ui/button';
+import { Hint } from '@components/ui/hint';
 import { DirectoryPicker } from '@features/shared/components/directory-picker';
 import { useAddProject } from '@hooks/use-add-project';
 import { useAttachedServer } from '@hooks/use-project-config';
@@ -63,28 +64,23 @@ export function NewProjectLink({
 
   return (
     <>
-      <Button
-        variant="ghost"
-        onClick={addProject}
-        pending={choosing}
-        /*
-          What the click opens. It no longer carries a refusal: while attached
-          this opens the server-side picker rather than a dialog that could
-          only fail (HIVE-146), so the control has no disabled state left
-          beyond a native dialog already being open.
-        */
-        title="Choose a folder to map as a project"
-        aria-label="Add a new project"
-        className={CLASSES[variant]}
-      >
-        <Plus
-          size={variant === 'icon' ? 14 : 11}
-          weight="bold"
-          aria-hidden="true"
-          className="shrink-0"
-        />
-        {variant === 'cta' ? 'new project' : null}
-      </Button>
+      <Hint label="Choose a folder to map as a project">
+        <Button
+          variant="ghost"
+          onClick={addProject}
+          pending={choosing}
+          aria-label="Add a new project"
+          className={CLASSES[variant]}
+        >
+          <Plus
+            size={variant === 'icon' ? 14 : 11}
+            weight="bold"
+            aria-hidden="true"
+            className="shrink-0"
+          />
+          {variant === 'cta' ? 'new project' : null}
+        </Button>
+      </Hint>
       <DirectoryPicker
         open={picking}
         onOpenChange={(next) => {

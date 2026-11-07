@@ -3,6 +3,7 @@ import type { Icon } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 import type { FlapTone } from '@/types/pull-request';
 
+import { Hint } from '@components/ui/hint';
 import { PlanRings } from '@features/plan/components/plan-rings';
 import { planFact } from '@features/plan/plan-fact';
 import { FLAP_DOT } from '@features/pull-requests/components/flap';
@@ -56,30 +57,30 @@ export function SessionPanelStrip({ plan, tabs, onOpen }: SessionPanelStripProps
         </>
       )}
       {tabs.map(({ id, Icon: TabIcon, fact, count, dot }) => (
-        <button
-          key={id}
-          type="button"
-          title={fact}
-          aria-label={fact}
-          onClick={() => {
-            onOpen(id);
-          }}
-          className="relative grid size-7 place-items-center rounded-full text-muted hover:bg-hover hover:text-ink"
-        >
-          <TabIcon size={16} aria-hidden />
-          {count === undefined || count === 0 ? null : (
-            <b className="absolute right-0 bottom-0 tabular-nums text-micro font-semibold text-muted">
-              {count}
-            </b>
-          )}
-          {dot === undefined ? null : (
-            <i
-              aria-hidden
-              data-testid="pr-dot"
-              className={cn('absolute top-[3px] right-[3px] size-1.5 rounded-full ring-2 ring-panel', FLAP_DOT[dot])}
-            />
-          )}
-        </button>
+        <Hint key={id} label={fact}>
+          <button
+            type="button"
+            aria-label={fact}
+            onClick={() => {
+              onOpen(id);
+            }}
+            className="relative grid size-7 place-items-center rounded-full text-muted hover:bg-hover hover:text-ink"
+          >
+            <TabIcon size={16} aria-hidden />
+            {count === undefined || count === 0 ? null : (
+              <b className="absolute right-0 bottom-0 tabular-nums text-micro font-semibold text-muted">
+                {count}
+              </b>
+            )}
+            {dot === undefined ? null : (
+              <i
+                aria-hidden
+                data-testid="pr-dot"
+                className={cn('absolute top-[3px] right-[3px] size-1.5 rounded-full ring-2 ring-panel', FLAP_DOT[dot])}
+              />
+            )}
+          </button>
+        </Hint>
       ))}
     </aside>
   );

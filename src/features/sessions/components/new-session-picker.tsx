@@ -9,6 +9,7 @@ import type { ProjectRow as ProjectRowData } from '@/types/entity';
 
 import { Button } from '@components/ui/button';
 import { CliMark } from '@components/ui/cli-mark';
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 import { ProjectKey } from '@components/ui/project-key';
 import { SelectField } from '@components/ui/select-field';
@@ -514,25 +515,26 @@ function PinnedProject({
   const access = useProjectAccess(id);
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(id)}
-      disabled={!access.spawnable || blocked}
-      title={access.reason ?? (blocked ? NONE_AVAILABLE : undefined)}
-      className="flex items-center gap-2 rounded-full border border-border bg-chip px-3.5 py-2 tabular-nums text-ui text-ink hover:border-brand hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:border-border disabled:hover:bg-chip"
-    >
-      <Icon
-        name={icon}
-        size={15}
-        className={access.spawnable ? 'text-brand' : 'text-subtle'}
-      />
-      {/*
-        The name, not the id (HIVE-104). These tiles sit directly above the
-        search rows, so an id here and a name there would be one screen
-        disagreeing with itself about what a project is called.
-      */}
-      {name}
-    </button>
+    <Hint label={access.reason ?? (blocked ? NONE_AVAILABLE : undefined)}>
+      <button
+        type="button"
+        onClick={() => onSelect(id)}
+        disabled={!access.spawnable || blocked}
+        className="flex items-center gap-2 rounded-full border border-border bg-chip px-3.5 py-2 tabular-nums text-ui text-ink hover:border-brand hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:border-border disabled:hover:bg-chip"
+      >
+        <Icon
+          name={icon}
+          size={15}
+          className={access.spawnable ? 'text-brand' : 'text-subtle'}
+        />
+        {/*
+          The name, not the id (HIVE-104). These tiles sit directly above the
+          search rows, so an id here and a name there would be one screen
+          disagreeing with itself about what a project is called.
+        */}
+        {name}
+      </button>
+    </Hint>
   );
 }
 
@@ -567,57 +569,58 @@ function ProjectRow({
   const access = useProjectAccess(id);
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(id)}
-      disabled={!access.spawnable || blocked}
-      // A skipped project CLI's reason is the row's own title (HIVE-387): the button's accessible description,
-      // so a screen reader reads it, and a tooltip over the whole row rather than over a 14px mark.
-      title={access.reason ?? (blocked ? NONE_AVAILABLE : skippedReason)}
-      className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover disabled:cursor-not-allowed disabled:hover:bg-transparent"
-    >
-      <Icon
-        name={icon}
-        size={14}
-        className={cn('shrink-0', access.spawnable ? 'text-brand' : 'text-subtle')}
-      />
-      {/* The same chip the Settings row shows, so the alias is learned in
-          whichever of the two the user happens to be looking at (HIVE-94). */}
-      <ProjectKey value={projectKey} />
-      {/*
-        The name, which is one of the three things the filter above matches on
-        (HIVE-104). This drew the id, so the picker would take the *new* name,
-        find the project, and label the hit with the *old* one — searching by a
-        string the row never displays is worse than not matching on it at all.
-      */}
-      <span
-        className={cn(
-          'min-w-0 flex-1 truncate tabular-nums text-control',
-          access.spawnable ? 'text-ink' : 'text-subtle',
-        )}
+    <Hint label={access.reason ?? (blocked ? NONE_AVAILABLE : skippedReason)}>
+      <button
+        type="button"
+        onClick={() => onSelect(id)}
+        disabled={!access.spawnable || blocked}
+        className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover disabled:cursor-not-allowed disabled:hover:bg-transparent"
       >
-        {name}
-      </span>
-      {/* `CliMark` is `aria-hidden` and takes no title, so the span carries it (HIVE-378). */}
-      {startsOn === undefined ? null : (
-        <span title={`Starts on ${CLI_NAMES[startsOn]}`} className="shrink-0 text-subtle">
-          <CliMark cli={startsOn} className="size-3.5" />
+        <Icon
+          name={icon}
+          size={14}
+          className={cn('shrink-0', access.spawnable ? 'text-brand' : 'text-subtle')}
+        />
+        {/* The same chip the Settings row shows, so the alias is learned in
+            whichever of the two the user happens to be looking at (HIVE-94). */}
+        <ProjectKey value={projectKey} />
+        {/*
+          The name, which is one of the three things the filter above matches on
+          (HIVE-104). This drew the id, so the picker would take the *new* name,
+          find the project, and label the hit with the *old* one — searching by a
+          string the row never displays is worse than not matching on it at all.
+        */}
+        <span
+          className={cn(
+            'min-w-0 flex-1 truncate tabular-nums text-control',
+            access.spawnable ? 'text-ink' : 'text-subtle',
+          )}
+        >
+          {name}
         </span>
-      )}
-      {/* HIVE-387: the project's own CLI cannot run; drawn dimmed, its reason on the row's title, never silently swapped. */}
-      {skippedCli === undefined ? null : (
-        <span data-skipped="true" className="shrink-0 text-subtle opacity-45">
-          <CliMark cli={skippedCli} className="size-3.5" />
+        {/* `CliMark` is `aria-hidden` and takes no title, so the span carries it (HIVE-378). */}
+        {startsOn === undefined ? null : (
+          <Hint label={`Starts on ${CLI_NAMES[startsOn]}`}>
+          <span className="shrink-0 text-subtle">
+              <CliMark cli={startsOn} className="size-3.5" />
+            </span>
+        </Hint>
+        )}
+        {/* HIVE-387: the project's own CLI cannot run; drawn dimmed, its reason on the row's title, never silently swapped. */}
+        {skippedCli === undefined ? null : (
+          <span data-skipped="true" className="shrink-0 text-subtle opacity-45">
+            <CliMark cli={skippedCli} className="size-3.5" />
+          </span>
+        )}
+        {/*
+          The refusal replaces the session count rather than joining it: a row
+          that cannot be started has nothing useful to say about how many
+          sessions it is running (story 090).
+        */}
+        <span className="shrink-0 tabular-nums text-micro text-subtle">
+          {access.spawnable ? `${live} active` : 'unmapped'}
         </span>
-      )}
-      {/*
-        The refusal replaces the session count rather than joining it: a row
-        that cannot be started has nothing useful to say about how many
-        sessions it is running (story 090).
-      */}
-      <span className="shrink-0 tabular-nums text-micro text-subtle">
-        {access.spawnable ? `${live} active` : 'unmapped'}
-      </span>
-    </button>
+      </button>
+    </Hint>
   );
 }

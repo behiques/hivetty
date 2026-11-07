@@ -253,7 +253,7 @@ describe('Change folder…', () => {
 
     const item = screen.getByRole('menuitem', { name: /change folder/i });
     expect(item).not.toHaveAttribute('aria-disabled', 'true');
-    expect(item).not.toHaveAttribute('title');
+    expect(item).not.toHaveAttribute('aria-description');
   });
 
   it('fires its handler', async () => {

@@ -2,6 +2,7 @@ import { FolderSimple, GearSix, Hexagon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { Button } from '@components/ui/button';
+import { Hint } from '@components/ui/hint';
 import { DirectoryPicker } from '@features/shared/components/directory-picker';
 import { useAddProject } from '@hooks/use-add-project';
 import { useAttachedServer } from '@hooks/use-project-config';
@@ -87,16 +88,17 @@ export function FirstRun() {
         </Step>
         <Step title="3 · Start a session" body="In a project, on a ticket, or with a goal.">
           {/* D8: nothing to start in until a project exists; the page leaves once one does. */}
-          <Button
-            size="sm"
-            className={STEP_BUTTON}
-            disabled
-            title="Add a project first"
-            onClick={() => openPicker()}
-          >
-            <Hexagon aria-hidden="true" />
-            New session
-          </Button>
+          <Hint label="Add a project first">
+            <Button
+              size="sm"
+              className={STEP_BUTTON}
+              disabled
+              onClick={() => openPicker()}
+            >
+              <Hexagon aria-hidden="true" />
+              New session
+            </Button>
+          </Hint>
         </Step>
       </div>
       <DirectoryPicker

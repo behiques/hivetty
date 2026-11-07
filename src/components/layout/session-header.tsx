@@ -20,6 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@components/ui/dropdown-menu';
+import { Hint } from '@components/ui/hint';
 import { StatusDot, statusLabel, statusText } from '@components/ui/status-dot';
 import { useProjectContainerised } from '@hooks/use-project-config';
 import { isMacPlatform } from '@lib/platform';
@@ -40,15 +41,16 @@ export function SessionHeader({ entity }: { entity: Session | Terminal }) {
       data-testid="session-header"
       className="@container flex shrink-0 items-center gap-3 border-b border-border-soft bg-panel px-5 py-2.5"
     >
-      <button
-        type="button"
-        onClick={backToOrch}
-        aria-label="Back to overmind"
-        title={`Back to overmind (${backChordLabel(isMacPlatform())})`}
-        className="grid size-7 shrink-0 place-items-center rounded-full text-brand hover:bg-hover"
-      >
-        <CaretLeft size={14} weight="bold" aria-hidden="true" />
-      </button>
+      <Hint label={`Back to overmind (${backChordLabel(isMacPlatform())})`}>
+        <button
+          type="button"
+          onClick={backToOrch}
+          aria-label="Back to overmind"
+          className="grid size-7 shrink-0 place-items-center rounded-full text-brand hover:bg-hover"
+        >
+          <CaretLeft size={14} weight="bold" aria-hidden="true" />
+        </button>
+      </Hint>
       <span aria-hidden="true" className="h-[22px] w-px shrink-0 bg-border-soft" />
       {isTerminal(entity) ? <TerminalLine terminal={entity} /> : <SessionLine session={entity} />}
     </div>
@@ -74,25 +76,27 @@ function SessionLine({ session }: { session: Session }) {
       */}
       {/* 96px at the narrowest step: beside both rails at 1200px the content box is 480px (the rails' 5px seams included), and the chip's last step needs up to 207. */}
       <span className="flex min-w-[140px] flex-1 basis-0 flex-col @max-[500px]:min-w-[96px]">
-        <span className="truncate text-ui font-semibold text-ink" title={session.task}>
-          {entityLabel(session)}
-        </span>
+        <Hint label={session.task}>
+          <span className="truncate text-ui font-semibold text-ink">
+            {entityLabel(session)}
+          </span>
+        </Hint>
         <span className="truncate tabular-nums text-ui-sm text-muted">
           {session.project} · {branchLabel(session)}
         </span>
       </span>
-      <span
-        data-testid="session-status"
-        className={cn('flex shrink-0 items-center gap-1.5 text-control', ended ? 'text-muted' : tone)}
-        // A narrow header hides the word (HIVE-213; at 720px, where the row needs ~705); the title keeps it for the dot.
-        title={reason ?? delegateTitle ?? word}
-        aria-label={reason === undefined ? undefined : `Ended: ${reason}`}
-      >
-        <StatusDot status={session.status} detail={session.idleDetail} delegate={delegate} />
-        <span data-word className="@max-[720px]:sr-only">
-          {word}
+      <Hint label={reason ?? delegateTitle ?? word}>
+        <span
+          data-testid="session-status"
+          className={cn('flex shrink-0 items-center gap-1.5 text-control', ended ? 'text-muted' : tone)}
+          aria-label={reason === undefined ? undefined : `Ended: ${reason}`}
+        >
+          <StatusDot status={session.status} detail={session.idleDetail} delegate={delegate} />
+          <span data-word className="@max-[720px]:sr-only">
+            {word}
+          </span>
         </span>
-      </span>
+      </Hint>
       {/*
         The chip's own steps should keep it whole (HIVE-220). If they ever miss,
         the stats clip at their end here, and the menu stays in the header.
@@ -111,9 +115,11 @@ function TerminalLine({ terminal }: { terminal: Terminal }) {
     <>
       <TerminalGlyph size={20} aria-hidden="true" className="shrink-0 text-muted" />
       <span className="flex min-w-0 flex-col">
-        <span className="truncate tabular-nums text-ui font-semibold text-ink" title={entityLabel(terminal)}>
-          {entityLabel(terminal)}
-        </span>
+        <Hint label={entityLabel(terminal)}>
+          <span className="truncate tabular-nums text-ui font-semibold text-ink">
+            {entityLabel(terminal)}
+          </span>
+        </Hint>
         <span className="truncate tabular-nums text-ui-sm text-muted">
           {terminal.project} · {cwdTail(terminal.cwd)}
         </span>
@@ -141,18 +147,19 @@ function SessionMenu({ session }: { session: Session }) {
         align="end"
         className="min-w-[13rem]"
       >
-        <DropdownMenuItem
-          onSelect={() => spawnTerminalBeside(session.id)}
-          title={
+        <Hint label={
             containerised
               ? 'This session runs in a container; a terminal is host-only'
               : undefined
-          }
-          className="justify-between gap-4"
-        >
-          Terminal here
-          <span className="tabular-nums text-micro text-subtle">⌃`</span>
-        </DropdownMenuItem>
+          }>
+          <DropdownMenuItem
+            onSelect={() => spawnTerminalBeside(session.id)}
+            className="justify-between gap-4"
+          >
+            Terminal here
+            <span className="tabular-nums text-micro text-subtle">⌃`</span>
+          </DropdownMenuItem>
+        </Hint>
         {pr ? (
           <DropdownMenuItem asChild>
             <a href={pr.url} target="_blank" rel="noreferrer">

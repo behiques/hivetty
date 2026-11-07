@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 import { ViewToggle } from '@features/editor/components/view-toggle';
 import { onTablistKeyDown } from '@lib/tablist';
@@ -100,57 +101,59 @@ export function EditorTabStrip({ showTerminalTab }: EditorTabStripProps) {
                 active ? 'bg-panel-2' : 'hover:bg-hover',
               )}
             >
-              <button
-                type="button"
-                role="tab"
-                id={editorTabId(tab.key)}
-                aria-selected={active}
-                aria-controls={EDITOR_FILE_PANEL}
-                aria-keyshortcuts="Delete"
-                tabIndex={active ? 0 : -1}
-                onKeyDown={(event) => {
-                  if (event.key === 'Delete') {
-                    event.preventDefault();
-                    refocus.current = true;
-                    closeFile(tab.key);
-                    return;
-                  }
-                  onTablistKeyDown(event);
-                }}
-                onClick={() => setActive(tab.key)}
-                title={tab.relPath}
-                className={cn(
-                  'flex items-center gap-1.5 py-1.5 pr-1 pl-3 tabular-nums text-ui-sm whitespace-nowrap',
-                  active ? 'text-ink' : 'text-subtle group-hover:text-muted',
-                )}
-              >
-                {tab.name}
-                {/*
-                  The dirty dot is inside the label button rather than replacing
-                  the ×, as some editors do. Swapping the close control for a dot
-                  means the one moment you most want to close a tab deliberately
-                  — when it has unsaved changes — is the one moment the control
-                  moves.
-                */}
-                {tab.dirty ? (
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 shrink-0 rounded-full bg-amber"
-                  />
-                ) : null}
-                {tab.dirty ? <span className="sr-only">unsaved changes</span> : null}
-              </button>
+              <Hint label={tab.relPath}>
+                <button
+                  type="button"
+                  role="tab"
+                  id={editorTabId(tab.key)}
+                  aria-selected={active}
+                  aria-controls={EDITOR_FILE_PANEL}
+                  aria-keyshortcuts="Delete"
+                  tabIndex={active ? 0 : -1}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Delete') {
+                      event.preventDefault();
+                      refocus.current = true;
+                      closeFile(tab.key);
+                      return;
+                    }
+                    onTablistKeyDown(event);
+                  }}
+                  onClick={() => setActive(tab.key)}
+                  className={cn(
+                    'flex items-center gap-1.5 py-1.5 pr-1 pl-3 tabular-nums text-ui-sm whitespace-nowrap',
+                    active ? 'text-ink' : 'text-subtle group-hover:text-muted',
+                  )}
+                >
+                  {tab.name}
+                  {/*
+                    The dirty dot is inside the label button rather than replacing
+                    the ×, as some editors do. Swapping the close control for a dot
+                    means the one moment you most want to close a tab deliberately
+                    — when it has unsaved changes — is the one moment the control
+                    moves.
+                  */}
+                  {tab.dirty ? (
+                    <span
+                      aria-hidden="true"
+                      className="size-1.5 shrink-0 rounded-full bg-amber"
+                    />
+                  ) : null}
+                  {tab.dirty ? <span className="sr-only">unsaved changes</span> : null}
+                </button>
+              </Hint>
 
-              <button
-                type="button"
-                tabIndex={-1}
-                aria-hidden="true"
-                title={`Close ${tab.name}`}
-                onClick={() => closeFile(tab.key)}
-                className="mr-1.5 rounded-full p-0.5 text-subtle hover:bg-active hover:text-ink"
-              >
-                <Icon name="ph-x" size={11} />
-              </button>
+              <Hint label={`Close ${tab.name}`}>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  onClick={() => closeFile(tab.key)}
+                  className="mr-1.5 rounded-full p-0.5 text-subtle hover:bg-active hover:text-ink"
+                >
+                  <Icon name="ph-x" size={11} />
+                </button>
+              </Hint>
             </div>
           );
         })}

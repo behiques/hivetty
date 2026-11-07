@@ -329,8 +329,7 @@ describe('SkillBundle', () => {
       name: 'Add from your computer',
     });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute(
-      'title',
+    expect(button).toHaveAttribute('aria-description',
       'Adding files to a skill opens a dialog on the server.',
     );
 

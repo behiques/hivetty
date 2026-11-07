@@ -3,6 +3,7 @@ import { type KeyboardEvent, type ReactNode, useId, useMemo } from 'react';
 import type { EpicLabel, LinkArcs, LinkedTicket } from '@/lib/ticket-links';
 import { cn } from '@/lib/utils';
 
+import { Hint } from '@components/ui/hint';
 import { type CellState, type Edge, layoutConstellation, type Point, VIEW } from '@features/work/constellation';
 
 /** A pointy-top hexagon's points around (x, y). */
@@ -100,13 +101,14 @@ export function TicketConstellation({
     <div className="flex flex-col">
       {/* HTML, not SVG text: a long epic truncates with its progress kept, instead of being cut at both edges. */}
       {epicLabel ? (
-        <p
-          className="flex min-w-0 gap-2 text-micro"
-          title={epicLabel.progress ? `${epicLabel.text} · ${epicLabel.progress}` : epicLabel.text}
-        >
-          <span className="min-w-0 flex-1 truncate text-brand">{epicLabel.text}</span>
-          {epicLabel.progress ? <span className="shrink-0 tabular-nums text-muted">{epicLabel.progress}</span> : null}
-        </p>
+        <Hint label={epicLabel.progress ? `${epicLabel.text} · ${epicLabel.progress}` : epicLabel.text}>
+          <p
+            className="flex min-w-0 gap-2 text-micro"
+          >
+            <span className="min-w-0 flex-1 truncate text-brand">{epicLabel.text}</span>
+            {epicLabel.progress ? <span className="shrink-0 tabular-nums text-muted">{epicLabel.progress}</span> : null}
+          </p>
+        </Hint>
       ) : null}
     <svg
       viewBox={`0 0 ${String(VIEW.width)} ${String(VIEW.height)}`}

@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils';
 import type { ProjectRow as ProjectRowData } from '@/types/entity';
 import { isTerminal } from '@/types/entity';
 
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 import { ProjectKey } from '@components/ui/project-key';
 import { Tag } from '@components/ui/tag';
@@ -126,15 +127,16 @@ export function SessionsProjectRow({ project }: { project: ProjectRowData }) {
 /** A count over the project icon. Decoration: the name's sr-only text says it. */
 function LiveBadge({ n, fill, label }: { n: number; fill: string; label: string }) {
   return (
-    <span
-      aria-hidden="true"
-      title={`${String(n)} ${label}`}
-      className={cn(
-        'absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-micro leading-none font-bold text-panel ring-2 ring-panel',
-        fill,
-      )}
-    >
-      {n}
-    </span>
+    <Hint label={`${String(n)} ${label}`}>
+      <span
+        aria-hidden="true"
+        className={cn(
+          'absolute -top-1.5 -right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-micro leading-none font-bold text-panel ring-2 ring-panel',
+          fill,
+        )}
+      >
+        {n}
+      </span>
+    </Hint>
   );
 }

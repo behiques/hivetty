@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 import { fileIconName } from '@lib/explorer/file-icon';
 import { parentPath } from '@lib/explorer/fs-client';
@@ -66,47 +67,49 @@ function HitGroup({
 
   return (
     <div className="flex flex-col">
-      <button
-        type="button"
-        onClick={() => {
-          // A name match has nothing to expand, so the row opens the file —
-          // which is the only thing anyone wants from it.
-          if (hasLines) setOpen((shown) => !shown);
-          else onOpenFile(hit.relPath, hit.name);
-        }}
-        title={hit.relPath}
-        className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-[3px] text-left hover:bg-hover"
-      >
-        {hasLines ? (
+      <Hint label={hit.relPath}>
+        <button
+          type="button"
+          onClick={() => {
+            // A name match has nothing to expand, so the row opens the file —
+            // which is the only thing anyone wants from it.
+            if (hasLines) setOpen((shown) => !shown);
+            else onOpenFile(hit.relPath, hit.name);
+          }}
+          className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-[3px] text-left hover:bg-hover"
+        >
+          {hasLines ? (
+            <Icon
+              name={open ? 'ph-caret-down' : 'ph-caret-right'}
+              size={11}
+              className="shrink-0 text-subtle"
+            />
+          ) : null}
           <Icon
-            name={open ? 'ph-caret-down' : 'ph-caret-right'}
-            size={11}
+            name={fileIconName(hit.name)}
+            size={12}
             className="shrink-0 text-subtle"
           />
-        ) : null}
-        <Icon
-          name={fileIconName(hit.name)}
-          size={12}
-          className="shrink-0 text-subtle"
-        />
-        <span className="min-w-0 flex-1 truncate text-ui-sm text-ink">
-          <Marked text={hit.name} query={query} />
-        </span>
-        {hit.total > 1 ? (
-          <span className="shrink-0 rounded-full bg-chip px-1.5 text-micro text-muted tabular-nums">
-            {hit.total}
+          <span className="min-w-0 flex-1 truncate text-ui-sm text-ink">
+            <Marked text={hit.name} query={query} />
           </span>
-        ) : null}
-      </button>
+          {hit.total > 1 ? (
+            <span className="shrink-0 rounded-full bg-chip px-1.5 text-micro text-muted tabular-nums">
+              {hit.total}
+            </span>
+          ) : null}
+        </button>
+      </Hint>
 
       {directory === '' ? null : (
-        <span
-          className="truncate px-1.5 pb-0.5 pl-[26px] text-micro text-subtle"
-          dir="rtl"
-          title={directory}
-        >
-          {directory}/
-        </span>
+        <Hint label={directory}>
+          <span
+            className="truncate px-1.5 pb-0.5 pl-[26px] text-micro text-subtle"
+            dir="rtl"
+          >
+            {directory}/
+          </span>
+        </Hint>
       )}
 
       {open && hasLines

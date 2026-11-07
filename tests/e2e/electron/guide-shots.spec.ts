@@ -172,7 +172,7 @@ test('guide shots', async ({}, testInfo) => {
   await shot(page, '04-explorer-editor.png');
   // The tab's × is aria-hidden (the tab strip's keyboard model closes tabs
   // another way), so it has a title and no accessible name.
-  await page.getByTitle('Close README.md').click();
+  await page.locator('[aria-description="Close README.md"]').click();
 
   // 08: the Overmind with its console open and the help output.
   await openConsole(page);

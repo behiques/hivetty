@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 
 import { Button } from '@components/ui/button';
 import { CliMark } from '@components/ui/cli-mark';
+import { Hint } from '@components/ui/hint';
 import { Icon } from '@components/ui/icon';
 import { SelectField } from '@components/ui/select-field';
 import { SwarmCreature } from '@components/ui/swarm-creature';
@@ -45,12 +46,14 @@ function DefaultCliForAgents() {
 function RunsOn({ clis }: { clis: HarnessId[] }) {
   const names = `Runs on ${clis.map((cli) => CLI_NAMES[cli]).join(', ')}`;
   return (
-    <span className="flex shrink-0 items-center gap-0.5 text-subtle" title={names}>
-      {clis.map((cli) => (
-        <CliMark key={cli} cli={cli} className="size-3.5" />
-      ))}
-      <span className="sr-only">{names}</span>
-    </span>
+    <Hint label={names}>
+      <span className="flex shrink-0 items-center gap-0.5 text-subtle">
+        {clis.map((cli) => (
+          <CliMark key={cli} cli={cli} className="size-3.5" />
+        ))}
+        <span className="sr-only">{names}</span>
+      </span>
+    </Hint>
   );
 }
 
@@ -165,46 +168,47 @@ export function AgentsSection() {
             const active = open?.name === agent.name;
 
             return (
-              <button
-                key={agent.name}
-                type="button"
-                onClick={() => setOpen({ name: agent.name })}
-                aria-current={active ? 'true' : undefined}
-                title={broken ? agent.invalid : undefined}
-                /*
-                  Not `justify-between`. The identity is one group pinned left —
-                  glyph then name — and the status is what floats to the far edge.
-                */
-                className={cn(
-                  'flex items-center gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-control last:border-b-0 hover:bg-hover hover:text-ink',
-                  active ? 'bg-hover text-ink' : 'text-muted',
-                )}
-              >
-                {/*
-                  The agent's own glyph, from `icon:` in its frontmatter, already
-                  on `AgentSummary`. It is what makes the list scannable rather
-                  than read: a fleet of five agents is five shapes before it is
-                  five names.
-                */}
-                <Icon name={agent.icon} size={14} className="shrink-0 text-brand" />
-                <span className="truncate tabular-nums">{agent.name}</span>
-                <ShippedDot status={shipped.get(agent.name)} />
-                <RunsOn clis={agent.harness ?? [defaultCli]} />
-                {broken ? (
-                  <span className="ml-auto shrink-0 text-micro text-amber-text">invalid</span>
-                ) : (
-                  <span
-                    className="ml-auto shrink-0 text-micro text-subtle"
-                    title={
+              <Hint key={agent.name} label={broken ? agent.invalid : undefined}>
+                <button
+                  type="button"
+                  onClick={() => setOpen({ name: agent.name })}
+                  aria-current={active ? 'true' : undefined}
+                  /*
+                    Not `justify-between`. The identity is one group pinned left —
+                    glyph then name — and the status is what floats to the far edge.
+                  */
+                  className={cn(
+                    'flex items-center gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-control last:border-b-0 hover:bg-hover hover:text-ink',
+                    active ? 'bg-hover text-ink' : 'text-muted',
+                  )}
+                >
+                  {/*
+                    The agent's own glyph, from `icon:` in its frontmatter, already
+                    on `AgentSummary`. It is what makes the list scannable rather
+                    than read: a fleet of five agents is five shapes before it is
+                    five names.
+                  */}
+                  <Icon name={agent.icon} size={14} className="shrink-0 text-brand" />
+                  <span className="truncate tabular-nums">{agent.name}</span>
+                  <ShippedDot status={shipped.get(agent.name)} />
+                  <RunsOn clis={agent.harness ?? [defaultCli]} />
+                  {broken ? (
+                    <span className="ml-auto shrink-0 text-micro text-amber-text">invalid</span>
+                  ) : (
+                    <Hint label={
                       agent.wake.everyMs === undefined && agent.wake.on.length === 0
                         ? 'Manual only — no schedule and no triggers.'
                         : undefined
-                    }
-                  >
-                    {agent.status}
-                  </span>
-                )}
-              </button>
+                    }>
+                    <span
+                        className="ml-auto shrink-0 text-micro text-subtle"
+                      >
+                        {agent.status}
+                      </span>
+                  </Hint>
+                  )}
+                </button>
+              </Hint>
             );
           })}
 

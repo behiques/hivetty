@@ -72,7 +72,7 @@ describe('MarkdownPreview', () => {
 
   it('shows an image as a placeholder naming it', async () => {
     await show('![board](docs/board.png)\n');
-    expect(screen.getByText('board')).toHaveAttribute('title', 'docs/board.png');
+    expect(screen.getByText('board')).toHaveAttribute('aria-description', 'docs/board.png');
   });
 
   it('opens a relative link through the callback, never as an href', async () => {

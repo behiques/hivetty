@@ -62,8 +62,8 @@ describe('ChecksGraphView', () => {
 
   it('shows a job’s whole name on hover, since a long one is cut off in its box', () => {
     render(<ChecksGraphView graph={graph} onJob={() => {}} onExpand={() => {}} />);
-    expect(screen.getByRole('button', { name: /integration/ })).toHaveAttribute('title', 'integration');
-    expect(screen.getByRole('button', { name: /unit × 6/ })).toHaveAttribute('title', 'unit × 6');
+    expect(screen.getByRole('button', { name: /integration/ })).toHaveAttribute('aria-description', 'integration');
+    expect(screen.getByRole('button', { name: /unit × 6/ })).toHaveAttribute('aria-description', 'unit × 6');
   });
 
   it('shows a job on click, and opens a matrix box into its legs', () => {

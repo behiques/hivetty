@@ -1,6 +1,7 @@
 import { Plus } from '@phosphor-icons/react';
 
 import { Button } from '@components/ui/button';
+import { Hint } from '@components/ui/hint';
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { TerminalMenu } from '@features/orchestrator/components/terminal-menu';
 import { useNewSessionPick } from '@hooks/use-new-session-pick';
@@ -96,12 +97,7 @@ function NewSessionHere({ projectId, projectName }: { projectId: string; project
   const access = useProjectAccess(projectId);
 
   return (
-    <Button
-      variant="primary"
-      onClick={() => spawnSession(projectId, '', cli, model, effort)}
-      // Off until the account's Codex list answers, so the click never starts on the fallback.
-      disabled={!access.spawnable || !ready}
-      title={
+    <Hint label={
         access.reason ??
         (noneAvailable
           ? 'No CLI is available for sessions'
@@ -111,11 +107,17 @@ function NewSessionHere({ projectId, projectName }: { projectId: string; project
               ? caption
               : `Starts on ${model} · ${effort}`
             : 'Reading your Codex models…')
-      }
-      className="flex items-center gap-1.5 rounded-r-none"
-    >
-      <Plus size={13} weight="bold" aria-hidden="true" />
-      New session in {projectName}
-    </Button>
+      }>
+      <Button
+        variant="primary"
+        onClick={() => spawnSession(projectId, '', cli, model, effort)}
+        // Off until the account's Codex list answers, so the click never starts on the fallback.
+        disabled={!access.spawnable || !ready}
+        className="flex items-center gap-1.5 rounded-r-none"
+      >
+        <Plus size={13} weight="bold" aria-hidden="true" />
+        New session in {projectName}
+      </Button>
+    </Hint>
   );
 }

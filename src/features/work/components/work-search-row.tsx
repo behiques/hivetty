@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 
+import { Hint } from '@components/ui/hint';
 import { SearchBox } from '@components/ui/search-box';
 import {
   useClearTicketSearchResults,
@@ -108,20 +109,21 @@ export function WorkSearchRow() {
       */}
       {term === '' ? null : (
         <div className="flex items-center justify-between gap-2 px-0.5">
-          <label
-            className="flex cursor-pointer items-center gap-1.5 text-micro text-muted"
-            title="Search only the tickets assigned to you."
-          >
-            <input
-              type="checkbox"
-              checked={mineOnly}
-              onChange={(event) => {
-                setMineOnly(event.target.checked);
-              }}
-              className="size-3 accent-brand-fill"
-            />
-            Mine only
-          </label>
+          <Hint label="Search only the tickets assigned to you.">
+            <label
+              className="flex cursor-pointer items-center gap-1.5 text-micro text-muted"
+            >
+              <input
+                type="checkbox"
+                checked={mineOnly}
+                onChange={(event) => {
+                  setMineOnly(event.target.checked);
+                }}
+                className="size-3 accent-brand-fill"
+              />
+              Mine only
+            </label>
+          </Hint>
 
           {/*
             The count says "all assignees" in words. The whole point of the row

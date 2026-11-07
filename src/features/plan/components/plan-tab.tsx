@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { Hint } from '@components/ui/hint';
 import { partLabel } from '@features/plan/plan-fact';
 import { formatDuration } from '@lib/format-duration';
 import type { PlanTask, SessionPlan } from '@shared/plan-contract';
@@ -100,17 +101,18 @@ export function PlanTab({
           <h3 className="px-1 pt-3.5 pb-1 text-micro font-semibold tracking-[.06em] text-subtle uppercase">
             Where it came from
           </h3>
-          <button
-            type="button"
-            title={file}
-            onClick={() => {
-              onOpenFile(file);
-            }}
-            className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1.5 text-left text-control text-brand hover:bg-hover"
-          >
-            <FileText size={14} aria-hidden className="shrink-0" />
-            <span className="truncate tabular-nums">{planFileLabel(file)}</span>
-          </button>
+          <Hint label={file}>
+            <button
+              type="button"
+              onClick={() => {
+                onOpenFile(file);
+              }}
+              className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1.5 text-left text-control text-brand hover:bg-hover"
+            >
+              <FileText size={14} aria-hidden className="shrink-0" />
+              <span className="truncate tabular-nums">{planFileLabel(file)}</span>
+            </button>
+          </Hint>
           <p className="px-1 text-control text-muted">
             {plan.fileAt === undefined ? '' : `Written by hive:plan at ${clock(plan.fileAt)} · `}
             open it in the editor
