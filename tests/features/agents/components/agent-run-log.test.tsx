@@ -1,4 +1,5 @@
 import { act, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentRunLog } from '@features/agents/components/agent-run-log';
@@ -1228,6 +1229,17 @@ describe('the CLI a run ran on (HIVE-340)', () => {
     const mark = getByHint(receipts(container), 'Ran on Codex');
     expect(mark.querySelector('svg[data-cli="codex"]')).toBeInTheDocument();
     expect(within(mark).getByText('Codex')).toHaveClass('sr-only');
+  });
+
+  it('opens only the CLI hint when the mark is hovered, not the run id hint around it too', async () => {
+    seed({ runs: [run(1, { harness: 'codex' })] });
+
+    const { container } = render(<AgentRunLog name="watcher" />);
+
+    const user = userEvent.setup();
+    await user.hover(getByHint(receipts(container), 'Ran on Codex'));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Ran on Codex');
+    expect(screen.getAllByRole('tooltip')).toHaveLength(1);
   });
 
   it('marks a claude-code run too, and a run recorded before HIVE-340 as Claude Code', () => {
