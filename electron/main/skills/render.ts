@@ -87,7 +87,7 @@ async function copyIfChanged(from: string, to: string): Promise<void> {
  * disk, and there is no file to stat here — only the string `readUserSkills`
  * already read.
  */
-async function writeIfChanged(to: string, body: string): Promise<void> {
+export async function writeIfChanged(to: string, body: string): Promise<void> {
   try {
     if ((await readFile(to, 'utf8')) === body) return;
   } catch {
@@ -96,6 +96,9 @@ async function writeIfChanged(to: string, body: string): Promise<void> {
 
   await writeFile(to, body, 'utf8');
 }
+
+/** An extra that is a skill's own SKILL.md, the files `transform` applies to (HIVE-372). */
+const SKILL_MD = /^skills\/[^/]+\/SKILL\.md$/;
 
 /**
  * Clear whatever is at `path` when it exists and is not a `kind`.
@@ -205,8 +208,11 @@ export async function renderSkills(
   {
     version,
     doneUrl,
+    transform = (text: string) => text,
   }: {
     version: string;
+    /** HIVE-372: applied to every skills/<n>/SKILL.md written here (the marketplace copy's guard). */
+    transform?: (skillMd: string) => string;
     /**
      * Where `/done` reports to, or `null` when nothing is listening (HIVE-93).
      *
@@ -250,7 +256,7 @@ export async function renderSkills(
     }
     await mkdir(dirname(to), { recursive: true });
     await ensureKind(to, 'file');
-    await writeIfChanged(to, body);
+    await writeIfChanged(to, SKILL_MD.test(path) ? transform(body) : body);
   }
 
   for (const skill of skills) {
@@ -267,7 +273,7 @@ export async function renderSkills(
     await ensureKind(skillMdPath, 'file');
     // Written directly from `skill.body`, not mirrored below — see the
     // docblock's "SKILL.md itself" paragraph for why.
-    await writeIfChanged(skillMdPath, renderSkillText(skill.body, cli, root));
+    await writeIfChanged(skillMdPath, transform(renderSkillText(skill.body, cli, root)));
 
     const admitted = skill.manifest.entries.filter(
       (entry) => entry.excluded === null && entry.path !== 'SKILL.md',
