@@ -76,9 +76,12 @@ export function Lock(props: LockProps) {
 }
 
 /** The nav row's lock: a glyph and the plan that includes it. */
-export function LockMark({ plan }: { plan: string | null }) {
+export function LockMark({ plan, className }: { plan: string | null; className?: string }) {
   return (
-    <span aria-label={plan ? `Locked: ${plan}` : 'Locked'} className="ml-auto inline-flex items-center gap-1 text-subtle">
+    <span
+      aria-label={plan ? `Locked: ${plan}` : 'Locked'}
+      className={cn('ml-auto inline-flex items-center gap-1 text-subtle', className)}
+    >
       <Icon name="ph-lock" size={12} />
       {plan && <Chip className="px-1.5 py-0 text-ui-sm">{plan}</Chip>}
     </span>
