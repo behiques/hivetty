@@ -17,6 +17,8 @@ export type Invocation =
   | { kind: 'pair'; name: string }
   | { kind: 'revoke'; name: string }
   | { kind: 'devices' }
+  | { kind: 'logout' }
+  | { kind: 'login'; force: boolean }
   | { kind: 'update' }
   | { kind: 'usage'; message: string };
 
@@ -28,7 +30,7 @@ export type Invocation =
  * named `--devices` is not a real scenario, but neither is one merely
  * *starting* with a dash, so there is no case here worth the extra rule.
  */
-const KNOWN_FLAGS = ['--pair', '--revoke', '--devices', '--update', '--server'];
+const KNOWN_FLAGS = ['--pair', '--revoke', '--devices', '--logout', '--login', '--force', '--update', '--server'];
 
 /**
  * Trims and validates a device name the same way both other pairing surfaces
@@ -69,7 +71,7 @@ export function parseInvocation(argv: readonly string[], packaged: boolean): Inv
   const args = argv.slice(packaged ? 1 : 2);
 
   // Precedence when several command flags are present together is
-  // deliberate: --pair > --revoke > --devices > --server, independent of
+  // deliberate: --pair > --revoke > --devices > --logout > --login > --update > --server, independent of
   // their order in argv. Each branch below returns before the next is
   // even inspected.
   const pairIndex = args.indexOf('--pair');
@@ -100,6 +102,15 @@ export function parseInvocation(argv: readonly string[], packaged: boolean): Inv
 
   if (args.includes('--devices')) {
     return { kind: 'devices' };
+  }
+
+  // HIVE-266. `--force` means something only beside `--login`; alone it is ignored.
+  if (args.includes('--logout')) {
+    return { kind: 'logout' };
+  }
+
+  if (args.includes('--login')) {
+    return { kind: 'login', force: args.includes('--force') };
   }
 
   if (args.includes('--update')) {
