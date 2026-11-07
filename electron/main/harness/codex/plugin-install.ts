@@ -21,19 +21,24 @@ export interface CodexPluginState {
   marketplace: boolean;
 }
 
+/** The plugin's tables in an already parsed `config.toml`, for a caller that reads the file for other keys too. */
+export function codexPluginStateOf(config: Record<string, unknown>): CodexPluginState {
+  const { plugins, marketplaces } = config as {
+    plugins?: Record<string, { enabled?: unknown } | undefined>;
+    marketplaces?: Record<string, unknown>;
+  };
+  const plugin = plugins?.[CODEX_PLUGIN_ID];
+  return {
+    installed: plugin !== undefined,
+    enabled: plugin?.enabled === true,
+    marketplace: marketplaces?.[MARKETPLACE] !== undefined,
+  };
+}
+
 /** Read-only (HIVE-372): HiveTTY never writes ~/.codex; Codex's own commands do. A malformed file reads as nothing. */
 export function readCodexPluginState(codexHome: string): CodexPluginState {
   try {
-    const config = parse(readFileSync(join(codexHome, 'config.toml'), 'utf8')) as {
-      plugins?: Record<string, { enabled?: unknown } | undefined>;
-      marketplaces?: Record<string, unknown>;
-    };
-    const plugin = config.plugins?.[CODEX_PLUGIN_ID];
-    return {
-      installed: plugin !== undefined,
-      enabled: plugin?.enabled === true,
-      marketplace: config.marketplaces?.[MARKETPLACE] !== undefined,
-    };
+    return codexPluginStateOf(parse(readFileSync(join(codexHome, 'config.toml'), 'utf8')));
   } catch {
     return { installed: false, enabled: false, marketplace: false };
   }

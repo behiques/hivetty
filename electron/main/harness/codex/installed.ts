@@ -49,7 +49,8 @@ export function parseCodexSkillCatalog(output: string): string[] {
     if (!skill) continue;
     const [alias, ...rest] = skill[2].split('/');
     const path = roots.has(alias) ? [roots.get(alias), ...rest].join('/') : skill[2];
-    if (!path.includes('/.system/')) names.push(skill[1]);
+    // HIVE-372: HiveTTY's own plugin (hive@hivetty) is HiveTTY's skills, not the user's. By path, not by name.
+    if (!path.includes('/.system/') && !path.includes('/plugins/cache/hivetty/')) names.push(skill[1]);
   }
   return names;
 }

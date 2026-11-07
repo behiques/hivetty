@@ -42,6 +42,17 @@ describe('parseCodexSkillCatalog', () => {
     expect(parseCodexSkillCatalog('{"a":1}')).toEqual([]);
     expect(parseCodexSkillCatalog(JSON.stringify([{ content: [{ text: 'no skills here' }] }]))).toEqual([]);
   });
+
+  it('leaves HiveTTY’s own installed plugin out, by its path, not its name (HIVE-372)', () => {
+    const text = [
+      '- `r0` = `/Users/u/.codex/plugins/cache/hivetty`',
+      '- `r1` = `/Users/u/.codex/plugins/cache/other`',
+      '### Available skills',
+      '- hive:hive-work-on: Works a ticket (file: r0/hive/1.0.0+abcd1234/skills/hive-work-on/SKILL.md)',
+      '- hive:lint: Someone else’s hive plugin (file: r1/hive/2.0.0/skills/lint/SKILL.md)',
+    ].join('\n');
+    expect(parseCodexSkillCatalog(JSON.stringify([{ content: [{ text }] }]))).toEqual(['hive:lint']);
+  });
 });
 
 describe('createCodexInstalled', () => {
