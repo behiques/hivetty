@@ -162,6 +162,27 @@ describe('codex session command (HIVE-279)', () => {
     }
   });
 
+  it('reads the CODEX_HOME the session runs in, the runtime env’s over main’s (HIVE-372)', () => {
+    // The installer writes the plugin into the runtime env's CODEX_HOME; launch must read that same home,
+    // or it misses the enabled plugin and injects the catalog the plugin already lists.
+    const root = mkdtempSync(join(tmpdir(), 'codex-launch-env-'));
+    const plugin = join(root, 'plugins', 'codex');
+    const runtimeHome = join(root, 'runtime-home');
+    mkdirSync(plugin, { recursive: true });
+    mkdirSync(runtimeHome);
+    writeFileSync(join(plugin, 'catalog.md'), '### HiveTTY skills\n- done: Finish.\n');
+    writeFileSync(join(runtimeHome, 'config.toml'), '[plugins."hive@hivetty"]\nenabled = true\n');
+    const previous = process.env['CODEX_HOME'];
+    process.env['CODEX_HOME'] = mkdtempSync(join(tmpdir(), 'codex-main-home-'));
+    try {
+      expect(line({ pluginDir: plugin, env: { CODEX_HOME: runtimeHome } })).not.toContain('developer_instructions');
+      expect(line({ pluginDir: plugin })).toContain('developer_instructions');
+    } finally {
+      if (previous === undefined) delete process.env['CODEX_HOME'];
+      else process.env['CODEX_HOME'] = previous;
+    }
+  });
+
   it('passes no developer_instructions when there is no catalog and no user text', () => {
     const previous = process.env['CODEX_HOME'];
     process.env['CODEX_HOME'] = mkdtempSync(join(tmpdir(), 'codex-empty-'));

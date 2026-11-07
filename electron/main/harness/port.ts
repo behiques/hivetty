@@ -391,6 +391,11 @@ export interface LaunchSpec {
   stateDir?: string;
   /** Where a `meterExport` harness writes its telemetry for `foldMeters` (HIVE-335). */
   exportPath?: string;
+  /**
+   * The runtime env (workspace, then project) a host session's pty gets over main's. Read, never
+   * applied here: Codex resolves `CODEX_HOME` from it, the home its installer wrote (HIVE-372).
+   */
+  env?: Readonly<Record<string, string>>;
 }
 
 /** What a harness answers a {@link LaunchSpec} with (HIVE-234). */
