@@ -165,8 +165,8 @@ describe('licence composition', () => {
   });
 
   it('the HIVE-265 calls answer not-ready before startLicence', async () => {
-    await expect(ACCOUNT_CALLS[CH.accountDevices]()).resolves.toEqual({ error: expect.any(String) });
-    await expect(LICENCE_CALLS[CH.licenceStartTrial]()).resolves.toEqual({ error: expect.any(String) });
+    await expect(ACCOUNT_CALLS[CH.accountDevices]()).resolves.toEqual({ error: 'Sign-in is not ready yet. Try again in a moment.' });
+    await expect(LICENCE_CALLS[CH.licenceStartTrial]()).resolves.toEqual({ error: 'Sign-in is not ready yet. Try again in a moment.' });
   });
 
   it('licence:paused is empty unless lapsed, and reads the census at call time', () => {
@@ -216,8 +216,8 @@ describe('licence composition', () => {
       broadcastDeviceCode: vi.fn(),
     });
     // Signed out: authedFetch has no account, so each answers its own error rather than not-ready.
-    await expect(ACCOUNT_CALLS[CH.accountDevices]()).resolves.toEqual({ error: expect.any(String) });
-    await expect(LICENCE_CALLS[CH.licenceStartTrial]()).resolves.toEqual({ error: expect.any(String) });
+    await expect(ACCOUNT_CALLS[CH.accountDevices]()).resolves.toEqual({ error: "Couldn't reach HiveTTY. Try again." });
+    await expect(LICENCE_CALLS[CH.licenceStartTrial]()).resolves.toEqual({ error: "Couldn't reach HiveTTY. Try again." });
   });
 });
 
