@@ -328,6 +328,11 @@ describe('CenterStage — interactive terminals', () => {
         // A dropped file's path, as preload would read it off a real drop.
         droppedPath: vi.fn((file: File) => `/Users/me/${file.name}`),
       },
+      // HIVE-265's licence banner reads the licence; no lease, so it draws nothing.
+      licence: {
+        state: vi.fn(() => Promise.resolve(null)),
+        onChanged: vi.fn(() => vi.fn()),
+      },
     };
   }
 
