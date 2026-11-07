@@ -41,3 +41,9 @@ export async function watchPurchase(on: boolean): Promise<void> {
 export function onLicenceChanged(callback: (state: LicenceState) => void): () => void {
   return window.hive?.licence.onChanged(callback) ?? (() => undefined);
 }
+
+/** Whole days left in the trial, part days rounded up, floored at 0; `null` with no trial. HIVE-265's account menu reads it too. */
+export function trialDaysLeft(state: LicenceState | null, now: number): number | null {
+  if (!state || (state.kind !== 'licensed' && state.kind !== 'grace') || state.trialEnds === undefined) return null;
+  return Math.max(0, Math.ceil((state.trialEnds * 1000 - now) / 86_400_000));
+}
