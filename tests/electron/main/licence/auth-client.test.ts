@@ -49,6 +49,7 @@ function memoryStore(initial: StoredAccount | null = null, writable = true) {
     clear: vi.fn(() => {
       value = null;
     }),
+    exists: vi.fn(() => value !== null),
     value: () => value,
   };
   return store;
@@ -938,5 +939,76 @@ describe('signInWithCode races (HIVE-266)', () => {
     await expect(done).resolves.toMatchObject({ failure: 'aborted' });
     expect(h.store.value()).toBeNull();
     expect(h.client.state()).toEqual({ kind: 'signed-out' });
+  });
+});
+
+describe('reload (another process wrote account.bin)', () => {
+  it('adopts an account that appeared while signed out, and refreshes it', async () => {
+    const h = harness();
+    h.store.write(STORED);
+    h.cloud.token.mockResolvedValue(tokens(1));
+    h.client.reload();
+    expect(h.client.state()).toEqual({ kind: 'signed-in', email: 'ada@example.com', name: 'Ada', deviceId: 'dev-0' });
+    await vi.waitFor(() => expect(h.cloud.token).toHaveBeenCalledWith({ grant_type: 'refresh_token', refresh_token: 'rt-0' }));
+  });
+
+  it('signs out when the file is gone', () => {
+    const h = harness({ stored: STORED });
+    h.client.start();
+    h.store.clear();
+    h.client.reload();
+    expect(h.client.state()).toEqual({ kind: 'signed-out' });
+  });
+
+  it('keeps the account when the file is there but cannot be read (a locked keychain)', () => {
+    const h = harness({ stored: STORED });
+    h.client.start();
+    (h.store.read as ReturnType<typeof vi.fn>).mockReturnValue(null); // exists() still true
+    h.client.reload();
+    expect(h.client.state()).toMatchObject({ kind: 'signed-in' });
+    expect(h.store.clear).not.toHaveBeenCalled();
+  });
+
+  it('switches to a different account written by --login --force', () => {
+    const h = harness({ stored: STORED });
+    h.client.start();
+    h.store.write({ ...STORED, deviceId: 'dev-9', email: 'bo@example.com', refreshToken: 'rt-9' });
+    h.client.reload();
+    expect(h.client.state()).toMatchObject({ kind: 'signed-in', email: 'bo@example.com', deviceId: 'dev-9' });
+  });
+
+  it('does nothing for the same account, or with nothing stored and nobody signed in', () => {
+    const h = harness({ stored: STORED });
+    h.client.start();
+    const before = h.states.length;
+    h.client.reload();
+    expect(h.states.length).toBe(before);
+    const empty = harness();
+    empty.client.reload();
+    expect(empty.states).toEqual([]);
+  });
+
+  it('stays out of the way while a sign-in of either kind is open', () => {
+    const h = harness();
+    void h.client.signInWithCode({ onCode: vi.fn() });
+    h.store.write(STORED);
+    h.client.reload();
+    expect(h.client.state()).toEqual({ kind: 'signing-in' });
+  });
+  it("a refresh of the old account still in flight cannot overwrite the new one", async () => {
+    const h = harness({ stored: STORED });
+    let resolveOld!: (value: TokenResponse) => void;
+    h.cloud.token
+      .mockReturnValueOnce(new Promise<TokenResponse>((r) => (resolveOld = r)))
+      .mockResolvedValue(tokens(9, { deviceId: 'dev-9', user: { email: 'bo@example.com', name: 'Bo' } }));
+    h.client.start();
+    const NEW = { ...STORED, deviceId: 'dev-9', email: 'bo@example.com', name: 'Bo', refreshToken: 'rt-new' };
+    h.store.write(NEW);
+    h.client.reload();
+    resolveOld(tokens(1));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.cloud.token).toHaveBeenLastCalledWith({ grant_type: 'refresh_token', refresh_token: 'rt-new' });
+    expect(h.store.value()).toMatchObject({ deviceId: 'dev-9', refreshToken: 'rt-9' });
+    expect(h.client.state()).toMatchObject({ kind: 'signed-in', email: 'bo@example.com' });
   });
 });

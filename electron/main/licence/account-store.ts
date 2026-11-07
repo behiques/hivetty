@@ -1,5 +1,5 @@
 import type { JsonWebKey } from 'node:crypto';
-import { chmodSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 
 /**
  * `<userData>/account.bin`: the signed-in account (HIVE-264), one safeStorage-encrypted JSON.
@@ -24,6 +24,8 @@ export interface AccountStore {
   read(): StoredAccount | null;
   write(account: StoredAccount): boolean;
   clear(): void;
+  /** Whether `account.bin` is on disk, readable or not (HIVE-266: a locked keychain is not a sign-out). */
+  exists(): boolean;
 }
 
 export type AccountSafeStorage = Pick<
@@ -96,5 +98,6 @@ export function createAccountStore({
     clear() {
       rmSync(filePath, { force: true });
     },
+    exists: () => existsSync(filePath),
   };
 }

@@ -53,6 +53,8 @@ export interface AuthClient {
    * `path` is `unknown` because it crosses IPC. Never throws: every failure is a sentence in `{ error }`.
    */
   openWeb(path: unknown): Promise<OpenWebResult>;
+  /** HIVE-266: re-read `account.bin` after another process (`hivetty --login`/`--logout`) wrote it. */
+  reload(): void;
 }
 
 export type CodeSignInResult = { ok: true } | { error: string; failure: DeviceFlowFailure | 'storage' };
@@ -440,6 +442,26 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
       const stored = store.read();
       signOutLocally();
       if (stored) await cloud.revoke(stored.refreshToken).catch(() => undefined);
+    },
+
+    reload() {
+      // This process's own sign-in decides the outcome; the next reload sees the result. A refresh in flight
+      // does not: it belongs to the account being replaced, and the generation bump below drops its result.
+      if (pending || codeFlow || activeExchange) return;
+      const stored = store.read();
+      if (!stored) {
+        // Only a missing file is a sign-out: a null read with the file present is a keychain that would not open.
+        if (current.kind === 'signed-in' && !store.exists()) dropAccount();
+        return;
+      }
+      if (current.kind === 'signed-in' && current.deviceId === stored.deviceId && current.email === stored.email) return;
+      generation += 1;
+      access = null;
+      refreshing = null; // the old account's refresh, if any, settles into nothing
+      clearRefreshTimer();
+      backoffMs = BACKOFF_START_MS;
+      set(signedInFrom(stored));
+      void refresh();
     },
 
     getAccessToken,
