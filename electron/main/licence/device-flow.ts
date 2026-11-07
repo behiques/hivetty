@@ -80,6 +80,7 @@ async function post(
   // An answer that lands after a cancel belongs to nobody.
   if (signal.aborted) throw new DeviceFlowError('aborted');
   const body: unknown = await response.json().catch(() => null);
+  if (signal.aborted) throw new DeviceFlowError('aborted');
   return { ok: response.ok, body };
 }
 

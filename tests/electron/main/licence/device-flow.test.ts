@@ -1,8 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 
+import { CloudError } from '../../../../electron/main/licence/cloud';
 import {
+  abortableSleep,
   DEVICE_GRANT,
+  DeviceFlowError,
   runDeviceFlow,
   type DeviceFlowDeps,
 } from '../../../../electron/main/licence/device-flow';
@@ -115,5 +118,161 @@ describe('runDeviceFlow', () => {
     expect(args.onCode).toHaveBeenCalledWith(
       expect.objectContaining({ verificationUriComplete: 'https://c.test/device?code=WDJB-MJHT' }),
     );
+  });
+  it.each([
+    ['access_denied', 'denied'],
+    ['expired_token', 'expired'],
+    ['invalid_grant', 'expired'],
+    ['server_error', 'refused'],
+  ] as const)('a poll answering %s ends as %s', async (error, kind) => {
+    const { deps } = harness([json(200, CODE), json(400, { error })]);
+    await expect(runDeviceFlow(deps, input())).rejects.toMatchObject({ kind });
+  });
+
+  it('a code request the cloud refuses is refused, with its description', async () => {
+    const { deps } = harness([json(400, { error: 'invalid_request', error_description: 'device_name is too long' })]);
+    const failure = runDeviceFlow(deps, input());
+    await expect(failure).rejects.toBeInstanceOf(DeviceFlowError);
+    await expect(failure).rejects.toMatchObject({ kind: 'refused', message: 'refused: device_name is too long' });
+  });
+
+  it('a 200 code answer missing its fields is refused', async () => {
+    const { deps } = harness([json(200, { user_code: 'X' })]);
+    await expect(runDeviceFlow(deps, input())).rejects.toMatchObject({ kind: 'refused' });
+  });
+
+  it('a 200 poll that is not a token is refused', async () => {
+    const { deps } = harness([json(200, CODE), json(200, { access_token: 'only' })]);
+    await expect(runDeviceFlow(deps, input())).rejects.toMatchObject({ kind: 'refused' });
+  });
+
+  it('a transport failure on either call is network', async () => {
+    const first = harness([new CloudError('network', 'ECONNREFUSED')]);
+    await expect(runDeviceFlow(first.deps, input())).rejects.toMatchObject({ kind: 'network' });
+    const second = harness([json(200, CODE), new CloudError('network', 'ETIMEDOUT')]);
+    await expect(runDeviceFlow(second.deps, input())).rejects.toMatchObject({ kind: 'network' });
+  });
+
+  it('expires locally once expires_in has passed, without another poll', async () => {
+    // Each sleep advances the clock 400 s: the second wait crosses 600 s.
+    const { deps, forms } = harness(
+      [json(200, { ...CODE, expires_in: 600 }), json(400, { error: 'authorization_pending' })],
+      { clockStep: 400_000 },
+    );
+    await expect(runDeviceFlow(deps, input())).rejects.toMatchObject({ kind: 'expired' });
+    expect(forms).toHaveLength(2); // the code request and one poll
+  });
+
+  it('an abort during the wait stops polling', async () => {
+    const controller = new AbortController();
+    const { deps, forms } = harness([json(200, CODE)]);
+    deps.sleep = vi.fn(async () => {
+      controller.abort();
+      throw new DeviceFlowError('aborted');
+    });
+    await expect(runDeviceFlow(deps, input({ signal: controller.signal }))).rejects.toMatchObject({ kind: 'aborted' });
+    expect(forms).toHaveLength(1);
+  });
+
+  it('an answer that lands after an abort is dropped', async () => {
+    const controller = new AbortController();
+    const { deps } = harness([json(200, CODE), json(200, TOKEN)]);
+    deps.sleep = vi.fn(async () => undefined);
+    const request = deps.request;
+    deps.request = vi.fn(async (path: string, init?: RequestInit) => {
+      const response = await request(path, init);
+      if (path === '/api/oauth/token') controller.abort();
+      return response;
+    });
+    await expect(runDeviceFlow(deps, input({ signal: controller.signal }))).rejects.toMatchObject({ kind: 'aborted' });
+  });
+
+  it('an already-aborted signal asks for nothing', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { deps, forms } = harness([]);
+    await expect(runDeviceFlow(deps, input({ signal: controller.signal }))).rejects.toMatchObject({ kind: 'aborted' });
+    expect(forms).toHaveLength(0);
+  });
+  it('a token body that finishes reading after an abort is dropped', async () => {
+    const controller = new AbortController();
+    const { deps } = harness([json(200, CODE)]);
+    deps.sleep = vi.fn(async () => undefined);
+    const request = deps.request;
+    deps.request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path !== '/api/oauth/token') return request(path, init);
+      const response = json(200, TOKEN);
+      const read = response.json.bind(response);
+      response.json = async () => {
+        controller.abort();
+        return read();
+      };
+      return response;
+    });
+    await expect(runDeviceFlow(deps, input({ signal: controller.signal }))).rejects.toMatchObject({ kind: 'aborted' });
+  });
+  it('a transport failure after an abort is aborted, not network', async () => {
+    const controller = new AbortController();
+    const { deps } = harness([]);
+    deps.request = vi.fn(async () => {
+      controller.abort();
+      throw new CloudError('network', 'socket closed');
+    });
+    await expect(runDeviceFlow(deps, input({ signal: controller.signal }))).rejects.toMatchObject({ kind: 'aborted' });
+  });
+
+  it('a transport failure that is not an Error is still network, described', async () => {
+    const { deps } = harness([]);
+    deps.request = vi.fn(async () => Promise.reject('ECONNRESET' as unknown as Error));
+    await expect(runDeviceFlow(deps, input())).rejects.toMatchObject({ kind: 'network', message: 'network: ECONNRESET' });
+  });
+
+  it('a wait that ends normally after an abort still stops before polling', async () => {
+    const controller = new AbortController();
+    const { deps, forms } = harness([json(200, CODE)]);
+    deps.sleep = vi.fn(async () => {
+      controller.abort();
+    });
+    await expect(runDeviceFlow(deps, input({ signal: controller.signal }))).rejects.toMatchObject({ kind: 'aborted' });
+    expect(forms).toHaveLength(1);
+  });
+
+  it.each([
+    [{ error: 'server_error', error_description: 'try later' }, 'refused: try later'],
+    [{ error: 'server_error' }, 'refused: server_error'],
+    [null, 'refused: the cloud refused'],
+  ])('a refused poll carries the best description it has (%o)', async (body, message) => {
+    const answer = body === null ? new Response('not json', { status: 500 }) : json(400, body);
+    const { deps } = harness([json(200, CODE), answer]);
+    await expect(runDeviceFlow(deps, input())).rejects.toMatchObject({ kind: 'refused', message });
+  });
+
+  it.each([
+    [{ error: 'invalid_client' }, 'refused: invalid_client'],
+    [{}, 'refused: the cloud issued no code'],
+  ])('a refused code request carries the best description it has (%o)', async (body, message) => {
+    const { deps } = harness([json(400, body)]);
+    await expect(runDeviceFlow(deps, input())).rejects.toMatchObject({ kind: 'refused', message });
+  });
+});
+
+describe('abortableSleep', () => {
+  it('resolves after the wait, and rejects at once on abort', async () => {
+    vi.useFakeTimers();
+    try {
+      const done = vi.fn();
+      void abortableSleep(5000, new AbortController().signal).then(done);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(done).toHaveBeenCalled();
+
+      const controller = new AbortController();
+      const waiting = abortableSleep(5000, controller.signal);
+      controller.abort();
+      await expect(waiting).rejects.toMatchObject({ kind: 'aborted' });
+
+      await expect(abortableSleep(1, controller.signal)).rejects.toMatchObject({ kind: 'aborted' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
