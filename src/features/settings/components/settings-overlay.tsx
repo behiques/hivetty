@@ -12,6 +12,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { SettingsSection } from '@/types/settings';
 
+import { Lock, LockMark } from '@components/ui/lock';
 import { AdvancedSection } from '@features/settings/components/advanced-section';
 import { AgentsSection } from '@features/settings/components/agents-section';
 import { AppearanceSection } from '@features/settings/components/appearance-section';
@@ -21,12 +22,17 @@ import { HarnessPage } from '@features/settings/components/harness-page';
 import { HarnessesOverviewSection } from '@features/settings/components/harnesses-overview-section';
 import { IntegrationsSection } from '@features/settings/components/integrations-section';
 import { NotificationsSection } from '@features/settings/components/notifications-section';
+import { PlanLicenceSection } from '@features/settings/components/plan-licence-section';
 import { ProjectsSection } from '@features/settings/components/projects-section';
 import { ServerModeSection } from '@features/settings/components/server-mode-section';
+import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { ShellSection } from '@features/settings/components/shell-section';
 import { SkillsSection } from '@features/settings/components/skills-section';
 import { TicketWorkflowSection } from '@features/settings/components/ticket-workflow-section';
 import { UpdatesAboutSection } from '@features/settings/components/updates-about-section';
+import { useLicence } from '@hooks/use-licence';
+import { entitlementOf } from '@shared/entitlement';
+import type { LicenceState } from '@shared/licence-contract';
 import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
 
 
@@ -68,14 +74,21 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
  * open from its row in Projects.
  *
  * Machines holds what this Mac is to other machines: Server mode (HIVE-380),
- * then Runners and Relay with their own stories. General holds Updates &
+ * then Runners and Relay with their own stories. Account holds Plan & licence
+ * (HIVE-268); HIVE-265 adds Account & devices above it. General holds Updates &
  * about, and Advanced last: it answers questions about the app rather than
  * setting anything in it, and the destructive verb in the product lives there.
  */
-const GROUPS: readonly {
-  group: string;
-  panes: readonly { id: SettingsSection; label: string }[];
-}[] = [
+export type SettingsPane = {
+  id: SettingsSection;
+  label: string;
+  /** HIVE-268: the lease feature this pane needs. A pane the plan lacks is shown locked, never hidden. HIVE-332 sets the CLIs'. */
+  feature?: string;
+};
+
+export type SettingsGroups = readonly { group: string; panes: readonly SettingsPane[] }[];
+
+export const SETTINGS_GROUPS: SettingsGroups = [
   {
     group: 'Harnesses',
     panes: [
@@ -106,6 +119,8 @@ const GROUPS: readonly {
     ],
   },
   { group: 'Machines', panes: [{ id: 'server-mode', label: 'Server mode' }] },
+  // HIVE-265 adds { id: 'account-devices', label: 'Account & devices' } first.
+  { group: 'Account', panes: [{ id: 'plan-licence', label: 'Plan & licence' }] },
   {
     group: 'General',
     panes: [
@@ -116,10 +131,10 @@ const GROUPS: readonly {
 ];
 
 /** Every pane in nav order, for the arrow keys, which cross group lines. */
-const ORDER = GROUPS.flatMap((entry) => entry.panes.map((pane) => pane.id));
+const ORDER = SETTINGS_GROUPS.flatMap((entry) => entry.panes.map((pane) => pane.id));
 
 const groupOf = (id: SettingsSection): string =>
-  GROUPS.find((entry) => entry.panes.some((pane) => pane.id === id))?.group ?? '';
+  SETTINGS_GROUPS.find((entry) => entry.panes.some((pane) => pane.id === id))?.group ?? '';
 
 /** Arrow keys move one pane and hold at the ends; Home and End jump to them. */
 function step(current: SettingsSection, key: string): SettingsSection | null {
@@ -174,6 +189,7 @@ const PANES: Record<SectionId, ComponentType> = {
   integrations: IntegrationsSection,
   notifications: NotificationsSection,
   'server-mode': ServerModeSection,
+  'plan-licence': PlanLicenceSection,
   'updates-about': UpdatesAboutSection,
   advanced: AdvancedSection,
 };
@@ -207,7 +223,19 @@ export function escapeIsClaimed(target: EventTarget | null): boolean {
   return document.querySelector('[data-escape-scope]') !== null;
 }
 
-export function SettingsOverlay() {
+/** The lock a pane shows, or `null` when it needs no feature or the lease grants it (HIVE-268). */
+export function paneLock(
+  feature: string | undefined,
+  licence: LicenceState | null,
+): { reason: string; plan: string | null } | null {
+  if (!feature) return null;
+  const verdict = entitlementOf(licence, feature);
+  return verdict.allowed ? null : { reason: verdict.reason, plan: verdict.plan };
+}
+
+/** `groups` is a test seam for a gated pane; the app always renders {@link SETTINGS_GROUPS}. */
+export function SettingsOverlay({ groups = SETTINGS_GROUPS }: { groups?: SettingsGroups } = {}) {
+  const licence = useLicence();
   const { closeSettings, clearSettingsSection } = useSettingsActions();
 
   /**
@@ -247,6 +275,8 @@ export function SettingsOverlay() {
     clearSettingsSection();
   }, [requested, clearSettingsSection]);
   const Pane = PANES[section];
+  const entry = groups.flatMap((g) => g.panes).find((pane) => pane.id === section);
+  const openLock = paneLock(entry?.feature, licence);
 
   const navRef = useRef<HTMLElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
@@ -393,12 +423,12 @@ export function SettingsOverlay() {
               paneOpen && '@max-xl:hidden',
             )}
           >
-            {GROUPS.map((entry) => {
-              const labelId = `${groupId}-${entry.group}`;
+            {groups.map((group) => {
+              const labelId = `${groupId}-${group.group}`;
 
               return (
                 <div
-                  key={entry.group}
+                  key={group.group}
                   role="group"
                   aria-labelledby={labelId}
                   className="flex flex-col gap-0.5"
@@ -407,10 +437,11 @@ export function SettingsOverlay() {
                     id={labelId}
                     className="px-2.5 pb-1 text-ui-sm font-semibold tracking-[0.06em] text-muted uppercase"
                   >
-                    {entry.group}
+                    {group.group}
                   </span>
-                  {entry.panes.map((pane) => {
+                  {group.panes.map((pane) => {
                     const active = pane.id === section;
+                    const lock = paneLock(pane.feature, licence);
 
                     return (
                       <button
@@ -433,7 +464,10 @@ export function SettingsOverlay() {
                             : 'text-muted hover:bg-hover hover:text-ink',
                         )}
                       >
-                        {pane.label}
+                        <span className="flex min-w-0 flex-1 items-center gap-2">
+                          {pane.label}
+                          {lock && <LockMark plan={lock.plan} />}
+                        </span>
                         <CaretRight size={12} aria-hidden className="text-subtle @xl:hidden" />
                       </button>
                     );
@@ -454,7 +488,14 @@ export function SettingsOverlay() {
               <CaretLeft size={12} aria-hidden />
               {groupOf(section)}
             </button>
-            <Pane />
+            {openLock ? (
+              <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
+                <SettingsSectionHeader title={entry?.label} description={openLock.reason} />
+                <Lock kind="plan" reason={openLock.reason} />
+              </div>
+            ) : (
+              <Pane />
+            )}
           </div>
         </div>
       </DialogPrimitive.Content>
