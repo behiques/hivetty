@@ -210,7 +210,8 @@ export function runHiveCli(input: {
       clearTimeout(timer);
       reject(cause);
     });
-    child.on('exit', (code) => {
+    // `close`, not `exit`: `exit` can fire before stdout is drained, and the specs assert on stdout.
+    child.on('close', (code) => {
       clearTimeout(timer);
       resolve({ code, stdout });
     });

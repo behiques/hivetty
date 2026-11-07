@@ -84,11 +84,17 @@ export async function signedIn(input: { stub: StubCloud; testInfo: TestInfo; tri
 }> {
   const { configPath, userDataDir } = licenceConfig(input.testInfo);
   const app = await launchLicensed({ stub: input.stub, configPath, userDataDir });
-  const page = await mainWindow(app);
-  const opened = await recordExternal(app);
-  await expectSignInGate(page);
-  await signInWithBrowser(app, page, opened);
-  if (input.trial ?? true) await page.getByRole('button', { name: 'Start 14-day free trial' }).click();
-  await expectWorkspace(page);
-  return { app, page, opened, configPath, userDataDir };
+  // The caller's try/finally opens only after this returns, so a failed step closes the app here.
+  try {
+    const page = await mainWindow(app);
+    const opened = await recordExternal(app);
+    await expectSignInGate(page);
+    await signInWithBrowser(app, page, opened);
+    if (input.trial ?? true) await page.getByRole('button', { name: 'Start 14-day free trial' }).click();
+    await expectWorkspace(page);
+    return { app, page, opened, configPath, userDataDir };
+  } catch (cause) {
+    await app.close().catch(() => undefined);
+    throw cause;
+  }
 }
