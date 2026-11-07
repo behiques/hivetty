@@ -1,10 +1,34 @@
 import { useId, useState } from 'react';
 
+import { cn } from '@/lib/utils';
+
 import { Button } from '@components/ui/button';
 import { Chip } from '@components/ui/chip';
 import { Icon } from '@components/ui/icon';
 import { openAccountWeb } from '@lib/account';
 import { UPGRADE_PATH } from '@shared/entitlement';
+
+/** Upgrade, through `account:open-web` (HIVE-268): the click and its error, shared by Lock and UpgradeLink. */
+export function useUpgrade(): { upgrade: () => void; error: string | null } {
+  const [error, setError] = useState<string | null>(null);
+  const upgrade = () => {
+    void openAccountWeb(UPGRADE_PATH).then((result) => setError(result && 'error' in result ? result.error : null));
+  };
+  return { upgrade, error };
+}
+
+/** The inline Upgrade beside a lock's reason (HIVE-332): the dock, an Overview row, the agents default. */
+export function UpgradeLink({ className }: { className?: string }) {
+  const { upgrade, error } = useUpgrade();
+  return (
+    <>
+      <button type="button" onClick={upgrade} className={cn('text-brand hover:underline', className)}>
+        Upgrade
+      </button>
+      {error && <span className="text-ui-sm text-red">{error}</span>}
+    </>
+  );
+}
 
 export type LockProps =
   | { kind: 'plan'; reason: string }
@@ -17,12 +41,7 @@ export type LockProps =
  */
 export function Lock(props: LockProps) {
   const reasonId = useId();
-  const [error, setError] = useState<string | null>(null);
-
-  const upgrade = async () => {
-    const result = await openAccountWeb(UPGRADE_PATH);
-    setError(result && 'error' in result ? result.error : null);
-  };
+  const { upgrade, error } = useUpgrade();
 
   return (
     <div
@@ -39,7 +58,7 @@ export function Lock(props: LockProps) {
         </span>
         {props.kind === 'plan' && (
           <div className="flex flex-col items-start gap-1">
-            <Button variant="primary" onClick={() => void upgrade()}>
+            <Button variant="primary" onClick={upgrade}>
               Upgrade
             </Button>
             {error && <span className="text-ui-sm text-red">{error}</span>}

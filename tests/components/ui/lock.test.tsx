@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { Lock, LockMark } from '@components/ui/lock';
+import { Lock, LockMark, UpgradeLink } from '@components/ui/lock';
 
 const openAccountWeb = vi.hoisted(() => vi.fn());
 vi.mock('@lib/account', () => ({ openAccountWeb }));
@@ -46,5 +46,15 @@ describe('LockMark', () => {
   it('with no plan, the glyph alone', () => {
     render(<LockMark plan={null} />);
     expect(screen.getByLabelText('Locked')).toBeInTheDocument();
+  });
+});
+
+describe('UpgradeLink (HIVE-332)', () => {
+  it('opens the plan page and shows a failure', async () => {
+    openAccountWeb.mockResolvedValueOnce({ error: 'Could not open the browser' });
+    render(<UpgradeLink />);
+    await userEvent.click(screen.getByRole('button', { name: 'Upgrade' }));
+    expect(openAccountWeb).toHaveBeenCalledWith('/account/plan');
+    expect(await screen.findByText('Could not open the browser')).toBeInTheDocument();
   });
 });
