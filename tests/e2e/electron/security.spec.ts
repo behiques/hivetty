@@ -317,6 +317,11 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'account',
     'agents',
     'appInfo',
+    /*
+      HIVE-265 adds `appQuit`: the gate's Quit. It takes no argument and only does what the menu's Quit
+      already does. Process-local: a remote client is answered locally and never quits the host.
+    */
+    'appQuit',
     // HIVE-201: read-only, like `plans`: a session's changed files, listed and pushed.
     'changedFiles',
     /*
