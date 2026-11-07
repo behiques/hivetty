@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { useLicence } from '@/hooks/use-licence';
+import { useLicence, useLicenceRead } from '@/hooks/use-licence';
 
 afterEach(() => {
   delete (window as { hive?: unknown }).hive;
@@ -51,5 +51,12 @@ describe('useLicence', () => {
     };
     renderHook(() => useLicence()).unmount();
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useLicenceRead', () => {
+  it('settles with null when there is no bridge', async () => {
+    const { result } = renderHook(() => useLicenceRead());
+    await waitFor(() => expect(result.current).toEqual({ licence: null, settled: true }));
   });
 });
