@@ -1,4 +1,6 @@
-import type { LicenceState } from '@shared/licence-contract';
+import type { TrialResult } from '@shared/account-contract';
+import { PLAN_NAMES, type PlanKey } from '@shared/feature-plans';
+import type { LicenceState, Paused } from '@shared/licence-contract';
 
 /**
  * The renderer's door onto the licence (HIVE-267); HIVE-265's gate and HIVE-268's locks use it.
@@ -38,6 +40,30 @@ export async function watchPurchase(on: boolean): Promise<void> {
   }
 }
 
+/** HIVE-265: start the account's trial; the licence follows on `licence:changed`. */
+export async function startTrial(): Promise<TrialResult | null> {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.licence.startTrial();
+  } catch (cause) {
+    console.error('[hive] starting the trial failed:', cause);
+    return null;
+  }
+}
+
+/** HIVE-265: the sessions and agents a lapse paused. */
+export async function readPaused(): Promise<Paused | null> {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.licence.paused();
+  } catch (cause) {
+    console.error('[hive] reading what is paused failed:', cause);
+    return null;
+  }
+}
+
 export function onLicenceChanged(callback: (state: LicenceState) => void): () => void {
   return window.hive?.licence.onChanged(callback) ?? (() => undefined);
 }
@@ -46,4 +72,12 @@ export function onLicenceChanged(callback: (state: LicenceState) => void): () =>
 export function trialDaysLeft(state: LicenceState | null, now: number): number | null {
   if (!state || (state.kind !== 'licensed' && state.kind !== 'grace') || state.trialEnds === undefined) return null;
   return Math.max(0, Math.ceil((state.trialEnds * 1000 - now) / 86_400_000));
+}
+
+/** "Team trial · 3 days left", or the plan's name; `null` with no live licence. */
+export function planLine(state: LicenceState | null, now: number): string | null {
+  if (!state || (state.kind !== 'licensed' && state.kind !== 'grace')) return null;
+  const name = PLAN_NAMES[state.plan as PlanKey] ?? state.plan;
+  const days = trialDaysLeft(state, now);
+  return days === null ? name : `${name} trial · ${String(days)} day${days === 1 ? '' : 's'} left`;
 }
