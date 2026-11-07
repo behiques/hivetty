@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 
 import { ConnectionItem } from '@components/layout/connection-item';
+import { AccountMenu } from '@features/account/components/account-menu';
 import { useResolvedTheme, useToggleTheme } from '@stores/appearance-store';
 import { useCounts, usePrNeedsYouCount, useTabGone, useWorkingAgentCount } from '@stores/hive-store';
 import {
@@ -104,6 +105,8 @@ export function ActivityBar() {
       <span className="flex-1" />
 
       <ConnectionItem />
+
+      <AccountMenu />
 
       <button
         type="button"

@@ -72,6 +72,7 @@ describe('SettingsOverlay', () => {
       'Appearance',
       'Integrations',
       'Server mode',
+      'Account & devices',
       'Plan & licence',
       'Updates & About',
       'Advanced',
@@ -93,7 +94,8 @@ describe('SettingsOverlay', () => {
   /**
    * The grouped nav (HIVE-374). Groups are labels, not buttons, and a group
    * with no pane yet is absent. Machines arrived with Server mode (HIVE-380),
-   * Account with Plan & licence (HIVE-268).
+   * Account with Plan & licence (HIVE-268), then Account & devices above it
+   * (HIVE-265).
    */
   it('reads in six groups, in the epic order, with no empty group', () => {
     render(<SettingsOverlay />);
@@ -115,7 +117,7 @@ describe('SettingsOverlay', () => {
       ['Agents', 'Skills', 'Ticket workflow'],
       ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
       ['Server mode'],
-      ['Plan & licence'],
+      ['Account & devices', 'Plan & licence'],
       ['Updates & About', 'Advanced'],
     ]);
     expect(within(nav).queryByRole('button', { name: 'Harnesses' })).not.toBeInTheDocument();
@@ -137,6 +139,7 @@ describe('SettingsOverlay', () => {
     ['integrations', 'Integrations'],
     ['notifications', 'Notifications'],
     ['server-mode', 'Server mode'],
+    ['account-devices', 'Account & devices'],
     ['plan-licence', 'Plan & licence'],
     ['updates-about', 'Updates & About'],
     ['advanced', 'Advanced'],
@@ -554,6 +557,28 @@ describe('Account › Plan & licence (HIVE-268)', () => {
     expect(screen.getByRole('note', { name: 'Sign in to use Copilot' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Upgrade' })).toBeInTheDocument();
     expect(screen.queryByText('Sign-in')).toBeNull();
+  });
+});
+
+describe('Account › Account & devices (HIVE-265)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+  });
+
+  it('opens from the nav, first in Account', async () => {
+    const user = userEvent.setup();
+    useUiStore.getState().openSettings();
+    render(<SettingsOverlay />);
+    const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+    await user.click(within(nav).getByRole('button', { name: 'Account & devices' }));
+    expect(screen.getByRole('heading', { name: 'Account & devices', level: 2 })).toBeInTheDocument();
+    expect(screen.getByText('Sign in to see your account.')).toBeInTheDocument();
+  });
+
+  it("openSettings('account-devices') shows the pane", () => {
+    useUiStore.getState().openSettings('account-devices');
+    render(<SettingsOverlay />);
+    expect(screen.getByRole('heading', { name: 'Account & devices', level: 2 })).toBeInTheDocument();
   });
 });
 
