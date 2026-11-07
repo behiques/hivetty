@@ -946,6 +946,25 @@ describe('narrow (HIVE-211)', () => {
   });
 });
 
+describe('the licence gate and the trial banner (HIVE-265)', () => {
+  beforeEach(() => useUiStore.getState().reset());
+
+  it('starts ungated with nothing dismissed', () => {
+    expect(useUiStore.getState()).toMatchObject({ gated: false, dismissedTrialThreshold: null });
+  });
+  it('setGated sets it', () => {
+    useUiStore.getState().setGated(true);
+    expect(useUiStore.getState().gated).toBe(true);
+  });
+  it('dismissTrialBanner records the threshold, and reset clears both', () => {
+    useUiStore.getState().dismissTrialBanner(3);
+    expect(useUiStore.getState().dismissedTrialThreshold).toBe(3);
+    useUiStore.getState().setGated(true);
+    useUiStore.getState().reset();
+    expect(useUiStore.getState()).toMatchObject({ gated: false, dismissedTrialThreshold: null });
+  });
+});
+
 describe('a row pick while narrow (HIVE-211)', () => {
   beforeEach(() => useUiStore.getState().reset());
 

@@ -180,6 +180,10 @@ interface UiState {
   panelOpen: boolean;
   /** The window is under 1,200px (HIVE-211). Fed from `useNarrowWindow` by the shell; never persisted. */
   narrow: boolean;
+  /** A licence gate is up over the shell (HIVE-265). Window keydown listeners stand down; inert does not reach them. */
+  gated: boolean;
+  /** The trial banner's threshold the person dismissed, 3 or 1 days (HIVE-265). Not persisted: a relaunch shows it again. */
+  dismissedTrialThreshold: 1 | 3 | null;
   /** The Overmind's project filter (HIVE-197). `null` is All projects. */
   sessionsProject: string | null;
   sessionsFilter: TableFilter;
@@ -273,6 +277,8 @@ interface UiState {
   togglePanel: () => void;
   /** Crossing below 1,200px closes the panel, so the stage is never covered without a click (HIVE-211). */
   setNarrow: (narrow: boolean) => void;
+  setGated: (gated: boolean) => void;
+  dismissTrialBanner: (threshold: 1 | 3) => void;
   setSessionsProject: (id: string | null) => void;
   setSessionsFilter: (filter: TableFilter) => void;
   expandEnded: () => void;
@@ -420,6 +426,8 @@ const initialUiState = {
   sessionsTab: 'orch' as 'orch' | string,
   panelOpen: true,
   narrow: false,
+  gated: false,
+  dismissedTrialThreshold: null as 1 | 3 | null,
   sessionsProject: null as string | null,
   sessionsFilter: 'all' as TableFilter,
   endedExpanded: false,
@@ -536,6 +544,10 @@ export const useUiStore = create<UiState>()((set) => ({
     set((state) =>
       state.narrow === narrow ? state : { narrow, ...(narrow ? { panelOpen: false } : {}) },
     ),
+
+  setGated: (gated) => set({ gated }),
+
+  dismissTrialBanner: (threshold) => set({ dismissedTrialThreshold: threshold }),
 
   setSessionsProject: (id) =>
     set((state) =>
@@ -846,6 +858,10 @@ export const useSelectPlace = () => useUiStore((state) => state.selectPlace);
 export const useTogglePanel = () => useUiStore((state) => state.togglePanel);
 export const useNarrow = () => useUiStore((state) => state.narrow);
 export const useSetNarrow = () => useUiStore((state) => state.setNarrow);
+export const useGated = () => useUiStore((state) => state.gated);
+export const useSetGated = () => useUiStore((state) => state.setGated);
+export const useDismissedTrialThreshold = () => useUiStore((state) => state.dismissedTrialThreshold);
+export const useDismissTrialBanner = () => useUiStore((state) => state.dismissTrialBanner);
 /** The Work place's open ticket, folds and conversation filter (HIVE-203). */
 export const useWorkTicket = () => useUiStore((state) => state.workTicket);
 export const useWorkTicketAt = () => useUiStore((state) => state.workTicketAt);
