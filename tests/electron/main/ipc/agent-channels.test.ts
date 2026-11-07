@@ -80,6 +80,8 @@ vi.mock('../../../../electron/main/licence', async (importOriginal) => ({
     licenceSeam.listeners.add(listener);
     return () => licenceSeam.listeners.delete(listener);
   },
+  // HIVE-265: the server:licence answer, read off the same seam.
+  hostLicence: () => ({ lapsed: licenceSeam.state.kind === 'lapsed', paused: { sessions: 0, agents: 0 } }),
 }));
 
 /** HIVE-267: the deps the composition handed the real scheduler and sessions, captured on the way through. */
@@ -1362,6 +1364,18 @@ describe('the licence suspender (HIVE-267)', () => {
 
     registerIpcHandlers();
     await settle();
-    expect(licenceSeam.listeners.size).toBe(1);
+    // The suspender's, and HIVE-265's server:licence-changed relay.
+    expect(licenceSeam.listeners.size).toBe(2);
+  });
+
+  it('relays every licence change as server:licence-changed, and answers server:licence (HIVE-265)', async () => {
+    const send = vi.fn();
+    windows.push({ isDestroyed: () => false, webContents: { send } });
+    licenceSeam.state = LAPSED;
+    await emit(LAPSED);
+
+    const host = { lapsed: true, paused: { sessions: 0, agents: 0 } };
+    expect(send).toHaveBeenCalledWith('server:licence-changed', host);
+    await expect(invoke(CH.serverLicence, undefined)).resolves.toEqual(host);
   });
 });

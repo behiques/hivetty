@@ -88,8 +88,9 @@ import { isThisMachineAction } from './notification-contract';
  * 32 → 33 (HIVE-267): `CH` gained `licence:state`, `licence:refresh`, `licence:watch-purchase` (process-local) and `licence:changed` (local-only).
  * 33 → 34 (HIVE-268): `CH` gained `account:open-web` (process-local).
  * 34 → 35 (HIVE-265): `CH` gained `account:devices`, `licence:start-trial`, `licence:paused` and `app:quit` (process-local).
+ * 35 → 36 (HIVE-265): CH gained server:licence (a forwarded read) and server:licence-changed (a relayed event).
  */
-export const REMOTE_PROTOCOL_VERSION = 35;
+export const REMOTE_PROTOCOL_VERSION = 36;
 
 /**
  * What a frame is for.
@@ -285,6 +286,8 @@ export const FRAME_KIND = {
   [CH.licenceStartTrial]: 'call',
   [CH.licencePaused]: 'call',
   [CH.appQuit]: 'call',
+  [CH.serverLicence]: 'call',
+  [CH.serverLicenceChanged]: 'event',
   [CH.configCloneStart]: 'call',
   [CH.configCloneCancel]: 'call',
   [CH.configCloneDone]: 'event',
@@ -619,6 +622,9 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.licenceStartTrial]: 'execute',
   [CH.licencePaused]: 'read',
   [CH.appQuit]: 'execute',
+  // HIVE-265: counts only, the one licence fact that crosses the socket.
+  [CH.serverLicence]: 'read',
+  [CH.serverLicenceChanged]: 'read',
   [CH.configCloneStart]: 'execute',
   [CH.configCloneCancel]: 'mutate',
   [CH.configCloneDone]: 'read',

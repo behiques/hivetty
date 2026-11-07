@@ -100,7 +100,7 @@ export const BRIDGE_CONFIG_KEYS = [
 ] as const satisfies readonly (keyof HiveBridge['config'])[];
 
 export const BRIDGE_SERVER_KEYS = [
-  'pair', 'revoke',
+  'pair', 'revoke', 'licence', 'onLicence',
 ] as const satisfies readonly (keyof HiveBridge['server'])[];
 
 export const BRIDGE_REMOTE_KEYS = [

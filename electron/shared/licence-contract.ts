@@ -55,3 +55,9 @@ export interface Paused {
   sessions: string[];
   agents: string[];
 }
+
+/** The host's licence, as an attached client sees it (HIVE-265). Counts only: the names stay on the host. */
+export interface HostLicence {
+  lapsed: boolean;
+  paused: { sessions: number; agents: number };
+}

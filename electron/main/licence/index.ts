@@ -11,7 +11,7 @@ import type {
   TrialResult,
 } from '@shared/account-contract';
 import { CH } from '@shared/ipc-contract';
-import type { LicenceState, Paused } from '@shared/licence-contract';
+import type { HostLicence, LicenceState, Paused } from '@shared/licence-contract';
 
 import { runLogin, runLogout } from './account-command';
 import { type AccountSafeStorage, createAccountStore } from './account-store';
@@ -201,6 +201,12 @@ export const LICENCE_CALLS = {
   // Read at call time: while lapsed every live thing is paused and nothing new can start.
   [CH.licencePaused]: (): Paused => (licence().kind === 'lapsed' ? census() : NOTHING_PAUSED),
 } as const;
+
+/** This machine's licence as a server reports it to attached clients (HIVE-265): counts, never names. */
+export function hostLicence(): HostLicence {
+  const { sessions, agents } = LICENCE_CALLS[CH.licencePaused]();
+  return { lapsed: licence().kind === 'lapsed', paused: { sessions: sessions.length, agents: agents.length } };
+}
 
 export type AccountCommandBoot = AccountBoot & { print: (line: string) => void; signal: AbortSignal };
 

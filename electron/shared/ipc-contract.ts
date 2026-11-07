@@ -153,7 +153,7 @@ import type {
   LedgerResult,
   LedgerSnapshot,
 } from './ledger-contract';
-import type { LicenceState, Paused } from './licence-contract';
+import type { HostLicence, LicenceState, Paused } from './licence-contract';
 import type { SessionMetricsEvent } from './metrics-contract';
 import type {
   HiveNotification,
@@ -914,6 +914,10 @@ export const CH = {
   licenceStartTrial: 'licence:start-trial',
   /** What a lapse paused: session titles and agent names. Empty unless lapsed (HIVE-265). */
   licencePaused: 'licence:paused',
+  /** This machine's licence as a server reports it to a peer (HIVE-265). Forwarded, not process-local: the server answers. */
+  serverLicence: 'server:licence',
+  /** Push: the server's licence changed. Relayed to attached clients. */
+  serverLicenceChanged: 'server:licence-changed',
   configCloneStart: 'config:clone-start',
   configCloneCancel: 'config:clone-cancel',
   configCloneDone: 'config:clone-done', // main → renderer
@@ -2390,6 +2394,13 @@ export interface HiveBridge {
      * must not report "done" for a revoke that changed nothing on disk.
      */
     revoke(request: DeviceNameRequest): Promise<{ revoked: true } | { error: string }>;
+    /**
+     * The attached server's licence (HIVE-265): whether it lapsed, and how much it paused, as counts. Forwarded to
+     * the server while attached; in local mode it answers this machine's own.
+     */
+    licence(): Promise<HostLicence>;
+    /** Follow the server's licence: the push it relays on every change. Returns the unsubscribe. */
+    onLicence(callback: (state: HostLicence) => void): () => void;
   };
   /**
    * Storing and forgetting the credential this machine was handed to attach

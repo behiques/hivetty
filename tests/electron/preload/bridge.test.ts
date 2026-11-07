@@ -1038,6 +1038,21 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
   });
 });
 
+describe('the host licence verbs (HIVE-265)', () => {
+  it('server.licence invokes server:licence', async () => {
+    await (server().licence as () => Promise<unknown>)();
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.serverLicence);
+  });
+
+  it('server.onLicence hands the pushed host licence over, payload only', () => {
+    const callback = vi.fn();
+    const host = { lapsed: true, paused: { sessions: 2, agents: 1 } };
+    (server().onLicence as (cb: unknown) => () => void)(callback);
+    listeners.get(CH.serverLicenceChanged)?.[0]?.({}, host);
+    expect(callback).toHaveBeenCalledWith(host);
+  });
+});
+
 describe('the licence verbs route to their channels (HIVE-267)', () => {
   it('invokes each call channel, watchPurchase with its flag', async () => {
     await licence().state();
