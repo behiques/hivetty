@@ -166,6 +166,14 @@ describe('runVersion (HIVE-375)', () => {
     });
   });
 
+  it('passes an env when given one, and the parent’s otherwise (HIVE-372)', async () => {
+    const echo = script('env', 'printf "%s" "$HIVE_TEST_VAR"');
+    await expect(runVersion(echo, [], 5_000, { env: { ...process.env, HIVE_TEST_VAR: 'given' } })).resolves.toMatchObject({
+      stdout: 'given',
+    });
+    await expect(runVersion(echo, [], 5_000)).resolves.toMatchObject({ stdout: process.env['HIVE_TEST_VAR'] ?? '' });
+  });
+
   it('kills a run that outlives the timeout', async () => {
     await expect(runVersion(script('slow', 'exec sleep 30'), [], 100)).resolves.toMatchObject({
       code: null,
