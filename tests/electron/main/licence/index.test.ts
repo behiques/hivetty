@@ -14,6 +14,7 @@ import {
   RELOAD_EVERY_MS,
   resetLicence,
   runAccountCommand,
+  setPausedCensus,
   startLicence,
 } from '../../../../electron/main/licence';
 import { ISS, makeSigner, claimsFor } from '../../../support/lease';
@@ -161,6 +162,62 @@ describe('licence composition', () => {
     expect(early).not.toHaveBeenCalled();
     resetLicence();
     expect(licence()).toEqual({ kind: 'unlicensed' });
+  });
+
+  it('the HIVE-265 calls answer not-ready before startLicence', async () => {
+    await expect(ACCOUNT_CALLS[CH.accountDevices]()).resolves.toEqual({ error: expect.any(String) });
+    await expect(LICENCE_CALLS[CH.licenceStartTrial]()).resolves.toEqual({ error: expect.any(String) });
+  });
+
+  it('licence:paused is empty unless lapsed, and reads the census at call time', () => {
+    const census = vi.fn(() => ({ sessions: ['api'], agents: ['shipper'] }));
+    setPausedCensus(census);
+    expect(LICENCE_CALLS[CH.licencePaused]()).toEqual({ sessions: [], agents: [] }); // unlicensed
+    expect(census).not.toHaveBeenCalled();
+  });
+
+  it('licence:paused names the census while lapsed, and resetLicence forgets it', () => {
+    const signer = makeSigner('kid-paused');
+    writeFileSync(join(dir, 'lease.jws'), signer.sign(claimsFor()));
+    setPausedCensus(() => ({ sessions: ['api'], agents: ['shipper'] }));
+    const boot = {
+      app: { isPackaged: false, getPath: () => dir },
+      safeStorage,
+      openExternal: vi.fn(),
+      env: { HIVETTY_LEASE_KEYS: JSON.stringify([signer.jwk]), HIVETTY_CLOUD_URL: ISS },
+      fetch: vi.fn(),
+      broadcast: vi.fn(),
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
+    };
+    startLicence(boot);
+    expect(licence()).toEqual({ kind: 'lapsed', reason: 'signed_out' });
+    expect(LICENCE_CALLS[CH.licencePaused]()).toEqual({ sessions: ['api'], agents: ['shipper'] });
+    resetLicence();
+    startLicence(boot);
+    expect(licence()).toEqual({ kind: 'lapsed', reason: 'signed_out' });
+    expect(LICENCE_CALLS[CH.licencePaused]()).toEqual({ sessions: [], agents: [] });
+  });
+
+  it('account:devices and licence:start-trial run through the started client', async () => {
+    const signer = makeSigner('kid-calls');
+    startLicence({
+      app: { isPackaged: false, getPath: () => dir },
+      safeStorage,
+      openExternal: vi.fn(),
+      env: { HIVETTY_LEASE_KEYS: JSON.stringify([signer.jwk]), HIVETTY_CLOUD_URL: ISS },
+      fetch: vi.fn(),
+      broadcast: vi.fn(),
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
+    });
+    // Signed out: authedFetch has no account, so each answers its own error rather than not-ready.
+    await expect(ACCOUNT_CALLS[CH.accountDevices]()).resolves.toEqual({ error: expect.any(String) });
+    await expect(LICENCE_CALLS[CH.licenceStartTrial]()).resolves.toEqual({ error: expect.any(String) });
   });
 });
 

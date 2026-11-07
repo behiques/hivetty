@@ -94,6 +94,7 @@ const removeAllListeners = vi.fn((channel: string) => {
  */
 const appListeners = new Map<string, Set<() => void>>();
 const setBadge = vi.fn();
+const quit = vi.fn();
 /** Toasts this process raised for the attached server (HIVE-145). */
 const toastsRaised: { title: string; body: string }[] = [];
 let windows: { isDestroyed: () => boolean; isFocused: () => boolean }[] = [
@@ -113,6 +114,8 @@ vi.mock('electron', () => ({
     },
     // HIVE-159: the attached client badges its own dock from its renderer's count.
     dock: { setBadge, bounce: vi.fn() },
+    // HIVE-265: app:quit is answered by this machine.
+    quit,
   },
   BrowserWindow: { getAllWindows: () => windows },
   /*
@@ -222,7 +225,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(147);
+    expect(callChannels.length).toBe(151);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -532,7 +535,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(153);
+    expect(remoteProxyBindingsSize()).toBe(157);
   });
 
   /**
@@ -546,20 +549,24 @@ describe('registerRemoteProxy', () => {
    * `remote:forget` (HIVE-153).
    */
   describe('PROCESS_LOCAL channels (HIVE-144 Rulings 24 and 28, HIVE-153, HIVE-149, HIVE-151)', () => {
-    it('names exactly nineteen channels', () => {
-      expect(PROCESS_LOCAL.length).toBe(19);
+    it('names exactly twenty-three channels', () => {
+      expect(PROCESS_LOCAL.length).toBe(23);
       expect([...PROCESS_LOCAL].sort()).toEqual(
         [
           'account:cancel',
+          'account:devices',
           'account:open-web',
           'account:sign-in',
           'account:sign-in-code',
           'account:sign-out',
           'account:state',
           'app:info',
+          'app:quit',
           'config:get-remote',
           'config:set-remote',
+          'licence:paused',
           'licence:refresh',
+          'licence:start-trial',
           'licence:state',
           'licence:watch-purchase',
           'notifications:badge',
@@ -619,6 +626,20 @@ describe('registerRemoteProxy', () => {
 
       // Not started in this test, so ACCOUNT_CALLS answers its not-ready sentence: proof it answered locally.
       await expect(invoke('account:sign-in-code', trustedEvent, undefined)).resolves.toEqual({ error: expect.any(String) });
+      expect(client.call).not.toHaveBeenCalled();
+    });
+
+    it('answers the HIVE-265 calls locally, never client.call', async () => {
+      const client = fakeClient();
+      registerRemoteProxy({ client, broadcaster: fakeBroadcaster() });
+
+      // Not started in this test, so each answers its not-ready or empty answer: proof it answered locally.
+      await expect(invoke('account:devices', trustedEvent, undefined)).resolves.toEqual({ error: expect.any(String) });
+      await expect(invoke('licence:start-trial', trustedEvent, undefined)).resolves.toEqual({ error: expect.any(String) });
+      await expect(invoke('licence:paused', trustedEvent, undefined)).resolves.toEqual({ sessions: [], agents: [] });
+      await invoke('app:quit', trustedEvent, undefined);
+
+      expect(quit).toHaveBeenCalledTimes(1);
       expect(client.call).not.toHaveBeenCalled();
     });
 
@@ -1180,8 +1201,8 @@ describe('registerRemoteProxy', () => {
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(153);
-    expect(removeAllListeners).toHaveBeenCalledTimes(153);
+    expect(removeHandler).toHaveBeenCalledTimes(157);
+    expect(removeAllListeners).toHaveBeenCalledTimes(157);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });
