@@ -10,6 +10,7 @@ import { type AccountSafeStorage, createAccountStore } from './account-store';
 import { type AuthClient, createAuthClient, generateDeviceKey } from './auth-client';
 import { createCloud, type Fetch, resolveCloudUrl } from './cloud';
 import { schemeFor } from './deep-link';
+import { abortableSleep, runDeviceFlow } from './device-flow';
 import { leaseKeys } from './keys';
 import { createLeaseFile, renewLease } from './lease';
 import { createLicenceState, type LicenceStateMachine } from './licence-state';
@@ -39,8 +40,9 @@ export function startLicence(deps: {
 }): AuthClient {
   const { app, safeStorage } = deps;
   const baseUrl = resolveCloudUrl({ isPackaged: app.isPackaged, configUrl: deps.cloudUrl, env: deps.env });
+  const cloud = createCloud({ baseUrl, fetch: deps.fetch });
   const next = createAuthClient({
-    cloud: createCloud({ baseUrl, fetch: deps.fetch }),
+    cloud,
     store: createAccountStore({ safeStorage, filePath: join(app.getPath('userData'), 'account.bin') }),
     encryptionAvailable: () => safeStorage.isEncryptionAvailable(),
     openExternal: deps.openExternal,
@@ -48,6 +50,7 @@ export function startLicence(deps: {
     randomBytes,
     generateDeviceKey,
     scheme: schemeFor(app.isPackaged),
+    runDeviceFlow: (input) => runDeviceFlow({ request: cloud.request, sleep: abortableSleep, now: Date.now }, input),
   });
   next.onChange(deps.broadcast);
   client = next;

@@ -13,6 +13,7 @@ import {
   SIGN_IN_DEADLINE_MS,
 } from '../../../../electron/main/licence/auth-client';
 import { type Cloud, CloudError, type TokenResponse } from '../../../../electron/main/licence/cloud';
+import { DeviceFlowError, type DeviceFlowInput } from '../../../../electron/main/licence/device-flow';
 
 const KEY = {
   publicJwk: { kty: 'OKP', crv: 'Ed25519', x: 'pub' },
@@ -69,6 +70,14 @@ function harness(opts: { stored?: StoredAccount | null; encryption?: boolean; wr
   const store = memoryStore(opts.stored ?? null, opts.writable ?? true);
   const openExternal = vi.fn().mockResolvedValue(undefined);
   let byte = 0;
+  let flow: { resolve: (t: TokenResponse) => void; reject: (e: unknown) => void; input: DeviceFlowInput } | null = null;
+  const runDeviceFlow = vi.fn(
+    (input: DeviceFlowInput) =>
+      new Promise<TokenResponse>((resolve, reject) => {
+        flow = { resolve, reject, input };
+        input.signal.addEventListener('abort', () => reject(new DeviceFlowError('aborted')), { once: true });
+      }),
+  );
   const client = createAuthClient({
     cloud,
     store,
@@ -78,6 +87,7 @@ function harness(opts: { stored?: StoredAccount | null; encryption?: boolean; wr
     randomBytes: (size) => Buffer.alloc(size, ++byte),
     generateDeviceKey: () => KEY,
     scheme: 'hivetty',
+    runDeviceFlow,
   });
   const states: AccountState[] = [];
   client.onChange((state) => states.push(state));
@@ -85,7 +95,7 @@ function harness(opts: { stored?: StoredAccount | null; encryption?: boolean; wr
   const lastState = () => new URL(openExternal.mock.lastCall![0] as string).searchParams.get('state')!;
   const callback = (state = lastState(), code = 'code-1') =>
     client.handleCallback(`hivetty://auth/callback?code=${code}&state=${state}`);
-  return { client, cloud, store, openExternal, states, lastState, callback };
+  return { client, cloud, store, openExternal, states, lastState, callback, runDeviceFlow, flow: () => flow! };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -726,5 +736,173 @@ describe('openWeb (HIVE-268)', () => {
     cloud.request.mockResolvedValueOnce(answer({ url: 'https://c.test/redeem?code=abc' }));
     openExternal.mockRejectedValueOnce(new Error('x'));
     await expect(client.openWeb('/account')).resolves.toEqual({ error: "The browser didn't open." });
+  });
+});
+
+describe('signInWithCode', () => {
+  it('runs the flow with this device, stores the account and announces it', async () => {
+    const h = harness();
+    const onCode = vi.fn();
+    const done = h.client.signInWithCode({ onCode });
+    expect(h.client.state()).toEqual({ kind: 'signing-in' });
+    expect(h.flow().input.device).toEqual({ name: 'ada-mbp', publicKey: '{"kty":"OKP","crv":"Ed25519","x":"pub"}' });
+    expect(h.flow().input.onCode).toBe(onCode);
+    h.flow().resolve(tokens(1));
+    await expect(done).resolves.toEqual({ ok: true });
+    expect(h.store.value()).toMatchObject({ refreshToken: 'rt-1', deviceId: 'dev-0', deviceKey: KEY });
+    expect(h.client.state()).toEqual({ kind: 'signed-in', email: 'ada@example.com', name: 'Ada', deviceId: 'dev-0' });
+    await expect(h.client.getAccessToken()).resolves.toBe('at-1');
+  });
+
+  it('reuses the stored device key and id (HIVE-260)', async () => {
+    const h = harness({ stored: STORED });
+    void h.client.signInWithCode({ onCode: vi.fn() });
+    expect(h.flow().input.device.id).toBe('dev-0');
+  });
+
+  it('refuses at once without encryption, and asks the cloud nothing', async () => {
+    const h = harness({ encryption: false });
+    await expect(h.client.signInWithCode({ onCode: vi.fn() })).resolves.toEqual({
+      error: expect.any(String),
+      failure: 'storage',
+    });
+    expect(h.runDeviceFlow).not.toHaveBeenCalled();
+  });
+
+  it.each(['denied', 'expired', 'network', 'refused'] as const)('a %s flow restores the state before it', async (kind) => {
+    const h = harness({ stored: STORED });
+    h.client.start();
+    const done = h.client.signInWithCode({ onCode: vi.fn() });
+    h.flow().reject(new DeviceFlowError(kind));
+    await expect(done).resolves.toEqual({ error: expect.any(String), failure: kind });
+    expect(h.client.state()).toMatchObject({ kind: 'signed-in' });
+  });
+
+  it('cancel() aborts the flow and restores signed-out', async () => {
+    const h = harness();
+    const done = h.client.signInWithCode({ onCode: vi.fn() });
+    h.client.cancel();
+    await expect(done).resolves.toMatchObject({ failure: 'aborted' });
+    expect(h.client.state()).toEqual({ kind: 'signed-out' });
+  });
+
+  it('the caller signal aborts it, even one aborted before the call', async () => {
+    const h = harness();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(h.client.signInWithCode({ onCode: vi.fn(), signal: controller.signal })).resolves.toMatchObject({
+      failure: 'aborted',
+    });
+  });
+
+  it('a second call replaces the first, which never lands', async () => {
+    const h = harness();
+    const first = h.client.signInWithCode({ onCode: vi.fn() });
+    const second = h.client.signInWithCode({ onCode: vi.fn() });
+    await expect(first).resolves.toMatchObject({ failure: 'aborted' });
+    expect(h.client.state()).toEqual({ kind: 'signing-in' });
+    h.flow().resolve(tokens(2));
+    await expect(second).resolves.toEqual({ ok: true });
+  });
+
+  it('a token that cannot be saved signs out with the storage failure', async () => {
+    const h = harness({ writable: false });
+    const done = h.client.signInWithCode({ onCode: vi.fn() });
+    h.flow().resolve(tokens(1));
+    await expect(done).resolves.toMatchObject({ failure: 'storage' });
+    expect(h.client.state()).toMatchObject({ kind: 'signed-out', reason: 'error' });
+  });
+
+  it('signOut during the flow aborts it', async () => {
+    const h = harness();
+    const done = h.client.signInWithCode({ onCode: vi.fn() });
+    await h.client.signOut();
+    await expect(done).resolves.toMatchObject({ failure: 'aborted' });
+    expect(h.client.state()).toEqual({ kind: 'signed-out' });
+  });
+});
+
+describe('signInWithCode races (HIVE-266)', () => {
+  it('waits for a refresh already in flight, so the rotated token is not lost, then stores the new account', async () => {
+    const h = harness({ stored: STORED });
+    let resolveRefresh!: (value: TokenResponse) => void;
+    h.cloud.token.mockReturnValueOnce(new Promise<TokenResponse>((r) => (resolveRefresh = r)));
+    const done = h.client.signInWithCode({ onCode: vi.fn() });
+    const refreshing = h.client.getAccessToken();
+    h.flow().resolve(tokens(2, { deviceId: 'dev-0' }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.store.value()?.refreshToken).toBe('rt-0');
+    resolveRefresh(tokens(1));
+    await refreshing;
+    await expect(done).resolves.toEqual({ ok: true });
+    expect(h.store.value()?.refreshToken).toBe('rt-2');
+    await expect(h.client.getAccessToken()).resolves.toBe('at-2');
+  });
+
+  it('a sign-out while waiting for that refresh drops the new account', async () => {
+    const h = harness({ stored: STORED });
+    let resolveRefresh!: (value: TokenResponse) => void;
+    h.cloud.token.mockReturnValueOnce(new Promise<TokenResponse>((r) => (resolveRefresh = r)));
+    const done = h.client.signInWithCode({ onCode: vi.fn() });
+    void h.client.getAccessToken();
+    h.flow().resolve(tokens(2));
+    await vi.advanceTimersByTimeAsync(0);
+    await h.client.signOut();
+    resolveRefresh(tokens(1));
+    await expect(done).resolves.toMatchObject({ failure: 'aborted' });
+    expect(h.store.value()).toBeNull();
+    expect(h.client.state()).toEqual({ kind: 'signed-out' });
+  });
+
+  it('a refresh landing during the flow keeps signing-in, and cancel returns to the refreshed account', async () => {
+    const h = harness({ stored: STORED });
+    h.cloud.token.mockResolvedValue(tokens(1));
+    const done = h.client.signInWithCode({ onCode: vi.fn() });
+    await h.client.getAccessToken();
+    expect(h.client.state()).toEqual({ kind: 'signing-in' });
+    h.client.cancel();
+    await expect(done).resolves.toMatchObject({ failure: 'aborted' });
+    expect(h.client.state()).toMatchObject({ kind: 'signed-in', email: 'ada@example.com' });
+  });
+
+  it('a device revoked during the flow keeps it open; cancel then returns to the revoked state', async () => {
+    const h = harness({ stored: STORED });
+    h.cloud.token.mockRejectedValueOnce(new CloudError('invalid_grant', 'device_revoked'));
+    const done = h.client.signInWithCode({ onCode: vi.fn() });
+    await h.client.getAccessToken();
+    expect(h.client.state()).toEqual({ kind: 'signing-in' });
+    h.client.cancel();
+    await done;
+    expect(h.client.state()).toEqual({ kind: 'signed-out', reason: 'device-revoked' });
+  });
+
+  it('a browser sign-in replaces a code flow, and returns where the flow would have', async () => {
+    const h = harness({ stored: STORED });
+    h.client.start();
+    const done = h.client.signInWithCode({ onCode: vi.fn() });
+    await h.client.signIn();
+    await expect(done).resolves.toMatchObject({ failure: 'aborted' });
+    expect(h.client.state()).toEqual({ kind: 'signing-in' });
+    h.client.cancel();
+    expect(h.client.state()).toMatchObject({ kind: 'signed-in' });
+  });
+
+  it('a code flow replaces a browser sign-in', async () => {
+    const h = harness();
+    await h.client.signIn();
+    const state = h.lastState();
+    const done = h.client.signInWithCode({ onCode: vi.fn() });
+    await h.callback(state);
+    expect(h.cloud.token).not.toHaveBeenCalled();
+    h.flow().resolve(tokens(1));
+    await expect(done).resolves.toEqual({ ok: true });
+  });
+
+  it('an unexpected throw from the flow is refused, and restores', async () => {
+    const h = harness();
+    const done = h.client.signInWithCode({ onCode: vi.fn() });
+    h.flow().reject(new Error('boom'));
+    await expect(done).resolves.toEqual({ error: expect.any(String), failure: 'refused' });
+    expect(h.client.state()).toEqual({ kind: 'signed-out' });
   });
 });
