@@ -31,6 +31,8 @@ export interface StubControls {
   approveDeviceCode(): void;
   denyDeviceCode(): void;
   failDeviceCode(): void;
+  /** The next device code's `expires_in`, in seconds (600 by default), so a spec can reach the client's `expired`. */
+  deviceCodeExpiresIn(seconds: number): void;
   trialUsed(used: boolean): void;
   completeCheckout(plan: PlanKey): void;
 }
@@ -97,6 +99,7 @@ export async function startStubCloud(): Promise<StubCloud> {
     revoked: false,
     trialUsed: false,
     deviceCode: 'pending' as 'pending' | 'approved' | 'denied' | 'fail',
+    codeExpiresIn: 600,
     deviceId: `dev-${randomUUID()}`,
     access: new Set<string>(),
     refresh: new Set<string>(),
@@ -176,7 +179,8 @@ export async function startStubCloud(): Promise<StubCloud> {
       if (body.grant_type === 'authorization_code') return send(res, 200, tokens(body.device_id));
       if (body.grant_type === 'refresh_token') {
         if (state.revoked) return send(res, 400, { error: 'invalid_grant', error_description: 'device_revoked' });
-        if (!state.refresh.has(body.refresh_token ?? '')) return send(res, 400, { error: 'invalid_grant' });
+        // Rotation, as the real cloud does it: a refresh token is good once, so an app that kept the old one fails.
+        if (!state.refresh.delete(body.refresh_token ?? '')) return send(res, 400, { error: 'invalid_grant' });
         return send(res, 200, tokens());
       }
       if (body.grant_type === DEVICE_GRANT) {
@@ -194,11 +198,14 @@ export async function startStubCloud(): Promise<StubCloud> {
         user_code: USER_CODE,
         verification_uri: `${url}/device`,
         verification_uri_complete: `${url}/device?user_code=${USER_CODE}`,
-        expires_in: 600,
+        expires_in: state.codeExpiresIn,
         interval: 1,
       });
     }
-    if (req.method === 'POST' && path === '/api/oauth/revoke') return send(res, 200, {});
+    if (req.method === 'POST' && path === '/api/oauth/revoke') {
+      state.refresh.delete(body.token ?? '');
+      return send(res, 200, {});
+    }
     if (req.method === 'POST' && path === '/api/oauth/web-session') {
       if (unauthorised(req, res)) return;
       return send(res, 200, { url: `${url}/redeem?next=${encodeURIComponent(body.next ?? '/')}` });
@@ -246,6 +253,7 @@ export async function startStubCloud(): Promise<StubCloud> {
     approveDeviceCode: () => (state.deviceCode = 'approved'),
     denyDeviceCode: () => (state.deviceCode = 'denied'),
     failDeviceCode: () => (state.deviceCode = 'fail'),
+    deviceCodeExpiresIn: (seconds) => (state.codeExpiresIn = seconds),
     trialUsed: (used) => (state.trialUsed = used),
     completeCheckout: (plan) => Object.assign(state, { plan, trialEnds: undefined, refusal: null, next: {} }),
   };
