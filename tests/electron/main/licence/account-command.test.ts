@@ -31,6 +31,8 @@ function harness(opts: {
   canEncrypt?: boolean;
   result?: CodeSignInResult;
   lease?: Response | Error;
+  /** The lease answer signs the client out: authedFetch clears the store, as a device_revoked 401 does. */
+  dropsAccount?: boolean;
 } = {}) {
   const signer = makeSigner('kid-cmd');
   let stored = opts.stored ?? null;
@@ -44,6 +46,7 @@ function harness(opts: {
       return result;
     }),
     authedFetch: vi.fn(async () => {
+      if (opts.dropsAccount) stored = null;
       const answer = opts.lease ?? leaseResponse(200, { lease: signer.sign(claimsFor({ plan: 'team' })) });
       if (answer instanceof Error) throw answer;
       return answer;
@@ -139,6 +142,18 @@ describe('runLogin', () => {
     await expect(runLogin({ force: false }, h.deps)).resolves.toBe(0);
     expect(h.lines.at(-1)).toBe('Signed in as ana@example.com on studio-mac · plan pending (the app will fetch it)');
     expect(h.written).toEqual([]);
+  });
+
+  it('a lease answer that revokes the device exits 1 and never says signed in', async () => {
+    const h = harness({
+      lease: leaseResponse(401, { error: 'invalid_token', error_description: 'device_revoked' }),
+      dropsAccount: true,
+    });
+    await expect(runLogin({ force: false }, h.deps)).resolves.toBe(1);
+    expect(h.lines.at(-1)).toBe(
+      "This Mac's device was revoked before it could fetch a licence. Run hivetty --login again.",
+    );
+    expect(h.lines.some((line) => line.startsWith('Signed in'))).toBe(false);
   });
 
   it('a lease that verifies but cannot be saved leaves the plan to the app', async () => {

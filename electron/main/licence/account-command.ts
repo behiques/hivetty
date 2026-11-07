@@ -78,8 +78,13 @@ export async function runLogin({ force }: { force: boolean }, deps: AccountComma
     return EXIT[result.failure];
   }
   const account = deps.store.read();
-  const who = `Signed in as ${account?.email ?? 'your account'} on ${deps.hostname()}`;
-  print(`${who} · ${await planLine(deps, account?.deviceId ?? '')}`);
+  const plan = await planLine(deps, account?.deviceId ?? '');
+  // The first lease can sign the device out (a device_revoked 401 clears the store inside authedFetch).
+  if (!deps.store.read()) {
+    print("This Mac's device was revoked before it could fetch a licence. Run hivetty --login again.");
+    return 1;
+  }
+  print(`Signed in as ${account?.email ?? 'your account'} on ${deps.hostname()} · ${plan}`);
   return 0;
 }
 
