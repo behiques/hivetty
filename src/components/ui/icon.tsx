@@ -53,6 +53,7 @@ import {
   Hourglass,
   Keyboard,
   Lightning,
+  Lock,
   Megaphone,
   Moon,
   Package,
@@ -94,6 +95,8 @@ import {
  * renders as the fallback.
  */
 const GLYPHS: Record<string, PhosphorIcon> = {
+  // Entitlement locks (HIVE-268).
+  'ph-lock': Lock,
   // Disclosure — the projects panel's caret (031).
   'ph-caret-down': CaretDown,
   'ph-caret-right': CaretRight,
