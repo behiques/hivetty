@@ -162,7 +162,7 @@ if (!app.requestSingleInstanceLock()) {
         watcher.on('error', () => undefined);
         return () => watcher.close();
       },
-      broadcastDeviceCode: (code) => createWindowBroadcaster().emit('account:device-code', code),
+      broadcastDeviceCode: (code) => createWindowBroadcaster().emit(CH.accountDeviceCode, code),
     });
     deepLinks.attach((url) => void licence.handleCallback(url));
   });

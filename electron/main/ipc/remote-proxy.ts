@@ -141,6 +141,7 @@ function localAnswerFor(
     case CH.accountSignIn:
     case CH.accountCancel:
     case CH.accountSignOut:
+    case CH.accountSignInCode:
       return () => ACCOUNT_CALLS[channel]();
     /* HIVE-268. Opens this machine's browser as this machine's account; the path is validated in openWeb. */
     case CH.accountOpenWeb:

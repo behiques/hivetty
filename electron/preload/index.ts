@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 
 
-import type { AccountState, OpenWebResult, SignInResult } from '@shared/account-contract';
+import type { AccountState, DeviceCode, OpenWebResult, SignInResult } from '@shared/account-contract';
 import type {
   AgentLinesPush,
   AgentNameRequest,
@@ -894,6 +894,8 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.accountOpenWeb, path) as Promise<OpenWebResult>,
     onChanged: (callback: (state: AccountState) => void) =>
       subscribe<AccountState>(CH.accountChanged, callback),
+    signInWithCode: (): Promise<SignInResult> => ipcRenderer.invoke(CH.accountSignInCode) as Promise<SignInResult>,
+    onDeviceCode: (callback: (code: DeviceCode) => void) => subscribe<DeviceCode>(CH.accountDeviceCode, callback),
   },
   licence: {
     state: (): Promise<LicenceState> => ipcRenderer.invoke(CH.licenceState) as Promise<LicenceState>,

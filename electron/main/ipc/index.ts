@@ -1970,12 +1970,13 @@ export function registerIpcHandlers(
 
   handle(CH.updatesStatus, (): UpdateStatus => updateStatus());
   handle(CH.updatesCheck, () => checkForUpdatesInteractively());
-  // HIVE-264. Process-local: the remote proxy answers the same four from `ACCOUNT_CALLS`.
+  // HIVE-264. Process-local: the remote proxy answers the same calls from `ACCOUNT_CALLS`.
   handle(CH.accountState, () => ACCOUNT_CALLS[CH.accountState]());
   handle(CH.accountSignIn, () => ACCOUNT_CALLS[CH.accountSignIn]());
   handle(CH.accountCancel, () => ACCOUNT_CALLS[CH.accountCancel]());
   handle(CH.accountSignOut, () => ACCOUNT_CALLS[CH.accountSignOut]());
   handle(CH.accountOpenWeb, (_event, path: unknown) => ACCOUNT_CALLS[CH.accountOpenWeb](path));
+  handle(CH.accountSignInCode, () => ACCOUNT_CALLS[CH.accountSignInCode]());
   // HIVE-267. Process-local: the remote proxy answers the same three from `LICENCE_CALLS`.
   handle(CH.licenceState, () => LICENCE_CALLS[CH.licenceState]());
   handle(CH.licenceRefresh, () => LICENCE_CALLS[CH.licenceRefresh]());

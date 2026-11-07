@@ -278,3 +278,54 @@ describe('runAccountCommand (HIVE-266)', () => {
     expect(lines).toEqual(['Not signed in.']);
   });
 });
+
+describe('account:sign-in-code (HIVE-266)', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-licence-'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    resetLicence();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('answers not-ready before start', async () => {
+    await expect(ACCOUNT_CALLS[CH.accountSignInCode]()).resolves.toEqual({ error: expect.any(String) });
+  });
+
+  it('pushes the code to every window and resolves when the flow ends', async () => {
+    const broadcastDeviceCode = vi.fn();
+    const fetch = vi.fn(async (url: string) =>
+      url.endsWith('/device/code')
+        ? new Response(
+            JSON.stringify({
+              device_code: 'd',
+              user_code: 'WDJB-MJHT',
+              verification_uri: `${ISS}/device`,
+              expires_in: 600,
+              interval: 5,
+            }),
+            { status: 200 },
+          )
+        : new Response(JSON.stringify({ error: 'access_denied' }), { status: 400 }),
+    );
+    vi.useFakeTimers();
+    startLicence({
+      app: { isPackaged: false, getPath: () => dir },
+      safeStorage,
+      openExternal: vi.fn(),
+      env: { HIVETTY_CLOUD_URL: ISS },
+      fetch,
+      broadcast: vi.fn(),
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode,
+    });
+    const done = ACCOUNT_CALLS[CH.accountSignInCode]();
+    await vi.advanceTimersByTimeAsync(5000);
+    await expect(done).resolves.toMatchObject({ error: expect.any(String) });
+    expect(broadcastDeviceCode).toHaveBeenCalledWith(expect.objectContaining({ userCode: 'WDJB-MJHT' }));
+  });
+});

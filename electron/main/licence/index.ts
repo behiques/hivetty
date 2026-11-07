@@ -162,7 +162,7 @@ export const ACCOUNT_CALLS = {
   [CH.accountOpenWeb]: (path: unknown): Promise<OpenWebResult> =>
     client?.openWeb(path) ?? Promise.resolve({ error: NOT_READY }),
   /** HIVE-266: sign in with a code; the code goes to every window on account:device-code. */
-  ['account:sign-in-code']: (): Promise<SignInResult> =>
+  [CH.accountSignInCode]: (): Promise<SignInResult> =>
     client?.signInWithCode({ onCode: (code) => pushDeviceCode(code) }) ?? Promise.resolve({ error: NOT_READY }),
 } as const;
 
