@@ -49,14 +49,20 @@ const REASONS: readonly LapseReason[] = [
 /**
  * One `POST /api/lease` (HIVE-272): 200 `{ lease }`, 403 `{ error: 'lease_refused', reason }`, 401 for a bad
  * token. A `device_revoked` 401 is `authedFetch`'s to act on: it signs the device out, and the licence follows
- * the account. Every other 401 is a failure: HIVE-264 refreshes the token on the next call.
+ * the account. Every other 401 is a failure: HIVE-264 refreshes the token on the next call. HIVE-291: `org` asks
+ * for that org's seat; the cloud grants another when it cannot, and an older cloud ignores the body.
  */
 export async function renewLease(
   authedFetch: (path: string, init?: RequestInit) => Promise<Response>,
+  org?: string,
 ): Promise<RenewResult> {
+  const init: RequestInit =
+    org === undefined
+      ? { method: 'POST' }
+      : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ org }) };
   let response: Response;
   try {
-    response = await authedFetch('/api/lease', { method: 'POST' });
+    response = await authedFetch('/api/lease', init);
   } catch (cause) {
     if (cause instanceof CloudError && cause.kind === 'refused') return { kind: 'signed-out' };
     return { kind: 'failed', detail: cause instanceof Error ? cause.message : String(cause) };

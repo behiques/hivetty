@@ -46,6 +46,16 @@ describe('renewLease', () => {
     expect(fetch).toHaveBeenCalledWith('/api/lease', { method: 'POST' });
   });
 
+  it('POSTs { org } as JSON when one is asked for (HIVE-291)', async () => {
+    const fetch = vi.fn().mockResolvedValue(json(200, { lease: 'a.b.c' }));
+    await expect(renewLease(fetch, 'org-b')).resolves.toEqual({ kind: 'lease', jws: 'a.b.c' });
+    expect(fetch).toHaveBeenCalledWith('/api/lease', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"org":"org-b"}',
+    });
+  });
+
   it.each(['trial_ended', 'plan_cancelled', 'payment_failed', 'device_revoked', 'seat_removed', 'no_plan'])(
     'answers a 403 refusal for %s',
     async (reason) => {
