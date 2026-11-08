@@ -166,6 +166,7 @@ import type {
   HiveNotification,
   NotificationAction,
 } from '@shared/notification-contract';
+import type { OrgSummary } from '@shared/orgs';
 import type { PlanChangedEvent, PlansSnapshot } from '@shared/plan-contract';
 import type {
   SessionBranchEvent,
@@ -910,6 +911,9 @@ const bridge: HiveBridge = {
     signInWithCode: (): Promise<SignInResult> => ipcRenderer.invoke(CH.accountSignInCode) as Promise<SignInResult>,
     onDeviceCode: (callback: (code: DeviceCode) => void) => subscribe<DeviceCode>(CH.accountDeviceCode, callback),
     devices: (): Promise<DevicesResult> => ipcRenderer.invoke(CH.accountDevices) as Promise<DevicesResult>,
+    orgs: (): Promise<OrgSummary[]> => ipcRenderer.invoke(CH.accountOrgs) as Promise<OrgSummary[]>,
+    switchOrg: (id: string): Promise<LicenceState> =>
+      ipcRenderer.invoke(CH.accountSwitchOrg, id) as Promise<LicenceState>,
   },
   licence: {
     state: (): Promise<LicenceState> => ipcRenderer.invoke(CH.licenceState) as Promise<LicenceState>,

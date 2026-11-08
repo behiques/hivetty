@@ -1002,9 +1002,15 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
 
   it.each([
     ['devices', CH.accountDevices],
-  ])('account.%s invokes its channel (HIVE-265)', async (verb, channel) => {
+    ['orgs', CH.accountOrgs],
+  ])('account.%s invokes its channel (HIVE-265, HIVE-291)', async (verb, channel) => {
     await (account()[verb] as () => Promise<unknown>)();
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(channel);
+  });
+
+  it('switchOrg invokes account:switch-org with the id (HIVE-291)', async () => {
+    await (account().switchOrg as (id: string) => Promise<unknown>)('org-b');
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.accountSwitchOrg, 'org-b');
   });
 
   it.each([

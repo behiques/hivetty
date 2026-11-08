@@ -290,6 +290,8 @@ export const FRAME_KIND = {
   [CH.appQuit]: 'call',
   [CH.serverLicence]: 'call',
   [CH.serverLicenceChanged]: 'event',
+  [CH.accountOrgs]: 'call',
+  [CH.accountSwitchOrg]: 'call',
   [CH.configCloneStart]: 'call',
   [CH.configCloneCancel]: 'call',
   [CH.configCloneDone]: 'event',
@@ -628,6 +630,8 @@ export const CHANNEL_AUTHORIZATION = {
   // HIVE-265: counts only, the one licence fact that crosses the socket.
   [CH.serverLicence]: 'read',
   [CH.serverLicenceChanged]: 'read',
+  [CH.accountOrgs]: 'read',
+  [CH.accountSwitchOrg]: 'execute',
   [CH.configCloneStart]: 'execute',
   [CH.configCloneCancel]: 'mutate',
   [CH.configCloneDone]: 'read',

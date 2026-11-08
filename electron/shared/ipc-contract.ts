@@ -160,6 +160,7 @@ import type {
   HiveNotification,
   NotificationAction,
 } from './notification-contract';
+import type { OrgSummary } from './orgs';
 import type { PlanChangedEvent, PlansSnapshot } from './plan-contract';
 import type {
   SessionBranchEvent,
@@ -921,6 +922,10 @@ export const CH = {
   serverLicence: 'server:licence',
   /** Push: the server's licence changed. Relayed to attached clients. */
   serverLicenceChanged: 'server:licence-changed',
+  /** HIVE-291: this account's orgs, from the cloud; `[]` when it cannot say. Process-local. */
+  accountOrgs: 'account:orgs',
+  /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. Process-local. */
+  accountSwitchOrg: 'account:switch-org',
   configCloneStart: 'config:clone-start',
   configCloneCancel: 'config:clone-cancel',
   configCloneDone: 'config:clone-done', // main → renderer
@@ -3211,6 +3216,10 @@ export interface HiveBridge {
     onDeviceCode(callback: (code: DeviceCode) => void): () => void;
     /** HIVE-265: this account's live devices, from the cloud. */
     devices(): Promise<DevicesResult>;
+    /** HIVE-291: this account's orgs, from the cloud; `[]` when it cannot say. */
+    orgs(): Promise<OrgSummary[]>;
+    /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. */
+    switchOrg(id: string): Promise<LicenceState>;
   };
   /** The licence (HIVE-267). The gate is HIVE-265's. */
   licence: {
