@@ -83,16 +83,15 @@ describe('SettingsOverlay', () => {
       'Appearance',
       'Integrations',
       'Server mode',
-      'Account & devices',
-      'Plan & licence',
-      'Organisation',
       'Updates & About',
       'Advanced',
     ]) {
       expect(within(nav).getByRole('button', { name: present })).toBeInTheDocument();
     }
-    // Containers is a band inside Runtime now, not a row.
+    // Containers is a band inside Runtime now, not a row; the account rows are the Account centre's tabs.
     expect(within(nav).queryByRole('button', { name: 'Containers' })).toBeNull();
+    expect(within(nav).queryByRole('button', { name: 'Plan & licence' })).toBeNull();
+    expect(within(nav).getByRole('button', { name: /^Account/ })).toHaveAttribute('data-pane', 'account-devices');
   });
 
   it('opens the CLIs pane from the nav (HIVE-341)', async () => {
@@ -110,7 +109,7 @@ describe('SettingsOverlay', () => {
    * Advanced inside it, Projects with its services, Harnesses only the CLIs, Environment for where sessions run.
    * Groups are labels, not buttons, and a group with no pane yet is absent.
    */
-  it('reads in six groups, General first, with no empty group', () => {
+  it('reads in five groups under the profile card, General first, with no empty group', () => {
     render(<SettingsOverlay />);
 
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
@@ -118,7 +117,7 @@ describe('SettingsOverlay', () => {
     const heading = (group: HTMLElement) =>
       document.getElementById(group.getAttribute('aria-labelledby') ?? '')?.textContent;
 
-    expect(groups.map(heading)).toEqual(['General', 'Projects', 'Harnesses', 'Environment', 'Automation', 'Account']);
+    expect(groups.map(heading)).toEqual(['General', 'Projects', 'Harnesses', 'Environment', 'Automation']);
     expect(
       groups.map((group) =>
         within(group)
@@ -131,7 +130,6 @@ describe('SettingsOverlay', () => {
       ['Overview', 'Claude Code', 'Codex', 'Copilot'],
       ['Runtime', 'Server mode'],
       ['Agents', 'Skills'],
-      ['Account & devices', 'Plan & licence', 'Organisation'],
     ]);
     expect(within(nav).queryByRole('button', { name: 'Harnesses' })).not.toBeInTheDocument();
   });
@@ -151,9 +149,9 @@ describe('SettingsOverlay', () => {
     ['integrations', 'Integrations'],
     ['notifications', 'Notifications'],
     ['server-mode', 'Server mode'],
-    ['account-devices', 'Account & devices'],
-    ['plan-licence', 'Plan & licence'],
-    ['account-org', 'Organisation'],
+    ['account-devices', 'Account'],
+    ['plan-licence', 'Account'],
+    ['account-org', 'Account'],
     ['updates-about', 'Updates & About'],
     ['advanced', 'Advanced'],
   ] as const)('pane id %s renders its section', (id, title) => {
@@ -179,6 +177,26 @@ describe('SettingsOverlay', () => {
       'page',
     );
   });
+
+  it.each(['account-devices', 'plan-licence', 'account-org'] as const)(
+    'the profile card is the current row for %s, and opens the Account centre',
+    async (id) => {
+      const user = userEvent.setup();
+      useUiStore.getState().openSettings(id);
+      render(<SettingsOverlay />);
+      const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+      const card = within(nav).getByRole('button', { name: /^Account/ });
+
+      expect(card).toHaveAttribute('aria-current', 'page');
+      expect(card).toHaveAttribute('tabindex', '0');
+      expect(screen.getByRole('tablist', { name: 'Account' })).toBeInTheDocument();
+
+      await user.click(within(nav).getByRole('button', { name: 'Editor' }));
+      expect(card).not.toHaveAttribute('aria-current');
+      await user.click(card);
+      expect(screen.getByRole('tab', { name: 'Profile & devices' })).toHaveAttribute('aria-selected', 'true');
+    },
+  );
 
   it('the retired containers id lands on Runtime, scrolled to its Containers band', () => {
     const scroll = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => undefined);
@@ -226,15 +244,18 @@ describe('SettingsOverlay', () => {
     expect(within(nav).getByRole('button', { name: 'Integrations' })).toHaveFocus();
 
     await user.keyboard('{End}');
-    expect(within(nav).getByRole('button', { name: 'Organisation' })).toHaveFocus();
+    expect(within(nav).getByRole('button', { name: 'Skills' })).toHaveFocus();
 
     // The ends hold rather than wrap.
     await user.keyboard('{ArrowDown}');
-    expect(within(nav).getByRole('button', { name: 'Organisation' })).toHaveFocus();
+    expect(within(nav).getByRole('button', { name: 'Skills' })).toHaveFocus();
 
+    // Home is the profile card, the first row.
     await user.keyboard('{Home}');
+    expect(within(nav).getByRole('button', { name: /^Account/ })).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Account', level: 2 })).toBeInTheDocument();
+    await user.keyboard('{ArrowDown}');
     expect(within(nav).getByRole('button', { name: 'Appearance' })).toHaveFocus();
-    expect(screen.getByRole('heading', { name: 'Appearance', level: 2 })).toBeInTheDocument();
   });
 
   it('steps from Overview to Claude Code on ArrowDown (HIVE-376)', async () => {
@@ -262,6 +283,13 @@ describe('SettingsOverlay', () => {
       render(<SettingsOverlay />);
 
       expect(view()).toBe('list');
+    });
+
+    it('an account tab goes back to the list as Account', () => {
+      useUiStore.getState().openSettings('plan-licence');
+      render(<SettingsOverlay />);
+
+      expect(screen.getByRole('button', { name: 'Back to Account' })).toBeInTheDocument();
     });
 
     it('opens on the pane a caller named', () => {
@@ -572,13 +600,13 @@ describe('Account › Plan & licence (HIVE-268)', () => {
     locks = { licence: null, settled: true };
   });
 
-  it('opens from the nav between Machines and General', async () => {
+  it('opens from the profile card, as the Account centre’s Plan & billing tab', async () => {
     const user = userEvent.setup();
     render(<SettingsOverlay />);
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
-    await user.click(within(nav).getByRole('button', { name: 'Plan & licence' }));
-    expect(screen.getByRole('heading', { name: 'Plan & licence', level: 2 })).toBeInTheDocument();
-    expect(screen.getByText('Sign in to see your plan.')).toBeInTheDocument();
+    await user.click(within(nav).getByRole('button', { name: /^Account/ }));
+    await user.click(screen.getByRole('tab', { name: 'Plan & billing' }));
+    expect(screen.getByRole('tabpanel', { name: 'Plan & billing' })).toHaveTextContent('Sign in to see your plan.');
   });
 
   it('the Codex and Copilot panes carry their lease features (HIVE-332)', () => {
@@ -613,20 +641,22 @@ describe('Account › Account & devices (HIVE-265)', () => {
     useUiStore.getState().reset();
   });
 
-  it('opens from the nav, first in Account', async () => {
+  it('the profile card opens the Account centre on Profile & devices; signed out it says so', async () => {
     const user = userEvent.setup();
     useUiStore.getState().openSettings();
     render(<SettingsOverlay />);
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
-    await user.click(within(nav).getByRole('button', { name: 'Account & devices' }));
-    expect(screen.getByRole('heading', { name: 'Account & devices', level: 2 })).toBeInTheDocument();
-    expect(screen.getByText('Sign in to see your account.')).toBeInTheDocument();
+    const card = within(nav).getByRole('button', { name: 'Account' });
+    expect(card).toHaveTextContent('Not signed in');
+    await user.click(card);
+    expect(screen.getByRole('tabpanel', { name: 'Profile & devices' })).toHaveTextContent('Sign in to see your account.');
   });
 
-  it("openSettings('account-devices') shows the pane", () => {
+  it("openSettings('account-devices') shows the Account centre on that tab", () => {
     useUiStore.getState().openSettings('account-devices');
     render(<SettingsOverlay />);
-    expect(screen.getByRole('heading', { name: 'Account & devices', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Account', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Profile & devices' })).toHaveAttribute('aria-selected', 'true');
   });
 });
 

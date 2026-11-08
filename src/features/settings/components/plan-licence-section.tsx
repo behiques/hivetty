@@ -1,18 +1,22 @@
-import { useState } from 'react';
+import { ArrowSquareOut } from '@phosphor-icons/react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@components/ui/button';
-import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useLicence } from '@hooks/use-licence';
-import { openAccountWeb } from '@lib/account';
+import { useActiveOrg } from '@hooks/use-orgs';
+import { openAccountWeb, readBilling } from '@lib/account';
 import { refreshLicence, trialDaysLeft } from '@lib/licence';
+import type { BillingSubscription, BillingSummary } from '@shared/account-contract';
 import { UPGRADE_PATH } from '@shared/entitlement';
 import { PLAN_NAMES, type PlanKey } from '@shared/feature-plans';
 import type { LapseReason, LicenceTerms } from '@shared/licence-contract';
 
 /**
- * Account › Plan & licence (HIVE-268): what this Mac's lease includes, and until when it works offline.
- * Read from `useLicence()`; seats are not in the lease, so they are not shown here.
+ * The Account centre's Plan & billing tab (HIVE-268's Plan & licence pane): the org's subscription from the cloud,
+ * then what this Mac's lease includes and until when it works offline. The subscription (seats, period, renewal) is
+ * read with `GET /api/billing`; when the cloud has nothing to show this caller it is left out and the lease stands
+ * alone. Changing the plan, invoices and the card stay on the account site until the cloud serves them here.
  */
 
 const LAPSE: Record<LapseReason, string> = {
@@ -68,6 +72,48 @@ function Facts({ terms, grace }: { terms: LicenceTerms & { kind: 'licensed' | 'g
   );
 }
 
+const STATUS: Record<string, string> = {
+  active: 'Active',
+  trialing: 'Trial',
+  past_due: 'Payment due',
+  unpaid: 'Unpaid',
+  canceled: 'Cancelled',
+  incomplete: 'Awaiting payment',
+};
+
+const day = (iso: string): string => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
+
+function Subscription({ billing, sub }: { billing: BillingSummary; sub: BillingSubscription }) {
+  const used = Math.min(billing.seated, sub.seats);
+  return (
+    <SettingsGroup title="Subscription" description="What the account site bills for this organisation.">
+      <div className="flex flex-col gap-1 rounded-lg border border-border-soft p-3">
+        <Fact label="Plan" value={PLAN_NAMES[sub.plan as PlanKey] ?? sub.plan} />
+        <Fact label="Status" value={STATUS[sub.status] ?? sub.status} />
+        {sub.interval ? <Fact label="Billed" value={sub.interval === 'month' ? 'Monthly' : 'Yearly'} /> : null}
+        <Fact label="Seats" value={`${String(billing.seated)} of ${String(sub.seats)} in use`} />
+        <div
+          role="meter"
+          aria-label="Seats in use"
+          aria-valuemin={0}
+          aria-valuemax={sub.seats}
+          aria-valuenow={billing.seated}
+          className="h-1.5 overflow-hidden rounded-full bg-chip"
+        >
+          <div className="h-full bg-brand-fill" style={{ width: `${String(sub.seats > 0 ? (used / sub.seats) * 100 : 0)}%` }} />
+        </div>
+        {sub.renewsAt ? <Fact label={sub.cancelAtPeriodEnd ? 'Ends on' : 'Renews on'} value={day(sub.renewsAt)} /> : null}
+      </div>
+      <div className="flex">
+        <Button size="sm" onClick={() => void openAccountWeb('/account/plan')}>
+          Invoices &amp; payment
+          <ArrowSquareOut size={13} aria-hidden />
+        </Button>
+      </div>
+    </SettingsGroup>
+  );
+}
+
 export function PlanLicenceSection() {
   const licence = useLicence();
   const [refreshing, setRefreshing] = useState(false);
@@ -88,14 +134,22 @@ export function PlanLicenceSection() {
   };
 
   const signedOut = licence === null || licence.kind === 'unlicensed';
+  const orgId = useActiveOrg()?.id;
+  const [billing, setBilling] = useState<BillingSummary | null>(null);
+  useEffect(() => {
+    if (signedOut) return;
+    let cancelled = false;
+    void readBilling(orgId).then((next) => {
+      if (!cancelled) setBilling(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [signedOut, orgId]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
-      <SettingsSectionHeader
-        title="Plan & licence"
-        description="What this Mac's licence includes, and until when it works offline."
-      />
-
+    <>
+      {!signedOut && billing?.subscription ? <Subscription billing={billing} sub={billing.subscription} /> : null}
       {signedOut ? (
         <p className="text-control text-subtle">Sign in to see your plan.</p>
       ) : (
@@ -118,6 +172,6 @@ export function PlanLicenceSection() {
           </div>
         </SettingsGroup>
       )}
-    </div>
+    </>
   );
 }

@@ -530,6 +530,7 @@ describe('the renewal asks for the stored org (HIVE-291)', () => {
   it('account:orgs answers [] and account:switch-org the licence before startLicence', async () => {
     await expect(ACCOUNT_CALLS[CH.accountOrgs]()).resolves.toEqual([]);
     await expect(ACCOUNT_CALLS[CH.accountSwitchOrg]('org-b')).resolves.toEqual({ kind: 'unlicensed' });
+    await expect(ACCOUNT_CALLS[CH.accountBilling]('org-b')).resolves.toBeNull();
   });
 
   it('account:switch-org writes activeOrg, broadcasts it, and renews asking for it', async () => {

@@ -19,6 +19,7 @@
 
 import type {
   AccountState,
+  BillingSummary,
   DeviceCode,
   DevicesResult,
   OpenWebResult,
@@ -926,6 +927,8 @@ export const CH = {
   accountOrgs: 'account:orgs',
   /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. Process-local. */
   accountSwitchOrg: 'account:switch-org',
+  /** The Account centre: an org's billing summary from the cloud; `null` when it has nothing to show. Process-local. */
+  accountBilling: 'account:billing',
   configCloneStart: 'config:clone-start',
   configCloneCancel: 'config:clone-cancel',
   configCloneDone: 'config:clone-done', // main → renderer
@@ -3220,6 +3223,8 @@ export interface HiveBridge {
     orgs(): Promise<OrgSummary[]>;
     /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. */
     switchOrg(id: string): Promise<LicenceState>;
+    /** The Account centre: this org's billing (the personal org without one); `null` when the cloud has nothing to show. */
+    billing(orgId?: string): Promise<BillingSummary | null>;
   };
   /** The licence (HIVE-267). The gate is HIVE-265's. */
   licence: {

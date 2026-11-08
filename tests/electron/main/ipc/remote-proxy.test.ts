@@ -225,7 +225,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(155);
+    expect(callChannels.length).toBe(156);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -544,7 +544,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(161);
+    expect(remoteProxyBindingsSize()).toBe(162);
   });
 
   /**
@@ -558,10 +558,11 @@ describe('registerRemoteProxy', () => {
    * `remote:forget` (HIVE-153).
    */
   describe('PROCESS_LOCAL channels (HIVE-144 Rulings 24 and 28, HIVE-153, HIVE-149, HIVE-151)', () => {
-    it('names exactly twenty-five channels', () => {
-      expect(PROCESS_LOCAL.length).toBe(25);
+    it('names exactly twenty-six channels', () => {
+      expect(PROCESS_LOCAL.length).toBe(26);
       expect([...PROCESS_LOCAL].sort()).toEqual(
         [
+          'account:billing',
           'account:cancel',
           'account:devices',
           'account:open-web',
@@ -661,6 +662,8 @@ describe('registerRemoteProxy', () => {
       // Not started in this test: account:orgs answers [] and account:switch-org the unlicensed state, locally.
       await expect(invoke('account:orgs', trustedEvent, undefined)).resolves.toEqual([]);
       await expect(invoke('account:switch-org', trustedEvent, 'org-b')).resolves.toEqual({ kind: 'unlicensed' });
+      // The Account centre's billing read: this machine's own account, so local too; null before sign-in.
+      await expect(invoke('account:billing', trustedEvent, 'org-b')).resolves.toBeNull();
       expect(client.call).not.toHaveBeenCalled();
     });
 
@@ -1222,8 +1225,8 @@ describe('registerRemoteProxy', () => {
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(161);
-    expect(removeAllListeners).toHaveBeenCalledTimes(161);
+    expect(removeHandler).toHaveBeenCalledTimes(162);
+    expect(removeAllListeners).toHaveBeenCalledTimes(162);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });

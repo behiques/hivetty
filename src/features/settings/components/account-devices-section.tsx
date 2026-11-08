@@ -2,7 +2,6 @@ import { ArrowSquareOut } from '@phosphor-icons/react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@components/ui/button';
-import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { AccountAvatar } from '@features/shared/components/account-avatar';
 import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import { SettingsGroup } from '@features/shared/components/settings-group';
@@ -19,12 +18,10 @@ const ordered = (devices: AccountDevice[]): AccountDevice[] =>
     (a, b) => Number(b.current) - Number(a.current) || Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt),
   );
 
-const TITLE = 'Account & devices';
-const DESCRIPTION = 'Who is signed in, and where.';
-
 /**
- * Account › Account & devices (HIVE-265): who is signed in, and this account's devices from the cloud. Revoking
- * a device stays on the web (the bearer token reads only), behind Manage devices.
+ * The Account centre's Profile & devices tab (HIVE-265's Account & devices pane): who is signed in, and this
+ * account's devices from the cloud. Revoking a device stays on the web (the bearer token reads only), behind Manage
+ * devices.
  */
 export function AccountDevicesSection() {
   const account = useAccount();
@@ -46,14 +43,7 @@ export function AccountDevicesSection() {
     if (signedIn) load();
   }, [signedIn, load]);
 
-  if (!signedIn) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
-        <SettingsSectionHeader title={TITLE} description={DESCRIPTION} />
-        <p className="text-control text-subtle">Sign in to see your account.</p>
-      </div>
-    );
-  }
+  if (!signedIn) return <p className="text-control text-subtle">Sign in to see your account.</p>;
 
   const now = Date.now();
   const plan = planLine(licence, now);
@@ -61,8 +51,7 @@ export function AccountDevicesSection() {
   const count = devices ? ` · ${String(devices.length)}${limit === undefined ? '' : ` of ${String(limit)}`}` : '';
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
-      <SettingsSectionHeader title={TITLE} description={DESCRIPTION} />
+    <>
       {confirming ? (
         <InlineConfirm
           label="Sign out"
@@ -121,6 +110,6 @@ export function AccountDevicesSection() {
           </ul>
         )}
       </SettingsGroup>
-    </div>
+    </>
   );
 }

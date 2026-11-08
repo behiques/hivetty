@@ -1,7 +1,7 @@
 # Settings
 
 Open Settings from your avatar at the foot of the bar (**Settings…**), or press `⌘,`. It opens on the
-pane you last had open. When no one is signed in, a gear sits where the avatar would be. Its panes sit in six groups:
+pane you last had open. When no one is signed in, a gear sits where the avatar would be. The card at the top opens the [Account centre](#account-centre); the panes sit in five groups under it:
 
 | Group | Panes |
 | --- | --- |
@@ -10,7 +10,6 @@ pane you last had open. When no one is signed in, a gear sits where the avatar w
 | Harnesses | Overview, Claude Code, Codex, Copilot |
 | Environment | Runtime (with Containers inside it), Server mode |
 | Automation | Agents, Skills |
-| Account | Account & devices, Plan & licence, Organisation |
 
 Almost everything here is written to `~/.hivetty/config.json`
 ([The config file](configuration.md)); appearance and editor preferences stay on this machine.
@@ -18,8 +17,7 @@ Almost everything here is written to `~/.hivetty/config.json`
 **On this page:** [Appearance](#appearance) · [Editor](#editor) · [Notifications](#notifications) ·
 [Updates & About](#updates--about) · [Advanced](#advanced) · [Projects](#projects) · [Integrations](#integrations) ·
 [Ticket workflow](#ticket-workflow) · [Overview](#overview) · [Runtime](#runtime) · [Containers](#containers) ·
-[Server mode](#server-mode) · [Agents](#agents) · [Skills](#skills) · [Account & devices](#account--devices) ·
-[Plan & licence](#plan--licence)
+[Server mode](#server-mode) · [Agents](#agents) · [Skills](#skills) · [Account centre](#account-centre)
 
 | Where it is stored | What |
 | --- | --- |
@@ -167,17 +165,22 @@ Under **Environment**. **Serve this machine**, paired devices, and **Attach to a
 ([Remote](remote.md)). While this window is attached, the bind fields and the device roster are
 the server's, and the pane says so.
 
-## Account & devices
+## Account centre
 
-Under **Account**. Your name, email and plan, with **Sign out**, and this account's devices, this Mac first.
-**Manage devices** opens your account's devices page in the browser, already signed in; revoking a device happens
-there. Signed out, the pane says **Sign in to see your account.**
+The card at the top of the Settings nav, with your avatar, name and plan, opens the **Account centre**. So does
+**Account centre** in your avatar's menu at the foot of the bar. It has up to three tabs:
 
-## Plan & licence
-
-Under **Account**. Your plan (with **Trial · N days left** during a trial), devices per seat, runners, and
-until when this Mac's licence works offline. **Refresh licence** renews it now; **Manage plan** opens your
-account's plan page in the browser, already signed in. Signed out, the pane says **Sign in to see your plan.**
+- **Profile & devices**: your name, email and plan, with **Sign out**, and this account's devices, this Mac first.
+  **Manage devices** opens your account's devices page in the browser, already signed in; revoking a device happens
+  there. Signed out, the tab says **Sign in to see your account.**
+- **Plan & billing**: your organisation's **Subscription** from HiveTTY (plan, status, monthly or yearly, seats in
+  use of the total, and when it renews or ends), then this Mac's **Licence**: your plan (with **Trial · N days left**
+  during a trial), devices per seat, runners, and until when it works offline. **Refresh licence** renews it now;
+  **Manage plan** and **Invoices & payment** open your account's plan page in the browser, already signed in. When
+  HiveTTY can't show the subscription (offline, or you aren't the organisation's owner or billing member), the tab
+  shows the licence alone. Signed out, it says **Sign in to see your plan.**
+- **Organisation**: for a team, its name, your role, your seat and its plan. Owners, admins and billing members get
+  **Manage members and seats**, which opens the web. A Solo account has no organisation and no tab.
 
 A feature your plan doesn't include is shown locked, with the reason and an **Upgrade** button, never hidden.
 

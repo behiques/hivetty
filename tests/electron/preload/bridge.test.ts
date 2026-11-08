@@ -1008,6 +1008,11 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(channel);
   });
 
+  it('account.billing invokes its channel with the org (the Account centre)', async () => {
+    await (account().billing as (orgId?: string) => Promise<unknown>)('org-acme');
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.accountBilling, 'org-acme');
+  });
+
   it('switchOrg invokes account:switch-org with the id (HIVE-291)', async () => {
     await (account().switchOrg as (id: string) => Promise<unknown>)('org-b');
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.accountSwitchOrg, 'org-b');

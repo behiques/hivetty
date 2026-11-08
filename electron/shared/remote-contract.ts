@@ -91,8 +91,9 @@ import { isThisMachineAction } from './notification-contract';
  * 35 → 36 (HIVE-265): CH gained server:licence (a forwarded read) and server:licence-changed (a relayed event).
  * 36 → 37 (HIVE-372): `CH` gained `cli:codex-plugin-status`; `CliConfig` and `SetCliRequest` gained `installSkills`.
  * 37 → 38 (HIVE-291): `CH` gained `account:orgs` and `account:switch-org` (process-local).
+ * 38 → 39 (the Account centre): `CH` gained `account:billing` (process-local).
  */
-export const REMOTE_PROTOCOL_VERSION = 38;
+export const REMOTE_PROTOCOL_VERSION = 39;
 
 /**
  * What a frame is for.
@@ -293,6 +294,7 @@ export const FRAME_KIND = {
   [CH.serverLicenceChanged]: 'event',
   [CH.accountOrgs]: 'call',
   [CH.accountSwitchOrg]: 'call',
+  [CH.accountBilling]: 'call',
   [CH.configCloneStart]: 'call',
   [CH.configCloneCancel]: 'call',
   [CH.configCloneDone]: 'event',
@@ -633,6 +635,7 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.serverLicenceChanged]: 'read',
   [CH.accountOrgs]: 'read',
   [CH.accountSwitchOrg]: 'execute',
+  [CH.accountBilling]: 'read',
   [CH.configCloneStart]: 'execute',
   [CH.configCloneCancel]: 'mutate',
   [CH.configCloneDone]: 'read',
@@ -1008,6 +1011,8 @@ const PROCESS_LOCAL_REFUSALS = {
     "account:orgs lists the organisations of the answering machine's own account. A server refuses to show its account's organisations to a peer; the asking machine lists its own.",
   [CH.accountSwitchOrg]:
     "account:switch-org changes which organisation the answering machine's own lease comes from. A server refuses to switch on a peer's say-so; the asking machine switches its own.",
+  [CH.accountBilling]:
+    "account:billing reads the billing of the answering machine's own account. A server refuses to show its account's billing to a peer; the asking machine reads its own.",
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**

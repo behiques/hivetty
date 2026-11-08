@@ -37,6 +37,8 @@ export interface StubControls {
   completeCheckout(plan: PlanKey): void;
   /** HIVE-291: GET /api/orgs answers these; a lease signs for the asked org when it seats the caller, else the first seated. */
   setOrgs(orgs: StubOrg[]): void;
+  /** The Account centre: GET /api/billing answers this summary for any org; `null` (the default) answers 404, billing off. */
+  setBilling(summary: Record<string, unknown> | null): void;
 }
 
 export interface StubCloud {
@@ -129,6 +131,7 @@ export async function startStubCloud(): Promise<StubCloud> {
     access: new Set<string>(),
     refresh: new Set<string>(),
     orgs: [DEFAULT_ORG] as StubOrg[],
+    billing: null as Record<string, unknown> | null,
   };
   const calls: StubCall[] = [];
   let url = '';
@@ -257,6 +260,10 @@ export async function startStubCloud(): Promise<StubCloud> {
       if (unauthorised(req, res)) return;
       return send(res, 200, { orgs: state.orgs });
     }
+    if (req.method === 'GET' && path === '/api/billing') {
+      if (unauthorised(req, res)) return;
+      return state.billing ? send(res, 200, state.billing) : send(res, 404, { error: 'not_found' });
+    }
     send(res, 404, { error: 'not_found' });
   };
 
@@ -290,6 +297,7 @@ export async function startStubCloud(): Promise<StubCloud> {
     trialUsed: (used) => (state.trialUsed = used),
     completeCheckout: (plan) => Object.assign(state, { plan, trialEnds: undefined, refusal: null, next: {} }),
     setOrgs: (orgs) => (state.orgs = orgs),
+    setBilling: (summary) => (state.billing = summary),
   };
 
   return {

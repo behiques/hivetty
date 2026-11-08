@@ -13,8 +13,7 @@ import { cn } from '@/lib/utils';
 import type { SettingsSection } from '@/types/settings';
 
 import { Lock, LockMark } from '@components/ui/lock';
-import { AccountDevicesSection } from '@features/settings/components/account-devices-section';
-import { AccountOrgSection } from '@features/settings/components/account-org-section';
+import { ACCOUNT_TABS, AccountCentre } from '@features/settings/components/account-centre';
 import { AdvancedSection } from '@features/settings/components/advanced-section';
 import { AgentsSection } from '@features/settings/components/agents-section';
 import { AppearanceSection } from '@features/settings/components/appearance-section';
@@ -23,9 +22,9 @@ import { HarnessPage } from '@features/settings/components/harness-page';
 import { HarnessesOverviewSection } from '@features/settings/components/harnesses-overview-section';
 import { IntegrationsSection } from '@features/settings/components/integrations-section';
 import { NotificationsSection } from '@features/settings/components/notifications-section';
-import { PlanLicenceSection } from '@features/settings/components/plan-licence-section';
 import { ProjectsSection } from '@features/settings/components/projects-section';
 import { ServerModeSection } from '@features/settings/components/server-mode-section';
+import { SettingsProfileCard } from '@features/settings/components/settings-profile-card';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { ShellSection } from '@features/settings/components/shell-section';
 import { SkillsSection } from '@features/settings/components/skills-section';
@@ -65,7 +64,8 @@ import { useSettingsActions, useSettingsAnchor, useSettingsLast, useSettingsSect
  * in the product lives. Projects holds what this app works on and the services around it (Integrations, the Jira
  * ticket workflow). Harnesses is only the CLIs. Environment is where sessions run: Runtime (shell, environment and
  * containers, one pane in two bands, as Integrations bands GitHub, Jira and Slack) and Server mode. Automation is
- * Agents and Skills. Account comes last until the profile card replaces it.
+ * Agents and Skills. Account is not a group: the profile card above the groups opens the Account centre, whose tabs
+ * are the three account pane ids.
  *
  * A group heading is a label, never a button. A group with no pane yet is not listed, the same rule that keeps a
  * pane **absent rather than disabled** until it exists. A retired id (`containers`, `runtime`, `clis`) still opens
@@ -124,25 +124,27 @@ export const SETTINGS_GROUPS: SettingsGroups = [
       { id: 'skills', label: 'Skills' },
     ],
   },
-  {
-    group: 'Account',
-    panes: [
-      { id: 'account-devices', label: 'Account & devices' },
-      { id: 'plan-licence', label: 'Plan & licence' },
-      { id: 'account-org', label: 'Organisation' },
-    ],
-  },
 ];
 
-/** Every pane in nav order, for the arrow keys, which cross group lines. */
-const ORDER = SETTINGS_GROUPS.flatMap((entry) => entry.panes.map((pane) => pane.id));
+const ACCOUNT_IDS: ReadonlySet<SettingsSection> = new Set(ACCOUNT_TABS.map((tab) => tab.id));
+
+/** The nav row a pane lights: the profile card for every account tab, else the pane's own row. */
+const navKey = (id: SettingsSection): SettingsSection => (ACCOUNT_IDS.has(id) ? 'account-devices' : id);
+
+/** Every nav row in order, the profile card first, for the arrow keys, which cross group lines. */
+const ORDER: SettingsSection[] = [
+  'account-devices',
+  ...SETTINGS_GROUPS.flatMap((entry) => entry.panes.map((pane) => pane.id)),
+];
 
 const groupOf = (id: SettingsSection): string =>
-  SETTINGS_GROUPS.find((entry) => entry.panes.some((pane) => pane.id === id))?.group ?? '';
+  ACCOUNT_IDS.has(id)
+    ? 'Account'
+    : (SETTINGS_GROUPS.find((entry) => entry.panes.some((pane) => pane.id === id))?.group ?? '');
 
 /** Arrow keys move one pane and hold at the ends; Home and End jump to them. */
 function step(current: SettingsSection, key: string): SettingsSection | null {
-  const index = ORDER.indexOf(current);
+  const index = ORDER.indexOf(navKey(current));
 
   switch (key) {
     case 'ArrowDown':
@@ -171,6 +173,11 @@ const ClaudeCodePage = () => <HarnessPage cli="claude-code" />;
 const CodexPage = () => <HarnessPage cli="codex" />;
 const CopilotPage = () => <HarnessPage cli="copilot" />;
 
+/** The Account centre serves the three account ids the same way, one tab each. */
+const ProfileDevicesPage = () => <AccountCentre tab="account-devices" />;
+const PlanBillingPage = () => <AccountCentre tab="plan-licence" />;
+const OrganisationPage = () => <AccountCentre tab="account-org" />;
+
 /**
  * Section id → pane, the same shape `list-panel.tsx` uses for its panels.
  *
@@ -192,9 +199,9 @@ const PANES: Record<SectionId, ComponentType> = {
   integrations: IntegrationsSection,
   notifications: NotificationsSection,
   'server-mode': ServerModeSection,
-  'account-devices': AccountDevicesSection,
-  'plan-licence': PlanLicenceSection,
-  'account-org': AccountOrgSection,
+  'account-devices': ProfileDevicesPage,
+  'plan-licence': PlanBillingPage,
+  'account-org': OrganisationPage,
   'updates-about': UpdatesAboutSection,
   advanced: AdvancedSection,
 };
@@ -315,7 +322,7 @@ export function SettingsOverlay({ groups = SETTINGS_GROUPS }: { groups?: Setting
 
     if (target === 'back') backRef.current?.focus();
     if (target === 'nav') {
-      navRef.current?.querySelector<HTMLElement>(`[data-pane="${section}"]`)?.focus();
+      navRef.current?.querySelector<HTMLElement>(`[data-pane="${navKey(section)}"]`)?.focus();
     }
   }, [paneOpen, section]);
 
@@ -440,6 +447,11 @@ export function SettingsOverlay({ groups = SETTINGS_GROUPS }: { groups?: Setting
               paneOpen && '@max-xl:hidden',
             )}
           >
+            <SettingsProfileCard
+              active={ACCOUNT_IDS.has(section)}
+              onOpen={() => openPane('account-devices')}
+              onKeyDown={onNavKeyDown}
+            />
             {groups.map((group) => {
               const labelId = `${groupId}-${group.group}`;
 

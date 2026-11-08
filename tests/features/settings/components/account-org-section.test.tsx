@@ -19,7 +19,6 @@ describe('AccountOrgSection (HIVE-291)', () => {
 
   it('shows the name, your role, the seat and the plan', () => {
     render(<AccountOrgSection />);
-    expect(screen.getByRole('heading', { name: 'Organisation', level: 2 })).toBeInTheDocument();
     expect(screen.getByText('Acme')).toBeInTheDocument();
     expect(screen.getByText('Admin')).toBeInTheDocument();
     expect(screen.getByText('Seated')).toBeInTheDocument();
@@ -46,7 +45,6 @@ describe('AccountOrgSection (HIVE-291)', () => {
   ])('with %s: the empty state, never hidden (D3)', (_label, org) => {
     active.org = org;
     render(<AccountOrgSection />);
-    expect(screen.getByRole('heading', { name: 'Organisation', level: 2 })).toBeInTheDocument();
     expect(screen.getByText("You're not in a team organisation.")).toBeInTheDocument();
   });
 });
