@@ -1364,6 +1364,25 @@ describe('TerminalSurface', () => {
       }
     });
 
+    it('announces settings for Cmd+, (Ctrl+, off macOS) and keeps it from the pty', () => {
+      const seen: string[] = [];
+      const onChord = (event: Event) => {
+        seen.push((event as CustomEvent<{ chord: string }>).detail.chord);
+      };
+      window.addEventListener(TERMINAL_CHORD_EVENT, onChord);
+
+      try {
+        renderInteractive();
+        const mac = /mac/i.test(navigator.platform || navigator.userAgent);
+        const handled = press(mac ? { key: ',', metaKey: true } : { key: ',', ctrlKey: true });
+
+        expect(handled).toBe(false);
+        expect(seen).toEqual(['settings']);
+      } finally {
+        window.removeEventListener(TERMINAL_CHORD_EVENT, onChord);
+      }
+    });
+
     it('announces nothing for an ordinary key', () => {
       const seen: string[] = [];
       const onChord = () => seen.push('fired');

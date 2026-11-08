@@ -336,8 +336,7 @@ describe('SettingsOverlay', () => {
     const projects = within(nav).getByRole('button', { name: 'Projects' });
     const appearance = within(nav).getByRole('button', { name: 'Appearance' });
 
-    // Always Projects on open: the realistic route in is the picker finding no
-    // projects to offer, and landing that user in Appearance would strand them.
+    // Projects before any pane was shown; the picker names it, so its no-projects user lands there regardless.
     expect(projects).toHaveAttribute('aria-current', 'page');
     expect(appearance).not.toHaveAttribute('aria-current');
 
@@ -354,6 +353,19 @@ describe('SettingsOverlay', () => {
     expect(
       screen.getByRole('heading', { name: 'Projects', level: 2 }),
     ).toBeInTheDocument();
+  });
+
+  it('a bare open comes back to the pane last shown; a named pane still wins', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<SettingsOverlay />);
+    await user.click(within(screen.getByRole('navigation', { name: 'Settings sections' })).getByRole('button', { name: 'Appearance' }));
+    unmount();
+
+    render(<SettingsOverlay />);
+    expect(screen.getByRole('heading', { name: 'Appearance', level: 2 })).toBeInTheDocument();
+
+    act(() => useUiStore.getState().openSettings('projects'));
+    expect(screen.getByRole('heading', { name: 'Projects', level: 2 })).toBeInTheDocument();
   });
 
   it('closes on the close button', async () => {

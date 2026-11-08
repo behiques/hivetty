@@ -161,6 +161,8 @@ interface UiState {
   whatsNewOpen: boolean;
   /** The pane `openSettings` was asked for, or `null` for the default. */
   settingsSection: SettingsSection | null;
+  /** The pane Settings last showed this run, where a bare `openSettings()` lands. Not persisted. */
+  settingsLast: SettingsSection;
   /**
    * The CLI picked this run, and what was last picked on each (HIVE-279). Not persisted. `newCli` is `null`
    * until one is picked, so the configured default leads (HIVE-375 D1); `useNewSessionPick` resolves it.
@@ -312,6 +314,8 @@ interface UiState {
    * to that pane after they had moved on.
    */
   clearSettingsSection: () => void;
+  /** The overlay reports each pane it shows, so the next bare open comes back to it. */
+  rememberSettingsSection: (section: SettingsSection) => void;
   closeSettings: () => void;
   /** Opening closes Settings, so the card never sits under the overlay it was opened from. */
   setWhatsNewOpen: (open: boolean) => void;
@@ -420,6 +424,7 @@ const initialUiState = {
    * so the rule below still holds for every route that does not name a pane.
    */
   settingsSection: null as SettingsSection | null,
+  settingsLast: 'projects' as SettingsSection,
   newCli: null as HarnessId | null,
   newPicks: {} as Picks,
   place: 'home' as Place,
@@ -667,6 +672,7 @@ export const useUiStore = create<UiState>()((set) => ({
   setWhatsNewOpen: (open) => set(open ? { whatsNewOpen: true, settings: false } : { whatsNewOpen: false }),
   closeSettings: () => set({ settings: false, settingsSection: null }),
   clearSettingsSection: () => set({ settingsSection: null }),
+  rememberSettingsSection: (section) => set({ settingsLast: section }),
   setPickerQuery: (query) => set({ pickerQuery: query }),
 
   setNewCli: (cli) => set({ newCli: cli }),
@@ -820,6 +826,7 @@ const settingsActionsSelector = (state: UiState) => ({
   openSettings: state.openSettings,
   closeSettings: state.closeSettings,
   clearSettingsSection: state.clearSettingsSection,
+  rememberSettingsSection: state.rememberSettingsSection,
 });
 
 const inboxActionsSelector = (state: UiState) => ({
@@ -1030,6 +1037,9 @@ export const useSettingsActions = () =>
  */
 export const useSettingsSection = (): SettingsSection | null =>
   useUiStore((state) => state.settingsSection);
+
+/** Where a bare open lands: the pane Settings last showed this run, Projects before that. */
+export const useSettingsLast = (): SettingsSection => useUiStore((state) => state.settingsLast);
 
 /** New-session picker state and actions. */
 export const usePickerState = () => useUiStore(useShallow(pickerStateSelector));

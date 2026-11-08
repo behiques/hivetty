@@ -202,6 +202,16 @@ describe('settings overlay (story 101)', () => {
     expect(useUiStore.getState().activeTab).toBe('s1');
   });
 
+  it('remembers the last pane shown, Projects until then, and reset forgets it', () => {
+    expect(useUiStore.getState().settingsLast).toBe('projects');
+
+    useUiStore.getState().rememberSettingsSection('appearance');
+    expect(useUiStore.getState().settingsLast).toBe('appearance');
+
+    useUiStore.getState().reset();
+    expect(useUiStore.getState().settingsLast).toBe('projects');
+  });
+
   it('reset clears the settings flag', () => {
     useUiStore.getState().openSettings();
 

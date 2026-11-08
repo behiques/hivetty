@@ -825,6 +825,8 @@ describe('NewSessionPicker · unmapped projects', () => {
     // openSettings clears the picker: two stacked full-stage overlays is what
     // that rule exists to prevent, and this is the path that would cause it.
     expect(useUiStore.getState().picker).toBe(false);
+    // Named, so a bare open's last-pane memory can never strand the user who came to add a project.
+    expect(useUiStore.getState().settingsSection).toBe('projects');
   });
 
   it('shows no first-run notice once the file exists', () => {

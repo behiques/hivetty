@@ -13,6 +13,7 @@ import {
   isEmptyClaudePrompt,
   isNewlineChord,
   isRailChord,
+  isSettingsChord,
   isTerminalHereChord,
   lineMotion,
   isLineKillChord,
@@ -313,6 +314,27 @@ describe('the terminal-here chord', () => {
   it('is claimed inside a terminal on both platforms, never sent to the pty', () => {
     expect(decideTerminalKey(key({ key: '`', ctrlKey: true }), MAC)).toBe('terminal-chord');
     expect(decideTerminalKey(key({ key: '`', ctrlKey: true }), PC)).toBe('terminal-chord');
+  });
+});
+
+describe('the settings chord', () => {
+  it('is Cmd+, on macOS and Ctrl+, elsewhere, with no other modifier', () => {
+    expect(isSettingsChord(key({ key: ',', metaKey: true }), true)).toBe(true);
+    expect(isSettingsChord(key({ key: ',', ctrlKey: true }), true)).toBe(false);
+    expect(isSettingsChord(key({ key: ',', metaKey: true, shiftKey: true }), true)).toBe(false);
+    expect(isSettingsChord(key({ key: ',', metaKey: true, altKey: true }), true)).toBe(false);
+    expect(isSettingsChord(key({ key: ',', ctrlKey: true }), false)).toBe(true);
+    expect(isSettingsChord(key({ key: ',', metaKey: true }), false)).toBe(false);
+    expect(isSettingsChord(key({ key: '.', metaKey: true }), true)).toBe(false);
+  });
+
+  it('matches by physical key when a layout remaps the character', () => {
+    expect(isSettingsChord(key({ key: ';', code: 'Comma', metaKey: true }), true)).toBe(true);
+  });
+
+  it('is claimed inside a terminal, never sent to the pty', () => {
+    expect(decideTerminalKey(key({ key: ',', metaKey: true }), MAC)).toBe('settings-chord');
+    expect(decideTerminalKey(key({ key: ',', ctrlKey: true }), PC)).toBe('settings-chord');
   });
 });
 

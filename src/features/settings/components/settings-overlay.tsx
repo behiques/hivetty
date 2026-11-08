@@ -35,7 +35,7 @@ import { UpdatesAboutSection } from '@features/settings/components/updates-about
 import { useLicenceLocks } from '@hooks/use-licence-locks';
 import { entitlementOf } from '@shared/entitlement';
 import type { LicenceState } from '@shared/licence-contract';
-import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
+import { useSettingsActions, useSettingsLast, useSettingsSection } from '@stores/ui-store';
 
 
 /**
@@ -248,18 +248,15 @@ export function paneLock(
 export function SettingsOverlay({ groups = SETTINGS_GROUPS }: { groups?: SettingsGroups } = {}) {
   // HIVE-332: `null` locks nothing (the gate off, or the licence unread); main refuses regardless.
   const { licence } = useLicenceLocks();
-  const { closeSettings, clearSettingsSection } = useSettingsActions();
+  const { closeSettings, clearSettingsSection, rememberSettingsSection } = useSettingsActions();
 
   /**
-   * Component-local, deliberately not `ui-store`.
+   * Component-local; only the last pane shown is mirrored to `ui-store`.
    *
-   * Settings open on Projects unless the caller *named* a pane. The realistic
-   * route in is the picker discovering it has no projects to offer (story
-   * 101), and reopening onto whichever pane was last visited would strand
-   * exactly that user in Appearance with no idea where the thing they came for
-   * went. A caller that asked for a pane — the rail's `+ New agent…`
-   * (HIVE-116) — is a different case: it is answering a question the user just
-   * asked, and landing them on Projects would lose it.
+   * A bare open (the account menu, ⌘,) comes back to the pane last shown this run, Projects before any. A
+   * caller that *named* a pane wins: the picker that found no projects to offer names Projects (story 101),
+   * since reopening onto Appearance would strand exactly that user, and the rail's `+ New agent…` (HIVE-116)
+   * names Agents.
    *
    * The request is honoured on arrival, not only at mount. This overlay is
    * `modal={false}` precisely so the panels stay live underneath it, so
@@ -269,7 +266,9 @@ export function SettingsOverlay({ groups = SETTINGS_GROUPS }: { groups?: Setting
    * yanking the pane back after the user has navigated on.
    */
   const requested = useSettingsSection();
-  const [section, setSection] = useState<SectionId>(requested ?? 'projects');
+  const last = useSettingsLast();
+  const [section, setSection] = useState<SectionId>(requested ?? last);
+  useEffect(() => rememberSettingsSection(section), [section, rememberSettingsSection]);
 
   /**
    * Which half shows below the two-column breakpoint (HIVE-374): the group

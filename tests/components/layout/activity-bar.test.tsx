@@ -1,6 +1,6 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentSummary } from '@shared/agent-contract';
 
@@ -13,6 +13,9 @@ import { seedDemoFleet } from '@tests/support/demo-fleet';
 import { hintOf } from '@tests/support/hint';
 import { prRecord } from '@tests/support/prs';
 
+const account = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock('@hooks/use-account', () => ({ useAccount: () => account.current }));
+
 const renderBar = () =>
   render(
     <TooltipProvider>
@@ -24,6 +27,7 @@ describe('ActivityBar (HIVE-195)', () => {
   beforeEach(() => {
     useUiStore.getState().reset();
     useAppearanceStore.getState().reset();
+    account.current = null;
   });
 
   it('lists the five places, Home active on launch', () => {
@@ -63,6 +67,27 @@ describe('ActivityBar (HIVE-195)', () => {
     act(() => useHiveStore.getState().setSessionStatus('hero-refresh', 'terminated'));
     await userEvent.click(screen.getByRole('button', { name: /^Sessions/ }));
     expect(useUiStore.getState().activeTab).toBe('orch');
+  });
+
+  it('signed in: Theme, then the avatar last, and no Settings gear (the avatar menu opens Settings)', () => {
+    account.current = { kind: 'signed-in', email: 'ana@example.com', name: 'Ana Ruiz', deviceId: 'd' };
+    renderBar();
+    const buttons = within(screen.getByRole('navigation', { name: 'Places' })).getAllByRole('button');
+
+    expect(buttons.at(-1)).toHaveAccessibleName('Account');
+    expect(buttons.at(-2)).toHaveAccessibleName(/theme/);
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+  });
+
+  it('with no signed-in account the gear takes the avatar\'s place, so Settings stays reachable', async () => {
+    account.current = { kind: 'signed-out' };
+    renderBar();
+    const buttons = within(screen.getByRole('navigation', { name: 'Places' })).getAllByRole('button');
+
+    expect(buttons.at(-1)).toHaveAccessibleName('Settings');
+    expect(screen.queryByRole('button', { name: 'Account' })).toBeNull();
+    await userEvent.click(buttons.at(-1)!);
+    expect(useUiStore.getState().settings).toBe(true);
   });
 
   it('Settings opens settings', async () => {

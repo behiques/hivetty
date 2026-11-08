@@ -151,6 +151,41 @@ describe('useAppChords', () => {
     expect(useUiStore.getState().panelOpen).toBe(true);
   });
 
+  describe('settings (⌘,)', () => {
+    it('opens Settings on a window keydown, without naming a pane', () => {
+      renderHook(() => useAppChords());
+
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true, bubbles: true }));
+      });
+
+      expect(useUiStore.getState()).toMatchObject({ settings: true, settingsSection: null });
+    });
+
+    it('opens Settings on the chord a focused terminal announced', () => {
+      renderHook(() => useAppChords());
+
+      act(() => {
+        window.dispatchEvent(
+          new CustomEvent(TERMINAL_CHORD_EVENT, { detail: { chord: 'settings' } satisfies TerminalChordDetail }),
+        );
+      });
+
+      expect(useUiStore.getState().settings).toBe(true);
+    });
+
+    it('does nothing behind the licence gate', () => {
+      useUiStore.getState().setGated(true);
+      renderHook(() => useAppChords());
+
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true, bubbles: true }));
+      });
+
+      expect(useUiStore.getState().settings).toBe(false);
+    });
+  });
+
   describe('terminal-here', () => {
     it('opens a sibling terminal for the active session on a window keydown', () => {
       const session = useHiveStore.getState().spawnSession('nova-web');

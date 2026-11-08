@@ -30,7 +30,7 @@ The bar runs down the left edge.
 | **PRs** | Your pull requests. See [Jira and pull requests](work-and-prs.md) |
 | Connection item | Where this Hive runs. See below |
 | Sun / moon | Switch between the theme's light and dark mode. From System, it picks the opposite of what is showing |
-| Gear | Open Settings |
+| Your avatar, last | Your account and plan, and **Settings…**. When no one is signed in, a gear that opens Settings takes its place |
 
 Counts sit on the icons. Sessions and Agents show how many are working, in grey. PRs shows how
 many need you, in amber. A zero shows nothing.
@@ -118,6 +118,7 @@ card you can answer there, then the sessions waiting on you. See [The inbox](inb
 | Toggle the list panel | `⌘B` | `Ctrl+Shift+B` |
 | Toggle the session panel | `⌘⌥B` | `Ctrl+Shift+Alt+B` |
 | Terminal here, beside the current session | ``Ctrl+` `` | ``Ctrl+` `` |
+| Open Settings | `⌘,` | `Ctrl+,` |
 | New line without sending | `Shift+Enter` | `Shift+Enter` |
 | Copy / paste in a terminal | `⌘C` (with a selection) / `⌘V` | `Ctrl+Shift+C` / `Ctrl+Shift+V` |
 | Interrupt | `Ctrl+C` | `Ctrl+C` with nothing selected |
