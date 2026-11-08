@@ -55,6 +55,8 @@ export interface AuthClient {
   openWeb(path: unknown): Promise<OpenWebResult>;
   /** HIVE-266: re-read `account.bin` after another process (`hivetty --login`/`--logout`) wrote it. */
   reload(): void;
+  /** HIVE-291: lease from this org from now on. Writes it to account.bin and announces it; false if it cannot. */
+  setActiveOrg(org: string): boolean;
 }
 
 export type CodeSignInResult = { ok: true } | { error: string; failure: DeviceFlowFailure | 'storage' };
@@ -86,6 +88,7 @@ const signedInFrom = (account: StoredAccount): AccountState => ({
   email: account.email,
   name: account.name,
   deviceId: account.deviceId,
+  ...(account.activeOrg === undefined ? {} : { activeOrg: account.activeOrg }),
 });
 
 interface Pending {
@@ -192,13 +195,14 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
   };
 
   /** Store first: an account that cannot be saved is not signed in. The caller announces it. */
-  const accept = (response: TokenResponse, deviceKey: DeviceKey): StoredAccount | null => {
+  const accept = (response: TokenResponse, deviceKey: DeviceKey, activeOrg?: string): StoredAccount | null => {
     const account: StoredAccount = {
       refreshToken: response.refreshToken,
       deviceId: response.deviceId,
       deviceKey,
       email: response.user.email,
       name: response.user.name,
+      ...(activeOrg === undefined ? {} : { activeOrg }),
     };
     if (!store.write(account)) return null;
     knownRefreshToken = account.refreshToken;
@@ -226,7 +230,8 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
       try {
         const response = await cloud.token({ grant_type: 'refresh_token', refresh_token: stored.refreshToken });
         if (gen !== generation) return null;
-        const account = accept(response, stored.deviceKey);
+        // HIVE-291: re-read, so an org chosen while the token was out is not rotated away.
+        const account = accept(response, stored.deviceKey, store.read()?.activeOrg);
         if (!account) {
           dropAccount('error', NO_ENCRYPTION);
           return null;
@@ -474,6 +479,15 @@ export function createAuthClient(deps: AuthClientDeps): AuthClient {
       knownRefreshToken = stored.refreshToken;
       if (!sameAccount) set(signedInFrom(stored));
       void refresh();
+    },
+
+    setActiveOrg(org) {
+      const stored = store.read();
+      if (current.kind !== 'signed-in' || !stored) return false;
+      const next: StoredAccount = { ...stored, activeOrg: org };
+      if (!store.write(next)) return false;
+      set(signedInFrom(next));
+      return true;
     },
 
     getAccessToken,
