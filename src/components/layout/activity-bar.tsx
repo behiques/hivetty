@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { ConnectionItem } from '@components/layout/connection-item';
 import { Hint } from '@components/ui/hint';
 import { AccountMenu } from '@features/account/components/account-menu';
+import { useAccount } from '@hooks/use-account';
 import { useResolvedTheme, useToggleTheme } from '@stores/appearance-store';
 import { useCounts, usePrNeedsYouCount, useTabGone, useWorkingAgentCount } from '@stores/hive-store';
 import {
@@ -37,18 +38,21 @@ const ITEM =
   'relative grid w-[52px] justify-items-center gap-[3px] rounded-lg pt-[7px] pb-[5px] text-micro font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
 
 /**
- * Round two's activity bar (HIVE-195): the brand, the five places, Settings.
+ * Round two's activity bar (HIVE-195): the brand, the five places, the account.
  *
  * Picking a place is the whole interaction; the ui-store's `selectPlace` owns
  * what a click on the active one means. The foot holds the connection item
- * (HIVE-196), the theme toggle (HIVE-213) and Settings; Search is left out until a story says what it
- * searches. The team name lives on Home's headline, not here.
+ * (HIVE-196), the theme toggle (HIVE-213) and, last, the account avatar, whose menu opens Settings. With no
+ * signed-in account (the browser build, signed out, offline grace) there is no avatar, so the Settings gear
+ * takes its place: Settings is never out of reach. Search is left out until a story says what it searches.
+ * The team name lives on Home's headline, not here.
  */
 export function ActivityBar() {
   const place = usePlace();
   const selectPlace = useSelectPlace();
   const sessionGone = useTabGone(useSessionsTab());
   const { openSettings } = useSettingsActions();
+  const signedIn = useAccount()?.kind === 'signed-in';
   const prsNeedYou = usePrNeedsYouCount();
   const sessionsWorking = useCounts().working;
   const agentsWorking = useWorkingAgentCount();
@@ -107,8 +111,6 @@ export function ActivityBar() {
 
       <ConnectionItem />
 
-      <AccountMenu />
-
       <Hint label={themeLabel}>
         <button
           type="button"
@@ -121,14 +123,18 @@ export function ActivityBar() {
         </button>
       </Hint>
 
-      <button
-        type="button"
-        onClick={() => openSettings()}
-        className={cn(ITEM, 'text-muted hover:bg-hover')}
-      >
-        <Gear size={19} aria-hidden />
-        Settings
-      </button>
+      {signedIn ? (
+        <AccountMenu />
+      ) : (
+        <button
+          type="button"
+          onClick={() => openSettings()}
+          className={cn(ITEM, 'text-muted hover:bg-hover')}
+        >
+          <Gear size={19} aria-hidden />
+          Settings
+        </button>
+      )}
     </nav>
   );
 }

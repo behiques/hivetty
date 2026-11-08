@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { isMacPlatform } from '@lib/platform';
 import {
   isRailChord,
+  isSettingsChord,
   isTerminalHereChord,
   TERMINAL_CHORD_EVENT,
   type KeyEventLike,
@@ -10,7 +11,7 @@ import {
 } from '@lib/terminal/keymap';
 import { useToggleSessionPanel } from '@stores/appearance-store';
 import { useSpawnTerminalBeside } from '@stores/hive-store';
-import { useActiveTab, useGated, useTogglePanel } from '@stores/ui-store';
+import { useActiveTab, useGated, useSettingsActions, useTogglePanel } from '@stores/ui-store';
 
 /**
  * One chord, both ways it can arrive.
@@ -33,7 +34,7 @@ interface AppChord {
  * docblock said a third chord is when a table earns itself. The terminal-here
  * chord is the third. What the table shares is the two listeners and the
  * de-duplication between them; what it does not become is a binding registry —
- * `Cmd+,` is still deferred to story 060, and nothing here is rebindable.
+ * nothing here is rebindable. `Cmd+,` joined once the account avatar replaced the Settings gear.
  */
 export function useAppChords(): void {
   const toggleSessionPanel = useToggleSessionPanel();
@@ -56,6 +57,7 @@ export function useAppChords(): void {
   }, [gated]);
 
   const togglePanel = useTogglePanel();
+  const { openSettings } = useSettingsActions();
 
   useEffect(() => {
     const isMac = isMacPlatform();
@@ -82,6 +84,12 @@ export function useAppChords(): void {
           if (tab === 'orch') return;
           spawnTerminalBeside(tab);
         },
+      },
+      {
+        matches: (event, mac) => isSettingsChord(event, mac),
+        name: 'settings',
+        // Bare: lands on the pane Settings last showed.
+        run: () => openSettings(),
       },
     ];
 
@@ -113,5 +121,5 @@ export function useAppChords(): void {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener(TERMINAL_CHORD_EVENT, onChord);
     };
-  }, [toggleSessionPanel, spawnTerminalBeside, togglePanel]);
+  }, [toggleSessionPanel, spawnTerminalBeside, togglePanel, openSettings]);
 }

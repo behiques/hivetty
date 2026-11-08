@@ -1,6 +1,7 @@
 # Settings
 
-Open Settings with the gear at the foot of the bar. Its panes sit under Harnesses, Automation,
+Open Settings from your avatar at the foot of the bar (**Settings…**), or press `⌘,`. It opens on the
+pane you last had open. When no one is signed in, a gear sits where the avatar would be. Its panes sit under Harnesses, Automation,
 Workspace, Machines, Account and General. Almost everything here is written to `~/.hivetty/config.json`
 ([The config file](configuration.md)); appearance and editor preferences stay on this machine.
 

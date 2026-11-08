@@ -311,9 +311,8 @@ export function NewSessionPicker() {
             </p>
             <Button
               variant="primary"
-              // Wrapped: `openSettings` takes an optional pane, and a bare
-              // handler would hand it the click event as one (HIVE-116).
-              onClick={() => openSettings()}
+              // Named: a bare open lands on the last pane shown, and this user came for Projects.
+              onClick={() => openSettings('projects')}
             >
               Add project
             </Button>

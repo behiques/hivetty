@@ -37,6 +37,8 @@ type TerminalKeyAction =
   | 'rail-chord'
   /** The terminal-here chord. Not xterm's, not the pty's. Let it bubble. */
   | 'terminal-chord'
+  /** The settings chord (`Cmd+,`). Not xterm's, not the pty's. Let it bubble. */
+  | 'settings-chord'
   /**
    * A bare `←` the app wanted and could not have (HIVE-79).
    *
@@ -219,6 +221,18 @@ export function isTerminalHereChord(event: KeyEventLike): boolean {
     !event.shiftKey &&
     event.altKey !== true
   );
+}
+
+/**
+ * `Cmd+,` on macOS, `Ctrl+,` elsewhere, no other modifier: the platforms' own Settings chord, and the
+ * activity bar's only keyboard way into Settings now the gear is gone while signed in. xterm encodes nothing
+ * for `Cmd+,`, and `Ctrl+,` is no control character, so a pty loses nothing. Physical key first, as
+ * {@link isRailChord} argues.
+ */
+export function isSettingsChord(event: KeyEventLike, isMac: boolean): boolean {
+  const isComma = event.code ? event.code === 'Comma' : event.key === ',';
+  const primary = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  return isComma && primary && !event.shiftKey && event.altKey !== true;
 }
 
 export function isRailChord(
@@ -674,8 +688,10 @@ export interface TerminalChordDetail {
    *
    * `terminal-here` — a shell beside the entity on screen (entry points; see
    * {@link isTerminalHereChord}). Carried up for the reason the others are.
+   *
+   * `settings` — open Settings (see {@link isSettingsChord}). Carried up for the reason the others are.
    */
-  chord: 'back' | 'back-declined' | 'rail-left' | 'rail-right' | 'terminal-here';
+  chord: 'back' | 'back-declined' | 'rail-left' | 'rail-right' | 'terminal-here' | 'settings';
 }
 
 /** How that chord is written in the key-hint row. */
@@ -722,6 +738,8 @@ export function decideTerminalKey(
   if (isRailChord(event, isMac)) return 'rail-chord';
 
   if (isTerminalHereChord(event)) return 'terminal-chord';
+
+  if (isSettingsChord(event, isMac)) return 'settings-chord';
 
   /**
    * A terminal whose process has ended gives `←` back to the app (story 108).

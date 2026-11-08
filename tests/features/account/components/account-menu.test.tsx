@@ -67,11 +67,11 @@ describe('AccountMenu (HIVE-265)', () => {
     expect(openAccountWeb).toHaveBeenCalledWith(path);
   });
 
-  it('Settings… opens Account & devices', async () => {
+  it('Settings… opens Settings without naming a pane, so it lands where the user last was', async () => {
     render(<AccountMenu />);
     await userEvent.click(screen.getByRole('button', { name: 'Account' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Settings…' }));
-    expect(useUiStore.getState()).toMatchObject({ settings: true, settingsSection: 'account-devices' });
+    expect(useUiStore.getState()).toMatchObject({ settings: true, settingsSection: null });
   });
 
   it('Sign out asks first; Cancel keeps the account, Sign out signs out', async () => {
