@@ -28,7 +28,7 @@ const LAPSE: Record<LapseReason, string> = {
 };
 
 /** One label/value row, as in Updates & About. */
-function Fact({ label, value }: { label: string; value: string }) {
+export function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
       <span className="text-control text-subtle">{label}</span>

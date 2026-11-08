@@ -86,6 +86,7 @@ describe('SettingsOverlay', () => {
       'Server mode',
       'Account & devices',
       'Plan & licence',
+      'Organisation',
       'Updates & About',
       'Advanced',
     ]) {
@@ -129,7 +130,7 @@ describe('SettingsOverlay', () => {
       ['Agents', 'Skills', 'Ticket workflow'],
       ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
       ['Server mode'],
-      ['Account & devices', 'Plan & licence'],
+      ['Account & devices', 'Plan & licence', 'Organisation'],
       ['Updates & About', 'Advanced'],
     ]);
     expect(within(nav).queryByRole('button', { name: 'Harnesses' })).not.toBeInTheDocument();
@@ -153,6 +154,7 @@ describe('SettingsOverlay', () => {
     ['server-mode', 'Server mode'],
     ['account-devices', 'Account & devices'],
     ['plan-licence', 'Plan & licence'],
+    ['account-org', 'Organisation'],
     ['updates-about', 'Updates & About'],
     ['advanced', 'Advanced'],
   ] as const)('pane id %s renders its section', (id, title) => {
