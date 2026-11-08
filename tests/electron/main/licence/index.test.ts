@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -410,5 +410,76 @@ describe('account:sign-in-code (HIVE-266)', () => {
     await vi.advanceTimersByTimeAsync(5000);
     await expect(done).resolves.toMatchObject({ error: expect.any(String) });
     expect(broadcastDeviceCode).toHaveBeenCalledWith(expect.objectContaining({ userCode: 'WDJB-MJHT' }));
+  });
+});
+
+describe('the renewal asks for the stored org (HIVE-291)', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-licence-'));
+  });
+  afterEach(() => {
+    resetLicence();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const ACCOUNT = {
+    refreshToken: 'rt-1',
+    deviceId: 'dev-1',
+    deviceKey: { publicJwk: { kty: 'OKP', crv: 'Ed25519', x: 'p' }, privateJwk: { kty: 'OKP', crv: 'Ed25519', x: 'p', d: 'q' } },
+    email: 'ana@example.com',
+    name: 'Ana',
+  };
+  const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
+  const TOKEN = {
+    access_token: 'at-2',
+    refresh_token: 'rt-2',
+    expires_in: 3600,
+    device_id: 'dev-1',
+    user: { email: 'ana@example.com', name: 'Ana' },
+  };
+  /** The cloud: a token for any refresh, and a refused lease (the body is what is under test). */
+  const cloud = () =>
+    vi.fn((url: string, _init?: RequestInit) =>
+      Promise.resolve(
+        url.endsWith('/api/oauth/token') ? json(200, TOKEN) : json(403, { error: 'lease_refused', reason: 'no_plan' }),
+      ),
+    );
+  const leaseBodies = (fetch: ReturnType<typeof cloud>) =>
+    fetch.mock.calls.filter(([url]) => url === `${ISS}/api/lease`).map(([, init]) => init?.body);
+  const boot = (fetch: ReturnType<typeof cloud>) =>
+    startLicence({
+      app: { isPackaged: false, getPath: () => dir },
+      safeStorage,
+      openExternal: vi.fn(),
+      env: { HIVETTY_CLOUD_URL: ISS },
+      fetch,
+      broadcast: vi.fn(),
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
+    });
+
+  it('posts the stored activeOrg, and the token rotation keeps it in account.bin', async () => {
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify({ ...ACCOUNT, activeOrg: 'org-b' }));
+    const fetch = cloud();
+    boot(fetch);
+    await LICENCE_CALLS[CH.licenceRefresh]();
+    expect(leaseBodies(fetch).length).toBeGreaterThan(0);
+    expect(leaseBodies(fetch).every((body) => body === '{"org":"org-b"}')).toBe(true);
+    expect(JSON.parse(readFileSync(join(dir, 'account.bin'), 'utf8'))).toMatchObject({
+      refreshToken: 'rt-2',
+      activeOrg: 'org-b',
+    });
+  });
+
+  it('posts no body when none is stored', async () => {
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    const fetch = cloud();
+    boot(fetch);
+    await LICENCE_CALLS[CH.licenceRefresh]();
+    expect(leaseBodies(fetch).length).toBeGreaterThan(0);
+    expect(leaseBodies(fetch).every((body) => body === undefined)).toBe(true);
   });
 });

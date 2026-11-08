@@ -114,7 +114,8 @@ export function startLicence(
   const state = createLicenceState({
     account: next,
     file: built.leaseFile,
-    renew: () => renewLease((path, init) => next.authedFetch(path, init)),
+    // HIVE-291: every renewal (launch, 24 h, wake, sign-in, refresh, a switch) asks for the stored org.
+    renew: () => renewLease((path, init) => next.authedFetch(path, init), built.store.read()?.activeOrg),
     keys: built.keys,
     iss: built.baseUrl,
     now: Date.now,
