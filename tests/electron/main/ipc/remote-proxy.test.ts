@@ -558,13 +558,15 @@ describe('registerRemoteProxy', () => {
    * `remote:forget` (HIVE-153).
    */
   describe('PROCESS_LOCAL channels (HIVE-144 Rulings 24 and 28, HIVE-153, HIVE-149, HIVE-151)', () => {
-    it('names exactly twenty-three channels', () => {
-      expect(PROCESS_LOCAL.length).toBe(23);
+    it('names exactly twenty-five channels', () => {
+      expect(PROCESS_LOCAL.length).toBe(25);
       expect([...PROCESS_LOCAL].sort()).toEqual(
         [
           'account:cancel',
           'account:devices',
           'account:open-web',
+          'account:orgs',
+          'account:switch-org',
           'account:sign-in',
           'account:sign-in-code',
           'account:sign-out',
@@ -649,6 +651,16 @@ describe('registerRemoteProxy', () => {
       await invoke('app:quit', trustedEvent, undefined);
 
       expect(quit).toHaveBeenCalledTimes(1);
+      expect(client.call).not.toHaveBeenCalled();
+    });
+
+    it('answers the HIVE-291 calls locally, never client.call', async () => {
+      const client = fakeClient();
+      registerRemoteProxy({ client, broadcaster: fakeBroadcaster() });
+
+      // Not started in this test: account:orgs answers [] and account:switch-org the unlicensed state, locally.
+      await expect(invoke('account:orgs', trustedEvent, undefined)).resolves.toEqual([]);
+      await expect(invoke('account:switch-org', trustedEvent, 'org-b')).resolves.toEqual({ kind: 'unlicensed' });
       expect(client.call).not.toHaveBeenCalled();
     });
 

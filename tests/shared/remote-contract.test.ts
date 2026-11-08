@@ -630,7 +630,7 @@ describe('remote contract: the version handshake', () => {
   });
 
   it('is protocol 3: 2 carried a generation (HIVE-144), 3 caught up on unbumped channels (HIVE-140 audit)', () => {
-    expect(REMOTE_PROTOCOL_VERSION).toBe(37);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(38);
   });
 });
 
@@ -681,7 +681,7 @@ describe('remote contract: the attach snapshot (HIVE-144)', () => {
     expect(EVENT_CHANNELS).toContain(CH.changedFilesChanged);
     expect(frameKindOf(CH.changedFilesChanged)).toBe('event');
     expect(frameKindOf(CH.changedFilesList)).toBe('call');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(37);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(38);
   });
 
   it('snapshots the plans so a reattaching client sees the current plan (HIVE-179)', () => {
@@ -792,7 +792,7 @@ describe('WINDOW_BOUND', () => {
  * admitted and nobody had applied it to.
  */
 describe('PROCESS_LOCAL', () => {
-  it('names exactly twenty-three channels', () => {
+  it('names exactly twenty-five channels', () => {
     expect([...PROCESS_LOCAL].sort()).toEqual(
       [
         CH.appInfo,
@@ -818,6 +818,8 @@ describe('PROCESS_LOCAL', () => {
         CH.licenceStartTrial,
         CH.licencePaused,
         CH.appQuit,
+        CH.accountOrgs,
+        CH.accountSwitchOrg,
       ].sort(),
     );
   });
@@ -1006,6 +1008,15 @@ describe('account channels (HIVE-264)', () => {
       [CH.licencePaused]: 'read',
       [CH.appQuit]: 'execute',
     } as const;
+    for (const [channel, grade] of Object.entries(grades)) {
+      expect(frameKindOf(channel as Channel)).toBe('call');
+      expect(isProcessLocal(channel as Channel)).toBe(true);
+      expect(authorizationOf(channel as Channel)).toBe(grade);
+    }
+  });
+
+  it('the HIVE-291 channels are process-local calls, graded as they act', () => {
+    const grades = { [CH.accountOrgs]: 'read', [CH.accountSwitchOrg]: 'execute' } as const;
     for (const [channel, grade] of Object.entries(grades)) {
       expect(frameKindOf(channel as Channel)).toBe('call');
       expect(isProcessLocal(channel as Channel)).toBe(true);

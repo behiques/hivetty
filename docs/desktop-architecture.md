@@ -1162,6 +1162,11 @@ HIVE-265 adds four channels, all `PROCESS_LOCAL`, under one `REMOTE_PROTOCOL_VER
 `licence:start-trial` (the one 14-day trial, `POST /api/trial`), `licence:paused` (what a lapse paused) and
 `app:quit` (the gate's Quit; a peer never quits a server).
 
+HIVE-291 adds two more, both `PROCESS_LOCAL`, under one `REMOTE_PROTOCOL_VERSION` bump to 38: `account:orgs`
+(`GET /api/orgs`, shape-checked, `[]` on any failure; a list holding an org not seen since launch or sign-in renews
+the lease) and `account:switch-org` (an id of 1–64 characters, written to `account.bin` as `activeOrg`; every
+renewal posts it as `{ org }`, and the call resolves to the licence after the renewal).
+
 Server mode sits behind the licence (HIVE-265, PR 2). `startWhenLicensed(start, licence, onLicenceChange)` in
 `licence/serve-gate.ts` binds the remote listener at once when the licence is `licensed`, `grace` or `lapsed`,
 and otherwise on the first change out of `unlicensed`. Once bound, nothing takes it down: a lapsed server keeps
