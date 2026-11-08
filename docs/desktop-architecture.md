@@ -1186,7 +1186,8 @@ is not showing.
   kept on sign-out; the device id stops it working anywhere else.
 - `verify.ts` checks it offline with `node:crypto` (ES256, P1363), against the current and next keys
   committed in `keys.ts` and refreshed by `pnpm licence:keys`. Prod's list stays empty until the prod cloud
-  exists, so a packaged build accepts no lease.
+  exists, so a packaged stable build accepts no lease. A packaged **prerelease** (`1.0.0-rc.1`) is a release
+  candidate: `buildAccount` sends it to the dev cloud with the dev keys, the environment overrides still off.
 - `licence-state.ts` reports `unlicensed`, `licensed`, `grace` (the last renewal failed, the lease still
   holds) or `lapsed {reason}`. Only `lapsed` enforces; a refusal lapses at once, and the lease's own length
   is the offline grace.

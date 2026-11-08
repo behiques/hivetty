@@ -44,15 +44,20 @@ const isKey = (value: unknown): value is LeaseJwk =>
   typeof (value as { x?: unknown }).x === 'string' &&
   typeof (value as { y?: unknown }).y === 'string';
 
-/** `HIVETTY_LEASE_KEYS` (a JSON array of JWKs) is honoured only unpackaged, for the stub cloud (HIVE-270). */
+/**
+ * `HIVETTY_LEASE_KEYS` (a JSON array of JWKs) is honoured only unpackaged, for the stub cloud (HIVE-270). A packaged
+ * prerelease talks to the dev cloud (`resolveCloudUrl`), so it trusts the dev keys.
+ */
 export function leaseKeys({
   isPackaged,
+  prerelease,
   env,
 }: {
   isPackaged: boolean;
+  prerelease?: boolean;
   env: Record<string, string | undefined>;
 }): LeaseJwk[] {
-  if (isPackaged) return LEASE_KEYS.prod;
+  if (isPackaged) return prerelease ? LEASE_KEYS.dev : LEASE_KEYS.prod;
   const raw = env.HIVETTY_LEASE_KEYS;
   if (raw) {
     try {

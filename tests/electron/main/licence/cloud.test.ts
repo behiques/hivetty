@@ -20,6 +20,19 @@ describe('resolveCloudUrl', () => {
     expect(DEV_CLOUD_URL).toBe('https://api.dev.hivetty.dev');
   });
 
+  it('sends a packaged prerelease (a release candidate) to the dev cloud', () => {
+    expect(resolveCloudUrl({ isPackaged: true, prerelease: true, env: {} })).toBe(DEV_CLOUD_URL);
+    expect(resolveCloudUrl({ isPackaged: true, prerelease: false, env: {} })).toBe(PROD_CLOUD_URL);
+  });
+
+  it('still ignores HIVETTY_CLOUD_URL in a packaged prerelease, and still lets account.cloudUrl win', () => {
+    const env = { HIVETTY_CLOUD_URL: 'http://127.0.0.1:4010' };
+    expect(resolveCloudUrl({ isPackaged: true, prerelease: true, env })).toBe(DEV_CLOUD_URL);
+    expect(resolveCloudUrl({ isPackaged: true, prerelease: true, configUrl: 'https://hive.acme.test', env })).toBe(
+      'https://hive.acme.test',
+    );
+  });
+
   it('lets account.cloudUrl override either build, for self-hosted Enterprise', () => {
     expect(resolveCloudUrl({ isPackaged: true, configUrl: 'https://hive.acme.test', env: {} })).toBe(
       'https://hive.acme.test',

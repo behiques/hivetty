@@ -44,7 +44,7 @@ export const ACCOUNT_FILE = 'account.bin';
 export const RELOAD_EVERY_MS = 30_000;
 
 interface AccountBoot {
-  app: { isPackaged: boolean; getPath(name: 'userData'): string };
+  app: { isPackaged: boolean; getPath(name: 'userData'): string; getVersion(): string };
   safeStorage: AccountSafeStorage;
   cloudUrl?: string;
   env: Record<string, string | undefined>;
@@ -54,7 +54,9 @@ interface AccountBoot {
 /** The cloud, the store and the client, built the same way for the app and for a one-shot (HIVE-266). */
 function buildAccount(deps: AccountBoot & { openExternal: (url: string) => Promise<void> }) {
   const { app, safeStorage } = deps;
-  const baseUrl = resolveCloudUrl({ isPackaged: app.isPackaged, configUrl: deps.cloudUrl, env: deps.env });
+  // A semver prerelease (`1.0.0-rc.1`) is a release candidate: the dev cloud and its keys, never prod's.
+  const prerelease = app.getVersion().includes('-');
+  const baseUrl = resolveCloudUrl({ isPackaged: app.isPackaged, prerelease, configUrl: deps.cloudUrl, env: deps.env });
   const cloud = createCloud({ baseUrl, fetch: deps.fetch });
   const userData = app.getPath('userData');
   const accountPath = join(userData, ACCOUNT_FILE);
@@ -76,7 +78,7 @@ function buildAccount(deps: AccountBoot & { openExternal: (url: string) => Promi
     client: built,
     accountPath,
     leaseFile: createLeaseFile(join(userData, 'lease.jws')),
-    keys: leaseKeys({ isPackaged: app.isPackaged, env: deps.env }),
+    keys: leaseKeys({ isPackaged: app.isPackaged, prerelease, env: deps.env }),
   };
 }
 
