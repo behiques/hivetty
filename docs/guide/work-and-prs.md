@@ -160,7 +160,7 @@ From here, [Working a ticket](workflow.md) walks the rest of the way to Done.
 
 ### The ticket workflow
 
-**Settings › Automation › Ticket workflow** decides what a session started from a ticket does first:
+**Settings › Projects › Ticket workflow** decides what a session started from a ticket does first:
 
 - **Just open** (the default): the session opens at an empty prompt.
 - **Run a skill**: the skill runs on the ticket as the session's first message, `/hive:work-on ABC-123`.

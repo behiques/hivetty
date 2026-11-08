@@ -74,7 +74,7 @@ test('the empty app: first-run, Work, the bare openers and the cross-links betwe
     await expectPane(page, 'codex');
 
     // Containers → a CLI's page, by its name in the table.
-    await openPane(page, 'containers');
+    await openPane(page, 'shell');
     await page.getByRole('rowheader').getByRole('button', { name: 'Copilot', exact: true }).click();
     await expectPane(page, 'copilot');
   } finally {
@@ -91,8 +91,10 @@ test('an exposed receiver: the connection item links to Containers', async ({}, 
   try {
     await page.getByTestId('connection-item').click();
     const popover = page.getByRole('dialog', { name: 'Connection' });
-    await popover.getByRole('button', { name: 'Settings › Harnesses › Containers' }).click();
-    await expectPane(page, 'containers');
+    await popover.getByRole('button', { name: 'Settings › Runtime › Containers' }).click();
+    // Runtime, scrolled to its Containers band.
+    await expectPane(page, 'shell');
+    await expect(page.getByRole('region', { name: 'Containers' }).getByRole('heading', { name: 'Containers' })).toBeInViewport();
     await expect(popover).toBeHidden();
   } finally {
     await app.close();

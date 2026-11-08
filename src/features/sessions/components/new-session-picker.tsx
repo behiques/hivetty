@@ -136,7 +136,7 @@ export function NewSessionPicker() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   /*
-    Started from a ticket, Settings › Automation › Ticket workflow decides what the
+    Started from a ticket, Settings › Projects › Ticket workflow decides what the
     session does first: a message to type (a skill, or asking an agent), or
     waking an agent with no session at all. The message is the setting's until
     it is edited here, and an edit is for this one start (variant D). The
@@ -419,8 +419,8 @@ export function NewSessionPicker() {
             />
             <span id="picker-first-message-hint" className="text-ui-sm text-subtle">
               {workflow === null
-                ? 'Set one for every ticket in Settings › Automation › Ticket workflow. ⌥↵ starts empty.'
-                : 'From Settings › Automation › Ticket workflow; a change here is for this session only. ⌥↵ starts empty.'}
+                ? 'Set one for every ticket in Settings › Projects › Ticket workflow. ⌥↵ starts empty.'
+                : 'From Settings › Projects › Ticket workflow; a change here is for this session only. ⌥↵ starts empty.'}
             </span>
           </div>
         )}

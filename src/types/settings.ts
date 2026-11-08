@@ -17,7 +17,6 @@ export type SettingsSection =
   | 'codex'
   | 'copilot'
   | 'shell'
-  | 'containers'
   | 'agents'
   | 'skills'
   | 'ticket-workflow'
@@ -42,6 +41,13 @@ export type SettingsSection =
 export const LEGACY_SETTINGS_SECTIONS = {
   runtime: 'shell',
   clis: 'harnesses-overview',
+  // The Settings regroup folded Containers into Runtime as a band.
+  containers: 'shell',
 } as const satisfies Record<string, SettingsSection>;
 
 export type LegacySettingsSection = keyof typeof LEGACY_SETTINGS_SECTIONS;
+
+/** A retired id that lands partway down its new pane: the `data-settings-anchor` the overlay scrolls to. */
+export const LEGACY_SETTINGS_ANCHORS: Partial<Record<LegacySettingsSection, string>> = {
+  containers: 'containers',
+};

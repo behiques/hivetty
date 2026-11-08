@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react';
 import { Button } from '@components/ui/button';
 import { Switch } from '@components/ui/switch';
 import { TextField } from '@components/ui/text-field';
+import { ContainersGroups } from '@features/settings/components/containers-section';
 import { EnvDiagnosticView } from '@features/settings/components/env-diagnostic-view';
 import { EnvEditor } from '@features/settings/components/env-editor';
 import { PathSourceGroup } from '@features/settings/components/path-source-group';
+import { SettingsProviderGroup } from '@features/settings/components/settings-provider-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useProjectConfig } from '@hooks/use-project-config';
@@ -139,7 +141,7 @@ export function ShellSection() {
     <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
       <SettingsSectionHeader
         title="Runtime"
-        description="What every session starts in, for every CLI. A project can override these from Workspace › Projects › ⋯ › Runtime overrides."
+        description="What every session starts in, for every CLI, and how a container reaches this app. A project can override these from Projects › Projects › ⋯ › Runtime overrides."
       />
 
       {snapshot.errors.map((error) => (
@@ -151,6 +153,7 @@ export function ShellSection() {
         </p>
       ))}
 
+      <SettingsProviderGroup name="Shell & environment">
       <SettingsGroup
         title="Shell"
         description="Used by every project that does not override it."
@@ -278,6 +281,11 @@ export function ShellSection() {
         apart, and Integrations links this way instead.
       */}
       <PathSourceGroup loginEnv={loginEnv} />
+      </SettingsProviderGroup>
+
+      <SettingsProviderGroup name="Containers" anchor="containers">
+        <ContainersGroups />
+      </SettingsProviderGroup>
     </div>
   );
 }

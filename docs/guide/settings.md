@@ -1,15 +1,25 @@
 # Settings
 
 Open Settings from your avatar at the foot of the bar (**Settings…**), or press `⌘,`. It opens on the
-pane you last had open. When no one is signed in, a gear sits where the avatar would be. Its panes sit under Harnesses, Automation,
-Workspace, Machines, Account and General. Almost everything here is written to `~/.hivetty/config.json`
+pane you last had open. When no one is signed in, a gear sits where the avatar would be. Its panes sit in six groups:
+
+| Group | Panes |
+| --- | --- |
+| General | Appearance, Editor, Notifications, Updates & About, Advanced |
+| Projects | Projects, Integrations, Ticket workflow |
+| Harnesses | Overview, Claude Code, Codex, Copilot |
+| Environment | Runtime (with Containers inside it), Server mode |
+| Automation | Agents, Skills |
+| Account | Account & devices, Plan & licence, Organisation |
+
+Almost everything here is written to `~/.hivetty/config.json`
 ([The config file](configuration.md)); appearance and editor preferences stay on this machine.
 
-**On this page:** [Projects](#projects) · [Overview](#overview) ·
-[Runtime](#runtime) · [Containers](#containers) · [Skills](#skills) ·
-[Agents](#agents) · [Ticket workflow](#ticket-workflow) · [Appearance](#appearance) · [Editor](#editor) ·
-[Integrations](#integrations) · [Notifications](#notifications) · [Server mode](#server-mode) ·
-[Account & devices](#account--devices) · [Plan & licence](#plan--licence) · [Updates & About](#updates--about) · [Advanced](#advanced)
+**On this page:** [Appearance](#appearance) · [Editor](#editor) · [Notifications](#notifications) ·
+[Updates & About](#updates--about) · [Advanced](#advanced) · [Projects](#projects) · [Integrations](#integrations) ·
+[Ticket workflow](#ticket-workflow) · [Overview](#overview) · [Runtime](#runtime) · [Containers](#containers) ·
+[Server mode](#server-mode) · [Agents](#agents) · [Skills](#skills) · [Account & devices](#account--devices) ·
+[Plan & licence](#plan--licence)
 
 | Where it is stored | What |
 | --- | --- |
@@ -98,15 +108,17 @@ the command and Codex's own message, and the next session start tries again.
 
 ## Runtime
 
+Under **Environment**, in two bands: **Shell & environment**, then **Containers**.
+
 What every session starts in, for every CLI. **Shell** (started as a login shell) and environment variables for
 every project. **Import my login shell's PATH at startup** lets a Finder-launched app find Homebrew tools, and the
 environment diagnostic shows which variables your rc file overrode. The agent command is on each CLI's page.
 
 ![Settings › Runtime](../assets/guide/18-settings-runtime.png)
 
-## Containers
+### Containers
 
-Which CLIs can run in a project's container (Claude Code today), which of your projects do, and the **Host alias**
+The second band of Runtime. Which CLIs can run in a project's container (Claude Code today), which of your projects do, and the **Host alias**
 and **Bind address** a container uses to reach HiveTTY. A container profile belongs to its project.
 
 ## Skills
@@ -151,7 +163,7 @@ One row per event: Off, Inbox or Both. See [The inbox](inbox.md#choosing-what-re
 
 ## Server mode
 
-Under **Machines**. **Serve this machine**, paired devices, and **Attach to a server**
+Under **Environment**. **Serve this machine**, paired devices, and **Attach to a server**
 ([Remote](remote.md)). While this window is attached, the bind fields and the device roster are
 the server's, and the pane says so.
 

@@ -18,7 +18,6 @@ import { AccountOrgSection } from '@features/settings/components/account-org-sec
 import { AdvancedSection } from '@features/settings/components/advanced-section';
 import { AgentsSection } from '@features/settings/components/agents-section';
 import { AppearanceSection } from '@features/settings/components/appearance-section';
-import { ContainersSection } from '@features/settings/components/containers-section';
 import { EditorSection } from '@features/settings/components/editor-section';
 import { HarnessPage } from '@features/settings/components/harness-page';
 import { HarnessesOverviewSection } from '@features/settings/components/harnesses-overview-section';
@@ -35,7 +34,7 @@ import { UpdatesAboutSection } from '@features/settings/components/updates-about
 import { useLicenceLocks } from '@hooks/use-licence-locks';
 import { entitlementOf } from '@shared/entitlement';
 import type { LicenceState } from '@shared/licence-contract';
-import { useSettingsActions, useSettingsLast, useSettingsSection } from '@stores/ui-store';
+import { useSettingsActions, useSettingsAnchor, useSettingsLast, useSettingsSection } from '@stores/ui-store';
 
 
 /**
@@ -60,27 +59,19 @@ import { useSettingsActions, useSettingsLast, useSettingsSection } from '@stores
  */
 
 /**
- * The nav, in groups (HIVE-374, Epic HIVE-373).
+ * The nav, in groups (HIVE-374, Epic HIVE-373; regrouped after the account-menu reorg).
  *
- * Six groups in the epic's order: Harnesses, Automation, Workspace, Machines,
- * Account, General. A group heading is a label, never a button. A group with
- * no pane yet is simply not listed — Machines and Account arrive with their
- * panes — the same rule that keeps a pane **absent rather than disabled** until
- * it exists: a nav full of dead items teaches the user that settings are broken.
+ * General first: how the app looks and behaves, its updates, and Advanced last inside it, where the destructive verb
+ * in the product lives. Projects holds what this app works on and the services around it (Integrations, the Jira
+ * ticket workflow). Harnesses is only the CLIs. Environment is where sessions run: Runtime (shell, environment and
+ * containers, one pane in two bands, as Integrations bands GitHub, Jira and Slack) and Server mode. Automation is
+ * Agents and Skills. Account comes last until the profile card replaces it.
  *
- * Adding a pane is still a row here and an entry in `PANES`, and no control
- * flow anywhere in this file.
+ * A group heading is a label, never a button. A group with no pane yet is not listed, the same rule that keeps a
+ * pane **absent rather than disabled** until it exists. A retired id (`containers`, `runtime`, `clis`) still opens
+ * through `LEGACY_SETTINGS_SECTIONS`.
  *
- * Each CLI has its own page under Harnesses (HIVE-376). Runtime (named Shell &
- * environment by HIVE-377) and Containers split the old pane; a project's own overrides
- * open from its row in Projects.
- *
- * Machines holds what this Mac is to other machines: Server mode (HIVE-380),
- * then Runners and Relay with their own stories. Account holds Account &
- * devices (HIVE-265), then Plan & licence (HIVE-268), then Organisation
- * (HIVE-291). General holds Updates &
- * about, and Advanced last: it answers questions about the app rather than
- * setting anything in it, and the destructive verb in the product lives there.
+ * Adding a pane is still a row here and an entry in `PANES`, and no control flow anywhere in this file.
  */
 export type SettingsPane = {
   id: SettingsSection;
@@ -93,14 +84,37 @@ export type SettingsGroups = readonly { group: string; panes: readonly SettingsP
 
 export const SETTINGS_GROUPS: SettingsGroups = [
   {
+    group: 'General',
+    panes: [
+      { id: 'appearance', label: 'Appearance' },
+      { id: 'editor', label: 'Editor' },
+      { id: 'notifications', label: 'Notifications' },
+      { id: 'updates-about', label: 'Updates & About' },
+      { id: 'advanced', label: 'Advanced' },
+    ],
+  },
+  {
+    group: 'Projects',
+    panes: [
+      { id: 'projects', label: 'Projects' },
+      { id: 'integrations', label: 'Integrations' },
+      { id: 'ticket-workflow', label: 'Ticket workflow' },
+    ],
+  },
+  {
     group: 'Harnesses',
     panes: [
       { id: 'harnesses-overview', label: 'Overview' },
       { id: 'claude-code', label: 'Claude Code' },
       { id: 'codex', label: 'Codex', feature: 'cli.codex' },
       { id: 'copilot', label: 'Copilot', feature: 'cli.copilot' },
+    ],
+  },
+  {
+    group: 'Environment',
+    panes: [
       { id: 'shell', label: 'Runtime' },
-      { id: 'containers', label: 'Containers' },
+      { id: 'server-mode', label: 'Server mode' },
     ],
   },
   {
@@ -108,33 +122,14 @@ export const SETTINGS_GROUPS: SettingsGroups = [
     panes: [
       { id: 'agents', label: 'Agents' },
       { id: 'skills', label: 'Skills' },
-      { id: 'ticket-workflow', label: 'Ticket workflow' },
     ],
   },
-  {
-    group: 'Workspace',
-    panes: [
-      { id: 'projects', label: 'Projects' },
-      { id: 'appearance', label: 'Appearance' },
-      { id: 'editor', label: 'Editor' },
-      { id: 'integrations', label: 'Integrations' },
-      { id: 'notifications', label: 'Notifications' },
-    ],
-  },
-  { group: 'Machines', panes: [{ id: 'server-mode', label: 'Server mode' }] },
   {
     group: 'Account',
     panes: [
       { id: 'account-devices', label: 'Account & devices' },
       { id: 'plan-licence', label: 'Plan & licence' },
       { id: 'account-org', label: 'Organisation' },
-    ],
-  },
-  {
-    group: 'General',
-    panes: [
-      { id: 'updates-about', label: 'Updates & About' },
-      { id: 'advanced', label: 'Advanced' },
     ],
   },
 ];
@@ -185,7 +180,6 @@ const CopilotPage = () => <HarnessPage cli="copilot" />;
 const PANES: Record<SectionId, ComponentType> = {
   projects: ProjectsSection,
   shell: ShellSection,
-  containers: ContainersSection,
   'harnesses-overview': HarnessesOverviewSection,
   'claude-code': ClaudeCodePage,
   codex: CodexPage,
@@ -266,6 +260,7 @@ export function SettingsOverlay({ groups = SETTINGS_GROUPS }: { groups?: Setting
    * yanking the pane back after the user has navigated on.
    */
   const requested = useSettingsSection();
+  const requestedAnchor = useSettingsAnchor();
   const last = useSettingsLast();
   const [section, setSection] = useState<SectionId>(requested ?? last);
   useEffect(() => rememberSettingsSection(section), [section, rememberSettingsSection]);
@@ -278,13 +273,24 @@ export function SettingsOverlay({ groups = SETTINGS_GROUPS }: { groups?: Setting
    */
   const [paneOpen, setPaneOpen] = useState(requested !== null);
 
+  /** A retired id's spot partway down its new pane (`containers` → Runtime's Containers band), scrolled to once. */
+  const [anchor, setAnchor] = useState<string | null>(requestedAnchor);
+
   useEffect(() => {
     if (requested === null) return;
 
     setSection(requested);
     setPaneOpen(true);
+    setAnchor(requestedAnchor);
     clearSettingsSection();
-  }, [requested, clearSettingsSection]);
+  }, [requested, requestedAnchor, clearSettingsSection]);
+
+  useEffect(() => {
+    if (anchor === null) return;
+    // shortcut: a pane that draws its anchor only after an async read misses the scroll; none does today.
+    document.querySelector(`[data-settings-anchor="${anchor}"]`)?.scrollIntoView({ block: 'start' });
+    setAnchor(null);
+  }, [anchor, section]);
   const Pane = PANES[section];
   const entry = groups.flatMap((g) => g.panes).find((pane) => pane.id === section);
   const openLock = licence === null ? null : paneLock(entry?.feature, licence);

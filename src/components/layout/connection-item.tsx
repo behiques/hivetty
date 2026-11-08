@@ -116,7 +116,7 @@ export function ConnectionItem() {
       body: (
         <>
           Serving its sessions to {devices === 1 ? '1 paired device' : `${String(devices)} paired devices`} on{' '}
-          {serving}. {settingsLink('server-mode', 'Machines › Server mode')}
+          {serving}. {settingsLink('server-mode', 'Server mode')}
         </>
       ),
     },
@@ -157,7 +157,7 @@ export function ConnectionItem() {
       title: `Exposed on ${exposed ?? ''}`,
       body: (
         <>
-          The receiver accepts connections on {exposed}, not only loopback. {settingsLink('containers', 'Harnesses › Containers')}
+          The receiver accepts connections on {exposed}, not only loopback. {settingsLink('containers', 'Runtime › Containers')}
         </>
       ),
     },

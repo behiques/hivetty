@@ -73,7 +73,6 @@ describe('SettingsOverlay', () => {
     for (const present of [
       'Projects',
       'Runtime',
-      'Containers',
       'Overview',
       'Claude Code',
       'Codex',
@@ -92,6 +91,8 @@ describe('SettingsOverlay', () => {
     ]) {
       expect(within(nav).getByRole('button', { name: present })).toBeInTheDocument();
     }
+    // Containers is a band inside Runtime now, not a row.
+    expect(within(nav).queryByRole('button', { name: 'Containers' })).toBeNull();
   });
 
   it('opens the CLIs pane from the nav (HIVE-341)', async () => {
@@ -105,12 +106,11 @@ describe('SettingsOverlay', () => {
   });
 
   /**
-   * The grouped nav (HIVE-374). Groups are labels, not buttons, and a group
-   * with no pane yet is absent. Machines arrived with Server mode (HIVE-380),
-   * Account with Plan & licence (HIVE-268), then Account & devices above it
-   * (HIVE-265).
+   * The grouped nav (HIVE-374), regrouped after the account-menu reorg: General first with Updates & About and
+   * Advanced inside it, Projects with its services, Harnesses only the CLIs, Environment for where sessions run.
+   * Groups are labels, not buttons, and a group with no pane yet is absent.
    */
-  it('reads in six groups, in the epic order, with no empty group', () => {
+  it('reads in six groups, General first, with no empty group', () => {
     render(<SettingsOverlay />);
 
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
@@ -118,7 +118,7 @@ describe('SettingsOverlay', () => {
     const heading = (group: HTMLElement) =>
       document.getElementById(group.getAttribute('aria-labelledby') ?? '')?.textContent;
 
-    expect(groups.map(heading)).toEqual(['Harnesses', 'Automation', 'Workspace', 'Machines', 'Account', 'General']);
+    expect(groups.map(heading)).toEqual(['General', 'Projects', 'Harnesses', 'Environment', 'Automation', 'Account']);
     expect(
       groups.map((group) =>
         within(group)
@@ -126,12 +126,12 @@ describe('SettingsOverlay', () => {
           .map((button) => button.textContent),
       ),
     ).toEqual([
-      ['Overview', 'Claude Code', 'Codex', 'Copilot', 'Runtime', 'Containers'],
-      ['Agents', 'Skills', 'Ticket workflow'],
-      ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
-      ['Server mode'],
+      ['Appearance', 'Editor', 'Notifications', 'Updates & About', 'Advanced'],
+      ['Projects', 'Integrations', 'Ticket workflow'],
+      ['Overview', 'Claude Code', 'Codex', 'Copilot'],
+      ['Runtime', 'Server mode'],
+      ['Agents', 'Skills'],
       ['Account & devices', 'Plan & licence', 'Organisation'],
-      ['Updates & About', 'Advanced'],
     ]);
     expect(within(nav).queryByRole('button', { name: 'Harnesses' })).not.toBeInTheDocument();
   });
@@ -142,7 +142,6 @@ describe('SettingsOverlay', () => {
     ['codex', 'Codex'],
     ['copilot', 'Copilot'],
     ['shell', 'Runtime'],
-    ['containers', 'Containers'],
     ['agents', 'Agents'],
     ['skills', 'Skills'],
     ['ticket-workflow', 'Ticket workflow'],
@@ -167,6 +166,7 @@ describe('SettingsOverlay', () => {
   it.each([
     ['runtime', 'Runtime'],
     ['clis', 'Overview'],
+    ['containers', 'Runtime'],
     ['advanced', 'Advanced'],
   ] as const)('the legacy id %s opens its new pane', (legacy, label) => {
     useUiStore.getState().openSettings(legacy);
@@ -178,6 +178,18 @@ describe('SettingsOverlay', () => {
       'aria-current',
       'page',
     );
+  });
+
+  it('the retired containers id lands on Runtime, scrolled to its Containers band', () => {
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => undefined);
+    useUiStore.getState().openSettings('containers');
+    render(<SettingsOverlay />);
+
+    const band = screen.getByRole('region', { name: 'Containers' });
+    expect(band).toHaveAttribute('data-settings-anchor', 'containers');
+    expect(scroll.mock.contexts).toEqual([band]);
+    expect(useUiStore.getState().settingsAnchor).toBeNull();
+    scroll.mockRestore();
   });
 
   /**
@@ -204,25 +216,25 @@ describe('SettingsOverlay', () => {
 
     await user.keyboard('{ArrowUp}');
 
-    const workflow = within(nav).getByRole('button', { name: 'Ticket workflow' });
-    expect(workflow).toHaveFocus();
-    expect(workflow).toHaveAttribute('aria-current', 'page');
-    expect(workflow).toHaveAttribute('tabindex', '0');
-    expect(screen.getByRole('heading', { name: 'Ticket workflow', level: 2 })).toBeInTheDocument();
+    const advanced = within(nav).getByRole('button', { name: 'Advanced' });
+    expect(advanced).toHaveFocus();
+    expect(advanced).toHaveAttribute('aria-current', 'page');
+    expect(advanced).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('heading', { name: 'Advanced', level: 2 })).toBeInTheDocument();
 
     await user.keyboard('{ArrowDown}{ArrowDown}');
-    expect(within(nav).getByRole('button', { name: 'Appearance' })).toHaveFocus();
+    expect(within(nav).getByRole('button', { name: 'Integrations' })).toHaveFocus();
 
     await user.keyboard('{End}');
-    expect(within(nav).getByRole('button', { name: 'Advanced' })).toHaveFocus();
+    expect(within(nav).getByRole('button', { name: 'Organisation' })).toHaveFocus();
 
     // The ends hold rather than wrap.
     await user.keyboard('{ArrowDown}');
-    expect(within(nav).getByRole('button', { name: 'Advanced' })).toHaveFocus();
+    expect(within(nav).getByRole('button', { name: 'Organisation' })).toHaveFocus();
 
     await user.keyboard('{Home}');
-    expect(within(nav).getByRole('button', { name: 'Overview' })).toHaveFocus();
-    expect(screen.getByRole('heading', { name: 'Overview', level: 2 })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Appearance' })).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Appearance', level: 2 })).toBeInTheDocument();
   });
 
   it('steps from Overview to Claude Code on ArrowDown (HIVE-376)', async () => {
@@ -268,7 +280,7 @@ describe('SettingsOverlay', () => {
 
       expect(view()).toBe('pane');
 
-      await user.click(screen.getByRole('button', { name: 'Back to Workspace' }));
+      await user.click(screen.getByRole('button', { name: 'Back to General' }));
 
       expect(view()).toBe('list');
     });
@@ -287,9 +299,9 @@ describe('SettingsOverlay', () => {
       const nav = screen.getByRole('navigation', { name: 'Settings sections' });
       await user.click(within(nav).getByRole('button', { name: 'Editor' }));
 
-      expect(screen.getByRole('button', { name: 'Back to Workspace' })).toHaveFocus();
+      expect(screen.getByRole('button', { name: 'Back to General' })).toHaveFocus();
 
-      await user.click(screen.getByRole('button', { name: 'Back to Workspace' }));
+      await user.click(screen.getByRole('button', { name: 'Back to General' }));
 
       expect(within(nav).getByRole('button', { name: 'Editor' })).toHaveFocus();
     });
@@ -298,7 +310,7 @@ describe('SettingsOverlay', () => {
       useUiStore.getState().openSettings('integrations');
       render(<SettingsOverlay />);
 
-      expect(screen.getByRole('button', { name: 'Back to Workspace' })).not.toHaveFocus();
+      expect(screen.getByRole('button', { name: 'Back to Projects' })).not.toHaveFocus();
     });
 
     it('moves on the arrows without leaving the list', async () => {

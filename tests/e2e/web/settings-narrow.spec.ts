@@ -54,7 +54,7 @@ test('a pane opens full width, and back returns to the list', async ({ page }) =
 
   await expectNoHorizontalScroll(page);
 
-  await page.getByRole('button', { name: 'Back to Workspace' }).click();
+  await page.getByRole('button', { name: 'Back to General' }).click();
 
   await expect(nav(page)).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Appearance', level: 2 })).toBeHidden();
@@ -69,7 +69,7 @@ test('focus moves to the back control on open, and back to the row on back', asy
   await row.focus();
   await page.keyboard.press('Enter');
 
-  const back = page.getByRole('button', { name: 'Back to Workspace' });
+  const back = page.getByRole('button', { name: 'Back to General' });
   await expect(back).toBeFocused();
 
   await page.keyboard.press('Enter');

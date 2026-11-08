@@ -35,16 +35,14 @@ const openAdvanced = async (page: Page): Promise<void> => {
   ).toBeVisible();
 };
 
-/** HIVE-377: the alias and bind fields left Advanced for Harnesses › Containers. */
+/** HIVE-377: the alias and bind fields left Advanced for Containers, now Runtime's second band. */
 const openContainers = async (page: Page): Promise<void> => {
   await page.getByRole('button', { name: 'Settings' }).click();
   await page
     .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('button', { name: 'Containers' })
+    .getByRole('button', { name: 'Runtime' })
     .click();
-  await expect(
-    page.getByRole('heading', { name: 'Containers', level: 2 }),
-  ).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Containers' })).toBeVisible();
 };
 
 /** HIVE-380: Server mode left Advanced for Machines › Server mode. */
@@ -313,8 +311,9 @@ test('the Reaching this app group shows the resolved host alias', async ({}, tes
 
   await openContainers(page);
 
+  // A group inside Runtime's Containers band, so one level below a pane's own groups.
   await expect(
-    page.getByRole('heading', { name: 'Reaching this app', level: 3 }),
+    page.getByRole('heading', { name: 'Reaching this app', level: 4 }),
   ).toBeVisible();
 
   const field = page.getByLabel('Host alias');

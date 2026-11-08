@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { Effort, Model } from '@/types/entity';
 import type { HatcheryRow } from '@/types/pull-request';
 import {
+  LEGACY_SETTINGS_ANCHORS,
   LEGACY_SETTINGS_SECTIONS,
   type LegacySettingsSection,
   type SettingsSection,
@@ -163,6 +164,8 @@ interface UiState {
   settingsSection: SettingsSection | null;
   /** The pane Settings last showed this run, where a bare `openSettings()` lands. Not persisted. */
   settingsLast: SettingsSection;
+  /** Where in the requested pane to scroll (`LEGACY_SETTINGS_ANCHORS`), consumed with `settingsSection`. */
+  settingsAnchor: string | null;
   /**
    * The CLI picked this run, and what was last picked on each (HIVE-279). Not persisted. `newCli` is `null`
    * until one is picked, so the configured default leads (HIVE-375 D1); `useNewSessionPick` resolves it.
@@ -425,6 +428,7 @@ const initialUiState = {
    */
   settingsSection: null as SettingsSection | null,
   settingsLast: 'projects' as SettingsSection,
+  settingsAnchor: null as string | null,
   newCli: null as HarnessId | null,
   newPicks: {} as Picks,
   place: 'home' as Place,
@@ -668,10 +672,11 @@ export const useUiStore = create<UiState>()((set) => ({
           : section in LEGACY_SETTINGS_SECTIONS
             ? LEGACY_SETTINGS_SECTIONS[section as LegacySettingsSection]
             : (section as SettingsSection),
+      settingsAnchor: section === undefined ? null : (LEGACY_SETTINGS_ANCHORS[section as LegacySettingsSection] ?? null),
     }),
   setWhatsNewOpen: (open) => set(open ? { whatsNewOpen: true, settings: false } : { whatsNewOpen: false }),
-  closeSettings: () => set({ settings: false, settingsSection: null }),
-  clearSettingsSection: () => set({ settingsSection: null }),
+  closeSettings: () => set({ settings: false, settingsSection: null, settingsAnchor: null }),
+  clearSettingsSection: () => set({ settingsSection: null, settingsAnchor: null }),
   rememberSettingsSection: (section) => set({ settingsLast: section }),
   setPickerQuery: (query) => set({ pickerQuery: query }),
 
@@ -1037,6 +1042,9 @@ export const useSettingsActions = () =>
  */
 export const useSettingsSection = (): SettingsSection | null =>
   useUiStore((state) => state.settingsSection);
+
+/** Where in the requested pane to scroll, or `null`; read alongside {@link useSettingsSection}. */
+export const useSettingsAnchor = (): string | null => useUiStore((state) => state.settingsAnchor);
 
 /** Where a bare open lands: the pane Settings last showed this run, Projects before that. */
 export const useSettingsLast = (): SettingsSection => useUiStore((state) => state.settingsLast);
