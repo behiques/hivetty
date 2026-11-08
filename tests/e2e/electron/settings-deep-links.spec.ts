@@ -48,9 +48,9 @@ test('the empty app: first-run, Work, the bare openers and the cross-links betwe
       await closeSettings(page);
     }
 
-    // The bare openers name no pane, so Settings opens on Projects.
+    // The bare openers name no pane, so Settings comes back to the pane last shown.
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await expectPane(page, 'projects');
+    await expectPane(page, 'integrations');
     await closeSettings(page);
 
     await goToOvermind(page);

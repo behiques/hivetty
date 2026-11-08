@@ -781,9 +781,10 @@ export function TerminalSurface({
             event.preventDefault();
             return false;
           }
-          /** Same contract as `rail-chord`, with its own name in the event. */
-          case 'terminal-chord': {
-            const detail: TerminalChordDetail = { chord: 'terminal-here' };
+          /** Same contract as `rail-chord`, each with its own name in the event. */
+          case 'terminal-chord':
+          case 'settings-chord': {
+            const detail: TerminalChordDetail = { chord: action === 'terminal-chord' ? 'terminal-here' : 'settings' };
             container.dispatchEvent(
               new CustomEvent(TERMINAL_CHORD_EVENT, { detail, bubbles: true }),
             );
