@@ -212,6 +212,21 @@ describe('settings overlay (story 101)', () => {
     expect(useUiStore.getState().settingsLast).toBe('projects');
   });
 
+  it('a retired id carries its anchor with the request; consuming or closing drops it', () => {
+    useUiStore.getState().openSettings('containers');
+    expect(useUiStore.getState()).toMatchObject({ settingsSection: 'shell', settingsAnchor: 'containers' });
+
+    useUiStore.getState().clearSettingsSection();
+    expect(useUiStore.getState()).toMatchObject({ settingsSection: null, settingsAnchor: null });
+
+    useUiStore.getState().openSettings('containers');
+    useUiStore.getState().closeSettings();
+    expect(useUiStore.getState().settingsAnchor).toBeNull();
+
+    useUiStore.getState().openSettings('agents');
+    expect(useUiStore.getState().settingsAnchor).toBeNull();
+  });
+
   it('reset clears the settings flag', () => {
     useUiStore.getState().openSettings();
 

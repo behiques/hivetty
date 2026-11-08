@@ -98,7 +98,7 @@ describe('ConnectionItem (HIVE-196)', () => {
     const dialog = await open();
     expect(dialog).toHaveTextContent('Serving its sessions to 1 paired device on 0.0.0.0:7420.');
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Settings › Machines › Server mode' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Settings › Server mode' }));
 
     expect(useUiStore.getState()).toMatchObject({ settings: true, settingsSection: 'server-mode' });
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -109,10 +109,10 @@ describe('ConnectionItem (HIVE-196)', () => {
     render(<ConnectionItem />);
     const dialog = await open();
     expect(dialog).toHaveTextContent('The receiver accepts connections on 0.0.0.0, not only loopback.');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Settings › Harnesses › Containers' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Settings › Runtime › Containers' }));
 
-    // Containers has been its own pane since HIVE-377 (HIVE-380).
-    expect(useUiStore.getState()).toMatchObject({ settings: true, settingsSection: 'containers' });
+    // Containers is Runtime's second band since the Settings regroup: the retired id lands there, at the band.
+    expect(useUiStore.getState()).toMatchObject({ settings: true, settingsSection: 'shell', settingsAnchor: 'containers' });
   });
 
   it('attached, disconnected and demo carry their sentences', async () => {

@@ -12,7 +12,7 @@ The problems people hit first, and the fix for each.
 
 Opened from Finder, a Mac app gets a short `PATH` that misses Homebrew and `~/.local/bin`.
 
-1. **Settings › Harnesses › Runtime › Import my login shell's PATH at startup** should be on (it is by
+1. **Settings › Runtime › Import my login shell's PATH at startup** should be on (it is by
    default). Restart the app after turning it on.
 2. Open **Settings › Harnesses › Claude Code**. Its command check shows the `PATH` searched and
    where `claude` was, or was not, found.

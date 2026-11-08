@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -92,7 +92,18 @@ describe('ShellSection — the pane (HIVE-377)', () => {
     install({ projects: [entry({ id: 'scratch' })] });
     render(<ShellSection />);
     expect(screen.queryByRole('combobox', { name: 'Project' })).toBeNull();
-    expect(screen.getByText(/Workspace › Projects › ⋯ › Runtime overrides/)).toBeInTheDocument();
+    expect(screen.getByText(/can override these from Projects › Projects › ⋯ › Runtime overrides/)).toBeInTheDocument();
+  });
+
+  it('is two bands, Shell & environment then Containers, the way Integrations bands its services', () => {
+    install();
+    render(<ShellSection />);
+
+    const bands = screen.getAllByRole('region');
+    expect(bands.map((band) => band.getAttribute('aria-label'))).toEqual(['Shell & environment', 'Containers']);
+    expect(within(bands[0]!).getByRole('textbox', { name: 'Shell' })).toBeInTheDocument();
+    expect(within(bands[1]!).getByRole('row', { name: /Claude Code/ })).toHaveTextContent('Yes');
+    expect(bands[1]).toHaveAttribute('data-settings-anchor', 'containers');
   });
 });
 

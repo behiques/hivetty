@@ -9,7 +9,7 @@ import {
   type ProjectConfig,
 } from '@shared/config-contract';
 
-import { ContainersSection } from '@features/settings/components/containers-section';
+import { ContainersGroups } from '@features/settings/components/containers-section';
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 import { useUiStore } from '@stores/ui-store';
 
@@ -42,10 +42,10 @@ afterEach(() => {
   resetProjectConfig();
 });
 
-describe('ContainersSection (HIVE-377)', () => {
+describe('ContainersGroups (HIVE-377)', () => {
   it('lists each CLI with whether it runs in a container', () => {
     install();
-    render(<ContainersSection />);
+    render(<ContainersGroups />);
     expect(screen.getByRole('row', { name: /Claude Code/ })).toHaveTextContent('Yes');
     expect(screen.getByRole('row', { name: /Codex/ })).toHaveTextContent('Not supported');
     expect(screen.getByRole('row', { name: /Copilot/ })).toHaveTextContent('Not supported');
@@ -54,7 +54,7 @@ describe('ContainersSection (HIVE-377)', () => {
   it('opens a CLI’s page from its name', async () => {
     const user = userEvent.setup();
     install();
-    render(<ContainersSection />);
+    render(<ContainersGroups />);
     await user.click(screen.getByRole('button', { name: 'Codex' }));
     expect(useUiStore.getState().settingsSection).toBe('codex');
   });
@@ -63,29 +63,28 @@ describe('ContainersSection (HIVE-377)', () => {
     install({
       projects: [entry({ id: 'api', name: 'api', container }), entry({ id: 'web', name: 'web' })],
     });
-    render(<ContainersSection />);
+    render(<ContainersGroups />);
     expect(screen.getByText(/Running in a container:/)).toHaveTextContent('api');
     expect(screen.getByText(/Running in a container:/)).not.toHaveTextContent('web');
-    expect(screen.getByText(/Workspace › Projects › ⋯ › Runtime overrides/)).toBeInTheDocument();
+    expect(screen.getByText(/Projects › Projects › ⋯ › Runtime overrides/)).toBeInTheDocument();
   });
 
   it('says None yet when no project runs in one', () => {
     install({ projects: [entry({ id: 'web' })] });
-    render(<ContainersSection />);
+    render(<ContainersGroups />);
     expect(screen.getByText(/None yet/)).toBeInTheDocument();
   });
 
   it('holds the alias group', () => {
     install();
-    render(<ContainersSection />);
+    render(<ContainersGroups />);
     expect(screen.getByRole('heading', { name: 'Reaching this app', level: 3 })).toBeInTheDocument();
     expect(screen.getByLabelText('Host alias')).toBeInTheDocument();
   });
 
-  it('needs the desktop app', () => {
+  it('draws nothing without the desktop app: Runtime says so once for the pane', () => {
     resetProjectConfig();
-    render(<ContainersSection />);
-    expect(screen.getByRole('heading', { name: 'Containers', level: 2 })).toBeInTheDocument();
-    expect(screen.getByText(/only available in the desktop app/)).toBeInTheDocument();
+    const { container } = render(<ContainersGroups />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

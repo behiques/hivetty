@@ -58,15 +58,18 @@ import { SettingsNestingContext } from '@features/settings/components/settings-n
  */
 export function SettingsProviderGroup({
   name,
+  anchor,
   children,
 }: {
   /** The service. Shown verbatim, upper-cased by CSS so the string stays readable. */
   name: string;
+  /** Where a retired pane id lands inside this pane (`LEGACY_SETTINGS_ANCHORS`); the overlay scrolls here. */
+  anchor?: string;
   children: React.ReactNode;
 }) {
   return (
     <SettingsNestingContext value={true}>
-      <section aria-label={name} className="flex flex-col gap-5">
+      <section aria-label={name} data-settings-anchor={anchor} className="flex flex-col gap-5">
         <h3 className="flex items-center gap-3 tabular-nums text-micro font-semibold tracking-[0.1em] text-brand uppercase">
           {name}
           <span aria-hidden="true" className="h-px flex-1 bg-brand-strong" />
