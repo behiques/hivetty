@@ -32,6 +32,7 @@ export interface LicenceStateMachine {
 }
 
 const termsOf = (c: LeaseClaims): LicenceTerms => ({
+  org: c.org,
   plan: c.plan,
   features: c.features,
   limits: c.limits,

@@ -7,7 +7,8 @@ export type SignedOutReason = 'device-revoked' | 'timeout' | 'error';
 export type AccountState =
   | { kind: 'signed-out'; reason?: SignedOutReason; message?: string }
   | { kind: 'signing-in' }
-  | { kind: 'signed-in'; email: string; name: string; deviceId: string };
+  /** HIVE-291 D6: `activeOrg` is the org asked for, which the lease may not have granted. */
+  | { kind: 'signed-in'; email: string; name: string; deviceId: string; activeOrg?: string };
 
 /** `account:sign-in` resolves once the browser is open; the outcome arrives on `account:changed`. */
 export type SignInResult = { ok: true } | { error: string };

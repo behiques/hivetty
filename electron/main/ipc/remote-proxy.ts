@@ -152,9 +152,15 @@ function localAnswerFor(
       return () => LICENCE_CALLS[channel]();
     case CH.licenceWatchPurchase:
       return (on: unknown) => LICENCE_CALLS[CH.licenceWatchPurchase](on === true);
-    /* HIVE-265. This machine's own account, licence and app, like the calls above. */
+    /*
+      HIVE-265. This machine's own account, licence and app, like the calls above. HIVE-291: its own orgs too; a
+      remote window switches its own machine's org, as with sign-in.
+    */
     case CH.accountDevices:
+    case CH.accountOrgs:
       return () => ACCOUNT_CALLS[channel]();
+    case CH.accountSwitchOrg:
+      return (id: unknown) => ACCOUNT_CALLS[CH.accountSwitchOrg](id);
     case CH.licenceStartTrial:
     case CH.licencePaused:
       return () => LICENCE_CALLS[channel]();

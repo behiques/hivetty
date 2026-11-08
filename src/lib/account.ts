@@ -1,4 +1,6 @@
 import type { AccountState, DeviceCode, DevicesResult, OpenWebResult, SignInResult } from '@shared/account-contract';
+import type { LicenceState } from '@shared/licence-contract';
+import type { OrgSummary } from '@shared/orgs';
 
 /**
  * The renderer's door onto the HiveTTY account (HIVE-264); HIVE-265's screens use it.
@@ -56,6 +58,30 @@ export async function listDevices(): Promise<DevicesResult | null> {
     return await bridge.account.devices();
   } catch (cause) {
     console.error('[hive] listing devices failed:', cause);
+    return null;
+  }
+}
+
+/** HIVE-291: the account's orgs, for the switcher. Main answers `[]` when the cloud cannot. */
+export async function listOrgs(): Promise<OrgSummary[] | null> {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.account.orgs();
+  } catch (cause) {
+    console.error('[hive] listing organisations failed:', cause);
+    return null;
+  }
+}
+
+/** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. */
+export async function switchOrg(id: string): Promise<LicenceState | null> {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.account.switchOrg(id);
+  } catch (cause) {
+    console.error('[hive] switching organisation failed:', cause);
     return null;
   }
 }

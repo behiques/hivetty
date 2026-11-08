@@ -12,6 +12,7 @@ import type {
 } from '@shared/account-contract';
 import { CH } from '@shared/ipc-contract';
 import type { HostLicence, LicenceState, Paused } from '@shared/licence-contract';
+import type { OrgSummary } from '@shared/orgs';
 
 import { runLogin, runLogout } from './account-command';
 import { type AccountSafeStorage, createAccountStore } from './account-store';
@@ -23,6 +24,7 @@ import { listDevices } from './devices';
 import { leaseKeys } from './keys';
 import { createLeaseFile, renewLease } from './lease';
 import { createLicenceState, type LicenceStateMachine } from './licence-state';
+import { createSeenOrgs, isOrgId, listOrgs } from './orgs';
 import { startTrial } from './trial';
 
 /**
@@ -34,6 +36,8 @@ let client: AuthClient | null = null;
 let licenceState: LicenceStateMachine | null = null;
 /** Module-level, so a subscriber made before or after `startLicence` hears every change (PR 2's suspender). */
 const licenceListeners = new Set<(state: LicenceState) => void>();
+/** HIVE-291 D5: the orgs `account:orgs` has listed since launch or sign-in; a new one renews the lease. */
+const seenOrgs = createSeenOrgs(() => void licenceState?.refresh());
 
 export const ACCOUNT_FILE = 'account.bin';
 /** HIVE-266: how often a running instance re-reads account.bin, in case a watch event was missed. */
@@ -106,6 +110,9 @@ export function startLicence(
   const built = buildAccount(deps);
   const next = built.client;
   next.onChange(deps.broadcast);
+  next.onChange((account) => {
+    if (account.kind === 'signed-out') seenOrgs.clear();
+  });
   client = next;
   next.start();
 
@@ -114,7 +121,8 @@ export function startLicence(
   const state = createLicenceState({
     account: next,
     file: built.leaseFile,
-    renew: () => renewLease((path, init) => next.authedFetch(path, init)),
+    // HIVE-291: every renewal (launch, 24 h, wake, sign-in, refresh, a switch) asks for the stored org.
+    renew: () => renewLease((path, init) => next.authedFetch(path, init), built.store.read()?.activeOrg),
     keys: built.keys,
     iss: built.baseUrl,
     now: Date.now,
@@ -157,6 +165,7 @@ export function resetLicence(): void {
   stopFollowing = null;
   pushDeviceCode = () => undefined;
   census = () => NOTHING_PAUSED;
+  seenOrgs.clear();
 }
 
 /** Main's one read of the licence (HIVE-267; HIVE-268's single licence read). */
@@ -185,6 +194,23 @@ export const ACCOUNT_CALLS = {
   /** HIVE-265: this account's live devices, from the cloud. */
   [CH.accountDevices]: (): Promise<DevicesResult> =>
     client ? listDevices(client.authedFetch) : Promise.resolve({ error: NOT_READY }),
+  /** HIVE-291: the account's orgs. A list holding an org not seen since launch or sign-in renews (D5). */
+  [CH.accountOrgs]: (): Promise<OrgSummary[]> => {
+    if (!client) return Promise.resolve([]);
+    return listOrgs(client.authedFetch).then((orgs) => {
+      seenOrgs.note(orgs);
+      return orgs;
+    });
+  },
+  /**
+   * HIVE-291: lease from this org from now on. The first refresh may join a renewal that was already out and
+   * asked for the old org; the second always starts after `activeOrg` is written, so it asks for the new one.
+   */
+  [CH.accountSwitchOrg]: (id: unknown): Promise<LicenceState> => {
+    const state = licenceState;
+    if (!client || !state || !isOrgId(id) || !client.setActiveOrg(id)) return Promise.resolve(licence());
+    return state.refresh().then(() => state.refresh());
+  },
 } as const;
 
 /** What each licence call answers, for `ipc/index.ts` and `ipc/remote-proxy.ts` alike (process-local, D9). */

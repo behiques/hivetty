@@ -10,6 +10,7 @@ const { cliEntitled, entitled } = await import('../../../../electron/main/licenc
 
 const lease = (plan: string, features: string[]): LicenceState => ({
   kind: 'licensed',
+  org: 'org_1',
   plan,
   features,
   limits: {},

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -410,5 +410,158 @@ describe('account:sign-in-code (HIVE-266)', () => {
     await vi.advanceTimersByTimeAsync(5000);
     await expect(done).resolves.toMatchObject({ error: expect.any(String) });
     expect(broadcastDeviceCode).toHaveBeenCalledWith(expect.objectContaining({ userCode: 'WDJB-MJHT' }));
+  });
+});
+describe('the renewal asks for the stored org (HIVE-291)', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-licence-'));
+  });
+  afterEach(() => {
+    resetLicence();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const ACCOUNT = {
+    refreshToken: 'rt-1',
+    deviceId: 'dev-1',
+    deviceKey: { publicJwk: { kty: 'OKP', crv: 'Ed25519', x: 'p' }, privateJwk: { kty: 'OKP', crv: 'Ed25519', x: 'p', d: 'q' } },
+    email: 'ana@example.com',
+    name: 'Ana',
+  };
+  const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
+  const TOKEN = {
+    access_token: 'at-2',
+    refresh_token: 'rt-2',
+    expires_in: 3600,
+    device_id: 'dev-1',
+    user: { email: 'ana@example.com', name: 'Ana' },
+  };
+  const ORG_A = { id: 'org-a', name: 'A', role: 'Owner', seat: true, plan: 'solo', status: 'active', personal: true };
+  const ORG_B = { id: 'org-b', name: 'B', role: 'Member', seat: true, plan: 'team', status: 'active', personal: false };
+  let rows: unknown[] = [ORG_A];
+  /** The cloud: a token for any refresh, `rows` on GET /api/orgs, and a refused lease (its body is under test). */
+  const cloud = () =>
+    vi.fn((url: string, _init?: RequestInit) =>
+      Promise.resolve(
+        url.endsWith('/api/oauth/token')
+          ? json(200, TOKEN)
+          : url.endsWith('/api/orgs')
+            ? json(200, { orgs: rows })
+            : json(403, { error: 'lease_refused', reason: 'no_plan' }),
+      ),
+    );
+  const leaseBodies = (fetch: ReturnType<typeof cloud>) =>
+    fetch.mock.calls.filter(([url]) => url === `${ISS}/api/lease`).map(([, init]) => init?.body);
+  const boot = (fetch: ReturnType<typeof cloud>, broadcast = vi.fn()) =>
+    startLicence({
+      app: { isPackaged: false, getPath: () => dir },
+      safeStorage,
+      openExternal: vi.fn(),
+      env: { HIVETTY_CLOUD_URL: ISS },
+      fetch,
+      broadcast,
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
+    });
+
+  it('posts the stored activeOrg, and the token rotation keeps it in account.bin', async () => {
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify({ ...ACCOUNT, activeOrg: 'org-b' }));
+    const fetch = cloud();
+    boot(fetch);
+    await LICENCE_CALLS[CH.licenceRefresh]();
+    expect(leaseBodies(fetch).length).toBeGreaterThan(0);
+    expect(leaseBodies(fetch).every((body) => body === '{"org":"org-b"}')).toBe(true);
+    expect(JSON.parse(readFileSync(join(dir, 'account.bin'), 'utf8'))).toMatchObject({
+      refreshToken: 'rt-2',
+      activeOrg: 'org-b',
+    });
+  });
+
+  it('posts no body when none is stored', async () => {
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    const fetch = cloud();
+    boot(fetch);
+    await LICENCE_CALLS[CH.licenceRefresh]();
+    expect(leaseBodies(fetch).length).toBeGreaterThan(0);
+    expect(leaseBodies(fetch).every((body) => body === undefined)).toBe(true);
+  });
+
+  it('account:orgs answers [] and account:switch-org the licence before startLicence', async () => {
+    await expect(ACCOUNT_CALLS[CH.accountOrgs]()).resolves.toEqual([]);
+    await expect(ACCOUNT_CALLS[CH.accountSwitchOrg]('org-b')).resolves.toEqual({ kind: 'unlicensed' });
+  });
+
+  it('account:switch-org writes activeOrg, broadcasts it, and renews asking for it', async () => {
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    const fetch = cloud();
+    const broadcast = vi.fn();
+    boot(fetch, broadcast);
+    await LICENCE_CALLS[CH.licenceRefresh]();
+    const before = leaseBodies(fetch).length;
+    await expect(ACCOUNT_CALLS[CH.accountSwitchOrg]('org-b')).resolves.toEqual({ kind: 'lapsed', reason: 'no_plan' });
+    expect(leaseBodies(fetch).slice(before).at(-1)).toBe('{"org":"org-b"}');
+    expect(JSON.parse(readFileSync(join(dir, 'account.bin'), 'utf8'))).toMatchObject({ activeOrg: 'org-b' });
+    expect(broadcast).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'signed-in', activeOrg: 'org-b' }));
+  });
+
+  it('account:switch-org made during a renewal still ends on a lease asked for the new org', async () => {
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    const fetch = cloud();
+    boot(fetch);
+    const inFlight = LICENCE_CALLS[CH.licenceRefresh](); // starts before activeOrg exists, so it asks for no org
+    await ACCOUNT_CALLS[CH.accountSwitchOrg]('org-b');
+    await inFlight;
+    expect(leaseBodies(fetch).at(-1)).toBe('{"org":"org-b"}');
+  });
+
+  it('account:switch-org refuses an id that is not 1–64 characters, renewing nothing', async () => {
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    const fetch = cloud();
+    boot(fetch);
+    await LICENCE_CALLS[CH.licenceRefresh]();
+    const before = leaseBodies(fetch).length;
+    for (const id of ['', 'x'.repeat(65), 5, null]) {
+      await expect(ACCOUNT_CALLS[CH.accountSwitchOrg](id)).resolves.toEqual({ kind: 'lapsed', reason: 'no_plan' });
+    }
+    expect(leaseBodies(fetch).length).toBe(before);
+    expect(JSON.parse(readFileSync(join(dir, 'account.bin'), 'utf8'))).not.toHaveProperty('activeOrg');
+  });
+
+  it('account:orgs seeds on its first list and renews when a later list holds a new org (D5)', async () => {
+    rows = [ORG_A];
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    const fetch = cloud();
+    boot(fetch);
+    await LICENCE_CALLS[CH.licenceRefresh]();
+    const before = leaseBodies(fetch).length;
+    await expect(ACCOUNT_CALLS[CH.accountOrgs]()).resolves.toEqual([ORG_A]);
+    await ACCOUNT_CALLS[CH.accountOrgs]();
+    expect(leaseBodies(fetch).length).toBe(before);
+    rows = [ORG_A, ORG_B];
+    await expect(ACCOUNT_CALLS[CH.accountOrgs]()).resolves.toEqual([ORG_A, ORG_B]);
+    // No refresh of our own: only the seen-set's renewal can make this request.
+    await vi.waitFor(() => expect(leaseBodies(fetch).length).toBe(before + 1));
+  });
+
+  it('sign-out clears the seen-set, so the next account\'s first list seeds rather than renews (D5)', async () => {
+    rows = [ORG_A];
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    const fetch = cloud();
+    const account = boot(fetch);
+    await LICENCE_CALLS[CH.licenceRefresh]();
+    await ACCOUNT_CALLS[CH.accountOrgs]();
+    await ACCOUNT_CALLS[CH.accountSignOut]();
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    account.reload();
+    await LICENCE_CALLS[CH.licenceRefresh]();
+    const before = leaseBodies(fetch).length;
+    rows = [ORG_B];
+    await expect(ACCOUNT_CALLS[CH.accountOrgs]()).resolves.toEqual([ORG_B]);
+    // A macrotask turn drains every microtask a renewal would have queued (the fetch mock resolves at once).
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(leaseBodies(fetch).length).toBe(before);
   });
 });

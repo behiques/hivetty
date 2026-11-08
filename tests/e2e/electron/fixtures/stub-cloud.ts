@@ -35,6 +35,8 @@ export interface StubControls {
   deviceCodeExpiresIn(seconds: number): void;
   trialUsed(used: boolean): void;
   completeCheckout(plan: PlanKey): void;
+  /** HIVE-291: GET /api/orgs answers these; a lease signs for the asked org when it seats the caller, else the first seated. */
+  setOrgs(orgs: StubOrg[]): void;
 }
 
 export interface StubCloud {
@@ -47,12 +49,35 @@ export interface StubCloud {
 
 /**
  * The HiveTTY cloud as the app calls it (HIVE-270), one per test, on 127.0.0.1 and a random port. Shapes are
- * the app's as merged: `electron/main/licence/{cloud,lease,verify,trial,devices,device-flow}.ts` and
+ * the app's as merged: `electron/main/licence/{cloud,lease,verify,trial,devices,device-flow,orgs}.ts` and
  * `auth-client.ts`'s web-session. A control changes what the *next* request gets, never the past.
  */
 export const DAY_S = 86_400;
 export const nowS = (): number => Math.floor(Date.now() / 1000);
 export const STUB_USER = { email: 'ada@example.com', name: 'Ada Lovelace' } as const;
+
+/** HIVE-291: one row of GET /api/orgs, as hivetty-cloud's `OrgRow`. */
+export interface StubOrg {
+  id: string;
+  name: string;
+  role: string;
+  seat: boolean;
+  /** `null` leases on the stub's own plan (`setPlan`, a trial, a checkout), as the default org does. */
+  plan: PlanKey | null;
+  status: string | null;
+  personal: boolean;
+}
+
+/** The caller's one org until `setOrgs`: the `org-ada` every lease carried before HIVE-291. */
+export const DEFAULT_ORG: StubOrg = {
+  id: 'org-ada',
+  name: 'Ada Lovelace',
+  role: 'Owner',
+  seat: true,
+  plan: null,
+  status: null,
+  personal: true,
+};
 
 const KID = 'stub-1';
 const b64 = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -103,20 +128,20 @@ export async function startStubCloud(): Promise<StubCloud> {
     deviceId: `dev-${randomUUID()}`,
     access: new Set<string>(),
     refresh: new Set<string>(),
+    orgs: [DEFAULT_ORG] as StubOrg[],
   };
   const calls: StubCall[] = [];
   let url = '';
   let deviceCodeDeviceId: string | undefined;
 
-  const lease = (): string => {
+  const lease = (plan: PlanKey, org: string): string => {
     const iat = state.next.iat ?? nowS();
     const trialEnds = state.next.trialEnds ?? state.trialEnds;
     const exp = Math.min(state.next.exp ?? iat + 7 * DAY_S, trialEnds ?? Number.POSITIVE_INFINITY);
-    const plan = state.next.plan ?? state.plan ?? 'team';
     return signLease(privateKey, {
       iss: url,
       sub: 'user-ada',
-      org: 'org-ada',
+      org,
       plan,
       device: state.deviceId,
       jti: randomUUID(),
@@ -171,9 +196,13 @@ export async function startStubCloud(): Promise<StubCloud> {
 
     if (req.method === 'POST' && path === '/api/lease') {
       if (unauthorised(req, res)) return;
-      const reason = state.refusal ?? (state.plan === null && state.next.plan === undefined ? 'no_plan' : null);
-      if (reason !== null) return send(res, 403, { error: 'lease_refused', reason });
-      return send(res, 200, { lease: lease() });
+      // HIVE-291: the asked org when it seats the caller, else the first seated one, as the cloud's `decide`.
+      const seated = state.orgs.filter((org) => org.seat);
+      const granted = seated.find((org) => org.id === body.org) ?? seated[0];
+      const plan = state.next.plan ?? granted?.plan ?? state.plan;
+      if (state.refusal !== null) return send(res, 403, { error: 'lease_refused', reason: state.refusal });
+      if (plan === null) return send(res, 403, { error: 'lease_refused', reason: 'no_plan' });
+      return send(res, 200, { lease: lease(plan, granted?.id ?? DEFAULT_ORG.id) });
     }
     if (req.method === 'POST' && path === '/api/oauth/token') {
       if (body.grant_type === 'authorization_code') return send(res, 200, tokens(body.device_id));
@@ -224,6 +253,10 @@ export async function startStubCloud(): Promise<StubCloud> {
         devices: [{ id: state.deviceId, name: 'Test Mac', lastSeenAt: at, createdAt: at, current: true }],
       });
     }
+    if (req.method === 'GET' && path === '/api/orgs') {
+      if (unauthorised(req, res)) return;
+      return send(res, 200, { orgs: state.orgs });
+    }
     send(res, 404, { error: 'not_found' });
   };
 
@@ -256,6 +289,7 @@ export async function startStubCloud(): Promise<StubCloud> {
     deviceCodeExpiresIn: (seconds) => (state.codeExpiresIn = seconds),
     trialUsed: (used) => (state.trialUsed = used),
     completeCheckout: (plan) => Object.assign(state, { plan, trialEnds: undefined, refusal: null, next: {} }),
+    setOrgs: (orgs) => (state.orgs = orgs),
   };
 
   return {

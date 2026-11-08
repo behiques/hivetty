@@ -65,6 +65,7 @@ describe('trialDaysLeft (HIVE-268)', () => {
   const NOW = 1_800_000_000_000;
   const trial = (trialEnds?: number) => ({
     kind: 'licensed' as const,
+    org: 'org_1',
     plan: 'team',
     features: [],
     limits: {},
@@ -128,7 +129,7 @@ describe('readPaused (HIVE-265)', () => {
 
 describe('planLine', () => {
   const NOW = Date.UTC(2026, 10, 7);
-  const live = { kind: 'licensed' as const, plan: 'team', features: [], limits: {}, exp: NOW / 1000 + 86_400 * 30, iat: NOW / 1000 };
+  const live = { kind: 'licensed' as const, org: 'org_1', plan: 'team', features: [], limits: {}, exp: NOW / 1000 + 86_400 * 30, iat: NOW / 1000 };
   it('a trial reads "<Plan> trial · N days left", singular at one', () => {
     expect(planLine({ ...live, trialEnds: NOW / 1000 + 2.5 * 86_400 }, NOW)).toBe('Team trial · 3 days left');
     expect(planLine({ ...live, trialEnds: NOW / 1000 + 0.5 * 86_400 }, NOW)).toBe('Team trial · 1 day left');

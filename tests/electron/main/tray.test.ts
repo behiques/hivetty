@@ -94,7 +94,7 @@ function makeDevices(): ServerDevice[] {
   ];
 }
 
-const LICENSED: LicenceState = { kind: 'licensed', plan: 'team', features: [], limits: {}, exp: 2e9, iat: 1.9e9 };
+const LICENSED: LicenceState = { kind: 'licensed', org: 'org_1', plan: 'team', features: [], limits: {}, exp: 2e9, iat: 1.9e9 };
 const SIGNED_IN: AccountState = { kind: 'signed-in', email: 'a@b.c', name: 'A', deviceId: 'dev_1' };
 
 type PairAttempt = { token: string; deviceId: string } | { error: string };

@@ -4,6 +4,7 @@ import {
   cancelSignIn,
   initialOf,
   listDevices,
+  listOrgs,
   onAccountChanged,
   onDeviceCode,
   openAccountWeb,
@@ -11,6 +12,7 @@ import {
   signIn,
   signInWithCode,
   signOut,
+  switchOrg,
 } from '@/lib/account';
 
 const bridge = (account: Record<string, unknown>): void => {
@@ -129,5 +131,33 @@ describe('src/lib/account', () => {
   it('initialOf takes the name, else the email, upper-cased', () => {
     expect(initialOf({ name: 'ana ruiz', email: 'x@y.z' })).toBe('A');
     expect(initialOf({ name: '  ', email: 'zed@y.z' })).toBe('Z');
+  });
+});
+
+describe('the org calls (HIVE-291)', () => {
+  const ORGS = [{ id: 'org-b', name: 'B', role: 'Admin', seat: true, plan: 'team', status: 'active', personal: false }];
+
+  it('answer null with no bridge', async () => {
+    await expect(listOrgs()).resolves.toBeNull();
+    await expect(switchOrg('org-b')).resolves.toBeNull();
+  });
+
+  it('pass main answers through, the id included', async () => {
+    const account = {
+      orgs: vi.fn().mockResolvedValue(ORGS),
+      switchOrg: vi.fn().mockResolvedValue({ kind: 'unlicensed' }),
+    };
+    bridge(account);
+    await expect(listOrgs()).resolves.toEqual(ORGS);
+    await expect(switchOrg('org-b')).resolves.toEqual({ kind: 'unlicensed' });
+    expect(account.switchOrg).toHaveBeenCalledWith('org-b');
+  });
+
+  it('answer null and log when main refuses', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    bridge({ orgs: vi.fn().mockRejectedValue(new Error('x')), switchOrg: vi.fn().mockRejectedValue(new Error('x')) });
+    await expect(listOrgs()).resolves.toBeNull();
+    await expect(switchOrg('org-b')).resolves.toBeNull();
+    expect(error).toHaveBeenCalledTimes(2);
   });
 });

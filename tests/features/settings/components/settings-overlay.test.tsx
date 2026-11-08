@@ -86,6 +86,7 @@ describe('SettingsOverlay', () => {
       'Server mode',
       'Account & devices',
       'Plan & licence',
+      'Organisation',
       'Updates & About',
       'Advanced',
     ]) {
@@ -129,7 +130,7 @@ describe('SettingsOverlay', () => {
       ['Agents', 'Skills', 'Ticket workflow'],
       ['Projects', 'Appearance', 'Editor', 'Integrations', 'Notifications'],
       ['Server mode'],
-      ['Account & devices', 'Plan & licence'],
+      ['Account & devices', 'Plan & licence', 'Organisation'],
       ['Updates & About', 'Advanced'],
     ]);
     expect(within(nav).queryByRole('button', { name: 'Harnesses' })).not.toBeInTheDocument();
@@ -153,6 +154,7 @@ describe('SettingsOverlay', () => {
     ['server-mode', 'Server mode'],
     ['account-devices', 'Account & devices'],
     ['plan-licence', 'Plan & licence'],
+    ['account-org', 'Organisation'],
     ['updates-about', 'Updates & About'],
     ['advanced', 'Advanced'],
   ] as const)('pane id %s renders its section', (id, title) => {
@@ -609,10 +611,10 @@ describe('paneLock (HIVE-268)', () => {
     expect(paneLock(undefined, null)).toBeNull();
   });
   it('a feature the lease grants, no lock', () => {
-    expect(paneLock('cli.codex', { kind: 'licensed', plan: 'solo', features: ['cli.codex'], limits: {}, exp: 2e9, iat: 1.8e9 })).toBeNull();
+    expect(paneLock('cli.codex', { kind: 'licensed', org: 'org_1', plan: 'solo', features: ['cli.codex'], limits: {}, exp: 2e9, iat: 1.8e9 })).toBeNull();
   });
   it('a feature the lease lacks: its reason and plan', () => {
-    expect(paneLock('cli.copilot', { kind: 'licensed', plan: 'solo', features: [], limits: {}, exp: 2e9, iat: 1.8e9 })).toEqual({
+    expect(paneLock('cli.copilot', { kind: 'licensed', org: 'org_1', plan: 'solo', features: [], limits: {}, exp: 2e9, iat: 1.8e9 })).toEqual({
       reason: 'Copilot is in Team and above',
       plan: 'Team',
     });

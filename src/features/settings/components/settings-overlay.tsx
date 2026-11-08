@@ -14,6 +14,7 @@ import type { SettingsSection } from '@/types/settings';
 
 import { Lock, LockMark } from '@components/ui/lock';
 import { AccountDevicesSection } from '@features/settings/components/account-devices-section';
+import { AccountOrgSection } from '@features/settings/components/account-org-section';
 import { AdvancedSection } from '@features/settings/components/advanced-section';
 import { AgentsSection } from '@features/settings/components/agents-section';
 import { AppearanceSection } from '@features/settings/components/appearance-section';
@@ -76,7 +77,8 @@ import { useSettingsActions, useSettingsSection } from '@stores/ui-store';
  *
  * Machines holds what this Mac is to other machines: Server mode (HIVE-380),
  * then Runners and Relay with their own stories. Account holds Account &
- * devices (HIVE-265), then Plan & licence (HIVE-268). General holds Updates &
+ * devices (HIVE-265), then Plan & licence (HIVE-268), then Organisation
+ * (HIVE-291). General holds Updates &
  * about, and Advanced last: it answers questions about the app rather than
  * setting anything in it, and the destructive verb in the product lives there.
  */
@@ -125,6 +127,7 @@ export const SETTINGS_GROUPS: SettingsGroups = [
     panes: [
       { id: 'account-devices', label: 'Account & devices' },
       { id: 'plan-licence', label: 'Plan & licence' },
+      { id: 'account-org', label: 'Organisation' },
     ],
   },
   {
@@ -197,6 +200,7 @@ const PANES: Record<SectionId, ComponentType> = {
   'server-mode': ServerModeSection,
   'account-devices': AccountDevicesSection,
   'plan-licence': PlanLicenceSection,
+  'account-org': AccountOrgSection,
   'updates-about': UpdatesAboutSection,
   advanced: AdvancedSection,
 };

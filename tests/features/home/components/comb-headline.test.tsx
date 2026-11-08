@@ -1,14 +1,20 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CombHeadline, headline, summaryText } from '@features/home/components/comb-headline';
 import { useAppearanceStore } from '@stores/appearance-store';
+
+const active = vi.hoisted(() => ({ org: undefined as unknown }));
+vi.mock('@hooks/use-orgs', () => ({ useActiveOrg: () => active.org }));
 
 const BUSY = { working: 4, failed: 1, resting: 3, projects: 3, agents: 6 };
 const CALM = { working: 4, failed: 0, resting: 3, projects: 3, agents: 6 };
 
 describe('CombHeadline', () => {
-  beforeEach(() => useAppearanceStore.getState().reset());
+  beforeEach(() => {
+    useAppearanceStore.getState().reset();
+    active.org = undefined;
+  });
 
   it('is calling, in amber, with the summons count', () => {
     render(<CombHeadline needs={5} summary={BUSY} />);
@@ -40,5 +46,19 @@ describe('CombHeadline', () => {
     useAppearanceStore.setState({ teamName: '  ' });
     const { container } = render(<CombHeadline needs={0} summary={CALM} />);
     expect(container.querySelectorAll('span')).toHaveLength(1);
+  });
+
+  it("shows the active org's name over the team name while it is a team (HIVE-291)", () => {
+    useAppearanceStore.setState({ teamName: 'Zergling Battalion' });
+    active.org = { id: 'org-acme', name: 'Acme', role: 'Member', seat: true, plan: 'team', status: 'active', personal: false };
+    const { unmount } = render(<CombHeadline needs={0} summary={CALM} />);
+    expect(screen.getByText('Acme')).toBeInTheDocument();
+    expect(screen.queryByText('Zergling Battalion')).toBeNull();
+    unmount();
+
+    active.org = { id: 'org-me', name: 'Personal', role: 'Owner', seat: true, plan: 'solo', status: 'active', personal: true };
+    render(<CombHeadline needs={0} summary={CALM} />);
+    expect(screen.getByText('Zergling Battalion')).toBeInTheDocument();
+    expect(screen.queryByText('Personal')).toBeNull();
   });
 });

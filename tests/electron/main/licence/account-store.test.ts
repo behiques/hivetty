@@ -86,6 +86,15 @@ describe('createAccountStore', () => {
     expect(store.read()).toBeNull();
   });
 
+  it('round-trips an activeOrg, and reads null when it is not a string (HIVE-291)', () => {
+    const safeStorage = fakeSafeStorage();
+    const store = createAccountStore({ safeStorage, filePath });
+    expect(store.write({ ...ACCOUNT, activeOrg: 'org-b' })).toBe(true);
+    expect(store.read()).toEqual({ ...ACCOUNT, activeOrg: 'org-b' });
+    writeFileSync(filePath, safeStorage.encryptString(JSON.stringify({ ...ACCOUNT, activeOrg: 5 })));
+    expect(store.read()).toBeNull();
+  });
+
   it('answers false instead of throwing when the write fails, keeping the old account', () => {
     const safeStorage = fakeSafeStorage();
     const store = createAccountStore({ safeStorage, filePath });

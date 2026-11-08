@@ -90,8 +90,9 @@ import { isThisMachineAction } from './notification-contract';
  * 34 → 35 (HIVE-265): `CH` gained `account:devices`, `licence:start-trial`, `licence:paused` and `app:quit` (process-local).
  * 35 → 36 (HIVE-265): CH gained server:licence (a forwarded read) and server:licence-changed (a relayed event).
  * 36 → 37 (HIVE-372): `CH` gained `cli:codex-plugin-status`; `CliConfig` and `SetCliRequest` gained `installSkills`.
+ * 37 → 38 (HIVE-291): `CH` gained `account:orgs` and `account:switch-org` (process-local).
  */
-export const REMOTE_PROTOCOL_VERSION = 37;
+export const REMOTE_PROTOCOL_VERSION = 38;
 
 /**
  * What a frame is for.
@@ -290,6 +291,8 @@ export const FRAME_KIND = {
   [CH.appQuit]: 'call',
   [CH.serverLicence]: 'call',
   [CH.serverLicenceChanged]: 'event',
+  [CH.accountOrgs]: 'call',
+  [CH.accountSwitchOrg]: 'call',
   [CH.configCloneStart]: 'call',
   [CH.configCloneCancel]: 'call',
   [CH.configCloneDone]: 'event',
@@ -628,6 +631,8 @@ export const CHANNEL_AUTHORIZATION = {
   // HIVE-265: counts only, the one licence fact that crosses the socket.
   [CH.serverLicence]: 'read',
   [CH.serverLicenceChanged]: 'read',
+  [CH.accountOrgs]: 'read',
+  [CH.accountSwitchOrg]: 'execute',
   [CH.configCloneStart]: 'execute',
   [CH.configCloneCancel]: 'mutate',
   [CH.configCloneDone]: 'read',
@@ -999,6 +1004,10 @@ const PROCESS_LOCAL_REFUSALS = {
     "licence:paused names what the answering machine's own lapse paused. A server's answer would describe its fleet as the peer's, so the asking machine answers it and a server refuses it.",
   [CH.appQuit]:
     "app:quit quits the answering machine's app. A server refuses to quit on a peer's say-so; the asking machine quits itself.",
+  [CH.accountOrgs]:
+    "account:orgs lists the organisations of the answering machine's own account. A server refuses to show its account's organisations to a peer; the asking machine lists its own.",
+  [CH.accountSwitchOrg]:
+    "account:switch-org changes which organisation the answering machine's own lease comes from. A server refuses to switch on a peer's say-so; the asking machine switches its own.",
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**

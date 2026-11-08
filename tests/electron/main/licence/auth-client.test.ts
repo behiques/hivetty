@@ -1063,3 +1063,56 @@ describe('reload (another process wrote account.bin)', () => {
     expect(h.store.value()?.refreshToken).toBe('rt-1');
   });
 });
+
+describe('the active org (HIVE-291)', () => {
+  it('start() reports the stored activeOrg on the signed-in state', () => {
+    const { client, cloud, states } = harness({ stored: { ...STORED, activeOrg: 'org-b' } });
+    cloud.token.mockReturnValue(new Promise(() => undefined));
+    client.start();
+    expect(states[0]).toEqual({
+      kind: 'signed-in',
+      email: 'ada@example.com',
+      name: 'Ada',
+      deviceId: 'dev-0',
+      activeOrg: 'org-b',
+    });
+  });
+
+  it('a token rotation keeps the activeOrg, including one set while the refresh was out', async () => {
+    const { client, cloud, store } = harness({ stored: STORED });
+    let answer!: (t: TokenResponse) => void;
+    cloud.token.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    client.start();
+    expect(client.setActiveOrg('org-b')).toBe(true);
+    answer(tokens(1));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.value()).toMatchObject({ refreshToken: 'rt-1', activeOrg: 'org-b' });
+    expect(client.state()).toMatchObject({ kind: 'signed-in', activeOrg: 'org-b' });
+  });
+
+  it('setActiveOrg writes it and announces it; it refuses while signed out or when the write fails', () => {
+    const { client, cloud, store, states } = harness({ stored: STORED });
+    cloud.token.mockReturnValue(new Promise(() => undefined));
+    expect(client.setActiveOrg('org-b')).toBe(false);
+    client.start();
+    expect(client.setActiveOrg('org-b')).toBe(true);
+    expect(store.value()?.activeOrg).toBe('org-b');
+    expect(states.at(-1)).toEqual({
+      kind: 'signed-in',
+      email: 'ada@example.com',
+      name: 'Ada',
+      deviceId: 'dev-0',
+      activeOrg: 'org-b',
+    });
+
+    const locked = harness({ stored: STORED, writable: false });
+    locked.cloud.token.mockReturnValue(new Promise(() => undefined));
+    locked.client.start();
+    expect(locked.client.setActiveOrg('org-b')).toBe(false);
+    expect(locked.states).toHaveLength(1);
+  });
+});

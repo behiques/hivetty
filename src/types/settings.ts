@@ -29,6 +29,7 @@ export type SettingsSection =
   | 'server-mode'
   | 'account-devices'
   | 'plan-licence'
+  | 'account-org'
   | 'updates-about'
   | 'advanced';
 
