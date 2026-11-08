@@ -542,7 +542,26 @@ describe('the renewal asks for the stored org (HIVE-291)', () => {
     expect(leaseBodies(fetch).length).toBe(before);
     rows = [ORG_A, ORG_B];
     await expect(ACCOUNT_CALLS[CH.accountOrgs]()).resolves.toEqual([ORG_A, ORG_B]);
+    // No refresh of our own: only the seen-set's renewal can make this request.
+    await vi.waitFor(() => expect(leaseBodies(fetch).length).toBe(before + 1));
+  });
+
+  it('sign-out clears the seen-set, so the next account\'s first list seeds rather than renews (D5)', async () => {
+    rows = [ORG_A];
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    const fetch = cloud();
+    const account = boot(fetch);
     await LICENCE_CALLS[CH.licenceRefresh]();
-    expect(leaseBodies(fetch).length).toBe(before + 1);
+    await ACCOUNT_CALLS[CH.accountOrgs]();
+    await ACCOUNT_CALLS[CH.accountSignOut]();
+    writeFileSync(join(dir, 'account.bin'), JSON.stringify(ACCOUNT));
+    account.reload();
+    await LICENCE_CALLS[CH.licenceRefresh]();
+    const before = leaseBodies(fetch).length;
+    rows = [ORG_B];
+    await expect(ACCOUNT_CALLS[CH.accountOrgs]()).resolves.toEqual([ORG_B]);
+    // A macrotask turn drains every microtask a renewal would have queued (the fetch mock resolves at once).
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(leaseBodies(fetch).length).toBe(before);
   });
 });
