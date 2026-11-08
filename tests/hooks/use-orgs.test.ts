@@ -65,6 +65,20 @@ describe('useOrgs (HIVE-291)', () => {
     expect(h.orgs).toHaveBeenCalledTimes(2);
   });
 
+  it('a failed refresh (main answers []) keeps the list, and the next refresh asks at once', async () => {
+    const h = bridge();
+    const { result } = renderHook(() => useOrgs());
+    await waitFor(() => expect(result.current).toEqual([SOLO, ACME]));
+    h.orgs.mockImplementationOnce(() => Promise.resolve([]));
+    vi.setSystemTime(T0 + ORGS_REFRESH_MS);
+    refreshOrgs();
+    await waitFor(() => expect(h.orgs).toHaveBeenCalledTimes(2));
+    await act(async () => undefined);
+    expect(result.current).toEqual([SOLO, ACME]);
+    refreshOrgs();
+    expect(h.orgs).toHaveBeenCalledTimes(3);
+  });
+
   it('a sign-out empties it and forgets, so the next sign-in fetches at once', async () => {
     const h = bridge();
     const { result } = renderHook(() => useOrgs());

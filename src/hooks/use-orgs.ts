@@ -29,13 +29,21 @@ function publish(next: OrgSummary[]): void {
   for (const listener of listeners) listener();
 }
 
-/** Ask main for the orgs, unless it was asked less than a minute ago. */
+/**
+ * Ask main for the orgs, unless it was asked less than a minute ago. Main answers every failure with `[]` (an
+ * account always has its personal org), so an empty or missing answer keeps the list it has and lets the next
+ * refresh ask at once, rather than hiding the switcher for a minute.
+ */
 export function refreshOrgs(): void {
   const now = Date.now();
   if (fetchedAt !== null && now - fetchedAt < ORGS_REFRESH_MS) return;
   fetchedAt = now;
   void listOrgs().then((orgs) => {
-    if (orgs !== null) publish(orgs);
+    if (orgs === null || orgs.length === 0) {
+      if (fetchedAt === now) fetchedAt = null;
+      return;
+    }
+    publish(orgs);
   });
 }
 
