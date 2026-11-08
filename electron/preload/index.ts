@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'ele
 
 import type {
   AccountState,
+  BillingSummary,
   DeviceCode,
   DevicesResult,
   OpenWebResult,
@@ -914,6 +915,8 @@ const bridge: HiveBridge = {
     orgs: (): Promise<OrgSummary[]> => ipcRenderer.invoke(CH.accountOrgs) as Promise<OrgSummary[]>,
     switchOrg: (id: string): Promise<LicenceState> =>
       ipcRenderer.invoke(CH.accountSwitchOrg, id) as Promise<LicenceState>,
+    billing: (orgId?: string): Promise<BillingSummary | null> =>
+      ipcRenderer.invoke(CH.accountBilling, orgId) as Promise<BillingSummary | null>,
   },
   licence: {
     state: (): Promise<LicenceState> => ipcRenderer.invoke(CH.licenceState) as Promise<LicenceState>,

@@ -57,14 +57,16 @@ describe('AccountMenu (HIVE-265)', () => {
     expect(screen.queryByText('Team')).toBeNull();
   });
 
-  it.each([
-    ['Plan & billing…', '/account/plan'],
-    ['Account…', '/account'],
-  ])('%s opens %s signed in', async (item, path) => {
+  it('Account centre opens the Account centre in Settings, not the web; the old web rows are gone', async () => {
     render(<AccountMenu />);
     await userEvent.click(screen.getByRole('button', { name: 'Account' }));
-    await userEvent.click(screen.getByRole('menuitem', { name: item }));
-    expect(openAccountWeb).toHaveBeenCalledWith(path);
+    expect(screen.queryByRole('menuitem', { name: 'Plan & billing…' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Account…' })).toBeNull();
+
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Account centre' }));
+
+    expect(useUiStore.getState()).toMatchObject({ settings: true, settingsSection: 'account-devices' });
+    expect(openAccountWeb).not.toHaveBeenCalled();
   });
 
   it('Settings… opens Settings without naming a pane, so it lands where the user last was', async () => {

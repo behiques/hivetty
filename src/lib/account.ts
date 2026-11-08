@@ -1,4 +1,11 @@
-import type { AccountState, DeviceCode, DevicesResult, OpenWebResult, SignInResult } from '@shared/account-contract';
+import type {
+  AccountState,
+  BillingSummary,
+  DeviceCode,
+  DevicesResult,
+  OpenWebResult,
+  SignInResult,
+} from '@shared/account-contract';
 import type { LicenceState } from '@shared/licence-contract';
 import type { OrgSummary } from '@shared/orgs';
 
@@ -58,6 +65,18 @@ export async function listDevices(): Promise<DevicesResult | null> {
     return await bridge.account.devices();
   } catch (cause) {
     console.error('[hive] listing devices failed:', cause);
+    return null;
+  }
+}
+
+/** The Account centre: the org's billing (the personal org without one), or `null` when there is nothing to show. */
+export async function readBilling(orgId: string | undefined): Promise<BillingSummary | null> {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.account.billing(orgId);
+  } catch (cause) {
+    console.error('[hive] reading billing failed:', cause);
     return null;
   }
 }

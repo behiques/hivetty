@@ -3,8 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { bar } from '../fixtures/places';
 
 /**
- * Settings › Account › Plan & licence on the browser target (HIVE-268). There is no bridge here, so the
- * licence reads `null` and the pane asks to sign in, with no buttons.
+ * The Account centre's Plan & billing tab on the browser target (HIVE-268's Plan & licence). There is no bridge
+ * here, so the licence reads `null` and the tab asks to sign in, with no buttons.
  */
 
 const APP_URL = '/?sim=0';
@@ -17,10 +17,12 @@ test.beforeEach(async ({ page }) => {
   await gear(page).click();
 });
 
-test('Settings › Account › Plan & licence asks to sign in on the browser target (HIVE-268)', async ({ page }) => {
+test('the profile card opens the Account centre; Plan & billing asks to sign in on the browser target', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Settings sections' });
-  await expect(nav.getByRole('group', { name: 'Account' })).toBeVisible();
-  await nav.getByRole('button', { name: 'Plan & licence' }).click();
-  await expect(page.getByRole('heading', { name: 'Plan & licence', level: 2 })).toBeVisible();
-  await expect(page.getByText('Sign in to see your plan.')).toBeVisible();
+  const card = nav.getByRole('button', { name: 'Account' });
+  await expect(card).toContainText('Not signed in');
+  await card.click();
+  await expect(page.getByRole('heading', { name: 'Account', level: 2 })).toBeVisible();
+  await page.getByRole('tab', { name: 'Plan & billing' }).click();
+  await expect(page.getByRole('tabpanel', { name: 'Plan & billing' })).toContainText('Sign in to see your plan.');
 });

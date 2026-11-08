@@ -2,28 +2,21 @@ import { ArrowSquareOut } from '@phosphor-icons/react';
 
 import { Button } from '@components/ui/button';
 import { Fact } from '@features/settings/components/plan-licence-section';
-import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useActiveOrg } from '@hooks/use-orgs';
 import { openAccountWeb } from '@lib/account';
 import { PLAN_NAMES, type PlanKey } from '@shared/feature-plans';
 import { canManage, isTeam } from '@shared/orgs';
 
-const TITLE = 'Organisation';
-const DESCRIPTION = 'The team this Mac leases from, and your place in it.';
-
 /**
- * Account › Organisation (HIVE-291): the active org, when it is a team (D2). Always listed; with no team org it
- * says so, as Account & devices does when signed out (D3). Members and seats are managed on the web (D1).
+ * The Account centre's Organisation tab (HIVE-291's pane): the active org, when it is a team (D2). The tab is shown
+ * only then; a deep link with no team org says so (D3). Members and seats are managed on the web (D1).
  */
 export function AccountOrgSection() {
   const active = useActiveOrg();
   const org = active && isTeam(active) ? active : undefined;
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
-      <SettingsSectionHeader title={TITLE} description={DESCRIPTION} />
-      {org ? (
+  return org ? (
         <SettingsGroup title="Membership" description="Read from HiveTTY each time the account menu opens.">
           <div className="flex flex-col gap-1 rounded-lg border border-border-soft p-3">
             <Fact label="Name" value={org.name} />
@@ -40,9 +33,7 @@ export function AccountOrgSection() {
             </div>
           ) : null}
         </SettingsGroup>
-      ) : (
-        <p className="text-control text-subtle">You&apos;re not in a team organisation.</p>
-      )}
-    </div>
+  ) : (
+    <p className="text-control text-subtle">You&apos;re not in a team organisation.</p>
   );
 }

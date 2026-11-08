@@ -5,6 +5,7 @@ import {
   initialOf,
   listDevices,
   listOrgs,
+  readBilling,
   onAccountChanged,
   onDeviceCode,
   openAccountWeb,
@@ -124,6 +125,27 @@ describe('src/lib/account', () => {
       vi.spyOn(console, 'error').mockImplementation(() => undefined);
       bridge({ devices: vi.fn().mockRejectedValue(new Error('x')) });
       await expect(listDevices()).resolves.toBeNull();
+      expect(console.error).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('readBilling (the Account centre)', () => {
+    it('answers null with no bridge', async () => {
+      await expect(readBilling('org-a')).resolves.toBeNull();
+    });
+
+    it('asks main for the org and passes the summary through', async () => {
+      const summary = { orgId: 'org-a', subscription: null, canManage: false, seated: 1 };
+      const billing = vi.fn().mockResolvedValue(summary);
+      bridge({ billing });
+      await expect(readBilling('org-a')).resolves.toEqual(summary);
+      expect(billing).toHaveBeenCalledWith('org-a');
+    });
+
+    it('answers null and logs when main refuses', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      bridge({ billing: vi.fn().mockRejectedValue(new Error('x')) });
+      await expect(readBilling(undefined)).resolves.toBeNull();
       expect(console.error).toHaveBeenCalledTimes(1);
     });
   });

@@ -38,3 +38,25 @@ export interface AccountDevice {
 }
 
 export type DevicesResult = { devices: AccountDevice[] } | { error: string };
+
+/** The org's subscription, as `GET /api/billing` reports it. `renewsAt` is an ISO string. */
+export interface BillingSubscription {
+  plan: string;
+  status: string;
+  interval: 'month' | 'year' | null;
+  seats: number;
+  renewsAt: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+/**
+ * `GET /api/billing` for the active org (the Account centre's Plan & billing). `seated` is seats in use; `canManage`
+ * says the org has a billing customer. Main answers `null` when the cloud has nothing to show this caller (billing
+ * off, not the org's Owner or Billing member, signed out, offline), and the pane falls back to the lease.
+ */
+export interface BillingSummary {
+  orgId: string;
+  subscription: BillingSubscription | null;
+  canManage: boolean;
+  seated: number;
+}

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,9 +7,12 @@ import { PlanLicenceSection } from '@features/settings/components/plan-licence-s
 const licence = vi.hoisted(() => ({ current: null as unknown }));
 const refreshLicence = vi.hoisted(() => vi.fn());
 const openAccountWeb = vi.hoisted(() => vi.fn());
+const readBilling = vi.hoisted(() => vi.fn());
+const activeOrg = vi.hoisted(() => ({ current: undefined as unknown }));
 vi.mock('@hooks/use-licence', () => ({ useLicence: () => licence.current }));
+vi.mock('@hooks/use-orgs', () => ({ useActiveOrg: () => activeOrg.current }));
 vi.mock('@lib/licence', async (real) => ({ ...(await real<object>()), refreshLicence }));
-vi.mock('@lib/account', () => ({ openAccountWeb }));
+vi.mock('@lib/account', () => ({ openAccountWeb, readBilling }));
 
 const NOW = new Date('2026-11-07T12:00:00Z').getTime();
 const DAY_S = 86_400;
@@ -20,6 +23,8 @@ describe('PlanLicenceSection', () => {
     vi.useFakeTimers({ now: NOW, shouldAdvanceTime: true });
     refreshLicence.mockReset().mockResolvedValue(null);
     openAccountWeb.mockReset().mockResolvedValue({ ok: true });
+    readBilling.mockReset().mockResolvedValue(null);
+    activeOrg.current = undefined;
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -28,9 +33,10 @@ describe('PlanLicenceSection', () => {
   it('signed out, or the browser target: one sentence and no buttons', () => {
     licence.current = null;
     render(<PlanLicenceSection />);
-    expect(screen.getByRole('heading', { name: 'Plan & licence', level: 2 })).toBeInTheDocument();
     expect(screen.getByText('Sign in to see your plan.')).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
+    // Nothing to bill a signed-out Mac for.
+    expect(readBilling).not.toHaveBeenCalled();
   });
 
   it('unlicensed reads the same as signed out', () => {
@@ -78,6 +84,54 @@ describe('PlanLicenceSection', () => {
     expect(screen.getByText('Your trial has ended.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Refresh licence' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Manage plan' })).toBeInTheDocument();
+  });
+
+  describe('the subscription, from the cloud (the Account centre)', () => {
+    const SUB = { plan: 'team', status: 'active', interval: 'month', seats: 10, renewsAt: '2026-12-01T00:00:00.000Z', cancelAtPeriodEnd: false };
+
+    it('asks for the active org, then shows seats in use of total, the period and the renewal', async () => {
+      activeOrg.current = { id: 'org-acme', name: 'Acme', role: 'Owner', seat: true, plan: 'team', personal: false };
+      readBilling.mockResolvedValue({ orgId: 'org-acme', subscription: SUB, canManage: true, seated: 6 });
+      licence.current = { kind: 'licensed', ...terms };
+      render(<PlanLicenceSection />);
+
+      const group = (await screen.findByRole('heading', { name: 'Subscription' })).closest('section')!;
+      expect(readBilling).toHaveBeenCalledWith('org-acme');
+      expect(within(group).getByText('Seats').nextSibling).toHaveTextContent('6 of 10 in use');
+      expect(within(group).getByRole('meter', { name: 'Seats in use' })).toHaveAttribute('aria-valuenow', '6');
+      expect(within(group).getByText('Billed').nextSibling).toHaveTextContent('Monthly');
+      expect(within(group).getByText('Status').nextSibling).toHaveTextContent('Active');
+      expect(within(group).getByText('Renews on').nextSibling).toHaveTextContent(/2026/);
+
+      await userEvent.click(within(group).getByRole('button', { name: 'Invoices & payment' }));
+      expect(openAccountWeb).toHaveBeenCalledWith('/account/plan');
+    });
+
+    it('a plan set to cancel says when it ends', async () => {
+      readBilling.mockResolvedValue({ orgId: 'org-me', subscription: { ...SUB, cancelAtPeriodEnd: true, interval: 'year' }, canManage: true, seated: 1 });
+      licence.current = { kind: 'licensed', ...terms };
+      render(<PlanLicenceSection />);
+
+      const group = (await screen.findByRole('heading', { name: 'Subscription' })).closest('section')!;
+      expect(readBilling).toHaveBeenCalledWith(undefined);
+      expect(within(group).getByText('Ends on')).toBeInTheDocument();
+      expect(within(group).queryByText('Renews on')).toBeNull();
+      expect(within(group).getByText('Billed').nextSibling).toHaveTextContent('Yearly');
+    });
+
+    it('nothing from the cloud, or no subscription: the licence alone, from the lease', async () => {
+      licence.current = { kind: 'licensed', ...terms };
+      const { unmount } = render(<PlanLicenceSection />);
+      await waitFor(() => expect(readBilling).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole('heading', { name: 'Subscription' })).toBeNull();
+      expect(screen.getByText('Works offline until')).toBeInTheDocument();
+      unmount();
+
+      readBilling.mockResolvedValue({ orgId: 'org-me', subscription: null, canManage: false, seated: 1 });
+      render(<PlanLicenceSection />);
+      await waitFor(() => expect(readBilling).toHaveBeenCalledTimes(2));
+      expect(screen.queryByRole('heading', { name: 'Subscription' })).toBeNull();
+    });
   });
 
   it('Refresh licence renews; Manage plan opens /account/plan signed in, and shows a failure', async () => {

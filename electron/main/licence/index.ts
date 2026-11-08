@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 
 import type {
   AccountState,
+  BillingSummary,
   DeviceCode,
   DevicesResult,
   OpenWebResult,
@@ -17,6 +18,7 @@ import type { OrgSummary } from '@shared/orgs';
 import { runLogin, runLogout } from './account-command';
 import { type AccountSafeStorage, createAccountStore } from './account-store';
 import { type AuthClient, createAuthClient, generateDeviceKey } from './auth-client';
+import { readBilling } from './billing';
 import { createCloud, type Fetch, resolveCloudUrl } from './cloud';
 import { schemeFor } from './deep-link';
 import { abortableSleep, runDeviceFlow } from './device-flow';
@@ -208,6 +210,9 @@ export const ACCOUNT_CALLS = {
    * HIVE-291: lease from this org from now on. The first refresh may join a renewal that was already out and
    * asked for the old org; the second always starts after `activeOrg` is written, so it asks for the new one.
    */
+  /** The Account centre: an org's billing, `null` when the cloud has nothing to show (the pane shows the lease). */
+  [CH.accountBilling]: (orgId: unknown): Promise<BillingSummary | null> =>
+    client ? readBilling(client.authedFetch, orgId) : Promise.resolve(null),
   [CH.accountSwitchOrg]: (id: unknown): Promise<LicenceState> => {
     const state = licenceState;
     if (!client || !state || !isOrgId(id) || !client.setActiveOrg(id)) return Promise.resolve(licence());

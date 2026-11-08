@@ -40,7 +40,6 @@ describe('AccountDevicesSection (HIVE-265)', () => {
 
   it('the account card: initial, name, "email · plan line"', async () => {
     render(<AccountDevicesSection />);
-    expect(screen.getByRole('heading', { name: 'Account & devices', level: 2 })).toBeInTheDocument();
     expect(screen.getByText('Ana Ruiz')).toBeInTheDocument();
     expect(screen.getByText('ana@example.com · Team trial · 3 days left')).toBeInTheDocument();
     expect(await screen.findByText('Devices · 3 of 3')).toBeInTheDocument();

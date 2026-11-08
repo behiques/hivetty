@@ -161,6 +161,8 @@ function localAnswerFor(
       return () => ACCOUNT_CALLS[channel]();
     case CH.accountSwitchOrg:
       return (id: unknown) => ACCOUNT_CALLS[CH.accountSwitchOrg](id);
+    case CH.accountBilling:
+      return (orgId: unknown) => ACCOUNT_CALLS[CH.accountBilling](orgId);
     case CH.licenceStartTrial:
     case CH.licencePaused:
       return () => LICENCE_CALLS[channel]();
