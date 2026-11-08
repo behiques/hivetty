@@ -9,15 +9,17 @@ export const DEV_CLOUD_URL = 'https://api.dev.hivetty.dev';
 
 /**
  * `account.cloudUrl` (self-hosted Enterprise, HIVE-316) wins; then `HIVETTY_CLOUD_URL`, honoured only
- * unpackaged so a shipped app can never be pointed elsewhere by its environment (e2e, HIVE-270).
+ * unpackaged so a shipped app can never be pointed elsewhere by its environment (e2e, HIVE-270). A packaged
+ * prerelease (`1.0.0-rc.1`) is a release candidate and talks to the dev cloud, so it ships before prod exists.
  */
 export function resolveCloudUrl(input: {
   isPackaged: boolean;
+  prerelease?: boolean;
   configUrl?: string;
   env: Record<string, string | undefined>;
 }): string {
   const fromEnv = input.isPackaged ? undefined : input.env.HIVETTY_CLOUD_URL;
-  const url = input.configUrl || fromEnv || (input.isPackaged ? PROD_CLOUD_URL : DEV_CLOUD_URL);
+  const url = input.configUrl || fromEnv || (input.isPackaged && !input.prerelease ? PROD_CLOUD_URL : DEV_CLOUD_URL);
   return url.replace(/\/+$/, '');
 }
 

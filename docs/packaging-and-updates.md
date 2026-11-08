@@ -47,6 +47,24 @@ publishes three assets to a GitHub Release:
 | `HiveTTY-Pro-<v>-arm64.zip` | **The updater.** Squirrel.Mac swaps a zip, never a dmg. |
 | `latest-mac.yml` | How a running app learns a newer version exists, and its SHA-512. |
 
+### Release candidates
+
+```bash
+pnpm version 1.0.0-rc.1   # any semver prerelease: a `-` in the version
+git push --follow-tags
+```
+
+A version with a prerelease suffix is a release candidate, and it changes two things:
+
+- **The licence talks to the dev cloud.** `buildAccount` reads `app.getVersion()`, and a packaged
+  prerelease resolves `api.dev.hivetty.dev` and trusts `LEASE_KEYS.dev`. `HIVETTY_CLOUD_URL` and
+  `HIVETTY_LEASE_KEYS` stay ignored, as in any packaged build, and `account.cloudUrl` still wins. It
+  returns on `hivetty://`, the packaged scheme, so the dev cloud must accept that redirect.
+- **The release is a GitHub prerelease, never `latest`.** Stable copies never see it. A copy already on
+  a prerelease does: electron-updater turns `allowPrerelease` on from the version, looks for
+  `rc-mac.yml`, and falls back to the `latest-mac.yml` the build uploads. An RC updates to the next RC
+  and to the stable release, which moves it to the prod cloud and so to a fresh sign-in.
+
 **Never move a published tag.** `latest-mac.yml` pins a checksum per asset, so
 re-cutting a release under the same tag fails the integrity check on any client
 that is mid-download. `workflow_dispatch` exists for rebuilds.

@@ -11,6 +11,16 @@ describe('leaseKeys', () => {
     expect(leaseKeys({ isPackaged: true, env: {} })).toBe(LEASE_KEYS.prod);
   });
 
+  it('ships the dev keys to a packaged prerelease, which talks to the dev cloud', () => {
+    expect(leaseKeys({ isPackaged: true, prerelease: true, env: {} })).toBe(LEASE_KEYS.dev);
+    expect(leaseKeys({ isPackaged: true, prerelease: false, env: {} })).toBe(LEASE_KEYS.prod);
+  });
+
+  it('still ignores HIVETTY_LEASE_KEYS in a packaged prerelease', () => {
+    const env = { HIVETTY_LEASE_KEYS: JSON.stringify([TEST_KEY]) };
+    expect(leaseKeys({ isPackaged: true, prerelease: true, env })).toBe(LEASE_KEYS.dev);
+  });
+
   it('holds both dev keys, current and next', () => {
     expect(LEASE_KEYS.dev).toHaveLength(2);
     for (const key of LEASE_KEYS.dev) expect(key).toMatchObject({ kty: 'EC', crv: 'P-256', alg: 'ES256' });

@@ -48,7 +48,7 @@ describe('licence composition', () => {
     const openExternal = vi.fn().mockResolvedValue(undefined);
     const broadcast = vi.fn();
     startLicence({
-      app: { isPackaged: false, getPath: () => dir },
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage,
       openExternal,
       env: { HIVETTY_CLOUD_URL: 'http://127.0.0.1:4010' },
@@ -71,10 +71,48 @@ describe('licence composition', () => {
     expect(ACCOUNT_CALLS[CH.accountState]()).toEqual({ kind: 'signed-out' });
   });
 
+  it('sends a packaged release candidate to the dev cloud, returning on the packaged scheme', async () => {
+    const openExternal = vi.fn().mockResolvedValue(undefined);
+    startLicence({
+      app: { isPackaged: true, getPath: () => dir, getVersion: () => '1.0.0-rc.1' },
+      safeStorage,
+      openExternal,
+      env: {},
+      fetch: vi.fn(),
+      broadcast: vi.fn(),
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
+    });
+    await ACCOUNT_CALLS[CH.accountSignIn]();
+    const url = new URL(openExternal.mock.calls[0]![0] as string);
+    expect(url.origin).toBe('https://api.dev.hivetty.dev');
+    expect(url.searchParams.get('redirect_uri')).toBe('hivetty://auth/callback');
+  });
+
+  it('sends a packaged stable release to the prod cloud', async () => {
+    const openExternal = vi.fn().mockResolvedValue(undefined);
+    startLicence({
+      app: { isPackaged: true, getPath: () => dir, getVersion: () => '1.0.0' },
+      safeStorage,
+      openExternal,
+      env: {},
+      fetch: vi.fn(),
+      broadcast: vi.fn(),
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
+    });
+    await ACCOUNT_CALLS[CH.accountSignIn]();
+    expect(new URL(openExternal.mock.calls[0]![0] as string).origin).toBe('https://api.hivetty.dev');
+  });
+
   it('prefers account.cloudUrl', async () => {
     const openExternal = vi.fn().mockResolvedValue(undefined);
     startLicence({
-      app: { isPackaged: true, getPath: () => dir },
+      app: { isPackaged: true, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage,
       openExternal,
       cloudUrl: 'https://hive.acme.test',
@@ -101,7 +139,7 @@ describe('licence composition', () => {
     let wake: (() => void) | undefined;
     const broadcastLicence = vi.fn();
     startLicence({
-      app: { isPackaged: false, getPath: () => dir },
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage,
       openExternal: vi.fn(),
       env: {},
@@ -126,7 +164,7 @@ describe('licence composition', () => {
     onLicenceChange(early);
     const broadcastLicence = vi.fn();
     startLicence({
-      app: { isPackaged: false, getPath: () => dir },
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage,
       openExternal: vi.fn(),
       env: { HIVETTY_LEASE_KEYS: JSON.stringify([signer.jwk]), HIVETTY_CLOUD_URL: ISS },
@@ -149,7 +187,7 @@ describe('licence composition', () => {
     const signer = makeSigner('kid-reset');
     writeFileSync(join(dir, 'lease.jws'), signer.sign(claimsFor()));
     startLicence({
-      app: { isPackaged: false, getPath: () => dir },
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage,
       openExternal: vi.fn(),
       env: { HIVETTY_LEASE_KEYS: JSON.stringify([signer.jwk]), HIVETTY_CLOUD_URL: ISS },
@@ -182,7 +220,7 @@ describe('licence composition', () => {
     writeFileSync(join(dir, 'lease.jws'), signer.sign(claimsFor()));
     setPausedCensus(() => ({ sessions: ['api'], agents: ['shipper'] }));
     const boot = {
-      app: { isPackaged: false, getPath: () => dir },
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage,
       openExternal: vi.fn(),
       env: { HIVETTY_LEASE_KEYS: JSON.stringify([signer.jwk]), HIVETTY_CLOUD_URL: ISS },
@@ -212,7 +250,7 @@ describe('licence composition', () => {
     writeFileSync(join(dir, 'lease.jws'), signer.sign(claimsFor()));
     setPausedCensus(() => ({ sessions: ['api', 'web'], agents: ['shipper'] }));
     startLicence({
-      app: { isPackaged: false, getPath: () => dir },
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage,
       openExternal: vi.fn(),
       env: { HIVETTY_LEASE_KEYS: JSON.stringify([signer.jwk]), HIVETTY_CLOUD_URL: ISS },
@@ -230,7 +268,7 @@ describe('licence composition', () => {
   it('account:devices and licence:start-trial run through the started client', async () => {
     const signer = makeSigner('kid-calls');
     startLicence({
-      app: { isPackaged: false, getPath: () => dir },
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage,
       openExternal: vi.fn(),
       env: { HIVETTY_LEASE_KEYS: JSON.stringify([signer.jwk]), HIVETTY_CLOUD_URL: ISS },
@@ -260,7 +298,7 @@ describe('the running instance follows account.bin (HIVE-266)', () => {
 
   const boot = (watch = vi.fn((_dir: string, _on: (file: string | null) => void) => () => undefined)) =>
     startLicence({
-      app: { isPackaged: false, getPath: () => dir },
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage,
       openExternal: vi.fn(),
       env: { HIVETTY_CLOUD_URL: ISS },
@@ -329,7 +367,7 @@ describe('runAccountCommand (HIVE-266)', () => {
   const run = (invocation: Parameters<typeof runAccountCommand>[0], over: { encryptThrows?: boolean } = {}) => {
     const lines: string[] = [];
     const code = runAccountCommand(invocation, {
-      app: { isPackaged: false, getPath: () => dir },
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage: {
         ...safeStorage,
         encryptString: (plain: string) => {
@@ -395,7 +433,7 @@ describe('account:sign-in-code (HIVE-266)', () => {
     );
     vi.useFakeTimers();
     startLicence({
-      app: { isPackaged: false, getPath: () => dir },
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage,
       openExternal: vi.fn(),
       env: { HIVETTY_CLOUD_URL: ISS },
@@ -455,7 +493,7 @@ describe('the renewal asks for the stored org (HIVE-291)', () => {
     fetch.mock.calls.filter(([url]) => url === `${ISS}/api/lease`).map(([, init]) => init?.body);
   const boot = (fetch: ReturnType<typeof cloud>, broadcast = vi.fn()) =>
     startLicence({
-      app: { isPackaged: false, getPath: () => dir },
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
       safeStorage,
       openExternal: vi.fn(),
       env: { HIVETTY_CLOUD_URL: ISS },
