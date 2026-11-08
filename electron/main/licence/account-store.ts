@@ -18,6 +18,8 @@ export interface StoredAccount {
   deviceKey: DeviceKey;
   email: string;
   name: string;
+  /** HIVE-291: the org the lease is asked for. Sign-out deletes the file, so it goes with the account. */
+  activeOrg?: string;
 }
 
 export interface AccountStore {
@@ -56,6 +58,7 @@ function isStoredAccount(value: unknown): value is StoredAccount {
     value.deviceId !== '' &&
     typeof value.email === 'string' &&
     typeof value.name === 'string' &&
+    (value.activeOrg === undefined || typeof value.activeOrg === 'string') &&
     isRecord(value.deviceKey) &&
     isEd25519(value.deviceKey.publicJwk, false) &&
     isEd25519(value.deviceKey.privateJwk, true)
