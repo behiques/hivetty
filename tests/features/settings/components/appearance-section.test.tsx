@@ -154,4 +154,9 @@ describe('AppearanceSection', () => {
     expect(screen.queryByRole('switch', { name: 'Show plan panel' })).not.toBeInTheDocument();
     expect(screen.getByText('Compact tightens the rows in the list and session panels.')).toBeInTheDocument();
   });
+
+  it("says Home shows the organisation's name while you're in one (HIVE-291)", () => {
+    render(<AppearanceSection />);
+    expect(screen.getByText(/Home shows your organisation's name while you're in one\./)).toBeInTheDocument();
+  });
 });

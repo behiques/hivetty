@@ -1,5 +1,7 @@
 import { cn } from '@/lib/utils';
 
+import { useActiveOrg } from '@hooks/use-orgs';
+import { isTeam } from '@shared/orgs';
 import { useTeamName } from '@stores/appearance-store';
 import type { CombSummary } from '@stores/hive-store';
 
@@ -33,7 +35,10 @@ export const summaryText = (s: CombSummary): string =>
  */
 export function CombHeadline({ needs, summary }: { needs: number; summary: CombSummary }) {
   const { text, tone } = headline(needs, summary);
-  const team = useTeamName();
+  const teamName = useTeamName();
+  const org = useActiveOrg();
+  // HIVE-291: inside a team org, the org's name; a personal Solo org keeps the name typed in Appearance.
+  const team = org && isTeam(org) ? org.name : teamName;
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 flex items-baseline gap-3.5 bg-linear-to-b from-bg to-transparent px-7 py-[18px]">
       <h2 className={cn('text-ui-lg font-semibold', tone)}>{text}</h2>
