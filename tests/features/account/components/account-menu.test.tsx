@@ -127,4 +127,46 @@ describe('AccountMenu (HIVE-265)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Account' }));
     expect(refreshOrgs).toHaveBeenCalledTimes(1);
   });
+
+  it('the no-seat line sits under the org asked for when the lease came from another (HIVE-291 D6)', async () => {
+    account.current = { ...IN, activeOrg: 'org-acme' };
+    orgs.list = [PERSONAL, { ...ACME, seat: false }];
+    orgs.active = PERSONAL;
+    render(<AccountMenu />);
+    await userEvent.click(screen.getByRole('button', { name: 'Account, Personal' }));
+    expect(screen.getByText('No seat in Acme, using Personal')).toBeInTheDocument();
+  });
+
+  it('no no-seat line when the lease is the org asked for (HIVE-291 D6)', async () => {
+    account.current = { ...IN, activeOrg: 'org-me' };
+    orgs.list = [PERSONAL, ACME];
+    orgs.active = PERSONAL;
+    render(<AccountMenu />);
+    await userEvent.click(screen.getByRole('button', { name: 'Account, Personal' }));
+    expect(screen.queryByText(/^No seat in/)).toBeNull();
+  });
+
+  it.each([['Owner'], ['Admin'], ['Billing']])(
+    'Manage organisation… opens /admin?org=<id> for a team %s, with one org too (HIVE-291 D1)',
+    async (role) => {
+      orgs.list = [{ ...ACME, role }];
+      orgs.active = { ...ACME, role };
+      render(<AccountMenu />);
+      await userEvent.click(screen.getByRole('button', { name: 'Account, Acme' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Manage organisation…' }));
+      expect(openAccountWeb).toHaveBeenCalledWith('/admin?org=org-acme');
+    },
+  );
+
+  it.each([
+    ['a Member of a team', { ...ACME, role: 'Member' }],
+    ['the Owner of a personal Solo org', PERSONAL],
+    ['no active org', undefined],
+  ])('no Manage organisation… for %s (HIVE-291)', async (_label, org) => {
+    orgs.list = org ? [org] : [];
+    orgs.active = org;
+    render(<AccountMenu />);
+    await userEvent.click(screen.getByRole('button', { name: /^Account/ }));
+    expect(screen.queryByRole('menuitem', { name: 'Manage organisation…' })).toBeNull();
+  });
 });

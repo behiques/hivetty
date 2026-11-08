@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -27,7 +27,7 @@ import { refreshOrgs, useActiveOrg, useOrgs } from '@hooks/use-orgs';
 import { initialOf, openAccountWeb, signOut, switchOrg } from '@lib/account';
 import { planLine } from '@lib/licence';
 import { PLAN_NAMES, type PlanKey } from '@shared/feature-plans';
-import { orgBadge, type OrgSummary } from '@shared/orgs';
+import { canManage, isTeam, orgBadge, type OrgSummary } from '@shared/orgs';
 import { useSettingsActions } from '@stores/ui-store';
 
 /** A switcher row's second line: "Team · Admin", or the role alone when the org has no plan. */
@@ -50,6 +50,10 @@ export function AccountMenu() {
   const plan = planLine(licence, Date.now());
   // The switcher and the badge only mean something with a second org to switch to.
   const switching = orgs.length >= 2;
+  // D6: asked for one org, leased from another (no seat there). The line sits under the one asked for.
+  const askedId = active && account.activeOrg !== active.id ? account.activeOrg : undefined;
+  // D1: Owner, Admin and Billing of a team; with one org too.
+  const managed = active && isTeam(active) && canManage(active.role) ? active : undefined;
 
   return (
     <>
@@ -82,25 +86,31 @@ export function AccountMenu() {
                 Organisation
               </DropdownMenuLabel>
               {orgs.map((org) => (
-                <DropdownMenuCheckboxItem
-                  key={org.id}
-                  checked={org.id === active?.id}
-                  onSelect={() => void switchOrg(org.id)}
-                >
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-ink">{org.name}</span>
-                    <span className="text-ui-sm text-subtle">{orgLine(org)}</span>
-                  </span>
-                  {org.seat ? null : (
-                    <span className="rounded border border-border px-1 text-micro text-subtle">No seat</span>
-                  )}
-                </DropdownMenuCheckboxItem>
+                <Fragment key={org.id}>
+                  <DropdownMenuCheckboxItem checked={org.id === active?.id} onSelect={() => void switchOrg(org.id)}>
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-ink">{org.name}</span>
+                      <span className="text-ui-sm text-subtle">{orgLine(org)}</span>
+                    </span>
+                    {org.seat ? null : (
+                      <span className="rounded border border-border px-1 text-micro text-subtle">No seat</span>
+                    )}
+                  </DropdownMenuCheckboxItem>
+                  {org.id === askedId && active ? (
+                    <p className="px-2 pb-1 pl-7 text-ui-sm text-amber-text">{`No seat in ${org.name}, using ${active.name}`}</p>
+                  ) : null}
+                </Fragment>
               ))}
             </>
           ) : null}
           <DropdownMenuSeparator className="my-1 bg-border-soft" />
           <DropdownMenuItem onSelect={() => void openAccountWeb('/account/plan')}>Plan &amp; billing…</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void openAccountWeb('/account')}>Account…</DropdownMenuItem>
+          {managed ? (
+            <DropdownMenuItem onSelect={() => void openAccountWeb(`/admin?org=${encodeURIComponent(managed.id)}`)}>
+              Manage organisation…
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onSelect={() => openSettings('account-devices')}>Settings…</DropdownMenuItem>
           <DropdownMenuSeparator className="my-1 bg-border-soft" />
           <DropdownMenuItem onSelect={() => setConfirming(true)}>Sign out</DropdownMenuItem>
