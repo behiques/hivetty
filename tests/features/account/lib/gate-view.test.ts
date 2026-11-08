@@ -6,7 +6,7 @@ import type { LicenceState } from '@shared/licence-contract';
 
 const IN: AccountState = { kind: 'signed-in', email: 'ana@example.com', name: 'Ana Ruiz', deviceId: 'd' };
 const OUT: AccountState = { kind: 'signed-out' };
-const TERMS = { plan: 'team', features: [], limits: {}, exp: 2e9, iat: 1.9e9 };
+const TERMS = { org: 'org_1', plan: 'team', features: [], limits: {}, exp: 2e9, iat: 1.9e9 };
 const CODE: DeviceCode = {
   userCode: 'WDJB-MJHT',
   verificationUri: 'https://c.test/device',

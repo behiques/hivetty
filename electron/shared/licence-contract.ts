@@ -29,6 +29,8 @@ export type LapseReason =
   | 'unknown';
 
 export interface LicenceTerms {
+  /** HIVE-291: the org this lease was granted for; the active org everywhere in the app. */
+  org: string;
   plan: string;
   features: string[];
   limits: Record<string, number>;

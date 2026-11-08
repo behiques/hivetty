@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { LicenceState } from '../../../../electron/shared/licence-contract';
 import { startWhenLicensed } from '../../../../electron/main/licence/serve-gate';
 
-const TERMS = { plan: 'team', features: [], limits: {}, exp: 2e9, iat: 1.9e9 };
+const TERMS = { org: 'org_1', plan: 'team', features: [], limits: {}, exp: 2e9, iat: 1.9e9 };
 
 function source(initial: LicenceState) {
   let listener: ((s: LicenceState) => void) | null = null;

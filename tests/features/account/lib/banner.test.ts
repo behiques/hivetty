@@ -6,6 +6,7 @@ const DAY = 86_400;
 const NOW = Date.UTC(2026, 10, 7) / 1000;
 const live = (over = {}) => ({
   kind: 'licensed' as const,
+  org: 'org_1',
   plan: 'team',
   features: [],
   limits: {},

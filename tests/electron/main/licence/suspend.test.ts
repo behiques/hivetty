@@ -41,8 +41,8 @@ function harness() {
   return { s: createSuspender(deps), deps, log };
 }
 
-const LICENSED: LicenceState = { kind: 'licensed', plan: 'team', features: [], limits: {}, exp: 1, iat: 0 };
-const GRACE: LicenceState = { kind: 'grace', plan: 'team', features: [], limits: {}, exp: 1, iat: 0 };
+const LICENSED: LicenceState = { kind: 'licensed', org: 'org_1', plan: 'team', features: [], limits: {}, exp: 1, iat: 0 };
+const GRACE: LicenceState = { kind: 'grace', org: 'org_1', plan: 'team', features: [], limits: {}, exp: 1, iat: 0 };
 const LAPSED: LicenceState = { kind: 'lapsed', reason: 'offline' };
 
 describe('createSuspender', () => {

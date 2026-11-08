@@ -4,6 +4,7 @@ import { CLI_FEATURES, cliEntitlementOf, entitlementOf, UPGRADE_PATH } from '../
 import type { LicenceState } from '../../../electron/shared/licence-contract';
 
 const terms = (plan: string, features: string[], extra: { trialEnds?: number } = {}) => ({
+  org: 'org_1',
   plan,
   features,
   limits: { devices: 3 },

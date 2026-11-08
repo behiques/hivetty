@@ -55,6 +55,7 @@ function harness(
 }
 
 const terms = (overrides = {}) => ({
+  org: 'org_1',
   plan: 'team',
   features: ['agents'],
   limits: { sessions: 10 },
