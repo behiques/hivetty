@@ -171,14 +171,19 @@ The card at the top of the Settings nav, with your avatar, name and plan, opens 
 **Account centre** in your avatar's menu at the foot of the bar. It has up to three tabs:
 
 - **Profile & devices**: your name, email and plan, with **Sign out**, and this account's devices, this Mac first.
-  **Manage devices** opens your account's devices page in the browser, already signed in; revoking a device happens
-  there. Signed out, the tab says **Sign in to see your account.**
+  **Remove** on any other device signs it out of HiveTTY Pro after you confirm; this Mac has **Sign out** instead.
+  **Manage devices** opens your account's devices page in the browser, already signed in. Signed out, the tab says
+  **Sign in to see your account.**
 - **Plan & billing**: your organisation's **Subscription** from HiveTTY (plan, status, monthly or yearly, seats in
   use of the total, and when it renews or ends), then this Mac's **Licence**: your plan (with **Trial · N days left**
-  during a trial), devices per seat, runners, and until when it works offline. **Refresh licence** renews it now;
-  **Manage plan** and **Invoices & payment** open your account's plan page in the browser, already signed in. When
-  HiveTTY can't show the subscription (offline, or you aren't the organisation's owner or billing member), the tab
-  shows the licence alone. Signed out, it says **Sign in to see your plan.**
+  during a trial), devices per seat, runners, and until when it works offline. **Payment** shows the card on file
+  (brand, last four digits, expiry) and the last 12 invoices with their date, number, amount and status; **PDF** and
+  **View** open the invoice on Stripe in the browser. **Manage billing** opens Stripe's billing portal, where you
+  update the card or cancel; if the portal can't open, it opens your account's plan page instead. **Refresh
+  licence** renews the licence now; **Manage plan** opens your account's plan page in the browser, already signed
+  in, which is where you switch plans or change seats. When HiveTTY can't show the subscription or the payments
+  (offline, or you aren't the organisation's owner or billing member), the tab leaves them out and shows the
+  licence alone. Signed out, it says **Sign in to see your plan.**
 - **Organisation**: for a team, its name, your role, your seat and its plan. Owners, admins and billing members get
   **Manage members and seats**, which opens the web. A Solo account has no organisation and no tab.
 

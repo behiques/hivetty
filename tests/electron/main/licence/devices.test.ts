@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 
-import { listDevices } from '../../../../electron/main/licence/devices';
+import { listDevices, revokeDevice } from '../../../../electron/main/licence/devices';
 
 const ROW = {
   id: 'd1',
@@ -45,5 +45,33 @@ describe('listDevices (HIVE-265, HIVE-262)', () => {
     await expect(listDevices(answer(200, { devices: [{ ...ROW, keyHash: 'x' }] }))).resolves.toEqual({
       devices: [ROW],
     });
+  });
+});
+
+describe('revokeDevice (Remove, against POST /api/account/devices/:id/revoke)', () => {
+  const noContent = () => vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
+
+  it('POSTs the revoke for the device, escaped, and answers ok', async () => {
+    const fetch = noContent();
+    await expect(revokeDevice(fetch, 'd/2')).resolves.toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledWith('/api/account/devices/d%2F2/revoke', { method: 'POST' });
+  });
+
+  it('a device already gone is one sentence', async () => {
+    await expect(revokeDevice(answer(404, { error: 'not_found' }), 'd2')).resolves.toEqual({
+      error: 'That device was already removed.',
+    });
+  });
+
+  it('an older cloud refusing the bearer, or offline, points at Manage devices', async () => {
+    const refused = { error: "Couldn't remove that device here. Use Manage devices." };
+    await expect(revokeDevice(answer(403, { error: 'invalid_request' }), 'd2')).resolves.toEqual(refused);
+    await expect(revokeDevice(vi.fn(() => Promise.reject(new Error('offline'))), 'd2')).resolves.toEqual(refused);
+  });
+
+  it.each([42, '', 'x'.repeat(129)])('refuses the id %j without a call', async (id) => {
+    const fetch = noContent();
+    await expect(revokeDevice(fetch, id)).resolves.toEqual({ error: expect.any(String) as string });
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

@@ -4,10 +4,12 @@ import { dirname, join } from 'node:path';
 
 import type {
   AccountState,
+  BillingPayments,
   BillingSummary,
   DeviceCode,
   DevicesResult,
   OpenWebResult,
+  RevokeResult,
   SignInResult,
   TrialResult,
 } from '@shared/account-contract';
@@ -18,11 +20,11 @@ import type { OrgSummary } from '@shared/orgs';
 import { runLogin, runLogout } from './account-command';
 import { type AccountSafeStorage, createAccountStore } from './account-store';
 import { type AuthClient, createAuthClient, generateDeviceKey } from './auth-client';
-import { readBilling } from './billing';
+import { openBillingPortal, openStripeLink, readBilling, readPayments } from './billing';
 import { createCloud, type Fetch, resolveCloudUrl } from './cloud';
 import { schemeFor } from './deep-link';
 import { abortableSleep, runDeviceFlow } from './device-flow';
-import { listDevices } from './devices';
+import { listDevices, revokeDevice } from './devices';
 import { leaseKeys } from './keys';
 import { createLeaseFile, renewLease } from './lease';
 import { createLicenceState, type LicenceStateMachine } from './licence-state';
@@ -36,6 +38,8 @@ import { startTrial } from './trial';
 
 let client: AuthClient | null = null;
 let licenceState: LicenceStateMachine | null = null;
+/** The browser, as `startLicence` was given it: Manage billing and invoice links open through it. */
+let openExternal: (url: string) => Promise<void> = () => Promise.reject(new Error('the licence has not started'));
 /** Module-level, so a subscriber made before or after `startLicence` hears every change (PR 2's suspender). */
 const licenceListeners = new Set<(state: LicenceState) => void>();
 /** HIVE-291 D5: the orgs `account:orgs` has listed since launch or sign-in; a new one renews the lease. */
@@ -112,6 +116,7 @@ export function startLicence(
   },
 ): AuthClient {
   const built = buildAccount(deps);
+  openExternal = deps.openExternal;
   const next = built.client;
   next.onChange(deps.broadcast);
   next.onChange((account) => {
@@ -213,6 +218,16 @@ export const ACCOUNT_CALLS = {
   /** The Account centre: an org's billing, `null` when the cloud has nothing to show (the pane shows the lease). */
   [CH.accountBilling]: (orgId: unknown): Promise<BillingSummary | null> =>
     client ? readBilling(client.authedFetch, orgId) : Promise.resolve(null),
+  [CH.accountPayments]: (orgId: unknown): Promise<BillingPayments | null> =>
+    client ? readPayments(client.authedFetch, orgId) : Promise.resolve(null),
+  [CH.accountRevokeDevice]: (id: unknown): Promise<RevokeResult> =>
+    client ? revokeDevice(client.authedFetch, id) : Promise.resolve({ error: NOT_READY }),
+  [CH.accountOpenBilling]: (orgId: unknown): Promise<OpenWebResult> => {
+    const account = client;
+    if (!account) return Promise.resolve({ error: NOT_READY });
+    return openBillingPortal({ authedFetch: account.authedFetch, openExternal, openWeb: (path) => account.openWeb(path) }, orgId);
+  },
+  [CH.accountOpenInvoice]: (url: unknown): Promise<OpenWebResult> => openStripeLink(openExternal, url),
   [CH.accountSwitchOrg]: (id: unknown): Promise<LicenceState> => {
     const state = licenceState;
     if (!client || !state || !isOrgId(id) || !client.setActiveOrg(id)) return Promise.resolve(licence());

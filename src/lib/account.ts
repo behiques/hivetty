@@ -1,9 +1,11 @@
 import type {
   AccountState,
+  BillingPayments,
   BillingSummary,
   DeviceCode,
   DevicesResult,
   OpenWebResult,
+  RevokeResult,
   SignInResult,
 } from '@shared/account-contract';
 import type { LicenceState } from '@shared/licence-contract';
@@ -77,6 +79,54 @@ export async function readBilling(orgId: string | undefined): Promise<BillingSum
     return await bridge.account.billing(orgId);
   } catch (cause) {
     console.error('[hive] reading billing failed:', cause);
+    return null;
+  }
+}
+
+/** The Account centre: the org's card and last 12 invoices, or `null` when the cloud has none to show. */
+export async function readPayments(orgId: string | undefined): Promise<BillingPayments | null> {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.account.payments(orgId);
+  } catch (cause) {
+    console.error('[hive] reading payments failed:', cause);
+    return null;
+  }
+}
+
+/** Remove one of this account's other devices. `null` without a bridge or when main throws. */
+export async function revokeDevice(id: string): Promise<RevokeResult | null> {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.account.revokeDevice(id);
+  } catch (cause) {
+    console.error('[hive] removing a device failed:', cause);
+    return null;
+  }
+}
+
+/** Manage billing: the org's Stripe portal, else (main decides) the signed-in plan page. */
+export async function openBilling(orgId: string | undefined): Promise<OpenWebResult | null> {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.account.openBilling(orgId);
+  } catch (cause) {
+    console.error('[hive] opening billing failed:', cause);
+    return null;
+  }
+}
+
+/** An invoice's PDF or page in the browser; main opens only Stripe's. */
+export async function openInvoice(url: string): Promise<OpenWebResult | null> {
+  const bridge = window.hive;
+  if (!bridge) return null;
+  try {
+    return await bridge.account.openInvoice(url);
+  } catch (cause) {
+    console.error('[hive] opening an invoice failed:', cause);
     return null;
   }
 }

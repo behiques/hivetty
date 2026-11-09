@@ -92,8 +92,10 @@ import { isThisMachineAction } from './notification-contract';
  * 36 → 37 (HIVE-372): `CH` gained `cli:codex-plugin-status`; `CliConfig` and `SetCliRequest` gained `installSkills`.
  * 37 → 38 (HIVE-291): `CH` gained `account:orgs` and `account:switch-org` (process-local).
  * 38 → 39 (the Account centre): `CH` gained `account:billing` (process-local).
+ * 39 → 40 (desktop billing): `CH` gained `account:payments`, `account:revoke-device`, `account:open-billing` and
+ *   `account:open-invoice` (process-local).
  */
-export const REMOTE_PROTOCOL_VERSION = 39;
+export const REMOTE_PROTOCOL_VERSION = 40;
 
 /**
  * What a frame is for.
@@ -295,6 +297,10 @@ export const FRAME_KIND = {
   [CH.accountOrgs]: 'call',
   [CH.accountSwitchOrg]: 'call',
   [CH.accountBilling]: 'call',
+  [CH.accountPayments]: 'call',
+  [CH.accountRevokeDevice]: 'call',
+  [CH.accountOpenBilling]: 'call',
+  [CH.accountOpenInvoice]: 'call',
   [CH.configCloneStart]: 'call',
   [CH.configCloneCancel]: 'call',
   [CH.configCloneDone]: 'event',
@@ -636,6 +642,10 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.accountOrgs]: 'read',
   [CH.accountSwitchOrg]: 'execute',
   [CH.accountBilling]: 'read',
+  [CH.accountPayments]: 'read',
+  [CH.accountRevokeDevice]: 'execute',
+  [CH.accountOpenBilling]: 'execute',
+  [CH.accountOpenInvoice]: 'execute',
   [CH.configCloneStart]: 'execute',
   [CH.configCloneCancel]: 'mutate',
   [CH.configCloneDone]: 'read',
@@ -1013,6 +1023,14 @@ const PROCESS_LOCAL_REFUSALS = {
     "account:switch-org changes which organisation the answering machine's own lease comes from. A server refuses to switch on a peer's say-so; the asking machine switches its own.",
   [CH.accountBilling]:
     "account:billing reads the billing of the answering machine's own account. A server refuses to show its account's billing to a peer; the asking machine reads its own.",
+  [CH.accountPayments]:
+    "account:payments reads the card and invoices of the answering machine's own account. A server refuses to show its account's payments to a peer; the asking machine reads its own.",
+  [CH.accountRevokeDevice]:
+    "account:revoke-device removes a device from the answering machine's own account. A server refuses to remove its account's devices on a peer's say-so; the asking machine removes its own.",
+  [CH.accountOpenBilling]:
+    "account:open-billing opens the answering machine's browser on its own account's billing. A server refuses to open its own account's billing on a peer's say-so; the asking machine opens its own.",
+  [CH.accountOpenInvoice]:
+    "account:open-invoice opens an invoice in the answering machine's browser. A server refuses to open its own account's invoices on a peer's say-so; the asking machine opens its own.",
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**
