@@ -70,13 +70,14 @@ describe('BillingPayments (the card and invoices, desktop billing)', () => {
     expect(screen.getByRole('button', { name: 'View invoice' })).toBeInTheDocument();
   });
 
+  // The parent keys it on the org (plan-licence-section), so a switch is a remount.
   it("switching org hides the last org's card and invoices until the new org's arrive", async () => {
-    const { rerender } = render(<BillingPayments orgId="org-a" />);
+    const { rerender } = render(<BillingPayments key="org-a" orgId="org-a" />);
     expect(await screen.findByText('Visa •••• 4242 · expires 03/27')).toBeInTheDocument();
 
     let answer: (value: unknown) => void = () => undefined;
     lib.readPayments.mockReturnValue(new Promise((resolve) => (answer = resolve)));
-    rerender(<BillingPayments orgId="org-b" />);
+    rerender(<BillingPayments key="org-b" orgId="org-b" />);
     expect(screen.queryByText('Visa •••• 4242 · expires 03/27')).toBeNull();
 
     answer({ card: { ...CARD, last4: '1111' }, invoices: [] });

@@ -10,11 +10,12 @@ const openAccountWeb = vi.hoisted(() => vi.fn());
 const readBilling = vi.hoisted(() => vi.fn());
 const openBilling = vi.hoisted(() => vi.fn());
 const readPayments = vi.hoisted(() => vi.fn());
+const openInvoice = vi.hoisted(() => vi.fn());
 const activeOrg = vi.hoisted(() => ({ current: undefined as unknown }));
 vi.mock('@hooks/use-licence', () => ({ useLicence: () => licence.current }));
 vi.mock('@hooks/use-orgs', () => ({ useActiveOrg: () => activeOrg.current }));
 vi.mock('@lib/licence', async (real) => ({ ...(await real<object>()), refreshLicence }));
-vi.mock('@lib/account', () => ({ openAccountWeb, openBilling, readBilling, readPayments, openInvoice: vi.fn() }));
+vi.mock('@lib/account', () => ({ openAccountWeb, openBilling, readBilling, readPayments, openInvoice }));
 
 const NOW = new Date('2026-11-07T12:00:00Z').getTime();
 const DAY_S = 86_400;
@@ -113,6 +114,32 @@ describe('PlanLicenceSection', () => {
       expect(openAccountWeb).not.toHaveBeenCalled();
       // The card and invoices are read for the same org.
       expect(readPayments).toHaveBeenCalledWith('org-acme');
+    });
+
+    it("switching org starts the Payment section afresh: the last org's invoice error goes", async () => {
+      const invoice = {
+        id: 'in_1',
+        number: 'A-0001',
+        created: '2026-11-01T12:00:00.000Z',
+        total: 1200,
+        currency: 'usd',
+        status: 'paid',
+        pdfUrl: null,
+        hostedUrl: 'https://invoice.stripe.com/i/1',
+      };
+      readPayments.mockResolvedValue({ card: null, invoices: [invoice] });
+      openInvoice.mockResolvedValue({ error: "The browser didn't open." });
+      activeOrg.current = { id: 'org-a', name: 'A', role: 'Owner', seat: true, plan: 'team', personal: false };
+      licence.current = { kind: 'licensed', ...terms };
+      const { rerender } = render(<PlanLicenceSection />);
+      await userEvent.click(await screen.findByRole('button', { name: 'View A-0001' }));
+      expect(await screen.findByText("The browser didn't open.")).toBeInTheDocument();
+
+      activeOrg.current = { id: 'org-b', name: 'B', role: 'Owner', seat: true, plan: 'team', personal: false };
+      rerender(<PlanLicenceSection />);
+      await waitFor(() => expect(readPayments).toHaveBeenCalledWith('org-b'));
+      expect(await screen.findByRole('button', { name: 'View A-0001' })).toBeInTheDocument();
+      expect(screen.queryByText("The browser didn't open.")).not.toBeInTheDocument();
     });
 
     it('Manage billing that cannot open says why in one line', async () => {
