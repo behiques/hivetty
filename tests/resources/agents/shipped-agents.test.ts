@@ -92,10 +92,11 @@ describe('shipped agents', () => {
     };
 
     // The gather is the shipper's own: a review body in any state, a PR-level
-    // comment and the checks, from the one call it holds.
+    // comment and the checks, from one gh pr view. It holds all of Bash, so a
+    // plain read through gh api runs too; only the merge stays fenced (above).
     expect(allows('gh pr view 1 --repo o/r --json reviews,comments,latestReviews,statusCheckRollup')).toBe(true);
-    expect(allows('gh api repos/o/r/pulls/1/reviews')).toBe(false);
-    expect(allows('jq .')).toBe(false);
+    expect(allows('ls /Users/me/.hivetty/work/shipper')).toBe(true);
+    expect(allows('gh api repos/o/r/pulls/1/reviews')).toBe(true);
     for (const stage of ['findings', 'approval']) {
       expect(row(stage)).not.toMatch(/gh api|\bjq\b|prefetch-feedback|repos\/<owner>/);
     }

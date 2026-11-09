@@ -791,3 +791,64 @@ describe('decide (HIVE-339)', () => {
     expect(decide(tool, input, [oneShotRuleFor(tool, input)!])).toEqual({ behavior: 'allow' });
   });
 });
+
+describe('a PR merge: the consent checkpoint survives a wide Bash grant', () => {
+  const merges = [
+    'gh pr merge 249 --squash --repo behiques/hivetty',
+    'cd /x && gh pr merge 1',
+    'gh --repo a/b pr merge 1 --auto',
+    'gh api -X PUT repos/a/b/pulls/1/merge',
+    "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'",
+    "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {}) { clientMutationId } }'",
+  ];
+
+  it('is granted by no wide rule: bare Bash, the blanket, or a gh glob', () => {
+    for (const command of merges) {
+      for (const rule of ['Bash', '*', 'Bash(gh *)', 'Bash(*)']) {
+        expect(matches(rule, 'Bash', { command }), `${rule} / ${command}`).toBe(false);
+      }
+    }
+  });
+
+  it('is granted by no wide rule when spelt as a branch merge or a merge-queue mutation', () => {
+    for (const command of [
+      'gh api -X POST repos/a/b/merges -f base=main -f head=feature',
+      'gh api /repos/{owner}/{repo}/merges -f base=main -f head=feature',
+      "gh api graphql -f query='mutation { enqueuePullRequest(input: {}) { clientMutationId } }'",
+      "gh api graphql -f query='mutation { addPullRequestToMergeQueue(input: {}) { clientMutationId } }'",
+    ]) {
+      for (const rule of ['Bash', '*', 'Bash(gh *)', 'Bash(*)']) {
+        expect(matches(rule, 'Bash', { command }), `${rule} / ${command}`).toBe(false);
+      }
+      expect(decide('Bash', { command }, ['Bash'])).toEqual({ behavior: 'ask' });
+    }
+  });
+
+  it('is still granted by the auto-merge rule for its own repository, and by a one-shot', () => {
+    const command = 'gh pr merge 3 --squash --repo a/b';
+    expect(matches('Bash(gh pr merge * --repo a/b)', 'Bash', { command })).toBe(true);
+    expect(matches('Bash(gh pr merge * --repo a/b)', 'Bash', { command: 'gh pr merge 3 --repo c/d' })).toBe(false);
+    expect(matches(oneShotRuleFor('Bash', { command })!, 'Bash', { command })).toBe(true);
+  });
+
+  it('asks under bare Bash, and allows once the project consents', () => {
+    const command = 'gh pr merge 3 --squash --repo a/b';
+    expect(decide('Bash', { command }, ['Bash'])).toEqual({ behavior: 'ask' });
+    expect(decide('Bash', { command }, ['Bash', 'Bash(gh pr merge * --repo a/b)'])).toEqual({ behavior: 'allow' });
+  });
+
+  it('leaves everything else bare Bash grants alone, git merge and merge-state reads included', () => {
+    for (const command of [
+      'ls /Users/me/.hivetty/work/shipper',
+      'gh pr view 249 --repo a/b --json mergeable,mergeStateStatus',
+      'git -C /x merge --ff-only origin/feature',
+      'gh pr checks 249 --repo a/b',
+    ]) {
+      expect(matches('Bash', 'Bash', { command }), command).toBe(true);
+    }
+  });
+
+  it('offers only once on the card, since no standing rung would cover it', () => {
+    expect(rungsFor('Bash', { command: merges[0] }).map((rung) => rung.id)).toEqual(['allow-once']);
+  });
+});

@@ -112,6 +112,15 @@ describe('launchHeadless', () => {
     expect(narrowed[0]).toBe('Read');
   });
 
+  it('keeps every Bash rule out of --allowedTools, so the fence decides each command', () => {
+    const granted = flag(
+      launchHeadless(spec({ grants: ['Read', 'Bash', 'Bash(gh pr view *)'] })).args,
+      '--allowedTools',
+    );
+
+    expect(granted).toBe('Read');
+  });
+
   it('asks for stream-json and ends with the prompt', () => {
     const { args } = launchHeadless(spec());
 

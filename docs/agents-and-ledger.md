@@ -1279,8 +1279,8 @@ a tool rather than by opening `~/.hivetty/config.json`. The projection
 `PrRecord` for one PR, from the same GitHub sweep the PRs panel runs, run
 fresh on each call since main keeps no snapshot of it:
 `state`, `findings` (unresolved review threads), `checks`, `branch`, `url`,
-`updatedAt`. The shipper holds no `gh api` (a REST or GraphQL merge hides
-behind that glob), so this is how its gate gets a contemporaneous thread count.
+`updatedAt`. The shipper reads this rather than `gh api` (whose REST or GraphQL
+merge the fence holds like `gh pr merge`), so this is how its gate gets a contemporaneous thread count.
 A PR the sweep does not list answers `pr: null` with a reason, which is a real
 answer: the sweep covers PRs the user authored, open or merged in the last day,
 on configured projects only.
@@ -2315,10 +2315,11 @@ one does. Packaged, the two trees ride `extraResources` beside the tray icon;
 `resources/agents/{builder,shipper,acr,fixer}/AGENT.md`, seeded like the
 skills. The shipper is a patrol: a ten-minute wake with
 `check: always` plus ledger wakes, `prs.json` in its work dir as memory, one
-`ledger_ask` per wake because an ask ends the wake. It holds neither
-`gh pr merge` nor `gh api` (the second reaches the same merge by REST or by a
-GraphQL mutation, and no glob over it could keep the consent narrow);
-HIVE-166's grant or the fence's card decides each merge, and
+`ledger_ask` per wake because an ask ends the wake. It holds all of Bash but
+never the merge: `isPrMerge` (`permission-rules.ts`) refuses `gh pr merge`, a
+REST merge through `gh api` and the GraphQL merge mutations to every wide rule,
+and no Bash rule reaches Claude's `--allowedTools`, so `approve` decides each
+command. HIVE-166's grant or the fence's card decides each merge, and
 `tests/resources/agents/shipped-agents.test.ts` proves it against the real
 `matches`, and pins every shipped icon to the Settings list so none draws as
 a question mark. The builder (HIVE-170) takes a plan by `ledger_ask` from the
