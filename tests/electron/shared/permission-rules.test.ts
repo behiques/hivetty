@@ -810,6 +810,20 @@ describe('a PR merge: the consent checkpoint survives a wide Bash grant', () => 
     }
   });
 
+  it('is granted by no wide rule when spelt as a branch merge or a merge-queue mutation', () => {
+    for (const command of [
+      'gh api -X POST repos/a/b/merges -f base=main -f head=feature',
+      'gh api /repos/{owner}/{repo}/merges -f base=main -f head=feature',
+      "gh api graphql -f query='mutation { enqueuePullRequest(input: {}) { clientMutationId } }'",
+      "gh api graphql -f query='mutation { addPullRequestToMergeQueue(input: {}) { clientMutationId } }'",
+    ]) {
+      for (const rule of ['Bash', '*', 'Bash(gh *)', 'Bash(*)']) {
+        expect(matches(rule, 'Bash', { command }), `${rule} / ${command}`).toBe(false);
+      }
+      expect(decide('Bash', { command }, ['Bash'])).toEqual({ behavior: 'ask' });
+    }
+  });
+
   it('is still granted by the auto-merge rule for its own repository, and by a one-shot', () => {
     const command = 'gh pr merge 3 --squash --repo a/b';
     expect(matches('Bash(gh pr merge * --repo a/b)', 'Bash', { command })).toBe(true);

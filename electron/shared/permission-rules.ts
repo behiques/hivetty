@@ -258,8 +258,10 @@ export function isToolName(value: unknown): value is string {
 const LITERAL_PREFIX = 'literal:';
 
 /**
- * A command that merges a pull request: `gh pr merge`, a REST merge through `gh api`, or the GraphQL
- * mutations that merge or queue one.
+ * A command that merges a pull request: `gh pr merge`, a REST merge through `gh api` (a pull's
+ * `/pulls/<n>/merge` or the branch-merge `repos/<o>/<r>/merges`), or the GraphQL mutations that merge,
+ * auto-merge or queue one (`mergePullRequest`, `enablePullRequestAutoMerge`, `enqueuePullRequest`,
+ * `addPullRequestToMergeQueue`).
  *
  * The merge is `ship`'s one consent checkpoint (HIVE-166), and an agent may hold all of Bash, so no wide
  * rule may grant it: only the auto-merge grant (`Bash(gh pr merge * --repo <owner>/<name>)`), a rule the
@@ -268,7 +270,8 @@ const LITERAL_PREFIX = 'literal:';
  * shortcut: it catches the merge a skill spells, not one hidden behind a shell variable or a raw `curl`;
  * upgrade to running agents without a GitHub token able to merge if that ever matters.
  */
-const PR_MERGE = /\bgh\b[\s\S]*?(\bpr\s+merge\b|\/pulls\/[^\s/]+\/merge\b|\bmergePullRequest\b|\benablePullRequestAutoMerge\b)/;
+const PR_MERGE =
+  /\bgh\b[\s\S]*?(\bpr\s+merge\b|\/pulls\/[^\s/]+\/merge\b|\brepos\/[^\s/]+\/[^\s/]+\/merges\b|\bmergePullRequest\b|\benablePullRequestAutoMerge\b|\benqueuePullRequest\b|\baddPullRequestToMergeQueue\b)/;
 
 export const isPrMerge = (toolName: string, input: Record<string, unknown>): boolean =>
   toolName === 'Bash' && PR_MERGE.test(str(input, 'command') ?? '');
