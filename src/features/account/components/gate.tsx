@@ -50,7 +50,7 @@ function SignIn({ message, onSignInWithCode }: { message?: string; onSignInWithC
         Sign in with browser
       </Button>
       <button type="button" className={cn(LINK, 'self-start text-control')} onClick={onSignInWithCode}>
-        Sign in with a code instead
+        Sign in with a code
       </button>
       {message ? <p className="text-ui-sm text-red">{message}</p> : null}
       <GateFooter />
