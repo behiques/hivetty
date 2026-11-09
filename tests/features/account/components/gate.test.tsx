@@ -43,7 +43,7 @@ describe('Gate (HIVE-265)', () => {
     expect(screen.getByRole('heading', { name: 'Sign in to HiveTTY Pro' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Sign in with browser' }));
     expect(account.signIn).toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Sign in with a code instead' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in with a code' }));
     expect(onSignInWithCode).toHaveBeenCalled();
     expect(account.signInWithCode).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull();

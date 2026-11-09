@@ -22,7 +22,7 @@ test('code sign-in: the gate shows the user code, approval lands on the welcome'
   const app = await launchLicensed({ stub, configPath, userDataDir });
   try {
     const page = await mainWindow(app);
-    await page.getByRole('button', { name: 'Sign in with a code instead' }).click();
+    await page.getByRole('button', { name: 'Sign in with a code' }).click();
     await expect(page.getByText(USER_CODE)).toBeVisible({ timeout: 15_000 });
     stub.controls.approveDeviceCode();
     await expect(page.getByText('Welcome, Ada')).toBeVisible({ timeout: 15_000 });
@@ -36,7 +36,7 @@ test('code sign-in: a cancel goes back to the gate with no error', async ({}, te
   const app = await launchLicensed({ stub, configPath, userDataDir });
   try {
     const page = await mainWindow(app);
-    await page.getByRole('button', { name: 'Sign in with a code instead' }).click();
+    await page.getByRole('button', { name: 'Sign in with a code' }).click();
     await expect(page.getByText(USER_CODE)).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: 'Cancel' }).click();
     await expectSignInGate(page);
