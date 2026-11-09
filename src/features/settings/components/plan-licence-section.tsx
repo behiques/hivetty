@@ -160,7 +160,7 @@ export function PlanLicenceSection() {
       {!signedOut && billing?.subscription ? (
         <Subscription billing={billing} sub={billing.subscription} orgId={orgId} />
       ) : null}
-      {signedOut ? null : <BillingPayments orgId={orgId} />}
+      {signedOut ? null : <BillingPayments key={orgId ?? ''} orgId={orgId} />}
       {signedOut ? (
         <p className="text-control text-subtle">Sign in to see your plan.</p>
       ) : (

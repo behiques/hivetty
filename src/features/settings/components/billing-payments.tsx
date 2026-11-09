@@ -29,20 +29,19 @@ function amount({ total, currency }: BillingInvoice): string {
 const day = (iso: string): string => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
 
 export function BillingPayments({ orgId }: { orgId: string | undefined }) {
-  // Kept with the org it was read for, so a switch never shows the last org's card under the new one.
-  const [loaded, setLoaded] = useState<{ orgId: string | undefined; payments: Payments | null } | null>(null);
+  // The caller keys this on the org, so a switch remounts it: no last org's card, invoices or error under the new one.
+  const [payments, setPayments] = useState<Payments | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    void readPayments(orgId).then((payments) => {
-      if (!cancelled) setLoaded({ orgId, payments });
+    void readPayments(orgId).then((next) => {
+      if (!cancelled) setPayments(next);
     });
     return () => {
       cancelled = true;
     };
   }, [orgId]);
 
-  const payments = loaded && loaded.orgId === orgId ? loaded.payments : null;
   if (!payments || (!payments.card && payments.invoices.length === 0)) return null;
 
   const open = async (url: string): Promise<void> => {
