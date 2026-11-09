@@ -437,7 +437,7 @@ export function SettingsOverlay({ groups = SETTINGS_GROUPS }: { groups?: Setting
         <div
           data-testid="settings-body"
           data-view={paneOpen ? 'pane' : 'list'}
-          className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] @xl:grid-cols-[148px_1fr]"
+          className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] @xl:grid-cols-[208px_1fr]"
         >
           <nav
             ref={navRef}
