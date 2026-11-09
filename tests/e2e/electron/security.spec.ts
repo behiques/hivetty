@@ -98,10 +98,12 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
   }));
 
   // HIVE-343: no verb here reads a stored token back. HIVE-375 added detect and rescan (a CLI's path and version),
-  // HIVE-376 signIn (a label from the CLI's own status verb). None of the three returns a credential.
+  // HIVE-376 signIn (a label from the CLI's own status verb). None of the three returns a credential. HIVE-372 added
+  // codexPluginStatus: off, the installed version, or the failed command and its message; no argument, no credential.
   expect(surface.cli).toEqual([
     'clearToken',
     'codexModels',
+    'codexPluginStatus',
     'detect',
     'rescan',
     'setToken',
