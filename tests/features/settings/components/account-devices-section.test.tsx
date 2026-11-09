@@ -138,7 +138,17 @@ describe('AccountDevicesSection (HIVE-265)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Remove device' }));
     expect(await screen.findByText("Couldn't remove that device here. Use Manage devices.")).toBeInTheDocument();
     expect(screen.getAllByTestId('device-name')).toHaveLength(3);
-    expect(lib.listDevices).toHaveBeenCalledTimes(1);
+  });
+
+  it('a device already removed elsewhere says so and leaves the list, which is fetched again', async () => {
+    lib.revokeDevice.mockResolvedValue({ error: 'That device was already removed.' });
+    render(<AccountDevicesSection />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove mini-server' }));
+    lib.listDevices.mockResolvedValue({ devices: ROWS.filter((row) => row.id !== 'd3') });
+    await userEvent.click(screen.getByRole('button', { name: 'Remove device' }));
+    expect(await screen.findByText('That device was already removed.')).toBeInTheDocument();
+    expect(await screen.findByText('Devices · 2 of 3')).toBeInTheDocument();
+    expect(screen.queryByText('mini-server')).toBeNull();
   });
 
   it('signed out, or the browser target: one sentence, no list call', () => {

@@ -70,6 +70,19 @@ describe('BillingPayments (the card and invoices, desktop billing)', () => {
     expect(screen.getByRole('button', { name: 'View invoice' })).toBeInTheDocument();
   });
 
+  it("switching org hides the last org's card and invoices until the new org's arrive", async () => {
+    const { rerender } = render(<BillingPayments orgId="org-a" />);
+    expect(await screen.findByText('Visa •••• 4242 · expires 03/27')).toBeInTheDocument();
+
+    let answer: (value: unknown) => void = () => undefined;
+    lib.readPayments.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    rerender(<BillingPayments orgId="org-b" />);
+    expect(screen.queryByText('Visa •••• 4242 · expires 03/27')).toBeNull();
+
+    answer({ card: { ...CARD, last4: '1111' }, invoices: [] });
+    expect(await screen.findByText('Visa •••• 1111 · expires 03/27')).toBeInTheDocument();
+  });
+
   it('nothing from the cloud (an older one, not the billing member), or nothing billed yet: nothing at all', async () => {
     lib.readPayments.mockResolvedValue(null);
     const { container, unmount } = render(<BillingPayments orgId={undefined} />);
