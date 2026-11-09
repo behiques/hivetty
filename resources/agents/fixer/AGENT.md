@@ -11,7 +11,6 @@ autonomy: act
 lane: thread
 limits:
   turns: 150
-  budget_usd: 25
   parallel: 2
 ---
 
