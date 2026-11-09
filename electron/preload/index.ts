@@ -3,10 +3,12 @@ import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'ele
 
 import type {
   AccountState,
+  BillingPayments,
   BillingSummary,
   DeviceCode,
   DevicesResult,
   OpenWebResult,
+  RevokeResult,
   SignInResult,
   TrialResult,
 } from '@shared/account-contract';
@@ -917,6 +919,14 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.accountSwitchOrg, id) as Promise<LicenceState>,
     billing: (orgId?: string): Promise<BillingSummary | null> =>
       ipcRenderer.invoke(CH.accountBilling, orgId) as Promise<BillingSummary | null>,
+    payments: (orgId?: string): Promise<BillingPayments | null> =>
+      ipcRenderer.invoke(CH.accountPayments, orgId) as Promise<BillingPayments | null>,
+    revokeDevice: (id: string): Promise<RevokeResult> =>
+      ipcRenderer.invoke(CH.accountRevokeDevice, id) as Promise<RevokeResult>,
+    openBilling: (orgId?: string): Promise<OpenWebResult> =>
+      ipcRenderer.invoke(CH.accountOpenBilling, orgId) as Promise<OpenWebResult>,
+    openInvoice: (url: string): Promise<OpenWebResult> =>
+      ipcRenderer.invoke(CH.accountOpenInvoice, url) as Promise<OpenWebResult>,
   },
   licence: {
     state: (): Promise<LicenceState> => ipcRenderer.invoke(CH.licenceState) as Promise<LicenceState>,

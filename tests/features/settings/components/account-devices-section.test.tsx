@@ -6,7 +6,7 @@ import { AccountDevicesSection } from '@features/settings/components/account-dev
 
 const account = vi.hoisted(() => ({ current: null as unknown }));
 const licence = vi.hoisted(() => ({ current: null as unknown }));
-const lib = vi.hoisted(() => ({ listDevices: vi.fn(), openAccountWeb: vi.fn(), signOut: vi.fn() }));
+const lib = vi.hoisted(() => ({ listDevices: vi.fn(), openAccountWeb: vi.fn(), signOut: vi.fn(), revokeDevice: vi.fn() }));
 vi.mock('@hooks/use-account', () => ({ useAccount: () => account.current }));
 vi.mock('@hooks/use-licence', () => ({ useLicence: () => licence.current }));
 vi.mock('@lib/account', async (real) => ({ ...(await real<object>()), ...lib }));
@@ -35,6 +35,7 @@ describe('AccountDevicesSection (HIVE-265)', () => {
     lib.listDevices.mockReset().mockResolvedValue({ devices: ROWS });
     lib.openAccountWeb.mockReset().mockResolvedValue({ ok: true });
     lib.signOut.mockReset().mockResolvedValue(undefined);
+    lib.revokeDevice.mockReset().mockResolvedValue({ ok: true });
   });
   afterEach(() => vi.useRealTimers());
 
@@ -104,6 +105,40 @@ describe('AccountDevicesSection (HIVE-265)', () => {
     // InlineConfirm: its confirm button carries the confirmLabel
     await userEvent.click(screen.getByRole('button', { name: 'Sign out of HiveTTY Pro' }));
     expect(lib.signOut).toHaveBeenCalled();
+  });
+
+  it('Remove is on every device but this Mac, which keeps Sign out', async () => {
+    render(<AccountDevicesSection />);
+    expect(await screen.findByText('Devices · 3 of 3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove ana-air' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove mini-server' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove studio-mac' })).toBeNull();
+  });
+
+  it('Remove confirms in place; Cancel keeps the device, confirming removes it and lists again', async () => {
+    render(<AccountDevicesSection />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove ana-air' }));
+    expect(screen.getByRole('alertdialog', { name: 'Remove ana-air' })).toHaveTextContent('Remove ana-air?');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(lib.revokeDevice).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+
+    lib.listDevices.mockResolvedValue({ devices: ROWS.filter((row) => row.id !== 'd2') });
+    await userEvent.click(screen.getByRole('button', { name: 'Remove ana-air' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove device' }));
+    expect(lib.revokeDevice).toHaveBeenCalledWith('d2');
+    expect(await screen.findByText('Devices · 2 of 3')).toBeInTheDocument();
+    expect(lib.listDevices).toHaveBeenCalledTimes(2);
+  });
+
+  it('a refused removal says why in one line and keeps the list', async () => {
+    lib.revokeDevice.mockResolvedValue({ error: "Couldn't remove that device here. Use Manage devices." });
+    render(<AccountDevicesSection />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove mini-server' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove device' }));
+    expect(await screen.findByText("Couldn't remove that device here. Use Manage devices.")).toBeInTheDocument();
+    expect(screen.getAllByTestId('device-name')).toHaveLength(3);
+    expect(lib.listDevices).toHaveBeenCalledTimes(1);
   });
 
   it('signed out, or the browser target: one sentence, no list call', () => {

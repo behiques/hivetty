@@ -21,7 +21,10 @@ export async function expectPane(page: Page, id: string): Promise<void> {
 /** Opens Settings if it is closed, then the pane with this id. */
 export async function openPane(page: Page, id: string): Promise<void> {
   if (!(await settingsNav(page).isVisible())) {
-    await page.getByRole('button', { name: 'Settings' }).click();
+    // Signed in, the avatar replaces the gear on the bar; ⌘, opens Settings either way.
+    const gear = page.getByRole('navigation', { name: 'Places' }).getByRole('button', { name: 'Settings', exact: true });
+    if (await gear.count()) await gear.click();
+    else await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Comma' : 'Control+Comma');
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   }
   await settingsNav(page).locator(`[data-pane="${id}"]`).click();

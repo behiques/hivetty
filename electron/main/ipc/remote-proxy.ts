@@ -163,6 +163,14 @@ function localAnswerFor(
       return (id: unknown) => ACCOUNT_CALLS[CH.accountSwitchOrg](id);
     case CH.accountBilling:
       return (orgId: unknown) => ACCOUNT_CALLS[CH.accountBilling](orgId);
+    case CH.accountPayments:
+      return (orgId: unknown) => ACCOUNT_CALLS[CH.accountPayments](orgId);
+    case CH.accountRevokeDevice:
+      return (id: unknown) => ACCOUNT_CALLS[CH.accountRevokeDevice](id);
+    case CH.accountOpenBilling:
+      return (orgId: unknown) => ACCOUNT_CALLS[CH.accountOpenBilling](orgId);
+    case CH.accountOpenInvoice:
+      return (url: unknown) => ACCOUNT_CALLS[CH.accountOpenInvoice](url);
     case CH.licenceStartTrial:
     case CH.licencePaused:
       return () => LICENCE_CALLS[channel]();

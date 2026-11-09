@@ -8,11 +8,13 @@ const licence = vi.hoisted(() => ({ current: null as unknown }));
 const refreshLicence = vi.hoisted(() => vi.fn());
 const openAccountWeb = vi.hoisted(() => vi.fn());
 const readBilling = vi.hoisted(() => vi.fn());
+const openBilling = vi.hoisted(() => vi.fn());
+const readPayments = vi.hoisted(() => vi.fn());
 const activeOrg = vi.hoisted(() => ({ current: undefined as unknown }));
 vi.mock('@hooks/use-licence', () => ({ useLicence: () => licence.current }));
 vi.mock('@hooks/use-orgs', () => ({ useActiveOrg: () => activeOrg.current }));
 vi.mock('@lib/licence', async (real) => ({ ...(await real<object>()), refreshLicence }));
-vi.mock('@lib/account', () => ({ openAccountWeb, readBilling }));
+vi.mock('@lib/account', () => ({ openAccountWeb, openBilling, readBilling, readPayments, openInvoice: vi.fn() }));
 
 const NOW = new Date('2026-11-07T12:00:00Z').getTime();
 const DAY_S = 86_400;
@@ -24,6 +26,8 @@ describe('PlanLicenceSection', () => {
     refreshLicence.mockReset().mockResolvedValue(null);
     openAccountWeb.mockReset().mockResolvedValue({ ok: true });
     readBilling.mockReset().mockResolvedValue(null);
+    openBilling.mockReset().mockResolvedValue({ ok: true });
+    readPayments.mockReset().mockResolvedValue(null);
     activeOrg.current = undefined;
   });
   afterEach(() => {
@@ -103,8 +107,21 @@ describe('PlanLicenceSection', () => {
       expect(within(group).getByText('Status').nextSibling).toHaveTextContent('Active');
       expect(within(group).getByText('Renews on').nextSibling).toHaveTextContent(/2026/);
 
-      await userEvent.click(within(group).getByRole('button', { name: 'Invoices & payment' }));
-      expect(openAccountWeb).toHaveBeenCalledWith('/account/plan');
+      // Stripe's portal for this org, through main (which falls back to the plan page itself).
+      await userEvent.click(within(group).getByRole('button', { name: 'Manage billing' }));
+      expect(openBilling).toHaveBeenCalledWith('org-acme');
+      expect(openAccountWeb).not.toHaveBeenCalled();
+      // The card and invoices are read for the same org.
+      expect(readPayments).toHaveBeenCalledWith('org-acme');
+    });
+
+    it('Manage billing that cannot open says why in one line', async () => {
+      readBilling.mockResolvedValue({ orgId: 'org-me', subscription: SUB, canManage: true, seated: 1 });
+      openBilling.mockResolvedValue({ error: 'Sign in to HiveTTY first.' });
+      licence.current = { kind: 'licensed', ...terms };
+      render(<PlanLicenceSection />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
+      expect(await screen.findByText('Sign in to HiveTTY first.')).toBeInTheDocument();
     });
 
     it('a plan set to cancel says when it ends', async () => {

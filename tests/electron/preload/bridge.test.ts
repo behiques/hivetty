@@ -1008,6 +1008,16 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(channel);
   });
 
+  it.each([
+    ['payments', CH.accountPayments, 'org-acme'],
+    ['revokeDevice', CH.accountRevokeDevice, 'd2'],
+    ['openBilling', CH.accountOpenBilling, 'org-acme'],
+    ['openInvoice', CH.accountOpenInvoice, 'https://invoice.stripe.com/i/1'],
+  ])('account.%s invokes its channel with its argument (desktop billing)', async (verb, channel, arg) => {
+    await (account()[verb] as (value: string) => Promise<unknown>)(arg);
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(channel, arg);
+  });
+
   it('account.billing invokes its channel with the org (the Account centre)', async () => {
     await (account().billing as (orgId?: string) => Promise<unknown>)('org-acme');
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.accountBilling, 'org-acme');

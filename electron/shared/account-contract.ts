@@ -60,3 +60,32 @@ export interface BillingSummary {
   canManage: boolean;
   seated: number;
 }
+
+/** The card on file, from `GET /api/billing/payments`. */
+export interface BillingCard {
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+/** One finalised invoice. `total` is in the currency's minor unit; links are https on stripe.com, or null. */
+export interface BillingInvoice {
+  id: string;
+  number: string | null;
+  created: string;
+  total: number;
+  currency: string;
+  status: string;
+  pdfUrl: string | null;
+  hostedUrl: string | null;
+}
+
+/** `account:payments`: the org's card and last 12 invoices. Main answers `null` when the cloud has none to show. */
+export interface BillingPayments {
+  card: BillingCard | null;
+  invoices: BillingInvoice[];
+}
+
+/** `account:revoke-device`. */
+export type RevokeResult = { ok: true } | { error: string };

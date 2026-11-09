@@ -19,10 +19,12 @@
 
 import type {
   AccountState,
+  BillingPayments,
   BillingSummary,
   DeviceCode,
   DevicesResult,
   OpenWebResult,
+  RevokeResult,
   SignInResult,
   TrialResult,
 } from './account-contract';
@@ -929,6 +931,14 @@ export const CH = {
   accountSwitchOrg: 'account:switch-org',
   /** The Account centre: an org's billing summary from the cloud; `null` when it has nothing to show. Process-local. */
   accountBilling: 'account:billing',
+  /** The Account centre: an org's card and last 12 invoices; `null` when the cloud has none to show. Process-local. */
+  accountPayments: 'account:payments',
+  /** Remove one of this account's devices (not this one: that is Sign out). Process-local. */
+  accountRevokeDevice: 'account:revoke-device',
+  /** Manage billing: the org's Stripe portal in the browser, else the signed-in plan page. Process-local. */
+  accountOpenBilling: 'account:open-billing',
+  /** An invoice's PDF or page in the browser: https on stripe.com only. Process-local. */
+  accountOpenInvoice: 'account:open-invoice',
   configCloneStart: 'config:clone-start',
   configCloneCancel: 'config:clone-cancel',
   configCloneDone: 'config:clone-done', // main → renderer
@@ -3225,6 +3235,14 @@ export interface HiveBridge {
     switchOrg(id: string): Promise<LicenceState>;
     /** The Account centre: this org's billing (the personal org without one); `null` when the cloud has nothing to show. */
     billing(orgId?: string): Promise<BillingSummary | null>;
+    /** The Account centre: this org's card and last 12 invoices; `null` when the cloud has none to show. */
+    payments(orgId?: string): Promise<BillingPayments | null>;
+    /** Remove one of this account's other devices. */
+    revokeDevice(id: string): Promise<RevokeResult>;
+    /** Manage billing: the org's Stripe portal, else the signed-in plan page. */
+    openBilling(orgId?: string): Promise<OpenWebResult>;
+    /** An invoice's PDF or page, https on stripe.com only. */
+    openInvoice(url: string): Promise<OpenWebResult>;
   };
   /** The licence (HIVE-267). The gate is HIVE-265's. */
   licence: {

@@ -69,6 +69,13 @@ describe('licence composition', () => {
     expect(ACCOUNT_CALLS[CH.accountState]()).toEqual({ kind: 'signing-in' });
     ACCOUNT_CALLS[CH.accountCancel]();
     expect(ACCOUNT_CALLS[CH.accountState]()).toEqual({ kind: 'signed-out' });
+
+    // Invoice links open through the browser startLicence was given, and only Stripe's.
+    await expect(ACCOUNT_CALLS[CH.accountOpenInvoice]('https://invoice.stripe.com/i/1')).resolves.toEqual({ ok: true });
+    expect(openExternal).toHaveBeenLastCalledWith('https://invoice.stripe.com/i/1');
+    await expect(ACCOUNT_CALLS[CH.accountOpenInvoice]('https://evil.example/i')).resolves.toEqual({
+      error: expect.any(String),
+    });
   });
 
   it('sends a packaged release candidate to the dev cloud, returning on the packaged scheme', async () => {
@@ -531,6 +538,9 @@ describe('the renewal asks for the stored org (HIVE-291)', () => {
     await expect(ACCOUNT_CALLS[CH.accountOrgs]()).resolves.toEqual([]);
     await expect(ACCOUNT_CALLS[CH.accountSwitchOrg]('org-b')).resolves.toEqual({ kind: 'unlicensed' });
     await expect(ACCOUNT_CALLS[CH.accountBilling]('org-b')).resolves.toBeNull();
+    await expect(ACCOUNT_CALLS[CH.accountPayments]('org-b')).resolves.toBeNull();
+    await expect(ACCOUNT_CALLS[CH.accountRevokeDevice]('d2')).resolves.toEqual({ error: expect.any(String) });
+    await expect(ACCOUNT_CALLS[CH.accountOpenBilling]('org-b')).resolves.toEqual({ error: expect.any(String) });
   });
 
   it('account:switch-org writes activeOrg, broadcasts it, and renews asking for it', async () => {

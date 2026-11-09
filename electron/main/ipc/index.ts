@@ -2003,6 +2003,10 @@ export function registerIpcHandlers(
   handle(CH.accountOrgs, () => ACCOUNT_CALLS[CH.accountOrgs]());
   handle(CH.accountSwitchOrg, (_event, id: unknown) => ACCOUNT_CALLS[CH.accountSwitchOrg](id));
   handle(CH.accountBilling, (_event, orgId: unknown) => ACCOUNT_CALLS[CH.accountBilling](orgId));
+  handle(CH.accountPayments, (_event, orgId: unknown) => ACCOUNT_CALLS[CH.accountPayments](orgId));
+  handle(CH.accountRevokeDevice, (_event, id: unknown) => ACCOUNT_CALLS[CH.accountRevokeDevice](id));
+  handle(CH.accountOpenBilling, (_event, orgId: unknown) => ACCOUNT_CALLS[CH.accountOpenBilling](orgId));
+  handle(CH.accountOpenInvoice, (_event, url: unknown) => ACCOUNT_CALLS[CH.accountOpenInvoice](url));
   handle(CH.licenceStartTrial, () => LICENCE_CALLS[CH.licenceStartTrial]());
   handle(CH.licencePaused, () => LICENCE_CALLS[CH.licencePaused]());
   // HIVE-265: forwarded, not process-local; a client attached here reads this machine's licence, as counts.

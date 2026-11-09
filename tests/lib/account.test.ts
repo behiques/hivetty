@@ -5,7 +5,11 @@ import {
   initialOf,
   listDevices,
   listOrgs,
+  openBilling,
+  openInvoice,
   readBilling,
+  readPayments,
+  revokeDevice,
   onAccountChanged,
   onDeviceCode,
   openAccountWeb,
@@ -146,6 +150,31 @@ describe('src/lib/account', () => {
       vi.spyOn(console, 'error').mockImplementation(() => undefined);
       bridge({ billing: vi.fn().mockRejectedValue(new Error('x')) });
       await expect(readBilling(undefined)).resolves.toBeNull();
+      expect(console.error).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe.each([
+    ['readPayments', readPayments, 'payments', 'org-a', { card: null, invoices: [] }],
+    ['revokeDevice', revokeDevice, 'revokeDevice', 'd2', { ok: true }],
+    ['openBilling', openBilling, 'openBilling', 'org-a', { ok: true }],
+    ['openInvoice', openInvoice, 'openInvoice', 'https://invoice.stripe.com/i/1', { ok: true }],
+  ] as const)('%s (desktop billing)', (_name, call, verb, arg, answer) => {
+    it('answers null with no bridge', async () => {
+      await expect(call(arg)).resolves.toBeNull();
+    });
+
+    it('passes its argument to main and the answer back', async () => {
+      const fn = vi.fn().mockResolvedValue(answer);
+      bridge({ [verb]: fn });
+      await expect(call(arg)).resolves.toEqual(answer);
+      expect(fn).toHaveBeenCalledWith(arg);
+    });
+
+    it('answers null and logs when main refuses', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      bridge({ [verb]: vi.fn().mockRejectedValue(new Error('x')) });
+      await expect(call(arg)).resolves.toBeNull();
       expect(console.error).toHaveBeenCalledTimes(1);
     });
   });

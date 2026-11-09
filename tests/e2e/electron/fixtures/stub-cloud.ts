@@ -39,6 +39,10 @@ export interface StubControls {
   setOrgs(orgs: StubOrg[]): void;
   /** The Account centre: GET /api/billing answers this summary for any org; `null` (the default) answers 404, billing off. */
   setBilling(summary: Record<string, unknown> | null): void;
+  /** GET /api/billing/payments answers this card and invoices; `null` (the default) answers 404, an older cloud. */
+  setPayments(payments: Record<string, unknown> | null): void;
+  /** Another device on the account, listed after this one; POST /api/account/devices/:id/revoke removes it. */
+  addDevice(device: { id: string; name: string }): void;
 }
 
 export interface StubCloud {
@@ -132,6 +136,8 @@ export async function startStubCloud(): Promise<StubCloud> {
     refresh: new Set<string>(),
     orgs: [DEFAULT_ORG] as StubOrg[],
     billing: null as Record<string, unknown> | null,
+    payments: null as Record<string, unknown> | null,
+    otherDevices: [] as { id: string; name: string }[],
   };
   const calls: StubCall[] = [];
   let url = '';
@@ -253,8 +259,25 @@ export async function startStubCloud(): Promise<StubCloud> {
       if (unauthorised(req, res)) return;
       const at = new Date().toISOString();
       return send(res, 200, {
-        devices: [{ id: state.deviceId, name: 'Test Mac', lastSeenAt: at, createdAt: at, current: true }],
+        devices: [
+          { id: state.deviceId, name: 'Test Mac', lastSeenAt: at, createdAt: at, current: true },
+          ...state.otherDevices.map((device) => ({ ...device, lastSeenAt: at, createdAt: at, current: false })),
+        ],
       });
+    }
+    const revoke = /^\/api\/account\/devices\/([^/]+)\/revoke$/.exec(path);
+    if (req.method === 'POST' && revoke) {
+      if (unauthorised(req, res)) return;
+      const id = decodeURIComponent(revoke[1] ?? '');
+      const before = state.otherDevices.length;
+      state.otherDevices = state.otherDevices.filter((device) => device.id !== id);
+      if (state.otherDevices.length === before) return send(res, 404, { error: 'not_found' });
+      res.writeHead(204).end();
+      return;
+    }
+    if (req.method === 'GET' && path === '/api/billing/payments') {
+      if (unauthorised(req, res)) return;
+      return state.payments ? send(res, 200, state.payments) : send(res, 404, { error: 'not_found' });
     }
     if (req.method === 'GET' && path === '/api/orgs') {
       if (unauthorised(req, res)) return;
@@ -298,6 +321,8 @@ export async function startStubCloud(): Promise<StubCloud> {
     completeCheckout: (plan) => Object.assign(state, { plan, trialEnds: undefined, refusal: null, next: {} }),
     setOrgs: (orgs) => (state.orgs = orgs),
     setBilling: (summary) => (state.billing = summary),
+    setPayments: (payments) => (state.payments = payments),
+    addDevice: (device) => state.otherDevices.push(device),
   };
 
   return {
