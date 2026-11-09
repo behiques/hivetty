@@ -86,9 +86,9 @@ The gate reads after it, never before.
 
 Two readings, by who is running this.
 
-**As the shipper.** The shipper holds no `gh api`: that command reaches the
-merge by REST or by a GraphQL mutation, and no glob over it could keep the
-merge consent narrow. Its reading is
+**As the shipper.** The shipper keeps to `gh pr view`: its fence holds a merge
+by REST or by a GraphQL mutation through `gh api` exactly like `gh pr merge`,
+and the gate needs nothing more. Its reading is
 
 ```
 gh pr view <N> --repo <owner>/<repo> --json state,isDraft,mergeable,mergeStateStatus,reviewDecision,headRefOid,statusCheckRollup
@@ -198,9 +198,9 @@ HiveTTY's permission fence and becomes an inbox card; the run ends `asking`,
 and the answer wakes a fresh run. That card is the checkpoint, and the wait
 behind it voids the CLEAR like any other wait: **the resumed run re-runs the
 gate** and merges on the new CLEAR, which the one-shot grant now lets through.
-The shipper holds no `gh api` at all, because a merge by REST or by GraphQL
-mutation is the same act without the consent; a session that does hold it
-does not use it for that either.
+A merge by REST or by GraphQL mutation is the same act, so the fence holds it
+like `gh pr merge` for the shipper; a session that holds `gh api` does not use
+it for that either.
 
 ## Step 4: teardown
 

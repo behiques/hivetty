@@ -58,11 +58,17 @@ const FOREGROUND_ONLY = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' };
  */
 function grantableTools(tools: readonly string[]): string[] {
   const onceOnly = [...ONCE_ONLY_TOOLS];
-  return tools.flatMap((rule) =>
-    onceOnly.some((tool) => namesTool(rule, tool))
+  return tools.flatMap((rule) => {
+    /*
+      Every Bash rule stays with the fence. The CLI would run a granted `Bash` without asking, and a PR
+      merge is a Bash command no wide rule may grant (`isPrMerge`); the CLI's own rule grammar cannot
+      say "all Bash but that", so `approve` decides each command against `HIVE_GRANTS`, which keeps it.
+    */
+    if (rule === 'Bash' || rule.startsWith('Bash(')) return [];
+    return onceOnly.some((tool) => namesTool(rule, tool))
       ? HIVE_CONSENT_TOOLS.filter((tool) => !ONCE_ONLY_TOOLS.has(tool) && namesTool(rule, tool))
-      : [rule],
-  );
+      : [rule];
+  });
 }
 
 export function launchHeadless(spec: HeadlessSpec): HeadlessPlan {

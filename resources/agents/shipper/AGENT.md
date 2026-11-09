@@ -8,7 +8,7 @@ wake:
   check: always
   on: [ledger]
 skills: [ship, merge-pr]
-tools: [Read, Write, Skill, Bash(gh pr view *), Bash(gh pr checks *), Bash(gh pr ready *), Bash(gh repo view *), Bash(gh workflow list *), Bash(gh workflow view *), Bash(git -C * fetch *), Bash(git -C * merge *), Bash(git -C * push *), Bash(git -C * rev-parse *), Bash(git -C * rev-list *), Bash(git -C * status *), Bash(git -C * worktree *), Bash(git -C * branch *), Bash(git -C * checkout *), Bash(git -C * pull *), Bash(git -C * log *), Bash(git -C * diff *), Bash(jira-writer *), mcp__hive__jira_transition]
+tools: [Read, Write, Skill, Bash, mcp__hive__jira_transition]
 autonomy: act
 lane: repo
 limits:
@@ -81,9 +81,9 @@ the review's own scripts need a shell this fence does not give you. No
 
 ## The merge
 
-Neither `gh pr merge` nor `gh api` is among your granted tools, on purpose:
-the first is the merge, and the second reaches the same merge by REST or by a
-GraphQL mutation, so no glob over it could keep the consent narrow. Your
+You hold all of Bash, but never the merge: the fence grants `gh pr merge`, a
+REST merge through `gh api` and the GraphQL merge mutations to no wide rule,
+only to the auto-merge grant or the card's one-shot. Your
 gate reads through `gh pr view --json`, `gh pr checks` and `gh workflow`; the
 unresolved-thread check is `mcp__hive__pr`'s `findings` plus the `findings`
 claim, both read through `merge-pr`, and the fixer's `clean` is history that
@@ -99,7 +99,7 @@ Consent lives in the config: `mcp__hive__projects` lists every project with
 its `path` and `autoMerge`; the one whose `path` is this PR's checkout with
 `autoMerge: true` means the approval wait is skipped. Nothing else about the
 stages changes. `mcp__hive__pr` gives you HiveTTY's own unresolved-thread
-count for a PR (`findings`) without `gh api`, which you do not hold.
+count for a PR (`findings`) without a `gh api` call.
 
 ## Lines you keep
 
