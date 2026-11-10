@@ -216,7 +216,7 @@ type BuildWakeCommand = (
   trigger: string,
   extra?: string,
   options?: { kind?: RunKind; lane?: string },
-) => WakeInvocation | { problem: string };
+) => WakeInvocation | { problem: string; waitFor?: HarnessId };
 
 const describe = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
@@ -458,11 +458,24 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       Which CLI runs this wake (HIVE-340), once per wake: a lapse moves the next wake, never this
       one. Before any write, so a refusal leaves nothing behind.
     */
-    const resolved = resolveHarness(def, fencedRules(def, grants), {
-      adapter: deps.adapter ?? headlessAdapter,
-      binary,
-      ...(deps.gate === undefined ? {} : { gate: deps.gate }),
-    });
+    /*
+      The CLI this lane's conversation is on, when it has one to keep (HIVE-399). A task run and a
+      parked rotation start fresh whatever happens, so they hold nothing.
+    */
+    const held: HarnessId | undefined =
+      !task && pending === undefined && previous.sessionUuid !== undefined
+        ? (previous.harness ?? 'claude-code')
+        : undefined;
+    const resolved = resolveHarness(
+      def,
+      fencedRules(def, grants),
+      {
+        adapter: deps.adapter ?? headlessAdapter,
+        binary,
+        ...(deps.gate === undefined ? {} : { gate: deps.gate }),
+      },
+      held,
+    );
 
     if ('problem' in resolved) return resolved;
 
@@ -482,8 +495,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       and it starts fresh anyway.
     */
     const recorded = previous.harness ?? 'claude-code';
-    const switched =
-      !task && pending === undefined && previous.sessionUuid !== undefined && recorded !== adapter.id;
+    const switched = held !== undefined && held !== adapter.id;
     const prompt = systemPromptFor(AGENT_PREAMBLE, def);
     const promptHash = createHash('sha256').update(prompt).digest('hex');
     /*

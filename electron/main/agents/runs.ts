@@ -162,7 +162,7 @@ export interface RunTrackerDeps {
         /** See {@link FinalizeInfo.startsRotation}. */
         startsRotation?: true;
       })
-    | { problem: string };
+    | { problem: string; waitFor?: HarnessId };
   /**
    * `limits.parallel` for this agent, read from the folder watcher's cache
    * (HIVE-128). `1` for an agent the cache has not seen, which is the default

@@ -1448,6 +1448,79 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
         'slack-watcher runs in a container, and codex agents cannot yet — run it on the host, or name claude-code first in harness:.',
     });
   });
+
+  describe('fallback: wait (HIVE-399)', () => {
+    const WAIT_MD = AGENT_MD.replace('limits:', 'harness: [codex, claude-code]\nfallback: wait\nlimits:');
+    const onCodex = (): AgentRunState => ({
+      status: 'sleeping',
+      runsSinceRotate: 1,
+      runs: [],
+      sessionUuid: 'old-thread',
+      harness: 'codex',
+      promptHash: promptHashNow(),
+    });
+    const wake = (codexOn: boolean) =>
+      openBuild({
+        adapter,
+        gate: { ...OPEN_GATE, enabled: (id: HarnessId) => codexOn || id !== 'codex' },
+        env: () => ({ PATH: '/opt/bin', HOME: '/home/u' }),
+        isExecutable: (path) => path === '/opt/bin/codex' || path === '/usr/local/bin/claude',
+      });
+
+    it("queues behind the lane's CLI instead of starting fresh on another, writing nothing", () => {
+      files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = WAIT_MD;
+      stored['slack-watcher'] = onCodex();
+      const before = structuredClone(stored['slack-watcher']);
+
+      expect(wake(false)('slack-watcher', 'manual')).toEqual({
+        problem: 'codex is turned off for agents in Settings › Harnesses',
+        waitFor: 'codex',
+      });
+      expect(stored['slack-watcher']).toEqual(before);
+    });
+
+    it('resumes the same conversation once the CLI is back', () => {
+      files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = WAIT_MD;
+      stored['slack-watcher'] = onCodex();
+
+      expect(wake(false)('slack-watcher', 'manual')).toHaveProperty('waitFor', 'codex');
+
+      const built = wake(true)('slack-watcher', 'manual');
+
+      if ('problem' in built) throw new Error(built.problem);
+      expect(built.harness).toBe('codex');
+      expect(built.sessionUuid).toBe('old-thread');
+      expect(built.args.join(' ')).toContain('old-thread');
+      expect(built.args.join('\n')).not.toContain('This is a fresh conversation');
+    });
+
+    it('a lane with no conversation resolves down harness: as usual', () => {
+      files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = WAIT_MD;
+      const built = wake(false)('slack-watcher', 'manual');
+
+      if ('problem' in built) throw new Error(built.problem);
+      expect(built.harness).toBe('claude-code');
+    });
+
+    it('a parked rotation starts fresh on the next CLI, as today', () => {
+      files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = WAIT_MD;
+      stored['slack-watcher'] = { ...onCodex(), pendingSession: { uuid: 'parked-uuid', handoff: 'Pick up the PR.' } };
+      const built = wake(false)('slack-watcher', 'manual');
+
+      if ('problem' in built) throw new Error(built.problem);
+      expect(built.harness).toBe('claude-code');
+      expect(built.sessionUuid).toBe('parked-uuid');
+    });
+
+    it('a task run starts fresh on the next CLI, as today', () => {
+      files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = WAIT_MD;
+      stored['slack-watcher'] = onCodex();
+      const built = wake(false)('slack-watcher', 'manual', undefined, { kind: 'task' });
+
+      if ('problem' in built) throw new Error(built.problem);
+      expect(built.harness).toBe('claude-code');
+    });
+  });
 });
 
 describe('a copilot wake (HIVE-343)', () => {
