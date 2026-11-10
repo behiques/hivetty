@@ -3,6 +3,11 @@ name: acr
 description: Reviews a pull request with the pr-review skill. By default it posts one review, approving only when clean; with --self it reviews your work on the branch and reports the findings back instead. Call it as "run acr <project> <pr> [--self]", or ask it with a PR link and --self.
 icon: ph-binoculars
 model: sonnet
+codex:
+  model: gpt-6.1-terra
+  effort: medium
+copilot:
+  model: claude-sonnet-5.5
 wake:
   on: [ledger]
 autonomy: act

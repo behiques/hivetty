@@ -3,6 +3,11 @@ name: shipper
 description: Drives draft PRs to merge. Takes a PR by ledger_ask, gets it self-reviewed by acr, marks it ready, watches CI, hands findings to fixer, waits for approval or merges under a project's auto-merge consent, then moves the ticket to Done. Reports each stage to the ledger.
 icon: ph-paper-plane-tilt
 model: sonnet
+codex:
+  model: gpt-6.1-terra
+  effort: medium
+copilot:
+  model: claude-sonnet-5.5
 wake:
   every: 10m
   check: always
