@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { cn } from '@/lib/utils';
+
+import { CliMark } from '@components/ui/cli-mark';
+import { Hint } from '@components/ui/hint';
 import { IconPicker } from '@components/ui/icon-picker';
 import {
   SegmentedControl,
@@ -10,6 +14,7 @@ import { Switch } from '@components/ui/switch';
 import { CliDock } from '@features/shared/components/cli-dock';
 import { CodexModelField } from '@features/shared/components/codex-model-field';
 import { SettingsGroup } from '@features/shared/components/settings-group';
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import {
   AGENT_FIELDS,
   AGENT_LIMIT_DEFAULTS,
@@ -713,13 +718,6 @@ export function AgentForm({
     onChange(patchFrontmatter(source, path, trimmed));
   };
 
-  /*
-    `name` never takes the `clear` branch, unlike every other text field.
-    Absence is not a legal value for it — the folder is named from it — so an
-    emptied box has to stay an empty `name:` line the user can type back into,
-    rather than a deleted key that `patchFrontmatter` would later re-add at the
-    bottom of the frontmatter, below the block it was declared above.
-  */
   // ---- runs on (HIVE-396) ----------------------------------------------
 
   const { verdicts, defaultCli, cardModels, codexModels } = runsOn;
@@ -747,6 +745,10 @@ export function AgentForm({
   const writeHarness = (next: HarnessId[]) => onChange(patchFrontmatter(source, 'harness', `[${next.join(', ')}]`));
   const pickPrimary = (cli: HarnessId) =>
     writeHarness(saved.length === 0 ? [cli] : [cli, ...saved.filter((id) => id !== cli)]);
+  /** A fallback on or off: on joins the end of the list, so the order is the order turned on. */
+  const toggleFallback = (cli: HarnessId) =>
+    writeHarness(list.includes(cli) ? list.filter((id) => id !== cli) : [...list, cli]);
+  const others = HARNESS_IDS.filter((cli) => cli !== primary);
   /** Clear a CLI's model, and its block with it once nothing is left under it. */
   const clearModel = (cli: 'codex' | 'copilot') => onChange(clearParent(cli, clear(`${cli}.model`)));
 
@@ -800,6 +802,13 @@ export function AgentForm({
     );
   };
 
+  /*
+    `name` never takes the `clear` branch, unlike every other text field.
+    Absence is not a legal value for it — the folder is named from it — so an
+    emptied box has to stay an empty `name:` line the user can type back into,
+    rather than a deleted key that `patchFrontmatter` would later re-add at the
+    bottom of the frontmatter, below the block it was declared above.
+  */
   const setName = (value: string) => {
     const trimmed = value.trim();
 
@@ -1407,6 +1416,38 @@ export function AgentForm({
             caption={saved.length === 0 ? 'Default CLI for agents' : null}
           />
           {row(primary === 'claude-code' ? 'model' : `${primary}.model`, 'model', modelControl(primary))}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-micro text-subtle">If {CLI_NAMES[primary]} can&apos;t run</span>
+            <div className="flex flex-wrap gap-1.5">
+              {others.map((cli) => {
+                const on = list.includes(cli);
+                const verdict = refused(cli);
+                return (
+                  <Hint key={cli} label={verdict?.reason}>
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      aria-label={CLI_NAMES[cli]}
+                      disabled={!on && verdict !== null}
+                      onClick={() => toggleFallback(cli)}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-micro',
+                        on ? 'border-brand bg-chip text-ink' : 'border-border text-muted hover:bg-hover',
+                        verdict !== null && 'opacity-45',
+                        !on && verdict !== null && 'cursor-not-allowed hover:bg-transparent',
+                      )}
+                    >
+                      <CliMark cli={cli} className="size-3.5" />
+                      {CLI_NAMES[cli]}
+                    </button>
+                  </Hint>
+                );
+              })}
+            </div>
+          </div>
+          {list.slice(1).map((cli) =>
+            row(cli === 'claude-code' ? 'model' : `${cli}.model`, `${CLI_NAMES[cli]} model`, modelControl(cli)),
+          )}
         </div>
       </SettingsGroup>
 

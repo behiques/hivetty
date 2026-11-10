@@ -1320,3 +1320,49 @@ describe('Runs on: the dock and the primary model (HIVE-396)', () => {
     expect(field(lastSource(onChange), 'copilot.model')).toBe('claude-opus-5.5');
   });
 });
+
+describe('Runs on: fallbacks (HIVE-396)', () => {
+  const lastSource = (onChange: ReturnType<typeof vi.fn>) => onChange.mock.calls.at(-1)![0] as string;
+  const field = (source: string, path: string) => readFrontmatter(source)?.fields.get(path)?.value;
+  const withHarness = (list: string) => SOURCE.replace('autonomy: ask', `autonomy: ask\nharness: ${list}`);
+
+  it('turns a fallback on after the primary, in the order turned on', async () => {
+    const onChange = setup({ source: withHarness('[codex]') });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Claude Code', pressed: false }));
+    expect(field(lastSource(onChange), 'harness')).toBe('[codex, claude-code]');
+  });
+
+  it('with no harness: line, a fallback joins the default', async () => {
+    const onChange = setup();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Codex', pressed: false }));
+    expect(field(lastSource(onChange), 'harness')).toBe('[claude-code, codex]');
+  });
+
+  it('turns a fallback off', async () => {
+    const onChange = setup({ source: withHarness('[codex, claude-code, copilot]') });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Claude Code', pressed: true }));
+    expect(field(lastSource(onChange), 'harness')).toBe('[codex, copilot]');
+  });
+
+  it('gives each fallback that is on its own model row', () => {
+    setup({ source: withHarness('[codex, claude-code]') });
+
+    expect(screen.getByRole('radio', { name: 'opus' })).toBeInTheDocument();
+  });
+
+  it('cannot turn on a fallback the check refused, but can turn one off', async () => {
+    const verdicts = {
+      'claude-code': { ok: true as const },
+      codex: { ok: true as const },
+      copilot: { ok: false as const, reason: 'copilot cannot start: no Copilot token', fix: 'sign-in' as const },
+    };
+    const onChange = setup({ source: withHarness('[claude-code]'), runsOn: runsOn({ verdicts }) });
+
+    expect(screen.getByRole('button', { name: /Copilot/, pressed: false })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Codex', pressed: false }));
+    expect(field(lastSource(onChange), 'harness')).toBe('[claude-code, codex]');
+  });
+});
