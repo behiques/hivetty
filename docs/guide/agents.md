@@ -113,6 +113,23 @@ codex:
   effort: medium
 ```
 
+**Keep the conversation.** Moving to the next CLI starts a fresh conversation there: one CLI cannot
+resume another's. An agent mid-way through something, like a fixer halfway through a PR, can wait
+instead:
+
+```yaml
+harness: [codex, claude-code]
+fallback: wait
+```
+
+With `fallback: wait`, a wake whose conversation is on Codex waits while Codex is not installed,
+signed out, outside your plan, or turned off. It is retried every minute, and the row shows
+*queued for pr-patrol — waiting for Codex: …* when you press Run. When Codex is back, the
+conversation carries on. If the agent asks for something Codex can never do (a dollar cap,
+Slack, a container), or Codex is no longer in `harness:`, it still moves on. An agent with no
+conversation yet always starts on the first CLI that can run it. In the form: Runs on › *If a
+conversation's CLI can't run*.
+
 ## AGENT.md reference
 
 Keys are snake_case. An unknown key is an error, not ignored.
@@ -123,6 +140,7 @@ Keys are snake_case. An unknown key is an error, not ignored.
 | `description` | one line, shown in the Agents panel | required |
 | `icon` | a Phosphor icon name, like `ph-robot` | required |
 | `harness` | the CLIs to try, in order: `claude-code`, `codex`, `copilot` | Default CLI for agents |
+| `fallback` | `switch` (start fresh on the next CLI) or `wait` (queue and keep the conversation) | `switch` |
 | `model` / `effort` | Claude Code's, as for sessions | the CLI's default |
 | `codex.model` / `codex.effort`, `copilot.model` / `copilot.effort` | that CLI's, as for [sessions](sessions.md#pick-the-cli) | the CLI's default |
 | `wake.every` | `5m`, `2h`, `daily` (whole minutes, at least 1m) | none |

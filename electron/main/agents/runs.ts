@@ -120,6 +120,7 @@ export type RunStart =
       started: false;
       refused: QueueableRefusal | 'invalid';
       reason?: string;
+      cli?: HarnessId;
     };
 
 export interface RunTrackerDeps {
@@ -162,7 +163,7 @@ export interface RunTrackerDeps {
         /** See {@link FinalizeInfo.startsRotation}. */
         startsRotation?: true;
       })
-    | { problem: string };
+    | { problem: string; waitFor?: HarnessId };
   /**
    * `limits.parallel` for this agent, read from the folder watcher's cache
    * (HIVE-128). `1` for an agent the cache has not seen, which is the default
@@ -1213,7 +1214,10 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       const command = deps.command(name, trigger, extra, { kind, ...(onLane ? { lane } : {}) });
 
       if ('problem' in command) {
-        return { started: false, refused: 'invalid', reason: command.problem };
+        // HIVE-399: a `wait` agent's CLI is down for now, and the queue keeps the wake until it is back.
+        return command.waitFor === undefined
+          ? { started: false, refused: 'invalid', reason: command.problem }
+          : { started: false, refused: 'cli', reason: command.problem, cli: command.waitFor };
       }
 
       const run = deps.newRunId();

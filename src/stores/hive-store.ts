@@ -56,6 +56,7 @@ import {
   writePrThread,
   writePrViewed,
 } from '@lib/github';
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import { inputProfileFor } from '@lib/harness/input-profile';
 import {
   readJiraComments,
@@ -1504,6 +1505,8 @@ export function agentRunRefusal(
       return `${name} is saturated — every run it may have live is live; try again when one ends`;
     case 'budget':
       return `${name} is out of today's budget — it runs when a run ends or tomorrow`;
+    case 'cli':
+      return `${name} is waiting for its CLI — try again when it can run`;
     case 'invalid':
       return `${name}'s definition could not be read — edit it to fix that`;
     case 'unknown':
@@ -1536,6 +1539,8 @@ export function agentRunQueued(
       return `queued for ${name} — it starts when one of its runs ends`;
     case 'budget':
       return `queued for ${name} — it runs when today's budget has room, or tomorrow`;
+    case 'cli':
+      return `queued for ${name} — waiting for ${outcome.cli === undefined ? 'its CLI' : CLI_NAMES[outcome.cli]}: ${outcome.reason ?? 'it cannot run'}`;
   }
 }
 

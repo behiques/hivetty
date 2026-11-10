@@ -40,6 +40,8 @@ import { useAppearanceStore } from '@stores/appearance-store';
 import {
   ACK_DELAY_MS,
   AGENT_LINE_CAP,
+  agentRunQueued,
+  agentRunRefusal,
   openOrResume,
   statusWord,
   agentStatusWord,
@@ -6355,5 +6357,31 @@ describe('openEntity unfolds the project (HIVE-197)', () => {
     useHiveStore.getState().openEntity('hero-refresh'); // nova-web
     expect(useUiStore.getState().expanded['nova-web']).toBe(true);
     expect(useUiStore.getState().sessionsProject).toBe('referral-api');
+  });
+});
+
+describe('the cli wait in words (HIVE-399)', () => {
+  it('names the CLI and its reason', () => {
+    expect(
+      agentRunQueued('fixer', {
+        started: false,
+        queued: true,
+        behind: 'cli',
+        reason: 'codex is turned off for agents in Settings › Harnesses',
+        cli: 'codex',
+      }),
+    ).toBe('queued for fixer — waiting for Codex: codex is turned off for agents in Settings › Harnesses');
+  });
+
+  it('still reads when main sent neither', () => {
+    expect(agentRunQueued('fixer', { started: false, queued: true, behind: 'cli' })).toBe(
+      'queued for fixer — waiting for its CLI: it cannot run',
+    );
+  });
+
+  it('refused cli with no reason says what to do', () => {
+    expect(agentRunRefusal('fixer', { started: false, refused: 'cli' })).toBe(
+      'fixer is waiting for its CLI — try again when it can run',
+    );
   });
 });

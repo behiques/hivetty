@@ -125,19 +125,37 @@ export function checkHarness(
   return { pass: { adapter, path: binary.path } };
 }
 
+/** The failures that clear up on their own (HIVE-399): a `wait` agent queues behind these and switches on any other. */
+const WAITABLE: ReadonlySet<HarnessFix> = new Set<HarnessFix>(['install', 'sign-in', 'upgrade', 'enable']);
+
 /**
  * Which CLI runs this wake (HIVE-340): the definition's `harness:` list, else the Settings
  * default, else `claude-code`, taking the first that passes every check. Called once per wake,
  * so a lapse moves the next wake and never a live run.
+ * With `fallback: wait` and a `held` CLI, see HIVE-399 below.
  */
 export function resolveHarness(
   def: AgentDefinition,
   rules: readonly string[],
   deps: ResolveDeps,
-): Resolved | { problem: string } {
-  const fallback = deps.gate?.defaultCli();
+  held?: HarnessId,
+): Resolved | { problem: string; waitFor?: HarnessId } {
+  const defaultCli = deps.gate?.defaultCli();
   const candidates: readonly HarnessId[] =
-    def.harness ?? (fallback === undefined ? ['claude-code'] : [fallback]);
+    def.harness ?? (defaultCli === undefined ? ['claude-code'] : [defaultCli]);
+
+  /*
+    HIVE-399. A `wait` agent whose lane holds a conversation on a CLI it still lists keeps that
+    conversation: only that CLI is asked, and a failure that clears up on its own queues the wake.
+    One the definition itself causes would never clear, so it walks the list as `switch` does.
+  */
+  if (def.fallback === 'wait' && held !== undefined && candidates.includes(held)) {
+    const own = checkHarness(def, rules, deps, held);
+
+    if ('pass' in own) return own.pass;
+    if (own.fix !== undefined && WAITABLE.has(own.fix)) return { problem: own.fail, waitFor: held };
+  }
+
   const result = firstPassing(candidates, (id) => checkHarness(def, rules, deps, id));
 
   return 'pass' in result

@@ -867,14 +867,15 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   const warned = new Map<string, string>();
 
   /**
-   * Say why a wake could not start, once per reason. Only a refusal that does
-   * not end on its own: a live run or a pause is a wait, and the budget posts
-   * its own card. The queue keeps the wake either way.
+   * Say why a wake could not start, once per reason. A refusal that does not end on its own, and
+   * `cli` (HIVE-399): it queues, but for a ledger or scheduled wake nothing on screen says so, and
+   * this line is its one trace. A live run or a pause is a wait, and the budget posts its own card.
+   * The queue keeps the wake either way.
    */
   const noteStart = (name: string, started: RunStart): RunStart => {
     if (started.started) {
       warned.delete(name);
-    } else if (!isQueueableRefusal(started.refused)) {
+    } else if (!isQueueableRefusal(started.refused) || started.refused === 'cli') {
       const said = `${started.refused}: ${started.reason ?? 'no reason given'}`;
 
       if (warned.get(name) !== said) {
@@ -1401,7 +1402,13 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       */
       if (!took) return started;
 
-      return { started: false, queued: true, behind: started.refused };
+      return {
+        started: false,
+        queued: true,
+        behind: started.refused,
+        ...(started.reason === undefined ? {} : { reason: started.reason }),
+        ...(started.cli === undefined ? {} : { cli: started.cli }),
+      };
     },
 
     start() {

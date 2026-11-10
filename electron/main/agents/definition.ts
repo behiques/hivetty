@@ -536,6 +536,7 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
       ...(model === undefined ? {} : { model: model as SessionModel }),
       ...(effort === undefined ? {} : { effort: effort as SessionEffort }),
       ...(harness.length === 0 ? {} : { harness: harness as HarnessId[] }),
+      ...(shaped('fallback') === 'wait' ? { fallback: 'wait' as const } : {}),
       ...cliBlocks,
       wake: {
         ...(everyMs === undefined || everyMs === null ? {} : { everyMs }),

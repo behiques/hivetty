@@ -853,6 +853,27 @@ describe('harness: (HIVE-340)', () => {
   });
 });
 
+describe('fallback (HIVE-399)', () => {
+  const withFallback = (value: string): string =>
+    GOOD.replace('autonomy: ask\n', `autonomy: ask\nfallback: ${value}\n`);
+
+  it('reads wait', () => {
+    expect(definition(withFallback('wait')).fallback).toBe('wait');
+  });
+
+  it('reads switch, like no line at all, as absent', () => {
+    expect(definition(withFallback('switch'))).not.toHaveProperty('fallback');
+    expect(definition(GOOD)).not.toHaveProperty('fallback');
+  });
+
+  it('names an unknown value as a problem', () => {
+    expect(problems(withFallback('bogus'))).toContainEqual({
+      field: 'fallback',
+      reason: 'Must be one of: switch, wait.',
+    });
+  });
+});
+
 describe('codex: and copilot: blocks (HIVE-396)', () => {
   const withBlocks = (blocks: string) => GOOD.replace('autonomy: ask\n', `autonomy: ask\n${blocks}`);
 

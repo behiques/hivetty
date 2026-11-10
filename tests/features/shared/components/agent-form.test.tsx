@@ -1380,6 +1380,44 @@ describe('Runs on: fallbacks (HIVE-396)', () => {
   });
 });
 
+describe('Runs on: fallback wait (HIVE-399)', () => {
+  const lastSource = (onChange: ReturnType<typeof vi.fn>) => onChange.mock.calls.at(-1)![0] as string;
+  const field = (source: string, path: string) => readFrontmatter(source)?.fields.get(path)?.value;
+  const withLines = (lines: string) => SOURCE.replace('autonomy: ask', `autonomy: ask\n${lines}`);
+  const select = () => screen.queryByRole('combobox', { name: "If a conversation's CLI can't run" });
+
+  it('is not offered while one CLI is listed', () => {
+    setup({ source: withLines('harness: [codex]') });
+
+    expect(select()).toBeNull();
+  });
+
+  it('writes fallback: wait, and Switch removes the line', async () => {
+    const onChange = setup({ source: withLines('harness: [codex, claude-code]') });
+
+    expect(select()).toHaveValue('switch');
+    await userEvent.selectOptions(select()!, 'wait');
+    expect(field(lastSource(onChange), 'fallback')).toBe('wait');
+    await userEvent.selectOptions(select()!, 'switch');
+    expect(field(lastSource(onChange), 'fallback')).toBeUndefined();
+  });
+
+  it('still draws a problem beside it when one CLI is listed', () => {
+    render(
+      <AgentForm
+        source={withLines('harness: [codex]\nfallback: bogus')}
+        problems={[{ field: 'fallback', reason: 'Must be one of: switch, wait.' }]}
+        taken={[]}
+        onChange={vi.fn()}
+        runsOn={runsOn()}
+      />,
+    );
+
+    expect(select()).toBeInTheDocument();
+    expect(screen.getByText('Must be one of: switch, wait.')).toBeInTheDocument();
+  });
+});
+
 describe('Runs on: what cannot run, and the fix (HIVE-396)', () => {
   const verdict = (reason: string, fix?: string) => ({ ok: false as const, reason, ...(fix ? { fix } : {}) });
   const ok = { ok: true as const };

@@ -154,6 +154,7 @@ describe('agent-contract', () => {
       'mcp',
       'tools',
       'harness',
+      'fallback',
       'codex.model',
       'codex.effort',
       'copilot.model',
@@ -273,7 +274,7 @@ describe('AGENTS_PATH', () => {
 
 describe('the refusals that end on their own (HIVE-128)', () => {
   it('lists exactly the waits the queue is allowed to hold', () => {
-    expect([...QUEUEABLE_REFUSALS].sort()).toEqual(['budget', 'paused', 'saturated', 'working']);
+    expect([...QUEUEABLE_REFUSALS].sort()).toEqual(['budget', 'cli', 'paused', 'saturated', 'working']);
   });
 
   it('keeps a broken definition out of the queue', () => {

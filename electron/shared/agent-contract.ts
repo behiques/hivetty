@@ -179,6 +179,10 @@ export const AGENT_LIMIT_DEFAULTS = {
 export const AUTONOMIES = ['ask', 'act'] as const;
 export type Autonomy = (typeof AUTONOMIES)[number];
 
+/** What a wake does when its lane's CLI can't run (HIVE-399): move on and start fresh, or queue and keep the conversation. */
+export const AGENT_FALLBACKS = ['switch', 'wait'] as const;
+export type AgentFallback = (typeof AGENT_FALLBACKS)[number];
+
 /**
  * How an agent's work divides into conversations (HIVE-183). Absent is one
  * lane, the standing one. `thread`: every ask opens its own lane. `repo`: one
@@ -302,6 +306,8 @@ export interface AgentDefinition {
   effort?: SessionEffort;
   /** The CLIs this agent may run on, in preference order (HIVE-340). Absent: the Settings default, else `claude-code`. */
   harness?: HarnessId[];
+  /** HIVE-399. Present only as `wait`; absent is `switch`, today's behaviour. */
+  fallback?: 'wait';
   /** Codex's model and effort for this agent (HIVE-396). */
   codex?: CliModelChoice;
   /** Copilot's model and effort for this agent (HIVE-396). */
@@ -650,6 +656,7 @@ export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'mcp', kind: 'list', required: false },
   { path: 'tools', kind: 'list', required: false },
   { path: 'harness', kind: 'list', required: false },
+  { path: 'fallback', kind: 'enum', required: false, values: AGENT_FALLBACKS },
   // HIVE-396. Codex's list is the account's, so its model is a shape the parser checks, not an enum.
   { path: 'codex.model', kind: 'text', required: false },
   { path: 'codex.effort', kind: 'enum', required: false, values: CODEX_EFFORTS },
@@ -1346,19 +1353,24 @@ export type RunKind = 'standing' | 'task';
  * queue can keep. Enumerated rather than inverted on purpose: a refusal added
  * later is reported until someone decides it queues, which is the safe default.
  *
- * One set, read by the tracker's refusal union, the scheduler's manual-wake
- * whitelist, and both console sentence functions — so they cannot drift.
+ * The set is the scheduler's manual-wake whitelist and its warning filter; the type is the
+ * tracker's refusal union and the two console sentence functions' exhaustive switches, so a
+ * refusal added here fails the build until it has words.
+ *
+ * `cli` is a `fallback: wait` agent's CLI that cannot run for now (HIVE-399): not installed,
+ * signed out, locked or turned off. It ends when the CLI is back.
  *
  * A day's budget frees up when a run closes and resets at midnight, so
  * `budget` queues too (HIVE-187).
  */
-export type QueueableRefusal = 'working' | 'paused' | 'saturated' | 'budget';
+export type QueueableRefusal = 'working' | 'paused' | 'saturated' | 'budget' | 'cli';
 
 export const QUEUEABLE_REFUSALS: ReadonlySet<string> = new Set<QueueableRefusal>([
   'working',
   'paused',
   'saturated',
   'budget',
+  'cli',
 ]);
 
 export const isQueueableRefusal = (refused: string): refused is QueueableRefusal =>
@@ -1458,11 +1470,12 @@ export interface AgentRunRequest {
  */
 export type AgentRunResult =
   | { started: true; run: string; kind: RunKind }
-  | { started: false; queued: true; behind: QueueableRefusal }
+  | { started: false; queued: true; behind: QueueableRefusal; reason?: string; cli?: HarnessId }
   | {
       started: false;
       refused: QueueableRefusal | 'unknown' | 'invalid';
       reason?: string;
+      cli?: HarnessId;
     };
 
 /**
