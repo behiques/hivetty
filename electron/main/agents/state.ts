@@ -5,6 +5,7 @@ import {
   AGENT_RUN_HISTORY,
   STANDING_LANE,
   dayKey,
+  spentTokens,
   type AgentRunState,
   type LaneState,
   type RunSummary,
@@ -273,6 +274,8 @@ export function createAgentState(options: AgentStateOptions): AgentState {
         does, so a capped agent resumes on its own.
       */
       const previous = current.today?.day === day ? current.today : undefined;
+      // What `limits.daily_tokens` counts (HIVE-398); a day of runs with no usage writes no key.
+      const tokens = (previous?.tokens ?? 0) + spentTokens(summary.usage);
 
       agents[name] = {
         ...current,
@@ -292,6 +295,7 @@ export function createAgentState(options: AgentStateOptions): AgentState {
           usd:
             Math.round(((previous?.usd ?? 0) + (summary.costUsd ?? 0)) * 10_000) /
             10_000,
+          ...(tokens === 0 ? {} : { tokens }),
           ...(previous?.capped === true ? { capped: true } : {}),
         },
       };
