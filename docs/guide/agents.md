@@ -1,19 +1,19 @@
 # Agents
 
-An agent is a `claude` that works in the background. It wakes on a schedule, a message or a
+An agent is an agent CLI (Claude Code, Codex or Copilot) that works in the background. It wakes on a schedule, a message or a
 Slack mention, does one job, reports through the [ledger](ledger.md), and goes back to
 sleep. It asks you before it does anything you have not allowed.
 
 **On this page:** [What an agent is](#what-an-agent-is) · [Create an agent](#create-an-agent) ·
-[AGENT.md reference](#agentmd-reference) · [When an agent wakes](#when-an-agent-wakes) ·
+[Runs on](#runs-on) · [AGENT.md reference](#agentmd-reference) · [When an agent wakes](#when-an-agent-wakes) ·
 [The tools fence](#the-tools-fence) · [Watch an agent work](#watch-an-agent-work) ·
 [Task runs](#task-runs) · [Memory and rotation](#memory-and-rotation)
 
 ## What an agent is
 
 One file, `~/.hivetty/agents/<name>/AGENT.md`: frontmatter that says when and how it runs, and a
-body that is its standing job. Each wake is one headless `claude -p` run that resumes the
-last one, so it remembers.
+body that is its standing job. Each wake is one headless run of its CLI (`claude -p`,
+`codex exec` or `copilot -p`) that resumes the last one, so it remembers.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/agent-wake.dark.svg">
@@ -55,7 +55,7 @@ with Settings still open. It shares the page's unsaved text, so an edit made in 
 in the other. A file you write by hand shows up without a restart, and a broken one is
 listed with its problem.
 
-![Settings › Agents with the form for standup-bot](../assets/guide/21-agent-form.png)
+![Settings › Agents with builder's form, open at its Runs on group](../assets/guide/21-agent-form.png)
 
 **Example.** An agent that checks your PRs every half hour and asks before it comments:
 
@@ -87,6 +87,32 @@ When nothing needs me, end the turn without posting.
 
 Write the body as an instruction ("watch X, when you find Y, do Z"), not a description.
 
+## Runs on
+
+The form's **Runs on** group picks the CLI each wake runs on, and the model it uses there.
+The dock picks the main CLI; **If it can't run** adds fallbacks, tried in order, each with
+its own model. At every wake the first CLI that can run this agent wins. A CLI is skipped,
+never removed, when it is:
+
+- not installed, or turned off for agents in Settings › Harnesses;
+- not in your plan (Codex needs Solo, Copilot needs Team);
+- unable to keep a promise the agent makes: a per-wake or daily dollar cap (only Claude Code
+  reports cost), a turn limit, Slack (`mcp: [slack]`), or a container (Claude Code only).
+
+When none can, the wake does not run and the agent's row says why: *No CLI can run
+pr-patrol: …*. An agent with no `harness:` key runs on **Default CLI for agents** in
+Settings › Agents. Copilot agents also need a token stored in Settings › Harnesses › Copilot.
+
+**Example.** Prefer Codex, fall back to Claude Code on Sonnet:
+
+```yaml
+harness: [codex, claude-code]
+model: sonnet              # Claude Code's model
+codex:
+  model: gpt-6.1-sol
+  effort: medium
+```
+
 ## AGENT.md reference
 
 Keys are snake_case. An unknown key is an error, not ignored.
@@ -96,7 +122,9 @@ Keys are snake_case. An unknown key is an error, not ignored.
 | `name` | lower-case, digits, dashes; equals the folder name | required |
 | `description` | one line, shown in the Agents panel | required |
 | `icon` | a Phosphor icon name, like `ph-robot` | required |
-| `model` / `effort` | as for sessions | Claude's default |
+| `harness` | the CLIs to try, in order: `claude-code`, `codex`, `copilot` | Default CLI for agents |
+| `model` / `effort` | Claude Code's, as for sessions | the CLI's default |
+| `codex.model` / `codex.effort`, `copilot.model` / `copilot.effort` | that CLI's, as for [sessions](sessions.md#pick-the-cli) | the CLI's default |
 | `wake.every` | `5m`, `2h`, `daily` (whole minutes, at least 1m) | none |
 | `wake.at` / `wake.days` | `[09:00, 17:00]` / `[mon, tue, …]` | none |
 | `wake.on` | `ledger`, `slack.mention`, `slack.app_mention`, `slack.channel:#name` | none |
@@ -107,8 +135,8 @@ Keys are snake_case. An unknown key is an error, not ignored.
 | `skills` | skill names to allow | none |
 | `mcp` | `[slack]` | none |
 | `lane` | `thread` or `repo`, see [Lanes](#lanes) | none |
-| `limits.turns` | turns per wake | 40 |
-| `limits.budget_usd` / `limits.daily_usd` | per-wake / per-day spend cap | none |
+| `limits.turns` | turns per wake (Claude Code only) | 40 |
+| `limits.budget_usd` / `limits.daily_usd` | per-wake / per-day spend cap (Claude Code only) | none |
 | `limits.rotate_after` | wakes before a fresh session | 50 |
 | `limits.parallel` | runs at once, across lanes and task runs | 1 |
 | `container.*` | run inside a container, see [Containers](containers.md) | none |

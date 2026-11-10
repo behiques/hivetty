@@ -1,7 +1,7 @@
 # Custom skills
 
 A skill is a slash command you write once and every Hive session gets. Skills live under
-`~/.hivetty/skills` and reach **only** sessions HiveTTY starts, never a `claude` you run
+`~/.hivetty/skills` and reach **only** sessions HiveTTY starts, on any CLI, never a CLI you run
 elsewhere.
 
 **On this page:** [What a skill is](#what-a-skill-is) · [Create a skill](#create-a-skill) ·

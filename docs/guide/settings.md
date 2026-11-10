@@ -58,6 +58,8 @@ starts on the next one.
 
 ## Overview
 
+![Settings › Harnesses › Overview with Claude Code, Codex and Copilot found](../assets/guide/23-settings-harnesses.png)
+
 Settings › Harnesses › Overview lists Claude Code, Codex and Copilot. Each row shows the binary HiveTTY found on
 this Mac, or on the server you are attached to, and its version. A CLI that is not there shows why, with the line
 that installs it. **Rescan** looks again after you install one. **Use for sessions** takes a CLI out of the new-session
@@ -186,6 +188,8 @@ The card at the top of the Settings nav, with your avatar, name and plan, opens 
   licence alone. Signed out, it says **Sign in to see your plan.**
 - **Organisation**: for a team, its name, your role, your seat and its plan. Owners, admins and billing members get
   **Manage members and seats**, which opens the web. A Solo account has no organisation and no tab.
+
+![The Account centre on Plan & billing: a Team trial's subscription, seats and licence](../assets/guide/19-account-centre.png)
 
 A feature your plan doesn't include is shown locked, with the reason and an **Upgrade** button, never hidden.
 

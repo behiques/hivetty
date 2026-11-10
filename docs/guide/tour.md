@@ -79,7 +79,7 @@ page: Add a project, connect your integrations, and New session.
 the console at the foot. See [The overmind console](overmind-console.md).
 
 **A session** is its terminal under the session header: **‹** back to the Overmind, the session's
-status, task and branch, the model chip with its gauges (when you sign in with a Claude plan), and
+status, task and branch, the model chip with its gauges (each CLI shows its own: see [Sessions](sessions.md#pick-the-cli)), and
 the **⋯** menu with **Terminal here**, which opens a shell beside it in the same folder.
 
 ## The session panel
@@ -125,7 +125,7 @@ card you can answer there, then the sessions waiting on you. See [The inbox](inb
 | Save a file in the editor | `⌘S` | |
 
 **Example.** You are in `ABC-123` and want to run the tests beside it without disturbing
-Claude:
+the agent:
 
 1. Press ``Ctrl+` ``. A terminal opens in the same folder, next to the session.
 2. Run `pnpm test` there.

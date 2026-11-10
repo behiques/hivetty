@@ -41,9 +41,10 @@ tab](work-and-prs.md#the-ticket-tab).
 A session has one plan at a time. When more than one source offers one, the
 higher one in this list wins:
 
-1. **Claude's own task list.** When Claude breaks work into tasks with its task
-   tools, those tasks are the plan, ticked as Claude works through them.
-   A subagent's tasks are left out.
+1. **The CLI's own task list.** When the session breaks work into tasks with its
+   own tools (Claude Code's task tools, Codex's `update_plan`, Copilot's todo list),
+   those tasks are the plan, ticked as it works through them. A subagent's tasks are
+   left out.
 2. **A `hive:plan` file.** When the session writes or edits a plan in its
    repository's `.hive/plans/` folder, the plan's tasks show up. `hive:work-on`
    and `hive:goal-on` both write one, so their sessions always have a plan.
@@ -52,7 +53,7 @@ higher one in this list wins:
    shell command or by hand, still shows. A builder
    agent working that plan ticks them off through the ledger as it goes:
    in progress when it starts a task, done when the task's commit lands.
-3. **Plan mode.** When you approve Claude's plan in plan mode, its steps show
+3. **Plan mode** (Claude Code). When you approve Claude's plan in plan mode, its steps show
    up as proposed tasks, none started, until one of the sources above takes
    over.
 

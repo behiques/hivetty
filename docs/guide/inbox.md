@@ -12,20 +12,31 @@ to watch every session.
 
 ## How a notification is born
 
-HiveTTY writes a small hooks file for every session it starts. Claude Code then reports
-what it is doing to a receiver inside the app, over loopback, with a per-session token.
+HiveTTY wires its hooks into every session it starts, on every CLI, and nothing into your
+own CLI settings. The CLI then reports what it is doing to a receiver inside the app, over
+loopback, with a per-session token.
+
+| CLI | How the hooks reach it |
+| --- | --- |
+| Claude Code | a hooks settings file passed on its command line |
+| Codex | `-c hooks.<Event>` flags on its command line; nothing is written to `~/.codex` |
+| Copilot | a plugin HiveTTY generates, passed with `--plugin-dir` |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/inbox.dark.svg">
   <img src="../assets/diagrams/inbox.light.svg" alt="A hook event reaches the receiver; the status tracker updates the dot, and the notifier raises a card or a desktop notification per your setting">
 </picture>
 
-| What Claude did | Kind raised |
-| --- | --- |
-| asked for permission, or asked a question | session blocked on you |
-| finished its turn with nothing left running | session became yours again |
-| sat idle waiting for input for a while | session ran out of instructions |
-| an agent or session asked the overmind something | an agent asks you |
+| What the session did | Kind raised | Claude Code | Codex | Copilot |
+| --- | --- | --- | --- | --- |
+| asked for permission | session blocked on you | ✓ | ✓ | ✓, when it draws a prompt |
+| asked a question | session blocked on you | ✓ | | ✓ (`ask_user`) |
+| finished its turn with nothing left running | session became yours again | ✓ | ✓ | ✓ |
+| sat idle waiting for input for a while | session ran out of instructions | ✓ | | |
+| an agent or session asked the overmind something | an agent asks you | ✓ | ✓ | ✓ |
+
+Codex and Copilot send no hook when you decline or interrupt a prompt, so HiveTTY clears that
+card on your next keystroke in the session.
 
 ## Card types
 
