@@ -586,7 +586,7 @@ interface HiveState {
    */
   loadTicketDetail: (key: string, want: TicketDetailWant) => Promise<void>;
   /** Re-read a ticket already held; a key never loaded does nothing (HIVE-203, HIVE-202). */
-  refreshTicketDetail: (key: string, want: TicketDetailWant) => Promise<void>;
+  refreshTicketDetail: (key: string) => Promise<void>;
   /** Read one PR's detail: the first read and every refresh (HIVE-205). */
   loadPrDetail: (owner: string, repo: string, n: number) => Promise<void>;
   /** Read one PR's Timeline: GitHub's history every call, the ledger's once (HIVE-208). */
@@ -2177,7 +2177,7 @@ async function readTicketParts(
   get: () => HiveState,
   set: SetHive,
   key: string,
-  read: { ledger: boolean; issue: boolean; links: boolean },
+  read: { ledger: boolean; issue: boolean },
 ): Promise<void> {
   const open = () => get().ticketDetails[key] !== undefined;
   const merge = (patch: Partial<TicketDetail>) => {
@@ -2207,7 +2207,7 @@ async function readTicketParts(
       merge({ detail: result.value, readAt: Date.now() });
       problem('detail', undefined);
       const epic = result.value.parent;
-      if (read.links && open() && epic?.issueType?.toLowerCase() === 'epic' && ISSUE_KEY_PATTERN.test(epic.key)) {
+      if (open() && epic?.issueType?.toLowerCase() === 'epic' && ISSUE_KEY_PATTERN.test(epic.key)) {
         // The key is checked before it is put in the JQL: it came from a server.
         const found = await searchJiraIssues({ jql: `parent = ${epic.key}` });
         if (!found?.ok) return merge({ epicProgress: undefined });
@@ -2236,34 +2236,32 @@ async function readTicketParts(
           })
           .catch(() => undefined)
       : Promise.resolve(),
-    read.links
-      ? readJiraLinks({ key }).then(async (result) => {
-          if (result === null) return problem('links', BRIDGE_ERROR);
-          if (!result.ok) return problem('links', result.error.message);
-          problem('links', undefined);
-          const issues = result.value.filter((link) => link.kind === 'issue');
-          const blocked =
-            issues.length > SECOND_HOP_MAX_LINKS
-              ? []
-              : issues.flatMap((link) =>
-                  isBlocks(link) && link.direction !== 'inward' && link.key !== undefined ? [link.key] : [],
-                );
-          // No hop to read: an earlier one must not stay drawn (past the cap, or nothing blocked any more).
-          if (blocked.length === 0) return merge({ links: result.value, secondHop: undefined });
-          merge({ links: result.value });
-          if (!open()) return;
-          const hops = await Promise.all(
-            blocked.map(async (next) => {
-              const answer = await readJiraLinks({ key: next });
-              const onward = answer?.ok
-                ? answer.value.filter((link) => link.kind === 'issue' && isBlocks(link) && link.direction === 'outward')
-                : [];
-              return [next, onward] as const;
-            }),
-          );
-          merge({ secondHop: Object.fromEntries(hops) });
-        })
-      : Promise.resolve(),
+    readJiraLinks({ key }).then(async (result) => {
+      if (result === null) return problem('links', BRIDGE_ERROR);
+      if (!result.ok) return problem('links', result.error.message);
+      problem('links', undefined);
+      const issues = result.value.filter((link) => link.kind === 'issue');
+      const blocked =
+        issues.length > SECOND_HOP_MAX_LINKS
+          ? []
+          : issues.flatMap((link) =>
+              isBlocks(link) && link.direction !== 'inward' && link.key !== undefined ? [link.key] : [],
+            );
+      // No hop to read: an earlier one must not stay drawn (past the cap, or nothing blocked any more).
+      if (blocked.length === 0) return merge({ links: result.value, secondHop: undefined });
+      merge({ links: result.value });
+      if (!open()) return;
+      const hops = await Promise.all(
+        blocked.map(async (next) => {
+          const answer = await readJiraLinks({ key: next });
+          const onward = answer?.ok
+            ? answer.value.filter((link) => link.kind === 'issue' && isBlocks(link) && link.direction === 'outward')
+            : [];
+          return [next, onward] as const;
+        }),
+      );
+      merge({ secondHop: Object.fromEntries(hops) });
+    }),
   ]);
 }
 
@@ -5424,7 +5422,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       ticketDetails: touchDetail(state.ticketDetails, key, state.ticketDetails[key] ?? { key, problems: {} }),
     }));
     const inList = get().tickets.some((ticket) => ticket.key === key);
-    await readTicketParts(get, set, key, { ledger: want === 'page', issue: !inList, links: want === 'tab' });
+    await readTicketParts(get, set, key, { ledger: want === 'page', issue: !inList });
   },
 
   /**
@@ -5433,14 +5431,14 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * the open — and the issue only when the entry read one for itself. A key
    * never loaded does nothing.
    */
-  refreshTicketDetail: async (key, want) => {
+  refreshTicketDetail: async (key) => {
     const entry = get().ticketDetails[key];
     if (entry === undefined) return;
     set((state) => {
       const current = state.ticketDetails[key];
       return current === undefined ? state : { ticketDetails: touchDetail(state.ticketDetails, key, current) };
     });
-    await readTicketParts(get, set, key, { ledger: false, issue: entry.issue !== undefined, links: want === 'tab' });
+    await readTicketParts(get, set, key, { ledger: false, issue: entry.issue !== undefined });
   },
 
   /**
@@ -8256,7 +8254,7 @@ export const useLoadTicketDetail = (): ((key: string, want: TicketDetailWant) =>
   useHiveStore((state) => state.loadTicketDetail);
 
 /** A poller's re-read of a ticket already held (HIVE-203, HIVE-202). */
-export const useRefreshTicketDetail = (): ((key: string, want: TicketDetailWant) => Promise<void>) =>
+export const useRefreshTicketDetail = (): ((key: string) => Promise<void>) =>
   useHiveStore((state) => state.refreshTicketDetail);
 
 /** One PR's detail, or undefined before its first load (HIVE-205). `key` is {@link prKey}'s. */

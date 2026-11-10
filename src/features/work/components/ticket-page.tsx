@@ -117,7 +117,7 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
   const loaded = useRef<string | null>(null);
   usePagePoller(
     useCallback(
-      () => (loaded.current === ticketKey ? refresh(ticketKey, 'page') : Promise.resolve()),
+      () => (loaded.current === ticketKey ? refresh(ticketKey) : Promise.resolve()),
       [ticketKey, refresh],
     ),
   );
