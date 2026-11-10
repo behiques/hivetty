@@ -38,6 +38,7 @@ import {
   describeSkips,
   describeWake,
   runsToday,
+  tokensToday,
 } from '@lib/agents';
 import { type ChecksGraph, foldPushes, jobState, layoutGraph, type Push } from '@lib/checks-graph';
 import { delegationTitle, delegationWord } from '@lib/delegation';
@@ -3900,6 +3901,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           ...(summary.today === undefined ? {} : { today: summary.today }),
           skipsSinceRun: summary.skipsSinceRun ?? 0,
           rotateAfter: summary.rotateAfter,
+          ...(summary.dailyTokens === undefined ? {} : { dailyTokens: summary.dailyTokens }),
           runs: summary.runs,
           // Run state too (HIVE-128): absent on a summary built for an agent
           // with nothing in flight, which is the common case.
@@ -7108,6 +7110,8 @@ interface AgentFacts {
   skips?: string;
   todayRuns: number;
   todayCost: string;
+  /** `1.2M of 2M tokens`, only when the agent caps its tokens (HIVE-398). */
+  todayTokens?: string;
   sessionUuid?: string;
   runsSinceRotate: number;
   rotateAfter: number;
@@ -7128,6 +7132,7 @@ export const useAgentFacts = (name: string): AgentFacts | null => {
     if (entity === undefined || !isAgent(entity)) return null;
 
     const today = runsToday(entity.today);
+    const tokens = tokensToday(entity.today, entity.dailyTokens);
     const open = openAsks(ledger, Date.now()).find((ask) => ask.from === name);
 
     return {
@@ -7145,6 +7150,7 @@ export const useAgentFacts = (name: string): AgentFacts | null => {
         : { skips: describeSkips(entity) as string }),
       todayRuns: today.count,
       todayCost: today.cost,
+      ...(tokens === undefined ? {} : { todayTokens: tokens }),
       ...(entity.sessionUuid === undefined
         ? {}
         : { sessionUuid: entity.sessionUuid }),

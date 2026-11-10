@@ -167,7 +167,9 @@ export function AgentView({ entity, notice, onNotice }: AgentViewProps) {
                 <span className="text-subtle"> · {facts.skips}</span>
               )}
             </Fact>
-            <Fact label="Today">{`${facts.todayRuns} runs · ${facts.todayCost}`}</Fact>
+            <Fact label="Today">
+              {`${facts.todayRuns} runs · ${facts.todayCost}${facts.todayTokens === undefined ? '' : ` · ${facts.todayTokens}`}`}
+            </Fact>
             {/*
               The rotation made visible *before* it happens: an agent resumes one
               conversation until this fraction fills, and HIVE-122 starts a fresh
