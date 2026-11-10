@@ -177,6 +177,8 @@ export interface WakeCommandDeps {
   gate?: HarnessGate;
   /** The adapter for a CLI. The registry's unless a test swaps it. */
   adapter?: (id: HarnessId) => HarnessAdapter | undefined;
+  /** Whether a CLI's conversation is still on disk (HIVE-404). Absent: that adapter's `record`. */
+  hasTranscript?: (id: HarnessId, cwd: string, sessionUuid: string) => boolean;
 }
 
 /**
@@ -209,6 +211,8 @@ type WakeInvocation = WakeCommand & {
   harness: HarnessId;
   /** This wake starts a rotation it left parked, for the close to clear (HIVE-353). */
   startsRotation?: true;
+  /** The conversation this lane lost: its transcript was gone, so this wake starts fresh (HIVE-404). */
+  sessionLost?: string;
 };
 
 type BuildWakeCommand = (
@@ -308,6 +312,11 @@ function binaryFor(def: AgentDefinition, deps: WakeCommandDeps) {
 
 export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
   const fs = deps.fs ?? REAL_FS;
+  // A CLI this build has no adapter for cannot say, and resolution moves the lane off it anyway.
+  const hasTranscript =
+    deps.hasTranscript ??
+    ((id: HarnessId, cwd: string, uuid: string) =>
+      (deps.adapter ?? headlessAdapter)(id)?.record.hasTranscript(cwd, uuid) ?? true);
 
   return (name, trigger, extra, options) => {
     /*
@@ -458,13 +467,30 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       Which CLI runs this wake (HIVE-340), once per wake: a lapse moves the next wake, never this
       one. Before any write, so a refusal leaves nothing behind.
     */
+    // A task run has always run in the agent's own directory; a lane runs in its own (HIVE-188).
+    const workdir = deps.workdir(name, task ? STANDING_LANE : lane);
+    const recorded = previous.harness ?? 'claude-code';
     /*
-      The CLI this lane's conversation is on, when it has one to keep (HIVE-399). A task run and a
-      parked rotation start fresh whatever happens, so they hold nothing.
+      The uuid of a conversation whose transcript is gone (HIVE-404). Claude deletes transcripts
+      after `cleanupPeriodDays`, and `--resume` of a missing one fails every wake, the handoff wake
+      included, so the lane never recovers. Asked of the CLI that recorded it, in the cwd it ran in.
+      A container agent's transcript lives inside the container, where the host cannot look.
+    */
+    const lost =
+      !task &&
+      pending === undefined &&
+      def.container === undefined &&
+      previous.sessionUuid !== undefined &&
+      !hasTranscript(recorded, workdir, previous.sessionUuid)
+        ? previous.sessionUuid
+        : undefined;
+    /*
+      The CLI this lane's conversation is on, when it has one to keep (HIVE-399). A task run, a
+      parked rotation and a lost conversation start fresh whatever happens, so they hold nothing.
     */
     const held: HarnessId | undefined =
-      !task && pending === undefined && previous.sessionUuid !== undefined
-        ? (previous.harness ?? 'claude-code')
+      !task && pending === undefined && previous.sessionUuid !== undefined && lost === undefined
+        ? recorded
         : undefined;
     const resolved = resolveHarness(
       def,
@@ -494,7 +520,6 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       one that just became unavailable). A parked rotation is not a switch: its handoff is text,
       and it starts fresh anyway.
     */
-    const recorded = previous.harness ?? 'claude-code';
     const switched = held !== undefined && held !== adapter.id;
     const prompt = systemPromptFor(AGENT_PREAMBLE, def);
     const promptHash = createHash('sha256').update(prompt).digest('hex');
@@ -509,11 +534,10 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     const lastTurn =
       !task &&
       !switched &&
+      lost === undefined &&
       pending === undefined &&
       previous.sessionUuid !== undefined &&
       (forced || stalePrompt || previous.runsSinceRotate >= def.limits.rotateAfter);
-    // A task run has always run in the agent's own directory; a lane runs in its own (HIVE-188).
-    const workdir = deps.workdir(name, task ? STANDING_LANE : lane);
     const systemPrompt = deps.promptFile(name);
     let agentMcp: string | null = null;
 
@@ -539,7 +563,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
     }
 
     const resuming =
-      task || pending !== undefined || switched ? undefined : previous.sessionUuid;
+      task || pending !== undefined || switched || lost !== undefined ? undefined : previous.sessionUuid;
     const minted = task ? deps.newUuid() : (pending?.uuid ?? deps.newUuid());
 
     // The CLI's own token (HIVE-343), on the child's env and nowhere else.
@@ -652,7 +676,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       the try/catch, like the consumption above: a refused wake starts no run, and the old
       conversation keeps its counters.
     */
-    if (switched) deps.state.patchLane(name, lane, { runsSinceRotate: 0, rotateFailures: 0 });
+    if (switched || lost !== undefined) deps.state.patchLane(name, lane, { runsSinceRotate: 0, rotateFailures: 0 });
 
     // Whichever of the two `wakeCommand` actually spelled — `--resume <uuid>`
     // or `--session-id <uuid>`. The tracker matches a Stop hook against it.
@@ -663,6 +687,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       kind,
       ...(resuming === undefined ? { promptHash } : {}),
       ...(startsRotation ? { startsRotation: true as const } : {}),
+      ...(lost === undefined ? {} : { sessionLost: lost }),
       harness: adapter.id,
     };
   };

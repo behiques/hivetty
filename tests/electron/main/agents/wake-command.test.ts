@@ -16,7 +16,7 @@ import { copilotAdapter } from '../../../../electron/main/harness/copilot';
 import { COPILOT_TOKEN_ENV, copilotSettings } from '../../../../electron/main/harness/copilot/headless';
 import type { HarnessAdapter, HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { McpServerSpec } from '../../../../electron/main/mcp/agent-config';
-import { STANDING_LANE, type AgentRunState } from '../../../../electron/shared/agent-contract';
+import { STANDING_LANE, type AgentRunState, type LaneState } from '../../../../electron/shared/agent-contract';
 import { resolveClis } from '../../../../electron/shared/cli-contract';
 import type { HarnessId } from '../../../../electron/shared/harness-contract';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
@@ -154,6 +154,8 @@ const baseDeps = (over: Partial<WakeCommandDeps> = {}): WakeCommandDeps => ({
   userDataPath: () => '/data',
   hostAlias: () => 'host.docker.internal',
   agentContainerSettingsPath: () => null,
+  // Every recorded conversation still on disk, unless a test says otherwise (HIVE-404).
+  hasTranscript: () => true,
   ...over,
 });
 
@@ -1512,6 +1514,22 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
       expect(built.sessionUuid).toBe('parked-uuid');
     });
 
+    it('a lost conversation holds no CLI: it starts fresh on the next one instead of waiting (HIVE-404)', () => {
+      files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = WAIT_MD;
+      stored['slack-watcher'] = onCodex();
+      const built = openBuild({
+        adapter,
+        gate: { ...OPEN_GATE, enabled: (id: HarnessId) => id !== 'codex' },
+        env: () => ({ PATH: '/opt/bin', HOME: '/home/u' }),
+        isExecutable: (path) => path === '/opt/bin/codex' || path === '/usr/local/bin/claude',
+        hasTranscript: () => false,
+      })('slack-watcher', 'manual');
+
+      if ('problem' in built) throw new Error(built.problem);
+      expect(built.harness).toBe('claude-code');
+      expect(built.sessionLost).toBe('old-thread');
+    });
+
     it('a task run starts fresh on the next CLI, as today', () => {
       files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = WAIT_MD;
       stored['slack-watcher'] = onCodex();
@@ -1520,6 +1538,122 @@ describe('the binary per CLI, and no codex in a container (HIVE-342)', () => {
       if ('problem' in built) throw new Error(built.problem);
       expect(built.harness).toBe('claude-code');
     });
+  });
+});
+
+describe('a lane whose conversation is gone (HIVE-404)', () => {
+  const LANE = 'repo:a/x';
+  const LANE_DIR = '/home/u/.hive/work/slack-watcher/lanes/repo:a/x';
+  const onLane = (over: Partial<LaneState> = {}) => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 0, runs: [],
+      lanes: { [LANE]: { sessionUuid: 'gone-uuid', runsSinceRotate: 2, rotateFailures: 0, promptHash: promptHashNow(), ...over } },
+    };
+  };
+  const laneNow = () => stored['slack-watcher']?.lanes?.[LANE];
+
+  it('asks the recorded CLI for the transcript in the lane\'s own directory, and resumes when it is there', () => {
+    onLane();
+    const hasTranscript = vi.fn(() => true);
+    const built = build({ hasTranscript })('slack-watcher', 'ledger', undefined, { lane: LANE });
+
+    if ('problem' in built) throw new Error(built.problem);
+    expect(hasTranscript).toHaveBeenCalledWith('claude-code', LANE_DIR, 'gone-uuid');
+    expect(built.args.join(' ')).toContain('--resume gone-uuid');
+    expect(built.sessionLost).toBeUndefined();
+  });
+
+  it('starts fresh under the minted uuid, with no --resume, when the transcript is missing', () => {
+    onLane();
+    const built = build({ hasTranscript: () => false })('slack-watcher', 'ledger', undefined, { lane: LANE });
+
+    if ('problem' in built) throw new Error(built.problem);
+    expect(built.args.join(' ')).not.toContain('--resume');
+    expect(built.args.join(' ')).toContain('--session-id minted-uuid');
+    expect(built.sessionUuid).toBe('minted-uuid');
+    expect(built.promptHash).toBeDefined();
+    expect(built.sessionLost).toBe('gone-uuid');
+  });
+
+  it('gives an overdue lane a fresh start, not a handoff wake on the missing session, and zeroes its counters', () => {
+    onLane({ runsSinceRotate: 73, rotateFailures: 3 });
+    const built = build({ hasTranscript: () => false })('slack-watcher', 'ledger', undefined, { lane: LANE });
+
+    if ('problem' in built) throw new Error(built.problem);
+    expect(built.lastTurn).toBe(false);
+    expect(built.args.join(' ')).not.toContain('--resume');
+    expect(laneNow()?.runsSinceRotate).toBe(0);
+    expect(laneNow()?.rotateFailures).toBe(0);
+  });
+
+  it('still asks an overdue lane whose transcript exists for its handoff, counters untouched', () => {
+    onLane({ runsSinceRotate: 73, rotateFailures: 1 });
+    const built = build()('slack-watcher', 'ledger', undefined, { lane: LANE });
+
+    if ('problem' in built) throw new Error(built.problem);
+    expect(built.lastTurn).toBe(true);
+    expect(built.args.join(' ')).toContain('--resume gone-uuid');
+    expect(laneNow()?.runsSinceRotate).toBe(73);
+    expect(laneNow()?.rotateFailures).toBe(1);
+  });
+
+  it('turns a forced rotation of a lost standing session into a fresh start, and clears the flag', () => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 4, rotateFailures: 2, runs: [],
+      sessionUuid: 'gone-uuid', promptHash: promptHashNow(), forceRotate: true,
+    };
+    const built = build({ hasTranscript: () => false })('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+    expect(built.lastTurn).toBe(false);
+    expect(built.args.join(' ')).not.toContain('--resume');
+    expect(built.sessionLost).toBe('gone-uuid');
+    expect(stored['slack-watcher']?.forceRotate).toBeUndefined();
+    expect(stored['slack-watcher']?.runsSinceRotate).toBe(0);
+    expect(stored['slack-watcher']?.rotateFailures).toBe(0);
+  });
+
+  it('asks the adapter\'s own record when no seam is given', () => {
+    onLane();
+    const hasTranscript = vi.fn(() => false);
+    const built = build({
+      hasTranscript: undefined,
+      adapter: () => ({ ...claudeCodeAdapter, record: { ...claudeCodeAdapter.record, hasTranscript } }),
+    })('slack-watcher', 'ledger', undefined, { lane: LANE });
+
+    if ('problem' in built) throw new Error(built.problem);
+    expect(hasTranscript).toHaveBeenCalledWith(LANE_DIR, 'gone-uuid');
+    expect(built.sessionLost).toBe('gone-uuid');
+  });
+
+  it('never looks for a transcript on a task run, which never resumes', () => {
+    onLane();
+    stored['slack-watcher'] = { ...stored['slack-watcher']!, sessionUuid: 'standing-uuid' };
+    const hasTranscript = vi.fn(() => false);
+    const built = build({ hasTranscript })('slack-watcher', 'manual', undefined, { kind: 'task' });
+
+    if ('problem' in built) throw new Error(built.problem);
+    expect(hasTranscript).not.toHaveBeenCalled();
+    expect(built.sessionLost).toBeUndefined();
+  });
+
+  it('never looks on the host for a container agent\'s transcript, which lives inside the container', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = AGENT_MD.replace(
+      'limits:',
+      'container:\n  runtime: docker\n  name: devbox\n  workspace: /work\n  hive_dir: /hive\nlimits:',
+    );
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 1, runs: [], sessionUuid: 'in-container',
+    };
+    const hasTranscript = vi.fn(() => false);
+    const built = build({
+      hasTranscript,
+      agentContainerSettingsPath: () => '/data/hive/container/claude-agent.settings.json',
+    })('slack-watcher', 'manual');
+
+    if ('problem' in built) throw new Error(built.problem);
+    expect(hasTranscript).not.toHaveBeenCalled();
+    expect(built.args.join(' ')).toContain('--resume in-container');
   });
 });
 
