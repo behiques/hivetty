@@ -1,5 +1,5 @@
 import { CheckCircle, WarningCircle } from '@phosphor-icons/react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CliMark } from '@/components/ui/cli-mark';
 import { SelectField } from '@/components/ui/select-field';
@@ -254,6 +254,20 @@ function SessionDefaultsGroup({ cli, clis }: { cli: HarnessId; clis: ClisConfig 
 /** On asks first, inline as every confirm in Settings does (`config-reset-confirm.tsx`); off is the safe way and writes at once. */
 function SkipPermissionsSwitch({ cli, checked }: { cli: HarnessId; checked: boolean }) {
   const [confirming, setConfirming] = useState(false);
+  const control = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef(false);
+
+  // The confirm replaced the switch, so its buttons took focus with them; hand it back once the switch is mounted again.
+  useEffect(() => {
+    if (confirming || !returnFocus.current) return;
+    returnFocus.current = false;
+    control.current?.focus();
+  }, [confirming]);
+
+  const close = () => {
+    returnFocus.current = true;
+    setConfirming(false);
+  };
 
   if (confirming) {
     return (
@@ -262,9 +276,9 @@ function SkipPermissionsSwitch({ cli, checked }: { cli: HarnessId; checked: bool
         title={`Start every ${CLI_NAMES[cli]} session with ${SKIP_PERMISSIONS_FLAG[cli]}?`}
         confirmLabel="Skip prompts"
         className="rounded-lg border border-red"
-        onCancel={() => setConfirming(false)}
+        onCancel={close}
         onConfirm={() => {
-          setConfirming(false);
+          close();
           void setCliConfig({ cli, skipPermissions: true });
         }}
       >
@@ -275,6 +289,7 @@ function SkipPermissionsSwitch({ cli, checked }: { cli: HarnessId; checked: bool
 
   return (
     <Switch
+      ref={control}
       label="Skip permission prompts"
       description={`Sessions start with ${SKIP_PERMISSIONS_FLAG[cli]}: nothing asks before a tool runs, so no permission card reaches the inbox.${SKIP_PERMISSIONS_EXTRA[cli]} Agents keep their fence.`}
       checked={checked}
