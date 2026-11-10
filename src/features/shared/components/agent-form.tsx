@@ -387,6 +387,8 @@ export const FIELD_HELP: Record<string, string> = {
     'ask first — it posts a question to the ledger and waits for an answer. act — it proceeds and reports afterwards. Neither changes the tool fence: act does not pre-allow permission prompts, so a tool outside "what it can do" still reaches your inbox.',
   harness:
     "Tried in this order at each wake; the first that can run this agent wins. A CLI that can't is skipped, never removed.",
+  fallback:
+    "Switch moves to the next CLI and starts a fresh conversation there. Wait queues the wake until the conversation's CLI is back, retrying each minute; a CLI that can never run this agent is still skipped.",
   model:
     'Which model each wake runs on. Default is what the CLI picks on its own, or its Settings card.',
   'codex.model':
@@ -461,6 +463,7 @@ export const RENDERED_PATHS: readonly string[] = [
   'model',
   // HIVE-396 and HIVE-397: the Runs on group.
   'harness',
+  'fallback',
   'codex.model',
   'copilot.model',
   'effort',
@@ -1590,6 +1593,22 @@ export function AgentForm({
               })}
             </div>
           </div>
+          {/* HIVE-399. Shown with a line present too, so a bad value always has a control to draw its problem beside. */}
+          {list.length > 1 || at('fallback') !== ''
+            ? row(
+                'fallback',
+                'fallback',
+                <SelectField
+                  label="If a conversation's CLI can't run"
+                  value={at('fallback') === 'wait' ? 'wait' : 'switch'}
+                  options={[
+                    { value: 'switch', label: 'Switch to the next CLI (starts fresh)' },
+                    { value: 'wait', label: 'Wait for it (keeps the conversation)' },
+                  ]}
+                  onChange={(next) => set('fallback', next === 'wait' ? 'wait' : '')}
+                />,
+              )
+            : null}
           {list.slice(1).flatMap((cli) => [
             row(modelPath(cli), `${CLI_NAMES[cli]} model`, modelControl(cli)),
             effortRow(cli, `${CLI_NAMES[cli]} effort`),
