@@ -1,4 +1,8 @@
 // @vitest-environment node
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { HarnessGate } from '../../../../electron/main/agents/resolve-harness';
@@ -1622,7 +1626,7 @@ describe('a lane whose conversation is gone (HIVE-404)', () => {
     })('slack-watcher', 'ledger', undefined, { lane: LANE });
 
     if ('problem' in built) throw new Error(built.problem);
-    expect(hasTranscript).toHaveBeenCalledWith(LANE_DIR, 'gone-uuid');
+    expect(hasTranscript).toHaveBeenCalledWith(LANE_DIR, 'gone-uuid', '/home/u/.hive/cli/claude-code');
     expect(built.sessionLost).toBe('gone-uuid');
   });
 
@@ -1693,6 +1697,37 @@ describe('a copilot wake (HIVE-343)', () => {
     expect(built.sessionUuid).toBe('b2e1-new');
     expect(built.startsRotation).toBe(true);
     expect(stored['slack-watcher']?.pendingSession).toEqual({ uuid: 'b2e1-new', handoff: 'I watch #ops.' });
+  });
+
+  /*
+    A headless copilot run writes under the app-owned home (`COPILOT_HOME` on the child's env only),
+    so that is where its lane's transcript is looked for, not the user's ~/.copilot (HIVE-404).
+  */
+  it('finds a lane\'s transcript under its own copilot home and resumes it (HIVE-404)', () => {
+    const uuid = '11111111-2222-4333-8444-555555555551';
+    const home = mkdtempSync(join(tmpdir(), 'wake-cop-home-'));
+    mkdirSync(join(home, 'session-state', uuid), { recursive: true });
+    writeFileSync(join(home, 'session-state', uuid, 'events.jsonl'), '{}\n');
+    vi.stubEnv('COPILOT_HOME', mkdtempSync(join(tmpdir(), 'wake-cop-user-')));
+    const fresh = copilot()('slack-watcher', 'manual');
+    if ('problem' in fresh || fresh.promptHash === undefined) throw new Error('expected a hash');
+    const promptHash = fresh.promptHash;
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 0, runs: [],
+      lanes: { 'repo:a/x': { sessionUuid: uuid, harness: 'copilot', runsSinceRotate: 1, rotateFailures: 0, promptHash } },
+    };
+    try {
+      const built = copilot({ hasTranscript: undefined, cliHome: (id) => (id === 'copilot' ? home : `/home/u/.hive/cli/${id}`) })(
+        'slack-watcher', 'ledger', undefined, { lane: 'repo:a/x' },
+      );
+
+      if ('problem' in built) throw new Error(built.problem);
+      expect(built.sessionLost).toBeUndefined();
+      expect(built.sessionUuid).toBe(uuid);
+      expect(built.args.join(' ')).toContain(uuid);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('resolves copilot on PATH, with its home and its token on the env only', () => {

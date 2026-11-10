@@ -24,6 +24,17 @@ describe('copilotRecord', () => {
     expect(record.hasTranscript('/any', UUID)).toBe(true);
   });
 
+  it('looks under a headless run\'s own home when one is given (HIVE-404)', () => {
+    const user = mkdtempSync(join(tmpdir(), 'cop-user-'));
+    const state = mkdtempSync(join(tmpdir(), 'cop-state-'));
+    mkdirSync(join(state, 'session-state', UUID), { recursive: true });
+    writeFileSync(join(state, 'session-state', UUID, 'events.jsonl'), '{}\n');
+    const record = copilotRecord(() => user);
+    expect(record.hasTranscript('/any', UUID)).toBe(false);
+    expect(record.hasTranscript('/any', UUID, state)).toBe(true);
+    expect(record.hasTranscript('/any', UUID, user)).toBe(false);
+  });
+
   it('answers nothing for an id that is not a uuid', () => {
     const record = copilotRecord(() => '/h');
     expect(record.transcriptPath('/c', '../etc')).toBeNull();

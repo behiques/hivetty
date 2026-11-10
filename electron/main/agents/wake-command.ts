@@ -316,7 +316,8 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
   const hasTranscript =
     deps.hasTranscript ??
     ((id: HarnessId, cwd: string, uuid: string) =>
-      (deps.adapter ?? headlessAdapter)(id)?.record.hasTranscript(cwd, uuid) ?? true);
+      // In the app-owned home a headless run is given, which is where Copilot writes (HIVE-404).
+      (deps.adapter ?? headlessAdapter)(id)?.record.hasTranscript(cwd, uuid, deps.cliHome(id)) ?? true);
 
   return (name, trigger, extra, options) => {
     /*

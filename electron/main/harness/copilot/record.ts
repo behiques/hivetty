@@ -14,13 +14,14 @@ export const defaultHome = (): string => process.env['COPILOT_HOME'] ?? join(hom
  * that never got a prompt has none and restarts fresh.
  */
 export function copilotRecord(home: () => string = defaultHome): HarnessRecord {
-  const transcriptPath = (_cwd: string, sessionUuid: string): string | null =>
+  const pathUnder = (dir: string, sessionUuid: string): string | null =>
     // Joined into a path: only a uuid gets that far.
-    UUID.test(sessionUuid) ? join(home(), 'session-state', sessionUuid, 'events.jsonl') : null;
+    UUID.test(sessionUuid) ? join(dir, 'session-state', sessionUuid, 'events.jsonl') : null;
   return {
-    transcriptPath,
-    hasTranscript: (cwd, sessionUuid) => {
-      const path = transcriptPath(cwd, sessionUuid);
+    transcriptPath: (_cwd, sessionUuid) => pathUnder(home(), sessionUuid),
+    // A headless run's home is app-owned, `COPILOT_HOME` on its env alone (HIVE-404).
+    hasTranscript: (_cwd, sessionUuid, stateDir) => {
+      const path = pathUnder(stateDir ?? home(), sessionUuid);
       return path !== null && existsSync(path);
     },
     titleOrigin: () => 'unknown',

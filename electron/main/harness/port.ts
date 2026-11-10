@@ -114,8 +114,12 @@ export type TitleVerdict =
 export interface HarnessRecord {
   /** The conversation's transcript on disk, or `null` when there is none yet. */
   transcriptPath(cwd: string, sessionUuid: string): string | null;
-  /** Whether there is a conversation behind the uuid for `--resume` to open. */
-  hasTranscript(cwd: string, sessionUuid: string): boolean;
+  /**
+   * Whether there is a conversation behind the uuid for `--resume` to open. `stateDir` is the CLI's
+   * app-owned home when a headless run asks ({@link HeadlessSpec.stateDir}); a CLI that writes there
+   * (Copilot, HIVE-404) looks in it, Claude and Codex ignore it.
+   */
+  hasTranscript(cwd: string, sessionUuid: string, stateDir?: string): boolean;
   /** Whether `name` was a rename or the harness's own guess; never throws, `unknown` on any doubt. */
   titleOrigin(cwd: string, sessionUuid: string, name: string): TitleVerdict;
   /** A raw terminal title as a session name: activity marks stripped, `''` for the harness's "unnamed". */
