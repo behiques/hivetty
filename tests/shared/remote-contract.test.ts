@@ -81,7 +81,7 @@ const MAIN_ONLY: ReadonlyMap<string, FrameKind> = new Map([
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(200);
+    expect(entries).toHaveLength(201);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -175,11 +175,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 160 call, 6 notify and 34 event', () => {
+  it('splits 161 call, 6 notify and 34 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 160, notify: 6, event: 34 });
+    expect(tally).toEqual({ call: 161, notify: 6, event: 34 });
   });
 
   /**
@@ -265,11 +265,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 200 as 83 read, 52 mutate and 65 execute', () => {
+  it('grades the 201 as 84 read, 52 mutate and 65 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 83, mutate: 52, execute: 65 });
+    expect(tally).toEqual({ read: 84, mutate: 52, execute: 65 });
   });
 
   /**

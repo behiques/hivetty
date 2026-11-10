@@ -29,6 +29,8 @@ import type {
   TrialResult,
 } from './account-contract';
 import type {
+  AgentHarnessCheckRequest,
+  AgentHarnessCheckResult,
   AgentLinesPush,
   AgentNameRequest,
   AgentRenameRequest,
@@ -1237,6 +1239,8 @@ export const CH = {
   agentsList: 'agents:list',
   agentsRead: 'agents:read',
   agentsWrite: 'agents:write',
+  /** Every CLI's verdict on a draft AGENT.md (HIVE-396). */
+  agentsHarnessCheck: 'agents:harness-check',
   agentsRemove: 'agents:remove',
   agentsRename: 'agents:rename',
   /** The folder changed — on disk or through this pane. Carries no payload. */
@@ -3158,6 +3162,8 @@ export interface HiveBridge {
     /** The raw file, or `null` when there is no such agent. */
     read(request: AgentNameRequest): Promise<string | null>;
     write(request: AgentWriteRequest): Promise<AgentWriteResult>;
+    /** Every CLI's verdict on a draft AGENT.md (HIVE-396). Writes nothing. */
+    harnessCheck(request: AgentHarnessCheckRequest): Promise<AgentHarnessCheckResult>;
     remove(request: AgentNameRequest): Promise<void>;
     rename(request: AgentRenameRequest): Promise<AgentWriteResult>;
     /** The folder changed; re-`list` to see how. */

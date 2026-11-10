@@ -360,6 +360,7 @@ export const FRAME_KIND = {
   [CH.agentsList]: 'call',
   [CH.agentsRead]: 'call',
   [CH.agentsWrite]: 'call',
+  [CH.agentsHarnessCheck]: 'call',
   [CH.agentsRemove]: 'call',
   [CH.agentsRename]: 'call',
   [CH.agentsChanged]: 'event',
@@ -705,6 +706,8 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.agentsList]: 'read',
   [CH.agentsRead]: 'read',
   [CH.agentsWrite]: 'execute',
+  // HIVE-396. Writes nothing, and answers only what Settings › Harnesses already shows a paired viewer.
+  [CH.agentsHarnessCheck]: 'read',
   [CH.agentsRemove]: 'mutate',
   [CH.agentsRename]: 'mutate',
   [CH.agentsChanged]: 'read',

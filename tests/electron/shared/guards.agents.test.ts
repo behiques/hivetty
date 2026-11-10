@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertAgentName,
   IpcValidationError,
+  parseAgentHarnessCheckRequest,
   parseAgentNameRequest,
   parseAgentRenameRequest,
   parseAgentRunRequest,
@@ -206,5 +207,19 @@ describe('parseAgentRunRequest', () => {
   it('refuses a request with no name at all', () => {
     expect(() => parseAgentRunRequest({})).toThrow(IpcValidationError);
     expect(() => parseAgentRunRequest(null)).toThrow(IpcValidationError);
+  });
+});
+
+describe('parseAgentHarnessCheckRequest (HIVE-396)', () => {
+  it('accepts a draft source', () => {
+    expect(parseAgentHarnessCheckRequest({ source: '---\nname: a\n---\n' })).toEqual({ source: '---\nname: a\n---\n' });
+  });
+
+  it('refuses a non-string source', () => {
+    expect(() => parseAgentHarnessCheckRequest({ source: 3 })).toThrow(IpcValidationError);
+  });
+
+  it('refuses an unexpected key', () => {
+    expect(() => parseAgentHarnessCheckRequest({ source: '', name: 'a' })).toThrow(IpcValidationError);
   });
 });

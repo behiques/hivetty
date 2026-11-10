@@ -283,6 +283,7 @@ describe('exposed surface', () => {
       'write',
       'remove',
       'rename',
+      'harnessCheck',
       'onChanged',
       'run',
       'kill',
