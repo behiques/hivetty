@@ -325,6 +325,8 @@ test('skip permission prompts asks, then writes clis.<id>.skipPermissions, and o
       await confirm.getByRole('button', { name: 'Skip prompts' }).click();
       await expect.poll(() => read(configPath).clis?.[id]?.skipPermissions).toBe(true);
       await expect(toggle).toHaveAttribute('aria-checked', 'true');
+      // Focus comes back to the switch the confirm replaced, so a keyboard user keeps their place.
+      await expect(toggle).toBeFocused();
     }
     await page.waitForFunction(() => document.getAnimations().length === 0);
     await page.screenshot({ path: testInfo.outputPath('skip-permissions-on.png') });

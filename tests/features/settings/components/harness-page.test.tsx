@@ -145,6 +145,20 @@ describe('HarnessPage (HIVE-376)', () => {
     expect(setCliConfig).toHaveBeenCalledWith({ cli, skipPermissions: false });
   });
 
+  it('returns focus to the switch when the confirm closes, by Cancel or by confirming', async () => {
+    const user = userEvent.setup();
+    renderPage('codex');
+    expect(screen.getByRole('switch', { name: 'Skip permission prompts' })).not.toHaveFocus();
+
+    await user.click(screen.getByRole('switch', { name: 'Skip permission prompts' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('switch', { name: 'Skip permission prompts' })).toHaveFocus();
+
+    await user.click(screen.getByRole('switch', { name: 'Skip permission prompts' }));
+    await user.click(screen.getByRole('button', { name: 'Skip prompts' }));
+    expect(screen.getByRole('switch', { name: 'Skip permission prompts' })).toHaveFocus();
+  });
+
   it('Codex says its sandbox goes too, in the description and the confirm; the others do not', async () => {
     const user = userEvent.setup();
     const { unmount } = renderPage('codex');
