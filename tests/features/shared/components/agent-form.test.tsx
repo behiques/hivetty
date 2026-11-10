@@ -13,6 +13,7 @@ import {
   type RunsOnContext,
 } from '@features/shared/components/agent-form';
 import { readFrontmatter } from '@shared/agent-contract';
+import { COPILOT_EFFORTS } from '@shared/cli-contract';
 import { runsOn } from '@tests/support/runs-on';
 
 const SOURCE = `---
@@ -1467,5 +1468,120 @@ describe('Runs on: problems in place (HIVE-396)', () => {
       />,
     );
     expect(screen.getByText('Not a Copilot model.')).toBeInTheDocument();
+  });
+});
+
+describe('Runs on: effort per model (HIVE-397)', () => {
+  const lastSource = (onChange: ReturnType<typeof vi.fn>) => onChange.mock.calls.at(-1)![0] as string;
+  const field = (source: string, path: string) => readFrontmatter(source)?.fields.get(path)?.value;
+  const withLines = (lines: string) => SOURCE.replace('autonomy: ask', `autonomy: ask\n${lines}`);
+  const stepper = (name: string) => screen.getByRole('radiogroup', { name });
+  const stops = (name: string) => within(stepper(name)).getAllByRole('radio').map((radio) => radio.textContent);
+  const live = (slug: string, efforts: string[]) => ({ slug, description: '', defaultEffort: 'medium', efforts });
+  const codexModels = [live('gpt-6-sol', ['low', 'high', 'ultra']), live('gpt-6-luna', ['low', 'medium'])];
+  const form = (source: string, problems: { field: string; reason: string }[] = [], context = runsOn()) =>
+    render(<AgentForm source={source} problems={problems} taken={[]} onChange={vi.fn()} runsOn={context} />);
+
+  it("offers Claude's efforts behind default, writes the pick, and default removes the line", async () => {
+    const onChange = setup();
+
+    expect(stops('thinking effort')).toEqual(['default', 'low', 'medium', 'high', 'max']);
+    await userEvent.click(within(stepper('thinking effort')).getByRole('radio', { name: 'high' }));
+    expect(field(lastSource(onChange), 'effort')).toBe('high');
+    await userEvent.click(within(stepper('thinking effort')).getByRole('radio', { name: 'default' }));
+    expect(field(lastSource(onChange), 'effort')).toBeUndefined();
+  });
+
+  it("offers Copilot's efforts on its fallback row, into its block", async () => {
+    const onChange = setup({ source: withLines('harness: [claude-code, copilot]') });
+
+    expect(stops('Copilot thinking effort')).toEqual(['default', ...COPILOT_EFFORTS]);
+    await userEvent.click(within(stepper('Copilot thinking effort')).getByRole('radio', { name: 'xhigh' }));
+    expect(field(lastSource(onChange), 'copilot.effort')).toBe('xhigh');
+  });
+
+  it("offers ultra only for a Codex model whose list has it, the card's model when the file names none", () => {
+    const { unmount } = form(withLines('harness: [codex]'), [], runsOn({ codexModels, cardModels: { codex: 'gpt-6-sol' } }));
+    expect(stops('thinking effort')).toEqual(['default', 'low', 'high', 'ultra']);
+    unmount();
+
+    form(withLines('harness: [codex]\ncodex:\n  model: gpt-6-luna'), [], runsOn({ codexModels }));
+    expect(stops('thinking effort')).toEqual(['default', 'low', 'medium']);
+  });
+
+  it.each([
+    ['haiku on Claude', 'model: haiku', {}],
+    ["haiku as Claude's card model", 'lane: build', { 'claude-code': 'haiku' }],
+    ['kimi-k3 on Copilot', 'harness: [copilot]\ncopilot:\n  model: kimi-k3', {}],
+  ])('hides the control for %s', (_label, lines, cardModels) => {
+    form(withLines(lines), [], runsOn({ cardModels }));
+    expect(screen.queryByRole('radiogroup', { name: /thinking effort/ })).toBeNull();
+  });
+
+  it('picking haiku removes the saved effort in the same write; opus keeps it', async () => {
+    const onChange = setup({ source: withLines('effort: high') });
+
+    await userEvent.click(screen.getByRole('radio', { name: 'opus' }));
+    expect(field(lastSource(onChange), 'effort')).toBe('high');
+    await userEvent.click(screen.getByRole('radio', { name: 'haiku' }));
+    const next = lastSource(onChange);
+    expect([field(next, 'model'), field(next, 'effort')]).toEqual(['haiku', undefined]);
+  });
+
+  it('picking kimi-k3 on Copilot removes its effort, and the block stays for the model', async () => {
+    const onChange = setup({ source: withLines('harness: [copilot]\ncopilot:\n  effort: high') });
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /Copilot model/ }), 'kimi-k3');
+    const next = lastSource(onChange);
+    expect([field(next, 'copilot.model'), field(next, 'copilot.effort')]).toEqual(['kimi-k3', undefined]);
+  });
+
+  it("picking a Codex model whose list lacks the saved effort removes it", async () => {
+    const onChange = setup({
+      source: withLines('harness: [codex]\ncodex:\n  model: gpt-6-sol\n  effort: high'),
+      runsOn: runsOn({ codexModels: [live('gpt-6-sol', ['low', 'high']), live('gpt-7-sol', ['low', 'medium'])] }),
+    });
+
+    await userEvent.click(screen.getByRole('radio', { name: /7 · latest/ }));
+    const next = lastSource(onChange);
+    expect([field(next, 'codex.model'), field(next, 'codex.effort')]).toEqual(['gpt-7-sol', undefined]);
+  });
+
+  it("Codex's Use the CLI default keeps an effort the card's model takes", async () => {
+    const onChange = setup({
+      source: withLines('harness: [codex]\ncodex:\n  model: gpt-6-luna\n  effort: ultra'),
+      runsOn: runsOn({ codexModels, cardModels: { codex: 'gpt-6-sol' } }),
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use the CLI default' }));
+    const next = lastSource(onChange);
+    expect([field(next, 'codex.model'), field(next, 'codex.effort')]).toEqual([undefined, 'ultra']);
+  });
+
+  it("Codex's Use the CLI default drops an effort the card's model lacks, and the emptied block", async () => {
+    const onChange = setup({
+      source: withLines('harness: [codex]\ncodex:\n  model: gpt-6-sol\n  effort: ultra'),
+      runsOn: runsOn({ codexModels, cardModels: { codex: 'gpt-6-luna' } }),
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use the CLI default' }));
+    const next = lastSource(onChange);
+    expect(field(next, 'codex.effort')).toBeUndefined();
+    expect(next).not.toMatch(/^codex:/m);
+  });
+
+  it('draws an effort problem beside its control', () => {
+    expect(RENDERED_PATHS).toEqual(expect.arrayContaining(['effort', 'codex.effort', 'copilot.effort']));
+    form(withLines('effort: high'), [{ field: 'effort', reason: 'Not an effort.' }]);
+    expect(screen.getByRole('alert').closest('[data-field]')).toHaveAttribute('data-field', 'effort');
+  });
+
+  it('banners an effort problem whose control is hidden, or whose CLI the list does not name', () => {
+    form(withLines('model: haiku\neffort: high\ncopilot:\n  effort: high'), [
+      { field: 'effort', reason: 'haiku takes no effort setting.' },
+      { field: 'copilot.effort', reason: 'Copilot is not in the list.' },
+    ]);
+    expect(screen.getByText('haiku takes no effort setting.').closest('[data-field]')).toBeNull();
+    expect(screen.getByText('Copilot is not in the list.').closest('[data-field]')).toBeNull();
   });
 });
