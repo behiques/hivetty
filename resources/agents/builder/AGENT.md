@@ -3,6 +3,11 @@ name: builder
 description: Builds an approved plan in its own worktree, task by task with a commit each, then opens a draft PR and hands it to shipper. Call it with a ledger_ask carrying repo, ticket, branch, plan and spec paths.
 icon: ph-git-branch
 model: opus
+codex:
+  model: gpt-6.1-sol
+  effort: high
+copilot:
+  model: claude-opus-5.5
 wake:
   on: [ledger]
 skills: [worktree, execute, tdd, debug, verify]

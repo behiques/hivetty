@@ -880,7 +880,7 @@ describe('codex: and copilot: blocks (HIVE-396)', () => {
     expect(definition(GOOD.replace('model: sonnet', 'model: opus')).effort).toBe('medium');
   });
 
-  it('parses every shipped agent exactly as before', () => {
+  it('parses every shipped agent with a model for each CLI', () => {
     const root = join(process.cwd(), 'resources/agents');
     const folders = readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory());
 
@@ -891,8 +891,15 @@ describe('codex: and copilot: blocks (HIVE-396)', () => {
       const declared = parseList(readFrontmatter(source)?.fields.get('skills')?.value ?? '[]') ?? [];
       const def = definition(source, { folder: folder.name, skillNames: declared, hiveSkillNames: [] });
 
-      expect(def.codex).toBeUndefined();
-      expect(def.copilot).toBeUndefined();
+      const builds = folder.name === 'builder' || folder.name === 'fixer';
+      expect(def.model).toBe(builds ? 'opus' : 'sonnet');
+      expect(def.codex).toEqual({
+        model: builds ? 'gpt-6.1-sol' : 'gpt-6.1-terra',
+        effort: builds ? 'high' : 'medium',
+      });
+      expect(def.copilot).toEqual({
+        model: builds ? 'claude-opus-5.5' : 'claude-sonnet-5.5',
+      });
     }
   });
 });

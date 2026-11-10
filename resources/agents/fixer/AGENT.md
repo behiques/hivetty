@@ -3,6 +3,11 @@ name: fixer
 description: Works through the findings on a PR, the self review's findings, reviewer comments, bot findings and red checks. Assesses each, fixes the valid ones behind a test on the PR branch, replies to the rest, and answers shipper when the PR is clean. Call it with a ledger_ask carrying the PR, its checkout, who to ask for decisions, and the findings.
 icon: ph-bug
 model: opus
+codex:
+  model: gpt-6.1-sol
+  effort: high
+copilot:
+  model: claude-opus-5.5
 wake:
   on: [ledger]
 skills: [review-pr-findings, tdd, debug, verify, worktree]
