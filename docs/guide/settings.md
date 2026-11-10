@@ -75,6 +75,21 @@ row says so and Claude Code stays in the picker.
 "clis": { "copilot": { "sessions": false } }
 ```
 
+### Skip permission prompts
+
+Each CLI's **New sessions** group has **Skip permission prompts**, off by default. With it on, every session
+of that CLI starts with all permissions granted, so it runs without stopping to ask: Claude Code gets
+`--dangerously-skip-permissions`, Codex `--dangerously-bypass-approvals-and-sandbox` (no approvals and no
+sandbox), and Copilot `--allow-all`, the same as typing `/yolo on`. Nothing asks, so no permission card
+reaches the inbox for those sessions. It applies to sessions you start from then on, and never to headless
+agents, which keep their own permission fence.
+
+**Example.** Run Codex and Copilot sessions uninterrupted:
+
+```json
+"clis": { "codex": { "skipPermissions": true }, "copilot": { "skipPermissions": true } }
+```
+
 ### Headless agents
 
 How each agent CLI runs [agents](agents.md). Claude Code's **Headless agents** group has

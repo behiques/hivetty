@@ -2219,6 +2219,15 @@ describe('parseSetCliRequest (HIVE-376)', () => {
     expect(() => parseSetCliRequest({ cli: 'copilot', installSkills: true })).toThrow();
     expect(() => parseSetCliRequest({ cli: 'codex', installSkills: 'yes' })).toThrow();
   });
+
+  it('takes skipPermissions on every CLI, as a boolean', () => {
+    expect(parseSetCliRequest({ cli: 'claude-code', skipPermissions: true })).toEqual({
+      cli: 'claude-code',
+      skipPermissions: true,
+    });
+    expect(parseSetCliRequest({ cli: 'copilot', skipPermissions: false })).toEqual({ cli: 'copilot', skipPermissions: false });
+    expect(() => parseSetCliRequest({ cli: 'codex', skipPermissions: 'yes' })).toThrow();
+  });
 });
 
 describe('parseDiagnoseCommandRequest cli (HIVE-376)', () => {

@@ -36,6 +36,13 @@ import { HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 /** A model list longer than this is a select, as in the picker (`new-session-picker.tsx`, HIVE-280). */
 const STEPPER_MAX = 8;
 
+/** The flag each CLI's launch adds under `clis.<id>.skipPermissions`, named so the switch says what it does. */
+const SKIP_PERMISSIONS_FLAG: Record<HarnessId, string> = {
+  'claude-code': '--dangerously-skip-permissions',
+  codex: '--dangerously-bypass-approvals-and-sandbox',
+  copilot: '--allow-all',
+};
+
 const SIGN_IN_COPY: Record<HarnessId, string> = {
   'claude-code': 'The account claude reports.',
   codex: 'The login codex reports.',
@@ -231,6 +238,12 @@ function SessionDefaultsGroup({ cli, clis }: { cli: HarnessId; clis: ClisConfig 
           disabledReason={`not for ${model}`}
         />
       </div>
+      <Switch
+        label="Skip permission prompts"
+        description={`Sessions start with ${SKIP_PERMISSIONS_FLAG[cli]}: nothing asks before a tool runs, so no permission card reaches the inbox. Agents keep their fence.`}
+        checked={clis[cli].skipPermissions === true}
+        onCheckedChange={(next) => void setCliConfig({ cli, skipPermissions: next })}
+      />
     </SettingsGroup>
   );
 }

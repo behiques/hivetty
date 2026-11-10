@@ -4313,6 +4313,20 @@ describe('codex sessions (HIVE-279)', () => {
     expect(typed().some((line) => line.includes('mcp_servers.hive.command'))).toBe(true);
   });
 
+  it('skips permission prompts only where clis.codex.skipPermissions says so', () => {
+    instance = build([], { config: { ...CONFIG, clis: resolveClis({ codex: { skipPermissions: true } }) } });
+    instance.open(codexOpen);
+    bootTo(mintedFor('hero-refresh'));
+    expect(typed().some((line) => line.includes('--dangerously-bypass-approvals-and-sandbox'))).toBe(true);
+  });
+
+  it('asks for permissions as before when skipPermissions is absent', () => {
+    instance = build([]);
+    instance.open(codexOpen);
+    bootTo(mintedFor('hero-refresh'));
+    expect(typed().some((line) => line.includes('--dangerously-bypass-approvals-and-sandbox'))).toBe(false);
+  });
+
   it('bypasses hook trust where the repository has no .codex of its own (D4)', () => {
     instance = build([]);
     instance.open(codexOpen);
