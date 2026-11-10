@@ -1,10 +1,14 @@
 // @vitest-environment node
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   parseAgent,
   readFrontmatter,
 } from '../../../../electron/main/agents/definition';
+import { parseList } from '../../../../electron/shared/agent-contract';
 
 /**
  * The ticket's own example, verbatim.
@@ -830,5 +834,56 @@ describe('harness: (HIVE-340)', () => {
     expect(problems(withHarness('claude-code'))).toContainEqual(
       expect.objectContaining({ field: 'harness' }),
     );
+  });
+});
+
+describe('codex: and copilot: blocks (HIVE-396)', () => {
+  const withBlocks = (blocks: string) => GOOD.replace('autonomy: ask\n', `autonomy: ask\n${blocks}`);
+
+  it('maps both blocks, absent fields staying absent', () => {
+    const def = definition(
+      withBlocks('codex:\n  model: gpt-6.1-sol\n  effort: high\ncopilot:\n  model: claude-opus-5.5\n'),
+    );
+    expect(def.codex).toEqual({ model: 'gpt-6.1-sol', effort: 'high' });
+    expect(def.copilot).toEqual({ model: 'claude-opus-5.5' });
+  });
+
+  it('leaves both unset with no block, and keeps Claude top-level', () => {
+    const def = definition(GOOD);
+    expect(def.codex).toBeUndefined();
+    expect(def.copilot).toBeUndefined();
+    expect(def.model).toBe('sonnet');
+  });
+
+  it('accepts a block for a CLI not in harness:', () => {
+    expect(definition(withBlocks('harness: [claude-code]\ncodex:\n  model: gpt-6-luna\n')).codex).toEqual({
+      model: 'gpt-6-luna',
+    });
+  });
+
+  it.each([
+    ['a Codex model that is not an id', 'codex:\n  model: GPT 6\n', 'codex.model'],
+    ['a Codex effort off its list', 'codex:\n  effort: turbo\n', 'codex.effort'],
+    ['a Copilot model off its list', 'copilot:\n  model: opus\n', 'copilot.model'],
+    ['an effort beside a model that takes none', 'copilot:\n  model: kimi-k3\n  effort: high\n', 'copilot.effort'],
+    ['an unknown child key', 'codex:\n  sandbox: read-only\n', 'codex.sandbox'],
+  ])('refuses %s, naming the field', (_label, block, field) => {
+    expect(problems(withBlocks(block))).toContainEqual(expect.objectContaining({ field }));
+  });
+
+  it('parses every shipped agent exactly as before', () => {
+    const root = join(process.cwd(), 'resources/agents');
+    const folders = readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+
+    expect(folders.length).toBeGreaterThan(0);
+    for (const folder of folders) {
+      const source = readFileSync(join(root, folder.name, 'AGENT.md'), 'utf8');
+      // The skills each file declares, as `parseForWake` reads them: the machine's catalog is not the question here.
+      const declared = parseList(readFrontmatter(source)?.fields.get('skills')?.value ?? '[]') ?? [];
+      const def = definition(source, { folder: folder.name, skillNames: declared, hiveSkillNames: [] });
+
+      expect(def.codex).toBeUndefined();
+      expect(def.copilot).toBeUndefined();
+    }
   });
 });
