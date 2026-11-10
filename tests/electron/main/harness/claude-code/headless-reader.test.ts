@@ -91,6 +91,36 @@ describe('readClaudeHeadless', () => {
     ]);
   });
 
+  it('reads usage off result: cache writes count as input, cache reads as cached (HIVE-398)', () => {
+    const [, end] = readAll([
+      result({
+        session_id: 's',
+        usage: {
+          input_tokens: 12,
+          cache_creation_input_tokens: 3_000,
+          cache_read_input_tokens: 40_000,
+          output_tokens: 250,
+        },
+      }),
+    ]);
+
+    expect(end).toMatchObject({
+      kind: 'end',
+      usage: { inputTokens: 3_012, outputTokens: 250, cachedTokens: 40_000 },
+    });
+  });
+
+  it('reads a usage with only some meters, and none when it carries no numbers (HIVE-398)', () => {
+    expect(readAll([line({ type: 'result', usage: { output_tokens: 9 } })])[0]).toMatchObject({
+      usage: { outputTokens: 9 },
+    });
+    expect(readAll([line({ type: 'result', usage: { cache_read_input_tokens: 4 } })])[0]).toEqual(
+      expect.objectContaining({ usage: { cachedTokens: 4 } }),
+    );
+    expect(readAll([line({ type: 'result', usage: { input_tokens: 'x' } })])[0]).not.toHaveProperty('usage');
+    expect(readAll([line({ type: 'result', usage: null })])[0]).not.toHaveProperty('usage');
+  });
+
   it('omits cost and turns that are not numbers, and spells a missing subtype unknown', () => {
     expect(readAll([line({ type: 'result', total_cost_usd: '1', num_turns: null })])).toEqual([
       { kind: 'end', stop: 'error', detail: 'unknown' },
