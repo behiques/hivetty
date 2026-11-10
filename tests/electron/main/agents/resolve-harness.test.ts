@@ -353,3 +353,99 @@ describe('checkHarness: a fix for each failure (HIVE-396)', () => {
     });
   });
 });
+
+describe('resolveHarness: fallback wait (HIVE-399)', () => {
+  const both = { codex: fake('codex'), 'claude-code': fake('claude-code') };
+  const waiting = def({ harness: [cli('codex'), cli('claude-code')], fallback: 'wait' });
+  const offPath =
+    (fix?: 'sign-in'): ResolveDeps['binary'] =>
+    (id) =>
+      id === 'codex'
+        ? {
+            problem: fix === undefined ? 'codex was not found on PATH' : 'no Codex token',
+            ...(fix === undefined ? {} : { fix }),
+          }
+        : { path: `/bin/${id}` };
+  const cases: [string, Partial<ResolveDeps>][] = [
+    ['enable', { gate: gate({ enabled: (id: HarnessId) => id !== 'codex' }) }],
+    ['upgrade', { gate: gate({ entitled: (id: HarnessId) => (id === 'codex' ? 'Codex is in Solo and above' : null) }) }],
+    ['install', { gate: gate(), binary: offPath() }],
+    ['sign-in', { gate: gate(), binary: offPath('sign-in') }],
+  ];
+
+  it.each(cases)('waits for the held CLI when its fix is %s', (_fix, over) => {
+    expect(resolveHarness(waiting, [], deps(both, over), cli('codex'))).toEqual({
+      problem: expect.stringMatching(/^codex/),
+      waitFor: 'codex',
+    });
+  });
+
+  it('stays on the held CLI when it passes, even when it is not first', () => {
+    const result = resolveHarness(
+      def({ harness: [cli('claude-code'), cli('codex')], fallback: 'wait' }),
+      [],
+      deps(both, { gate: gate() }),
+      cli('codex'),
+    );
+
+    expect('adapter' in result && result.adapter.id).toBe('codex');
+  });
+
+  it('switches when the held CLI cannot run this definition at all', () => {
+    const result = resolveHarness(
+      def({
+        harness: [cli('codex'), cli('claude-code')],
+        fallback: 'wait',
+        limits: { turns: 40, rotateAfter: 50, parallel: 1, budgetUsd: 1 },
+      }),
+      [],
+      deps({ codex: fake('codex', { caps: { reportsCostUsd: false } }), 'claude-code': fake('claude-code') }, { gate: gate() }),
+      cli('codex'),
+    );
+
+    expect('adapter' in result && result.adapter.id).toBe('claude-code');
+  });
+
+  it('switches when the held CLI cannot enforce the fence', () => {
+    const result = resolveHarness(
+      waiting,
+      ['Bash(rm:*)'],
+      deps(
+        { codex: fake('codex', { express: () => ({ ok: false, unexpressible: ['Bash(rm:*)'] }) }), 'claude-code': fake('claude-code') },
+        { gate: gate() },
+      ),
+      cli('codex'),
+    );
+
+    expect('adapter' in result && result.adapter.id).toBe('claude-code');
+  });
+
+  it('resolves normally when the held CLI is no longer listed', () => {
+    const result = resolveHarness(
+      def({ harness: [cli('claude-code')], fallback: 'wait' }),
+      [],
+      deps(both, { gate: gate({ enabled: (id: HarnessId) => id !== 'codex' }) }),
+      cli('codex'),
+    );
+
+    expect('adapter' in result && result.adapter.id).toBe('claude-code');
+  });
+
+  it('resolves normally with no conversation to keep', () => {
+    const result = resolveHarness(waiting, [], deps(both, { gate: gate({ enabled: (id: HarnessId) => id !== 'codex' }) }));
+
+    expect('adapter' in result && result.adapter.id).toBe('claude-code');
+  });
+
+  it('never waits under switch, the default', () => {
+    const result = resolveHarness(
+      def({ harness: [cli('codex'), cli('claude-code')] }),
+      [],
+      deps(both, { gate: gate({ enabled: (id: HarnessId) => id !== 'codex' }) }),
+      cli('codex'),
+    );
+
+    expect(result).not.toHaveProperty('waitFor');
+    expect('adapter' in result && result.adapter.id).toBe('claude-code');
+  });
+});
