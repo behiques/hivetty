@@ -80,7 +80,8 @@ row says so and Claude Code stays in the picker.
 Each CLI's **New sessions** group has **Skip permission prompts**, off by default. With it on, every session
 of that CLI starts with all permissions granted, so it runs without stopping to ask: Claude Code gets
 `--dangerously-skip-permissions`, Codex `--dangerously-bypass-approvals-and-sandbox` (no approvals and no
-sandbox), and Copilot `--allow-all`, the same as typing `/yolo on`. Nothing asks, so no permission card
+sandbox, so its commands get full access to the machine), and Copilot `--allow-all`, the same as typing
+`/yolo on`. Turning it on asks you to confirm first; turning it off does not. Nothing asks, so no permission card
 reaches the inbox for those sessions. It applies to sessions you start from then on, and never to headless
 agents, which keep their own permission fence.
 
