@@ -871,6 +871,38 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
     expect(args).not.toContain('--effort');
   });
 
+  it("hands another CLI the agent's own block, ahead of the card (HIVE-396)", () => {
+    const args = build({
+      adapter: other,
+      def: def({ model: 'opus', codex: { model: 'gpt-6.1-sol', effort: 'high' } }),
+      defaults: { model: 'gpt-6-luna', effort: 'low' },
+    }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('gpt-6.1-sol');
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
+  });
+
+  it('falls back to the card per field when the block names only one (HIVE-396)', () => {
+    const args = build({ adapter: other, def: def({ codex: { effort: 'high' } }), defaults: { model: 'gpt-6-luna' } }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('gpt-6-luna');
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
+  });
+
+  it('drops an effort the resolved model takes none of, off Claude (HIVE-396)', () => {
+    const copilot = { ...claudeCodeAdapter, id: 'copilot' as const };
+    const args = build({ adapter: copilot, def: def({ copilot: { effort: 'high' } }), defaults: { model: 'kimi-k3' } }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('kimi-k3');
+    expect(args).not.toContain('--effort');
+  });
+
+  it("never reads another CLI's block on Claude (HIVE-396)", () => {
+    const args = build({ def: def({ codex: { model: 'gpt-6.1-sol' } }) }).args;
+
+    expect(args).not.toContain('gpt-6.1-sol');
+  });
+
   it('hands the adapter the instructions and the hive server it carried (HIVE-342)', () => {
     const seen: HeadlessSpec[] = [];
     const recording = {

@@ -36,10 +36,13 @@ import {
   readFrontmatter,
   type AgentContainer,
   type AgentDefinition,
+  type AgentHarnessCheckResult,
+  type HarnessFix,
+  type HarnessVerdict,
   type RunKind,
 } from '@shared/agent-contract';
 import type { ClisConfig } from '@shared/cli-contract';
-import { CAPABILITIES, type HarnessId } from '@shared/harness-contract';
+import { CAPABILITIES, HARNESS_IDS, type HarnessId } from '@shared/harness-contract';
 
 import { CONTAINER_DIR, CONTAINER_MCP_FILE } from '../container/generated';
 import { cliCommand } from '../harness/cli-command';
@@ -50,7 +53,7 @@ import { agentMcpConfig, type McpServerSpec } from '../mcp/agent-config';
 import { resolveCommand } from './command-path';
 import { parseAgent } from './definition';
 import { AGENT_PREAMBLE } from './preamble';
-import { resolveHarness, type HarnessGate } from './resolve-harness';
+import { checkHarness, resolveHarness, type HarnessGate } from './resolve-harness';
 import type { AgentState } from './state';
 import { fencedRules, systemPromptFor, wakeCommand, type WakeCommand } from './waker';
 
@@ -282,6 +285,27 @@ function parseForWake(
   };
 }
 
+/**
+ * The binary a wake of `id` spawns, or why there is none (HIVE-376, HIVE-137). A module function so
+ * `createHarnessCheck` resolves exactly what a wake would (HIVE-396).
+ */
+function binaryFor(def: AgentDefinition, deps: WakeCommandDeps) {
+  return (id: HarnessId): { path: string } | { problem: string; fix?: HarnessFix } => {
+    const cli = id === 'claude-code' ? 'claude' : id;
+
+    if (def.container !== undefined) {
+      return { path: def.container.command ?? (deps.adapter ?? headlessAdapter)(id)?.headless.containerCommand ?? cli };
+    }
+    if (id === 'copilot' && deps.cliToken('copilot') === null) {
+      return { problem: 'no Copilot token: add one in Settings › Harnesses › Copilot', fix: 'sign-in' };
+    }
+    const command = cliCommand(id, deps.clis(), deps.claudeCommand());
+    return deps.isExecutable === undefined
+      ? resolveCommand(command, deps.env()['PATH'], undefined, cli)
+      : resolveCommand(command, deps.env()['PATH'], deps.isExecutable, cli);
+  };
+}
+
 export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
   const fs = deps.fs ?? REAL_FS;
 
@@ -335,20 +359,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       On the host each CLI resolves through `cliCommand` (HIVE-376): Claude's `claudeCommand`, the
       others' `clis.<id>.command`, else the bare name on PATH.
     */
-    const binary = (id: HarnessId) => {
-      const cli = id === 'claude-code' ? 'claude' : id;
-
-      if (def.container !== undefined) {
-        return { path: def.container.command ?? (deps.adapter ?? headlessAdapter)(id)?.headless.containerCommand ?? cli };
-      }
-      if (id === 'copilot' && deps.cliToken('copilot') === null) {
-        return { problem: 'no Copilot token: add one in Settings › Harnesses › Copilot' };
-      }
-      const command = cliCommand(id, deps.clis(), deps.claudeCommand());
-      return deps.isExecutable === undefined
-        ? resolveCommand(command, deps.env()['PATH'], undefined, cli)
-        : resolveCommand(command, deps.env()['PATH'], deps.isExecutable, cli);
-    };
+    const binary = binaryFor(def, deps);
 
     /*
       What this story does not do for an agent, refused rather than half-done
@@ -641,6 +652,45 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       ...(resuming === undefined ? { promptHash } : {}),
       ...(startsRotation ? { startsRotation: true as const } : {}),
       harness: adapter.id,
+    };
+  };
+}
+
+/**
+ * Every CLI's verdict on a draft AGENT.md, for the form (HIVE-396): the wake's own `checkHarness`,
+ * binary resolution and container rule, so the form never offers a CLI a wake would skip. A draft
+ * has no one-shot grants, so its rules are the standing ones. The name comes from the draft, which
+ * is what `parseForWake`'s folder check compares against, so a never-saved agent reads too.
+ */
+export function createHarnessCheck(deps: WakeCommandDeps): (source: string) => AgentHarnessCheckResult {
+  return (source) => {
+    const name = readFrontmatter(source)?.fields.get('name')?.value ?? '';
+    const parsed = parseForWake(source, name);
+
+    if ('problem' in parsed) return parsed;
+
+    const { def } = parsed;
+    const rules = fencedRules(def, []);
+    const resolve = {
+      adapter: deps.adapter ?? headlessAdapter,
+      binary: binaryFor(def, deps),
+      ...(deps.gate === undefined ? {} : { gate: deps.gate }),
+    };
+    const verdict = (id: HarnessId): HarnessVerdict => {
+      const result = checkHarness(def, rules, resolve, id);
+
+      if ('fail' in result) {
+        return { ok: false, reason: result.fail, ...(result.fix === undefined ? {} : { fix: result.fix }) };
+      }
+      // The wake's own rule, after resolution (wake-command's container refusal).
+      if (def.container !== undefined && !CAPABILITIES[id].container) {
+        return { ok: false, reason: `${id} agents cannot run in a container yet.` };
+      }
+      return { ok: true };
+    };
+
+    return {
+      verdicts: Object.fromEntries(HARNESS_IDS.map((id) => [id, verdict(id)])) as Record<HarnessId, HarnessVerdict>,
     };
   };
 }

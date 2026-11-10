@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  checkHarness,
   firstPassing,
   resolveHarness,
   type HarnessGate,
@@ -261,6 +262,63 @@ describe('resolveHarness: fail closed (HIVE-332)', () => {
     const codex = fake('codex');
     expect(resolveHarness(def({ harness: [cli('codex')] }), [], deps({ codex }, { gate: gate() }))).toMatchObject({
       adapter: codex,
+    });
+  });
+});
+
+describe('checkHarness: a fix for each failure (HIVE-396)', () => {
+  const claude = fake('claude-code');
+  const fail = (result: ReturnType<typeof checkHarness>) => {
+    if ('pass' in result) throw new Error('expected a failure');
+    return result;
+  };
+
+  it('passes the same CLI resolveHarness would run', () => {
+    expect(checkHarness(def(), [], deps({ 'claude-code': claude }), 'claude-code')).toEqual({
+      pass: { adapter: claude, path: '/bin/claude-code' },
+    });
+  });
+
+  it.each<[string, Partial<ResolveDeps>, Partial<AgentDefinition>, string | undefined]>([
+    ['a missing binary', { binary: () => ({ problem: 'not found' }) }, {}, 'install'],
+    ['a missing token', { binary: () => ({ problem: 'no token', fix: 'sign-in' }) }, {}, 'sign-in'],
+    ['a plan lock', { gate: gate({ entitled: () => 'Copilot is in Team and above' }) }, {}, 'upgrade'],
+    ['the agents switch', { gate: gate({ enabled: () => false }) }, {}, 'enable'],
+  ])('%s', (_label, over, defOver, fix) => {
+    expect(fail(checkHarness(def(defOver), [], deps({ 'claude-code': claude }, over), 'claude-code')).fix).toBe(fix);
+  });
+
+  it('a budget on a CLI that reports no cost', () => {
+    const codex = fake('codex', { caps: { reportsCostUsd: false } });
+    const result = fail(
+      checkHarness(
+        def({ limits: { turns: 40, rotateAfter: 50, parallel: 1, budgetUsd: 1 } }),
+        [],
+        deps({ codex }, { gate: gate() }),
+        cli('codex'),
+      ),
+    );
+    expect(result.fix).toBe('remove-budget');
+  });
+
+  it('an integration the CLI cannot serve', () => {
+    const codex = fake('codex', { caps: { agentMcp: [] } });
+    expect(fail(checkHarness(def({ mcp: ['slack'] }), [], deps({ codex }, { gate: gate() }), cli('codex'))).fix).toBe(
+      'remove-mcp',
+    );
+  });
+
+  it('no fix for a rule the fence cannot express, or no runner', () => {
+    const codex = fake('codex', { express: () => ({ ok: false, unexpressible: ['Bash(git push)'] }) });
+    expect(fail(checkHarness(def(), [], deps({ codex }, { gate: gate() }), cli('codex'))).fix).toBeUndefined();
+    expect(fail(checkHarness(def(), [], deps({}), 'claude-code')).fix).toBeUndefined();
+  });
+
+  it("leaves resolveHarness's sentence unchanged", () => {
+    expect(
+      resolveHarness(def(), [], deps({ 'claude-code': claude }, { binary: () => ({ problem: 'not found' }) })),
+    ).toEqual({
+      problem: 'No CLI can run reviewer: claude-code cannot start: not found.',
     });
   });
 });

@@ -3,6 +3,7 @@ import {
   isReservedAgentName,
 } from './agent-contract';
 import type {
+  AgentHarnessCheckRequest,
   AgentNameRequest,
   AgentRenameRequest,
   AgentRunRequest,
@@ -3020,6 +3021,12 @@ export function parseAgentWriteRequest(input: unknown): AgentWriteRequest {
     name: assertAgentName(raw.name, 'agentWrite.name'),
     source: assertString(raw.source, 'agentWrite.source'),
   };
+}
+
+/** A draft AGENT.md to check against every CLI (HIVE-396). Unvalidated past being a string, like a write. */
+export function parseAgentHarnessCheckRequest(input: unknown): AgentHarnessCheckRequest {
+  const raw = assertShape(input, ['source'], 'agentHarnessCheck');
+  return { source: assertString(raw.source, 'agentHarnessCheck.source') };
 }
 
 /**

@@ -13,6 +13,8 @@ import type {
   TrialResult,
 } from '@shared/account-contract';
 import type {
+  AgentHarnessCheckRequest,
+  AgentHarnessCheckResult,
   AgentLinesPush,
   AgentNameRequest,
   AgentRenameRequest,
@@ -635,6 +637,8 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.agentsRead, request),
     write: (request: AgentWriteRequest): Promise<AgentWriteResult> =>
       ipcRenderer.invoke(CH.agentsWrite, request),
+    harnessCheck: (request: AgentHarnessCheckRequest): Promise<AgentHarnessCheckResult> =>
+      ipcRenderer.invoke(CH.agentsHarnessCheck, request),
     remove: (request: AgentNameRequest): Promise<void> =>
       ipcRenderer.invoke(CH.agentsRemove, request),
     rename: (request: AgentRenameRequest): Promise<AgentWriteResult> =>

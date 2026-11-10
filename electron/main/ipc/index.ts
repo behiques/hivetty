@@ -57,6 +57,7 @@ import {
   parseAckRequest,
   parseAddJiraCommentRequest,
   parseAddProjectRequest,
+  parseAgentHarnessCheckRequest,
   parseAgentNameRequest,
   parseAgentRenameRequest,
   parseAgentRunRequest,
@@ -222,7 +223,7 @@ import {
 import { createScheduler, type Scheduler } from '../agents/scheduler';
 import { createAgentState, type AgentState } from '../agents/state';
 import { mergeRunState } from '../agents/summary';
-import { createWakeCommand } from '../agents/wake-command';
+import { createHarnessCheck, createWakeCommand, type WakeCommandDeps } from '../agents/wake-command';
 import { createCloneFlow, type CloneFlow } from '../clone';
 import {
   addProject,
@@ -2815,7 +2816,8 @@ export function registerIpcHandlers(
     file: credentialFile(join(app.getPath('userData'), CLI_TOKENS_FILE)),
   });
 
-  const buildWakeCommand = createWakeCommand({
+  // HIVE-396. One deps object, so the form's harness check resolves exactly what a wake would.
+  const wakeDeps: WakeCommandDeps = {
     clis: () => getConfig().clis,
     agentsRoot,
     workdir: laneWorkdir,
@@ -2855,7 +2857,9 @@ export function registerIpcHandlers(
     userDataPath: () => app.getPath('userData'),
     hostAlias: () => getConfig().receiver.hostAlias,
     agentContainerSettingsPath: (config) => hooks.agentContainerSettingsPathFor(config),
-  });
+  };
+  const buildWakeCommand = createWakeCommand(wakeDeps);
+  const checkAgentHarness = createHarnessCheck(wakeDeps);
 
   /**
    * Did this run leave an ask nobody has answered?
@@ -5082,6 +5086,10 @@ export function registerIpcHandlers(
     const request = parseAgentWriteRequest(payload);
     return agents?.write(request.name, request.source);
   });
+
+  handle(CH.agentsHarnessCheck, (_event, payload) =>
+    checkAgentHarness(parseAgentHarnessCheckRequest(payload).source),
+  );
 
   handle(CH.agentsRemove, (_event, payload) =>
     agents?.remove(parseAgentNameRequest(payload).name),

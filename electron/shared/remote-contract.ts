@@ -94,8 +94,9 @@ import { isThisMachineAction } from './notification-contract';
  * 38 → 39 (the Account centre): `CH` gained `account:billing` (process-local).
  * 39 → 40 (desktop billing): `CH` gained `account:payments`, `account:revoke-device`, `account:open-billing` and
  *   `account:open-invoice` (process-local).
+ * 40 → 41 (HIVE-396): `CH` gained `agents:harness-check` (a forwarded read).
  */
-export const REMOTE_PROTOCOL_VERSION = 40;
+export const REMOTE_PROTOCOL_VERSION = 41;
 
 /**
  * What a frame is for.
@@ -360,6 +361,7 @@ export const FRAME_KIND = {
   [CH.agentsList]: 'call',
   [CH.agentsRead]: 'call',
   [CH.agentsWrite]: 'call',
+  [CH.agentsHarnessCheck]: 'call',
   [CH.agentsRemove]: 'call',
   [CH.agentsRename]: 'call',
   [CH.agentsChanged]: 'event',
@@ -705,6 +707,8 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.agentsList]: 'read',
   [CH.agentsRead]: 'read',
   [CH.agentsWrite]: 'execute',
+  // HIVE-396. Writes nothing, and answers only what Settings › Harnesses already shows a paired viewer.
+  [CH.agentsHarnessCheck]: 'read',
   [CH.agentsRemove]: 'mutate',
   [CH.agentsRename]: 'mutate',
   [CH.agentsChanged]: 'read',

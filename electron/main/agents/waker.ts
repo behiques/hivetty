@@ -6,7 +6,7 @@ import {
   type Autonomy,
   type RunKind,
 } from '@shared/agent-contract';
-import type { CliAgents } from '@shared/cli-contract';
+import { cliTakesEffort, type CliAgents } from '@shared/cli-contract';
 import { DEFAULT_ENV_ARG, isSessionEnvDenied } from '@shared/config-contract';
 import type { HarnessId } from '@shared/harness-contract';
 import { HOOK_ENV_GRANTS, HOOK_ENV_RECEIVER_URL } from '@shared/hook-contract';
@@ -353,13 +353,16 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   const { adapter } = input;
   const fenced = fencedRules(def, input.grants, adapter.headless.fence.grants);
   /*
-    `AGENT.md`'s model and effort are Claude's vocabulary (HIVE-340), so they apply only there, ahead
-    of the card; every CLI takes its own card's (HIVE-341, HIVE-342), never a translated `opus`.
-    With neither, the flag is omitted.
+    `AGENT.md`'s top-level model and effort are Claude's vocabulary (HIVE-340), so they apply only there, ahead
+    of the card; another CLI takes its own block (HIVE-396), then its card (HIVE-341, HIVE-342), never a
+    translated `opus`. With neither, the flag is omitted. Off Claude, an effort the model takes none of is
+    dropped (a card model like `kimi-k3` beside an agent's effort); Claude's path is untouched.
   */
   const claude = adapter.id === 'claude-code';
-  const model = (claude ? def.model : undefined) ?? input.defaults?.model;
-  const effort = (claude ? def.effort : undefined) ?? input.defaults?.effort;
+  const own = adapter.id === 'claude-code' ? { model: def.model, effort: def.effort } : def[adapter.id];
+  const model = own?.model ?? input.defaults?.model;
+  const wanted = own?.effort ?? input.defaults?.effort;
+  const effort = !claude && model !== undefined && !cliTakesEffort(adapter.id, model) ? undefined : wanted;
 
   const plan = adapter.headless.launch({
     conversation:

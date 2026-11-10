@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AGENTS_PATH,
+  AGENT_CLI_BLOCKS,
   AGENT_FIELDS,
   AGENT_LIMIT_DEFAULTS,
   AGENT_NAME_PATTERN,
@@ -27,7 +28,9 @@ import {
   isWakeOn,
   listProblem,
   parseList,
+  readFrontmatter,
   repoLane,
+  stripComment,
   threadLane,
 } from '../../../electron/shared/agent-contract';
 import {
@@ -150,6 +153,10 @@ describe('agent-contract', () => {
       'mcp',
       'tools',
       'harness',
+      'codex.model',
+      'codex.effort',
+      'copilot.model',
+      'copilot.effort',
       'autonomy',
       'lane',
       'limits.turns',
@@ -197,7 +204,7 @@ describe('agent-contract', () => {
   });
 
   it('derives the nesting parents from the table', () => {
-    expect(AGENT_PARENT_KEYS).toEqual(['wake', 'limits', 'container']);
+    expect(AGENT_PARENT_KEYS).toEqual(['wake', 'codex', 'copilot', 'limits', 'container']);
   });
 });
 
@@ -418,5 +425,35 @@ describe('quoted list entries (HIVE-355)', () => {
     expect(listProblem(`['Bash(a, b)']`)).toBe(
       `'Bash(a has an unmatched quote. A list entry cannot hold a comma, even quoted.`,
     );
+  });
+});
+
+describe('per-CLI model blocks (HIVE-396)', () => {
+  it('registers codex and copilot as parents with a model and an effort each', () => {
+    expect(AGENT_CLI_BLOCKS).toEqual(['codex', 'copilot']);
+    expect(AGENT_PARENT_KEYS).toEqual(expect.arrayContaining(['codex', 'copilot']));
+    for (const cli of AGENT_CLI_BLOCKS) {
+      expect(AGENT_FIELDS.map((field) => field.path)).toEqual(
+        expect.arrayContaining([`${cli}.model`, `${cli}.effort`]),
+      );
+    }
+  });
+
+  it("closes Copilot's model and both efforts to the CLI's own lists", () => {
+    const spec = (path: string) => AGENT_FIELDS.find((field) => field.path === path);
+    expect(spec('codex.model')?.kind).toBe('text');
+    expect(spec('codex.effort')?.values).toContain('xhigh');
+    expect(spec('copilot.model')?.values).toContain('claude-opus-5.5');
+    expect(spec('copilot.effort')?.values).toContain('minimal');
+  });
+
+  it('reads a block through the shared reader', () => {
+    const read = readFrontmatter('---\nname: a\ncodex:\n  model: gpt-6.1-sol\n  effort: high\n---\n');
+    expect(read?.fields.get('codex.model')?.value).toBe('gpt-6.1-sol');
+    expect(read?.fields.get('codex.effort')?.value).toBe('high');
+  });
+
+  it('exports stripComment for the form', () => {
+    expect(stripComment('codex:   # later').trim()).toBe('codex:');
   });
 });

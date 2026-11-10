@@ -11,6 +11,7 @@
  * flatness is a feature there — nesting and lists are not its business.
  */
 import {
+  AGENT_CLI_BLOCKS,
   AGENT_FIELDS,
   AGENT_LIMIT_DEFAULTS,
   AGENT_NAME_PATTERN,
@@ -30,16 +31,19 @@ import {
   parseTimes,
   readFrontmatter,
   WAKE_DAYS,
+  type AgentCliBlock,
   type AgentContainer,
   type AgentDefinition,
   type AgentLane,
   type AgentProblem,
   type Autonomy,
+  type CliModelChoice,
   type FieldSpec,
   type WakeCheck,
   type WakeDay,
   type WakeOn,
 } from '@shared/agent-contract';
+import { cliAcceptsModel, cliTakesEffort } from '@shared/cli-contract';
 import {
   isAbsoluteContainerPath,
   isEnvArgTemplate,
@@ -374,6 +378,37 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
   }
 
   /*
+    HIVE-396. Each CLI's own model and effort. Copilot's model and both efforts are enums in the
+    table, so `checkKind` already refused a value off the list; Codex's model is the account's, so
+    only its shape is checked here. An effort beside a model that takes none is refused rather
+    than silently dropped: the author wrote it expecting it to apply.
+  */
+  const cliBlocks: Partial<Record<AgentCliBlock, CliModelChoice>> = {};
+
+  for (const cli of AGENT_CLI_BLOCKS) {
+    const model = shaped(`${cli}.model`);
+    const effort = shaped(`${cli}.effort`);
+
+    if (model !== undefined && !cliAcceptsModel(cli, model)) {
+      problems.push({
+        field: `${cli}.model`,
+        reason: 'Not a Codex model id: lowercase letters, digits, dots, underscores and hyphens.',
+      });
+      continue;
+    }
+    if (model !== undefined && effort !== undefined && !cliTakesEffort(cli, model)) {
+      problems.push({ field: `${cli}.effort`, reason: `${model} takes no effort setting.` });
+      continue;
+    }
+    if (model !== undefined || effort !== undefined) {
+      cliBlocks[cli] = {
+        ...(model === undefined ? {} : { model }),
+        ...(effort === undefined ? {} : { effort }),
+      };
+    }
+  }
+
+  /*
     The shared `number` rule accepts `1.5`, and a cap of one and a half runs
     is a cap of one that pretends otherwise. Whole numbers only (HIVE-128).
   */
@@ -484,6 +519,7 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
       ...(model === undefined ? {} : { model: model as SessionModel }),
       ...(effort === undefined ? {} : { effort: effort as SessionEffort }),
       ...(harness.length === 0 ? {} : { harness: harness as HarnessId[] }),
+      ...cliBlocks,
       wake: {
         ...(everyMs === undefined || everyMs === null ? {} : { everyMs }),
         ...(at === undefined ? {} : { at: parseTimes(at) as string[] }),
