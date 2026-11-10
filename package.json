@@ -6,7 +6,7 @@
   "type": "module",
   "packageManager": "pnpm@10.2.1",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.4"
   },
   "pnpm": {
     "//": "Since pnpm 10, dependency lifecycle scripts are blocked unless allowlisted — a supply-chain default, and the right one. Every entry here is a package granted arbitrary code execution at install time; the list stays minimal and every addition is justified in review. `electron` downloads its runtime binary (story 080); `node-pty` compiles its native addon (story 084). Without them, installs succeed and the app does not run.",
