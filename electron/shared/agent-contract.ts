@@ -179,6 +179,10 @@ export const AGENT_LIMIT_DEFAULTS = {
 export const AUTONOMIES = ['ask', 'act'] as const;
 export type Autonomy = (typeof AUTONOMIES)[number];
 
+/** What a wake does when its lane's CLI can't run (HIVE-399): move on and start fresh, or queue and keep the conversation. */
+export const AGENT_FALLBACKS = ['switch', 'wait'] as const;
+export type AgentFallback = (typeof AGENT_FALLBACKS)[number];
+
 /**
  * How an agent's work divides into conversations (HIVE-183). Absent is one
  * lane, the standing one. `thread`: every ask opens its own lane. `repo`: one
@@ -302,6 +306,8 @@ export interface AgentDefinition {
   effort?: SessionEffort;
   /** The CLIs this agent may run on, in preference order (HIVE-340). Absent: the Settings default, else `claude-code`. */
   harness?: HarnessId[];
+  /** HIVE-399. Present only as `wait`; absent is `switch`, today's behaviour. */
+  fallback?: 'wait';
   /** Codex's model and effort for this agent (HIVE-396). */
   codex?: CliModelChoice;
   /** Copilot's model and effort for this agent (HIVE-396). */
@@ -650,6 +656,7 @@ export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'mcp', kind: 'list', required: false },
   { path: 'tools', kind: 'list', required: false },
   { path: 'harness', kind: 'list', required: false },
+  { path: 'fallback', kind: 'enum', required: false, values: AGENT_FALLBACKS },
   // HIVE-396. Codex's list is the account's, so its model is a shape the parser checks, not an enum.
   { path: 'codex.model', kind: 'text', required: false },
   { path: 'codex.effort', kind: 'enum', required: false, values: CODEX_EFFORTS },
