@@ -1694,6 +1694,70 @@ describe('createScheduler', () => {
     });
   });
 
+  describe('the daily token cap (HIVE-398)', () => {
+    const NOON = new Date(2026, 7, 31, 12).getTime();
+    const MIDNIGHT = new Date(2026, 8, 1).getTime();
+    const tokenCapped = {
+      wake: { everyMs: 300_000, check: 'always' as const, on: [] },
+      dailyTokens: 1_000,
+    };
+    const cards = () =>
+      appended.filter((item) => (item.meta as { dailyCap?: number } | undefined)?.dailyCap !== undefined);
+
+    beforeEach(() => {
+      clock = NOON;
+      scheduler.start();
+      state.patch(AGENT, { nextRunAt: NOON });
+      schedules.set(AGENT, tokenCapped);
+    });
+
+    it("stops scheduled wakes once today's tokens reach the cap, carding once", () => {
+      state.patch(AGENT, { today: { day: '2026-08-31', runs: 2, usd: 0, tokens: 1_000 } });
+
+      tick();
+      state.patch(AGENT, { nextRunAt: NOON });
+      tick();
+
+      expect(woke).toEqual([]);
+      expect(state.read(AGENT).today?.capped).toBe(true);
+      expect(cards()).toEqual([
+        expect.objectContaining({
+          from: 'overmind',
+          kind: 'event',
+          body: `${AGENT} reached its daily token cap — 1,000 tokens`,
+          meta: { dailyCap: 1_000, unit: 'tokens', agent: AGENT },
+        }),
+      ]);
+    });
+
+    it('arms the next wake for local midnight on a token cap', () => {
+      state.patch(AGENT, { today: { day: '2026-08-31', runs: 2, usd: 0, tokens: 1_000 } });
+
+      tick();
+
+      expect(state.read(AGENT).nextRunAt).toBe(MIDNIGHT);
+    });
+
+    it('wakes under the token cap', () => {
+      state.patch(AGENT, { today: { day: '2026-08-31', runs: 2, usd: 0, tokens: 999 } });
+
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'interval' }]);
+    });
+
+    it('names the dollar cap when both are spent, USD checked first', () => {
+      schedules.set(AGENT, { ...tokenCapped, dailyUsd: 0.1 });
+      state.patch(AGENT, { today: { day: '2026-08-31', runs: 2, usd: 0.14, tokens: 1_000 } });
+
+      tick();
+
+      expect(cards()).toEqual([
+        expect.objectContaining({ meta: { dailyCap: 0.1, agent: AGENT } }),
+      ]);
+    });
+  });
+
   describe('the daily cap', () => {
     const NOON = new Date(2026, 7, 31, 12).getTime();
     const MIDNIGHT = new Date(2026, 8, 1).getTime();

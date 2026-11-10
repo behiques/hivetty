@@ -698,8 +698,24 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         work, not a lock on the agent.
       */
       const today = agent.today?.day === dayKey(now) ? agent.today : undefined;
+      /*
+        The dollar cap or the token cap (HIVE-398), whichever is spent; the card names the one that tripped,
+        dollars first. Both card through `meta.dailyCap`, the key notify.ts raises on.
+      */
+      const cap =
+        schedule.dailyUsd !== undefined && (today?.usd ?? 0) >= schedule.dailyUsd
+          ? {
+              body: `${name} reached its daily budget — $${schedule.dailyUsd.toFixed(2)}`,
+              meta: { dailyCap: schedule.dailyUsd, agent: name },
+            }
+          : schedule.dailyTokens !== undefined && (today?.tokens ?? 0) >= schedule.dailyTokens
+            ? {
+                body: `${name} reached its daily token cap — ${schedule.dailyTokens.toLocaleString('en-US')} tokens`,
+                meta: { dailyCap: schedule.dailyTokens, unit: 'tokens', agent: name },
+              }
+            : undefined;
 
-      if (schedule.dailyUsd !== undefined && (today?.usd ?? 0) >= schedule.dailyUsd) {
+      if (cap !== undefined) {
         // Once a day, not once a minute for the rest of it.
         if (today?.capped === true) {
           arm(name, agent.nextRunAt, nextMidnightAfter(now));
@@ -719,12 +735,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
           for itself — which is exactly why the expiry event is the overmind's
           too. Main declined to start this run; main says so.
         */
-        deps.ledger.append({
-          from: OVERMIND,
-          kind: 'event',
-          body: `${name} reached its daily budget — $${schedule.dailyUsd.toFixed(2)}`,
-          meta: { dailyCap: schedule.dailyUsd, agent: name },
-        });
+        deps.ledger.append({ from: OVERMIND, kind: 'event', body: cap.body, meta: cap.meta });
         continue;
       }
 
