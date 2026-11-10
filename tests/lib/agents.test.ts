@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AGENT_NAME_POOL,
   agentsSnapshot,
+  checkAgentHarness,
   deleteAgent,
   describeSkips,
   frontmatterName,
@@ -414,5 +415,20 @@ describe('templateFor / nameProblem (moved, HIVE-204)', () => {
     expect(nameProblem('Bad', [])).toBe('Lowercase letters, digits and dashes only.');
     expect(nameProblem('acr', ['acr'])).toBe('You already have an agent called acr.');
     expect(nameProblem('scout', [])).toBeNull();
+  });
+});
+
+describe('checkAgentHarness (HIVE-396)', () => {
+  it('asks main about the draft', async () => {
+    const verdicts = { 'claude-code': { ok: true }, codex: { ok: true }, copilot: { ok: true } };
+    const harnessCheck = vi.fn(async () => ({ verdicts }));
+    stub({ harnessCheck });
+
+    expect(await checkAgentHarness('---\nname: a\n---\n')).toEqual({ verdicts });
+    expect(harnessCheck).toHaveBeenCalledWith({ source: '---\nname: a\n---\n' });
+  });
+
+  it('answers null without a bridge, which is the browser demo', async () => {
+    expect(await checkAgentHarness('---\n')).toBeNull();
   });
 });
