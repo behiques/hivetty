@@ -23,6 +23,7 @@ const ROWS: readonly Row[] = [
     read: (c) => yes(c.contextDelivery === 'prompt-marker'),
   },
   { label: 'Agent cost in USD', key: 'reportsCostUsd', read: (c) => yes(c.reportsCostUsd) },
+  { label: 'Agent token usage', key: 'reportsTokens', read: (c) => yes(c.reportsTokens) },
   { label: 'Agent turn limit', key: 'enforcesTurns', read: (c) => yes(c.enforcesTurns) },
   { label: 'Agent budget limit', key: 'enforcesBudget', read: (c) => yes(c.enforcesBudget) },
   { label: 'MCP status in agent runs', key: 'reportsMcpStatus', read: (c) => yes(c.reportsMcpStatus) },

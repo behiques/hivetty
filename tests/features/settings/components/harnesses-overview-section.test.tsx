@@ -154,7 +154,7 @@ describe('HarnessesOverviewSection (HIVE-375)', () => {
     expect(screen.queryByRole('heading', { name: 'Headless agents' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /supported · Open Codex/ }));
     expect(useUiStore.getState().settingsSection).toBe('codex');
-    expect(screen.getByRole('button', { name: /^9 of 9 supported · Open Claude Code$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^10 of 10 supported · Open Claude Code$/ })).toBeInTheDocument();
   });
 
   it('says it is desktop-only with no config (the browser target)', () => {
