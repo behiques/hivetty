@@ -23,6 +23,8 @@ const STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -
  * An unavailable CLI (HIVE-375: missing, or turned off in Settings) stays drawn, dimmed, with its reason as its
  * name and its hover hint; a click on it does nothing and the keys step past it. A plan lock (HIVE-332) adds a lock
  * badge, and a line under the dock reads the reason with Upgrade.
+ *
+ * In `features/shared` since HIVE-396: the agent form's Runs on group draws it too.
  */
 export function CliDock({
   value,

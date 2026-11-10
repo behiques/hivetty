@@ -15,7 +15,7 @@ import { ProjectKey } from '@components/ui/project-key';
 import { SelectField } from '@components/ui/select-field';
 import { SwarmCreature, type Creature } from '@components/ui/swarm-creature';
 import { can } from '@config/runtime';
-import { CliDock } from '@features/sessions/components/cli-dock';
+import { CliDock } from '@features/shared/components/cli-dock';
 import { CodexModelField } from '@features/shared/components/codex-model-field';
 import { OptionStepper } from '@features/shared/components/option-stepper';
 import { useNewSessionPick } from '@hooks/use-new-session-pick';
