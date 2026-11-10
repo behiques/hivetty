@@ -276,6 +276,13 @@ rule. A draft that can't be parsed answers `{ problem }`. Both paths share one d
 (`wakeDeps` in `ipc/index.ts`) and one binary resolver, `binaryFor(def, deps)`. So the form
 never offers a CLI that a wake would skip.
 
+The channel is `CH.agentsHarnessCheck` (`'agents:harness-check'`). Its request is `{ source }`,
+validated by `parseAgentHarnessCheckRequest` in `guards.ts`, and preload exposes it as
+`window.hive.agents.harnessCheck`. It is a read in the remote contract, because it writes
+nothing. The renderer reaches it through `checkAgentHarness` (`src/lib/agents.ts`) and
+`useAgentHarnessCheck`, which waits 300 ms after typing stops and keeps its last answer through
+a draft it can't parse.
+
 The caveat is containers. For a container agent the binary is inside the image, and the check
 does not probe it there. A missing binary in the image surfaces at the wake, not in the form.
 
