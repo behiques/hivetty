@@ -175,11 +175,11 @@ export interface RunTrackerDeps {
    */
   parallelFor: (name: string) => number;
   /**
-   * `daily_usd` and `budget_usd` for this agent (HIVE-187), from the same
-   * cache as `parallelFor`. Optional so a spec without a budget needs none;
-   * absent means no ceiling.
+   * `daily_usd`, `budget_usd` (HIVE-187) and `daily_tokens` (HIVE-398) for
+   * this agent, from the same cache as `parallelFor`. Optional so a spec
+   * without a budget needs none; absent means no ceiling.
    */
-  limitsFor?: (name: string) => { dailyUsd?: number; budgetUsd?: number };
+  limitsFor?: (name: string) => { dailyUsd?: number; budgetUsd?: number; dailyTokens?: number };
   state: AgentState;
   appendLedger: (entry: {
     from: string;

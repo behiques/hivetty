@@ -975,7 +975,7 @@ const ledgerAgents = new Set<string>();
  */
 const agentSchedules = new Map<
   string,
-  { wake: WakeSpec; dailyUsd?: number; budgetUsd?: number; mcp: string[] }
+  { wake: WakeSpec; dailyUsd?: number; budgetUsd?: number; dailyTokens?: number; mcp: string[] }
 >();
 /**
  * Every valid agent's `limits.parallel` (HIVE-128), for the tracker's gate and
@@ -1078,6 +1078,7 @@ function refreshKnownAgents(): Promise<void> {
           wake: agent.wake,
           ...(agent.dailyUsd === undefined ? {} : { dailyUsd: agent.dailyUsd }),
           ...(agent.budgetUsd === undefined ? {} : { budgetUsd: agent.budgetUsd }),
+          ...(agent.dailyTokens === undefined ? {} : { dailyTokens: agent.dailyTokens }),
           mcp: agent.mcp,
         });
         // The parallel cap, for the same two synchronous askers (HIVE-128).

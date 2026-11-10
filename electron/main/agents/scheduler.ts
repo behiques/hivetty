@@ -199,7 +199,7 @@ interface SchedulerDeps {
    * fixture) still means "does not name Slack" rather than failing to type.
    */
   schedules: () =>
-    | ReadonlyMap<string, { wake: WakeSpec; dailyUsd?: number; mcp?: string[] }>
+    | ReadonlyMap<string, { wake: WakeSpec; dailyUsd?: number; dailyTokens?: number; mcp?: string[] }>
     | undefined;
   /**
    * Tell the renderer this agent's row changed.
