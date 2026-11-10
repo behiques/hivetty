@@ -10,6 +10,7 @@ import {
   AGENT_PARENT_KEYS,
   AGENT_PENDING_WAKE_MAX,
   KNOWN_AGENT_MCP,
+  spentTokens,
   QUEUEABLE_REFUSALS,
   RESERVED_AGENT_NAMES,
   STANDING_LANE,
@@ -162,6 +163,7 @@ describe('agent-contract', () => {
       'limits.turns',
       'limits.budget_usd',
       'limits.daily_usd',
+      'limits.daily_tokens',
       'limits.rotate_after',
       'limits.parallel',
       'container.runtime',
@@ -455,5 +457,16 @@ describe('per-CLI model blocks (HIVE-396)', () => {
 
   it('exports stripComment for the form', () => {
     expect(stripComment('codex:   # later').trim()).toBe('codex:');
+  });
+});
+
+describe('spentTokens (HIVE-398)', () => {
+  it('adds input and output, and never the cache read back', () => {
+    expect(spentTokens({ inputTokens: 100, outputTokens: 20, cachedTokens: 5_000 })).toBe(120);
+  });
+
+  it('reads a missing meter, or no usage at all, as nothing spent', () => {
+    expect(spentTokens({ outputTokens: 7 })).toBe(7);
+    expect(spentTokens(undefined)).toBe(0);
   });
 });

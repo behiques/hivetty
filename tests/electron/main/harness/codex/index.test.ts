@@ -25,6 +25,7 @@ describe('codexAdapter', () => {
       meters: ['model', 'effort', 'context', 'fiveHour', 'sevenDay', 'credits'],
       contextDelivery: 'prompt-marker',
       reportsCostUsd: false,
+      reportsTokens: true,
       enforcesTurns: false,
       enforcesBudget: false,
       reportsMcpStatus: false,

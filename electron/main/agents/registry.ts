@@ -408,6 +408,10 @@ export function createAgentRegistry({
             ...(def.limits.dailyUsd === undefined
               ? {}
               : { dailyUsd: def.limits.dailyUsd }),
+            // Its token twin (HIVE-398), for the same two checks.
+            ...(def.limits.dailyTokens === undefined
+              ? {}
+              : { dailyTokens: def.limits.dailyTokens }),
             // The per-run reservation against that ceiling (HIVE-187).
             ...(def.limits.budgetUsd === undefined
               ? {}

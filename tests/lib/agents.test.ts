@@ -15,6 +15,7 @@ import {
   renameAgent,
   resetAgents,
   runsToday,
+  tokensToday,
   saveAgent,
   slackSignedOut,
   subscribeAgents,
@@ -258,6 +259,28 @@ describe('nextAgentName', () => {
   /* A pick of ~1 must not index past the end of the list. */
   it('stays in range at the top of the draw', () => {
     expect(AGENT_NAME_POOL).toContain(nextAgentName([], last));
+  });
+});
+
+describe('tokensToday (HIVE-398)', () => {
+  const NOW = new Date(2026, 7, 31, 12).getTime();
+
+  it('reads today against the cap, compact', () => {
+    expect(tokensToday({ day: '2026-08-31', tokens: 1_234_567 }, 2_000_000, NOW)).toBe('1.2M of 2M tokens');
+  });
+
+  it('reads an ended day, a day with no tokens, or none, as nothing used', () => {
+    expect(tokensToday({ day: '2020-01-01', tokens: 9 }, 2_000_000, NOW)).toBe('0 of 2M tokens');
+    expect(tokensToday({ day: '2026-08-31' }, 2_000_000, NOW)).toBe('0 of 2M tokens');
+    expect(tokensToday(undefined, 500, NOW)).toBe('0 of 500 tokens');
+  });
+
+  it('says nothing for an agent without a cap', () => {
+    expect(tokensToday({ day: '2026-08-31', tokens: 10 }, undefined, NOW)).toBeUndefined();
+  });
+
+  it('defaults to now', () => {
+    expect(tokensToday(undefined, 1_000)).toBe('0 of 1K tokens');
   });
 });
 

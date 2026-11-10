@@ -6038,6 +6038,20 @@ describe('the agent view selectors', () => {
       expect(result.current?.runsSinceRotate).toBe(17);
       expect(result.current?.rotateAfter).toBe(50);
       expect(result.current?.sessionUuid).toBe('9f3c1e2a');
+      expect(result.current?.todayTokens).toBeUndefined();
+    });
+
+    it("reads today's tokens against the agent's token cap (HIVE-398)", () => {
+      useHiveStore.getState().hydrateAgents([
+        summary('a', {
+          dailyTokens: 2_000_000,
+          today: { day: dayKey(Date.now()), runs: 3, usd: 0.41, tokens: 1_234_567 },
+        }),
+      ]);
+
+      const { result } = renderHook(() => useAgentFacts('a'));
+
+      expect(result.current?.todayTokens).toBe('1.2M of 2M tokens');
     });
 
     /*

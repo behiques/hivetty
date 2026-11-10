@@ -1,3 +1,5 @@
+import type { RunUsage } from '@shared/agent-contract';
+
 import type { McpServerStatus, RunEvent, RunEventReader, RunStop } from '../port';
 
 /**
@@ -120,6 +122,7 @@ function readLine(line: string): RunEvent[] {
     const detail = typeof event['subtype'] === 'string' ? event['subtype'] : 'unknown';
     const costUsd = event['total_cost_usd'];
     const turns = event['num_turns'];
+    const usage = usageOf(event['usage']);
 
     return [
       ...conversationOf(event),
@@ -129,11 +132,37 @@ function readLine(line: string): RunEvent[] {
         detail,
         ...(typeof costUsd === 'number' ? { costUsd } : {}),
         ...(typeof turns === 'number' ? { turns } : {}),
+        ...(usage === undefined ? {} : { usage }),
       },
     ];
   }
 
   return [];
+}
+
+/** Claude's `input_tokens` excludes both cache meters; a cache write is new input, a cache read is not (HIVE-398). */
+function usageOf(raw: unknown): RunUsage | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+
+  const record = raw as Record<string, unknown>;
+  const num = (key: string): number | undefined => {
+    const value = record[key];
+
+    return typeof value === 'number' ? value : undefined;
+  };
+  const fresh = num('input_tokens');
+  const written = num('cache_creation_input_tokens');
+  const outputTokens = num('output_tokens');
+  const cachedTokens = num('cache_read_input_tokens');
+  const inputTokens = fresh === undefined && written === undefined ? undefined : (fresh ?? 0) + (written ?? 0);
+
+  if (inputTokens === undefined && outputTokens === undefined && cachedTokens === undefined) return undefined;
+
+  return {
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(outputTokens === undefined ? {} : { outputTokens }),
+    ...(cachedTokens === undefined ? {} : { cachedTokens }),
+  };
 }
 
 export function readClaudeHeadless(): RunEventReader {

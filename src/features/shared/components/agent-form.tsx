@@ -309,6 +309,12 @@ const LIMIT_FIELDS = [
     hint: 'unlimited',
   },
   {
+    // Absent means no ceiling, as with the dollar cap above (HIVE-398).
+    path: 'limits.daily_tokens',
+    label: 'daily cap tokens',
+    hint: 'unlimited',
+  },
+  {
     path: 'limits.rotate_after',
     label: 'rotate after',
     hint: String(AGENT_LIMIT_DEFAULTS.rotateAfter),
@@ -407,6 +413,8 @@ export const FIELD_HELP: Record<string, string> = {
   */
   'limits.daily_usd':
     'Empty means no daily ceiling. A number stops its scheduled wakes for the rest of the day once the day’s runs reach it, and posts a card saying so — you can still wake it by hand, and it resumes at midnight. Priced at list rates, like the budget above.',
+  'limits.daily_tokens':
+    'Empty means no daily ceiling. A number stops its wakes for the rest of the day once today’s runs have used that many tokens: new input, cache writes and output, not cached input read back. Checked before each wake, so one long run can finish past it. It resumes at midnight, on any CLI.',
   'limits.rotate_after': `Runs before it starts a fresh session. Every wake resumes the last one, so this is what stops the transcript growing forever. Default ${AGENT_LIMIT_DEFAULTS.rotateAfter}.`,
   'limits.parallel': `How many runs may be live at once. 1 keeps one conversation, strictly in turn. Above 1, a console run that carries a prompt starts a task run beside the standing session — a fresh conversation for that one job — up to this many live. Default ${AGENT_LIMIT_DEFAULTS.parallel}.`,
   'container.runtime':
@@ -804,7 +812,15 @@ export function AgentForm({
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => focusField(has('limits.daily_usd') ? 'limits.daily_usd' : 'limits.budget_usd')}
+            onClick={() =>
+              focusField(
+                has('limits.daily_tokens')
+                  ? 'limits.daily_tokens'
+                  : has('limits.daily_usd')
+                    ? 'limits.daily_usd'
+                    : 'limits.budget_usd',
+              )
+            }
           >
             Go to the budget limit
           </Button>

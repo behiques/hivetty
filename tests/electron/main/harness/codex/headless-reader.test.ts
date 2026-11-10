@@ -24,12 +24,23 @@ describe('readCodexHeadless', () => {
       kind: 'end',
       stop: 'done',
       detail: 'completed',
-      usage: {
-        inputTokens: expect.any(Number),
-        outputTokens: expect.any(Number),
-        cachedTokens: expect.any(Number),
-      },
+      // 90,460 input, 63,744 of it cached: only the new input counts (HIVE-398).
+      usage: { inputTokens: 26_716, outputTokens: 253, cachedTokens: 63_744 },
     });
+  });
+
+  it('never reads a cached count larger than the input as negative input (HIVE-398)', () => {
+    const end = all(
+      '{"type":"turn.completed","usage":{"input_tokens":5,"cached_input_tokens":9,"output_tokens":1}}\n',
+    ).at(-1);
+
+    expect(end).toMatchObject({ usage: { inputTokens: 0, outputTokens: 1, cachedTokens: 9 } });
+  });
+
+  it('keeps the input whole when codex reports no cached count', () => {
+    const end = all('{"type":"turn.completed","usage":{"input_tokens":5}}\n').at(-1);
+
+    expect(end).toMatchObject({ usage: { inputTokens: 5 } });
   });
 
   it('emits each tool once, though codex writes item.started and item.completed', () => {

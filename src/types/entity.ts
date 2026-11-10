@@ -423,6 +423,8 @@ export interface Agent {
   runsSinceRotate: number;
   /** `limits.rotateAfter` from the definition — the denominator. */
   rotateAfter: number;
+  /** `limits.dailyTokens` (HIVE-398), the denominator of the Today tile's tokens. */
+  dailyTokens?: number;
   /**
    * The last `AGENT_RUN_HISTORY` runs, oldest first.
    *
@@ -446,7 +448,7 @@ export interface Agent {
    * It is also the number the scheduler's daily ceiling is compared against,
    * so a tile deriving its own would be a second opinion about one fact.
    */
-  today?: { day: string; runs: number; usd: number; capped?: boolean };
+  today?: { day: string; runs: number; usd: number; tokens?: number; capped?: boolean };
   /**
    * Scheduled ticks skipped since the last run — the `· skipped 3` on `Next`.
    *
