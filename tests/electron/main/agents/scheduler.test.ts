@@ -8,6 +8,7 @@ import {
   dayKey,
   type WakeSpec,
 } from '../../../../electron/shared/agent-contract';
+import type { HarnessId } from '../../../../electron/shared/harness-contract';
 import {
   LEDGER_ASK_TTL_MS,
   type LedgerEntry,
@@ -46,9 +47,11 @@ describe('createScheduler', () => {
    * `working` and `paused` and reports the rest, so a fake that could not say
    * which it was could not drive that difference.
    */
-  let refuse: 'working' | 'paused' | 'saturated' | 'invalid' | false;
+  let refuse: 'working' | 'paused' | 'saturated' | 'invalid' | 'cli' | false;
   /** The `reason` a refusal carries, as `RunTracker` gives one for `invalid`. */
   let refuseReason: string | undefined;
+  /** The CLI a `cli` refusal names (HIVE-399). */
+  let refuseCli: HarnessId | undefined;
   /**
    * Refuses `'saturated'` on the one `run` call whose zero-based index
    * matches, and lets every other call through (HIVE-128). What `flush`'s
@@ -95,6 +98,7 @@ describe('createScheduler', () => {
             started: false,
             refused: refuse,
             ...(refuseReason === undefined ? {} : { reason: refuseReason }),
+            ...(refuseCli === undefined ? {} : { cli: refuseCli }),
           };
         }
         if (liveLanes?.has(options?.lane ?? 'standing') === true) return { started: false, refused: 'working' };
@@ -151,6 +155,7 @@ describe('createScheduler', () => {
     schedules = new Map();
     refuse = false;
     refuseReason = undefined;
+    refuseCli = undefined;
     refuseAfter = undefined;
     runCalls = 0;
     parallel = 1;
@@ -440,6 +445,21 @@ describe('createScheduler', () => {
     arriving through the ledger was queued and delivered later.
   */
   describe('manualWake', () => {
+    it('queues a run whose CLI cannot run yet, saying which and why (HIVE-399)', () => {
+      refuse = 'cli';
+      refuseReason = 'codex is turned off for agents in Settings › Harnesses';
+      refuseCli = 'codex';
+
+      expect(scheduler.manualWake(AGENT)).toEqual({
+        started: false,
+        queued: true,
+        behind: 'cli',
+        reason: 'codex is turned off for agents in Settings › Harnesses',
+        cli: 'codex',
+      });
+      expect(state.read(AGENT).pendingWake).toHaveLength(1);
+    });
+
     it('wakes now, saying the words as the reason', () => {
       const outcome = scheduler.manualWake(AGENT, 'review PR 1234');
 
@@ -1998,6 +2018,29 @@ describe('createScheduler', () => {
       expect(runCalls).toBe(3);
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('The MCP config has not been written yet.'));
+      warn.mockRestore();
+    });
+
+    it('retries a wake queued behind its CLI each minute, warns once, and runs it when the CLI is back (HIVE-399)', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      state.patch(AGENT, { pendingWake: [{ kind: 'ask', id: 'a9', from: 'overmind' }] });
+      refuse = 'cli';
+      refuseReason = 'codex is turned off for agents in Settings › Harnesses';
+      refuseCli = 'codex';
+      scheduler.start();
+      tick();
+      tick();
+
+      expect(state.read(AGENT).pendingWake).toHaveLength(1);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('codex is turned off'));
+
+      refuse = false;
+      tick();
+
+      expect(state.read(AGENT).pendingWake ?? []).toHaveLength(0);
+      expect(woke).toHaveLength(1);
       warn.mockRestore();
     });
   });
