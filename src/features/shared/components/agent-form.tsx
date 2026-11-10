@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { Button } from '@components/ui/button';
 import { CliMark } from '@components/ui/cli-mark';
 import { Hint } from '@components/ui/hint';
 import { IconPicker } from '@components/ui/icon-picker';
+import { UpgradeLink } from '@components/ui/lock';
 import {
   SegmentedControl,
   type SegmentedOption,
@@ -31,6 +33,7 @@ import {
   readFrontmatter,
   stripComment,
   type AgentProblem,
+  type HarnessFix,
   type HarnessVerdict,
 } from '@shared/agent-contract';
 import { COPILOT_MODELS, type CliModel } from '@shared/cli-contract';
@@ -626,6 +629,9 @@ export function AgentForm({
     null,
   );
 
+  /** The form's root, which {@link focusField} searches for a field's control. */
+  const formRoot = useRef<HTMLDivElement>(null);
+
   const read = readFrontmatter(source);
   const fields = read?.fields;
   const at = (path: string) => fields?.get(path)?.value ?? '';
@@ -749,6 +755,47 @@ export function AgentForm({
   const toggleFallback = (cli: HarnessId) =>
     writeHarness(list.includes(cli) ? list.filter((id) => id !== cli) : [...list, cli]);
   const others = HARNESS_IDS.filter((cli) => cli !== primary);
+  /** Focus a field's first control and bring it into view: the unavailable list's fixes (HIVE-396). */
+  const focusField = (path: string) => {
+    const target = formRoot.current?.querySelector<HTMLElement>(
+      `[data-field="${path}"] :is(input, select, textarea, button)`,
+    );
+    target?.scrollIntoView({ block: 'center' });
+    target?.focus();
+  };
+  /** What a refused CLI's line offers to put it right; a fence failure has nothing to offer. */
+  const fixFor = (cli: HarnessId, fix: HarnessFix | undefined) => {
+    switch (fix) {
+      case 'install':
+      case 'sign-in':
+      case 'enable':
+        return (
+          <Button size="sm" variant="ghost" onClick={() => runsOn.openHarness(cli)}>
+            Open Settings › Harnesses › {CLI_NAMES[cli]}
+          </Button>
+        );
+      case 'upgrade':
+        return <UpgradeLink className="text-micro" />;
+      case 'remove-budget':
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => focusField(has('limits.daily_usd') ? 'limits.daily_usd' : 'limits.budget_usd')}
+          >
+            Go to the budget limit
+          </Button>
+        );
+      case 'remove-mcp':
+        return (
+          <Button size="sm" variant="ghost" onClick={() => focusField('mcp')}>
+            Go to integrations
+          </Button>
+        );
+      default:
+        return null;
+    }
+  };
   /** Clear a CLI's model, and its block with it once nothing is left under it. */
   const clearModel = (cli: 'codex' | 'copilot') => onChange(clearParent(cli, clear(`${cli}.model`)));
 
@@ -983,7 +1030,7 @@ export function AgentForm({
     const help = FIELD_HELP[path];
 
     return (
-      <div key={path} className="grid grid-cols-[86px_minmax(0,1fr)] gap-2.5">
+      <div key={path} data-field={path} className="grid grid-cols-[86px_minmax(0,1fr)] gap-2.5">
         <label className="pt-1 text-right text-micro text-subtle">
           {label}
         </label>
@@ -1141,7 +1188,7 @@ export function AgentForm({
       : WAKE_OPTIONS;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 py-3">
+    <div ref={formRoot} className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 py-3">
       {homeless.map((problem) => (
         <p
           key={`${problem.field}:${problem.reason}`}
@@ -1448,6 +1495,20 @@ export function AgentForm({
           {list.slice(1).map((cli) =>
             row(cli === 'claude-code' ? 'model' : `${cli}.model`, `${CLI_NAMES[cli]} model`, modelControl(cli)),
           )}
+          {HARNESS_IDS.flatMap((cli) => {
+            const verdict = refused(cli);
+            if (verdict === null) return [];
+            return [
+              <div key={cli} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-subtle">
+                <CliMark cli={cli} className="size-3.5 opacity-45" />
+                <span className="min-w-0">
+                  {list.includes(cli) ? 'Skipped at wake: ' : ''}
+                  {verdict.reason}
+                </span>
+                {fixFor(cli, verdict.fix)}
+              </div>,
+            ];
+          })}
         </div>
       </SettingsGroup>
 

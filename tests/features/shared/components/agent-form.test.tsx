@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ICON_NAMES } from '@components/ui/icon';
 import {
@@ -1364,5 +1364,64 @@ describe('Runs on: fallbacks (HIVE-396)', () => {
     expect(screen.getByRole('button', { name: /Copilot/, pressed: false })).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: 'Codex', pressed: false }));
     expect(field(lastSource(onChange), 'harness')).toBe('[claude-code, codex]');
+  });
+});
+
+describe('Runs on: what cannot run, and the fix (HIVE-396)', () => {
+  const verdict = (reason: string, fix?: string) => ({ ok: false as const, reason, ...(fix ? { fix } : {}) });
+  const ok = { ok: true as const };
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('lists each refused CLI with its reason, and a CLI in harness: stays, marked', () => {
+    setup({
+      source: SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [claude-code, copilot]'),
+      runsOn: runsOn({ verdicts: { 'claude-code': ok, codex: ok, copilot: verdict('copilot cannot start: not found', 'install') } as never }),
+    });
+
+    expect(screen.getByText(/Skipped at wake: copilot cannot start: not found/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copilot/, pressed: true })).toBeInTheDocument();
+  });
+
+  it("opens the CLI's Settings page for install, sign-in and enable", async () => {
+    const openHarness = vi.fn();
+    setup({
+      runsOn: runsOn({
+        openHarness,
+        verdicts: { 'claude-code': ok, codex: verdict('codex is turned off for agents', 'enable'), copilot: verdict('no token', 'sign-in') } as never,
+      }),
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open Settings › Harnesses › Codex' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Open Settings › Harnesses › Copilot' }));
+    expect(openHarness.mock.calls).toEqual([['codex'], ['copilot']]);
+  });
+
+  it('focuses the budget limit for remove-budget, and integrations for remove-mcp', async () => {
+    const source = SOURCE.replace('autonomy: ask', 'autonomy: ask\nmcp: [slack]\nlimits:\n  daily_usd: 5');
+    setup({
+      source,
+      runsOn: runsOn({
+        verdicts: {
+          'claude-code': ok,
+          codex: verdict('codex does not report cost in USD', 'remove-budget'),
+          copilot: verdict('copilot cannot serve the slack integration', 'remove-mcp'),
+        } as never,
+      }),
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go to the budget limit' }));
+    expect(document.activeElement?.closest('[data-field]')).toHaveAttribute('data-field', 'limits.daily_usd');
+    await userEvent.click(screen.getByRole('button', { name: 'Go to integrations' }));
+    expect(document.activeElement?.closest('[data-field]')).toHaveAttribute('data-field', 'mcp');
+  });
+
+  it('a fence failure shows its reason and no fix', () => {
+    setup({ runsOn: runsOn({ verdicts: { 'claude-code': ok, codex: verdict('codex cannot enforce Bash'), copilot: ok } as never }) });
+
+    expect(screen.getByText(/codex cannot enforce Bash/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Settings › Harnesses › Codex/ })).toBeNull();
   });
 });
