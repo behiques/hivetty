@@ -287,6 +287,34 @@ describe('createRunTracker', () => {
     });
   });
 
+  it('refuses cli, with the reason and the CLI, when a wait agent\'s CLI cannot run (HIVE-399)', () => {
+    const waiting = createRunTracker({
+      spawn,
+      command: (_name: string) => ({
+        problem: 'codex is turned off for agents in Settings › Harnesses',
+        waitFor: 'codex' as const,
+      }),
+      parallelFor: () => 1,
+      state,
+      appendLedger: () => {},
+      openAsksFor: () => false,
+      hasOpenAsk: () => false,
+      handoffFor: () => undefined,
+      newUuid: () => 'uuid-minted',
+      pushStatus: () => {},
+      pushLines: () => {},
+      now: () => 1,
+      newRunId: () => 'run-x',
+    });
+
+    expect(waiting.run('a', 'ledger')).toEqual({
+      started: false,
+      refused: 'cli',
+      reason: 'codex is turned off for agents in Settings › Harnesses',
+      cli: 'codex',
+    });
+  });
+
   it('closes failed when spawn itself throws synchronously, without orphaning the ledger entry or bumping runsSinceRotate', () => {
     const throwing = createRunTracker({
       spawn: () => {

@@ -1349,19 +1349,24 @@ export type RunKind = 'standing' | 'task';
  * queue can keep. Enumerated rather than inverted on purpose: a refusal added
  * later is reported until someone decides it queues, which is the safe default.
  *
- * One set, read by the tracker's refusal union, the scheduler's manual-wake
- * whitelist, and both console sentence functions — so they cannot drift.
+ * The set is the scheduler's manual-wake whitelist and its warning filter; the type is the
+ * tracker's refusal union and the two console sentence functions' exhaustive switches, so a
+ * refusal added here fails the build until it has words.
+ *
+ * `cli` is a `fallback: wait` agent's CLI that cannot run for now (HIVE-399): not installed,
+ * signed out, locked or turned off. It ends when the CLI is back.
  *
  * A day's budget frees up when a run closes and resets at midnight, so
  * `budget` queues too (HIVE-187).
  */
-export type QueueableRefusal = 'working' | 'paused' | 'saturated' | 'budget';
+export type QueueableRefusal = 'working' | 'paused' | 'saturated' | 'budget' | 'cli';
 
 export const QUEUEABLE_REFUSALS: ReadonlySet<string> = new Set<QueueableRefusal>([
   'working',
   'paused',
   'saturated',
   'budget',
+  'cli',
 ]);
 
 export const isQueueableRefusal = (refused: string): refused is QueueableRefusal =>
@@ -1461,11 +1466,12 @@ export interface AgentRunRequest {
  */
 export type AgentRunResult =
   | { started: true; run: string; kind: RunKind }
-  | { started: false; queued: true; behind: QueueableRefusal }
+  | { started: false; queued: true; behind: QueueableRefusal; reason?: string; cli?: HarnessId }
   | {
       started: false;
       refused: QueueableRefusal | 'unknown' | 'invalid';
       reason?: string;
+      cli?: HarnessId;
     };
 
 /**
