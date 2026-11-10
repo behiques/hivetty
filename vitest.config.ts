@@ -27,6 +27,12 @@ export default defineConfig({
     // Playwright owns tests/e2e (story 070).
     exclude: ['node_modules/**', 'dist/**', 'tests/e2e/**'],
     restoreMocks: true,
+    /*
+      Node 25+ defines a global `localStorage` that reads `undefined` without
+      `--localstorage-file`, and vitest 4 then keeps it over happy-dom's. Off in
+      the workers, happy-dom's shows through. Vitest 5 handles this itself.
+    */
+    execArgv: ['--no-experimental-webstorage'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
