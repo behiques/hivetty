@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HarnessGate } from '../../../../electron/main/agents/resolve-harness';
 import {
   CLI_TOKEN_ENV,
+  createHarnessCheck,
   createWakeCommand,
   type WakeCommandDeps,
   type WakeFs,
@@ -121,41 +122,42 @@ const OPEN_GATE: HarnessGate = {
   defaults: () => ({}),
 };
 
-const build = (over: Partial<WakeCommandDeps> = {}) =>
-  createWakeCommand({
-    agentsRoot: () => '/home/u/.hive/agents',
-    cliHome: (id) => `/home/u/.hive/cli/${id}`,
-    workdir: (name, lane) =>
-      lane === 'standing' ? `/home/u/.hive/work/${name}` : `/home/u/.hive/work/${name}/lanes/${lane}`,
-    promptFile: (name) => `/data/hive/agents/${name}.system.md`,
-    pluginDir: (cli) => (cli === 'codex' ? '/data/hive/plugins/codex' : '/data/hive/plugin'),
-    agentSettingsPath: () => '/data/hive/claude-agent.settings.json',
-    mcpConfig: () => '/data/hive/hive.mcp.json',
-    // Handed to every wake's adapter (HIVE-342). `AGENT_MD` has no `mcp:` field,
-    // so no per-agent file is written from it.
-    hiveServer: () => ({
-      command: '/App',
-      args: ['/host.js'],
-      env: { ELECTRON_RUN_AS_NODE: '1' },
-    }),
-    agentMcpFile: (name) => `/data/hive/agents/${name}.mcp.json`,
-    hookEnv: (name) => ({ HIVE_SESSION_ID: name, HIVE_HOOK_TOKEN: 'tok' }),
-    claudeCommand: () => '/usr/local/bin/claude',
-    clis: () => resolveClis(undefined),
-    cliToken: () => null,
-    subscriptionAuth: () => true,
-    state: state(),
-    env: () => ({ PATH: '/usr/local/bin', HOME: '/home/u' }),
-    newUuid: () => 'minted-uuid',
-    pendingGrants: () => [],
-    fs,
-    isExecutable: (path) => path === '/usr/local/bin/claude',
-    // HIVE-137. Unused by a host agent, which every fixture above is.
-    userDataPath: () => '/data',
-    hostAlias: () => 'host.docker.internal',
-    agentContainerSettingsPath: () => null,
-    ...over,
-  });
+const baseDeps = (over: Partial<WakeCommandDeps> = {}): WakeCommandDeps => ({
+  agentsRoot: () => '/home/u/.hive/agents',
+  cliHome: (id) => `/home/u/.hive/cli/${id}`,
+  workdir: (name, lane) =>
+    lane === 'standing' ? `/home/u/.hive/work/${name}` : `/home/u/.hive/work/${name}/lanes/${lane}`,
+  promptFile: (name) => `/data/hive/agents/${name}.system.md`,
+  pluginDir: (cli) => (cli === 'codex' ? '/data/hive/plugins/codex' : '/data/hive/plugin'),
+  agentSettingsPath: () => '/data/hive/claude-agent.settings.json',
+  mcpConfig: () => '/data/hive/hive.mcp.json',
+  // Handed to every wake's adapter (HIVE-342). `AGENT_MD` has no `mcp:` field,
+  // so no per-agent file is written from it.
+  hiveServer: () => ({
+    command: '/App',
+    args: ['/host.js'],
+    env: { ELECTRON_RUN_AS_NODE: '1' },
+  }),
+  agentMcpFile: (name) => `/data/hive/agents/${name}.mcp.json`,
+  hookEnv: (name) => ({ HIVE_SESSION_ID: name, HIVE_HOOK_TOKEN: 'tok' }),
+  claudeCommand: () => '/usr/local/bin/claude',
+  clis: () => resolveClis(undefined),
+  cliToken: () => null,
+  subscriptionAuth: () => true,
+  state: state(),
+  env: () => ({ PATH: '/usr/local/bin', HOME: '/home/u' }),
+  newUuid: () => 'minted-uuid',
+  pendingGrants: () => [],
+  fs,
+  isExecutable: (path) => path === '/usr/local/bin/claude',
+  // HIVE-137. Unused by a host agent, which every fixture above is.
+  userDataPath: () => '/data',
+  hostAlias: () => 'host.docker.internal',
+  agentContainerSettingsPath: () => null,
+  ...over,
+});
+
+const build = (over: Partial<WakeCommandDeps> = {}) => createWakeCommand(baseDeps(over));
 
 /** The hash a fresh session of the definition on disk would record. */
 const promptHashNow = (): string => {
@@ -1579,3 +1581,53 @@ describe('a copilot wake (HIVE-343)', () => {
   });
 });
 
+describe('createHarnessCheck (HIVE-396)', () => {
+  it("answers every CLI with the wake's own reasons and fixes", () => {
+    const check = createHarnessCheck(baseDeps({ gate: OPEN_GATE }));
+
+    expect(check(AGENT_MD)).toEqual({
+      verdicts: {
+        'claude-code': { ok: true },
+        codex: { ok: false, reason: expect.stringContaining('codex cannot start'), fix: 'install' },
+        copilot: { ok: false, reason: expect.stringContaining('no Copilot token'), fix: 'sign-in' },
+      },
+    });
+  });
+
+  it('answers the first problem for a draft that cannot be read', () => {
+    expect(createHarnessCheck(baseDeps())('---\nname: slack-watcher\n---\n')).toEqual({
+      problem: expect.any(String),
+    });
+  });
+
+  it('reads a never-saved draft by the name it declares, not a folder on disk', () => {
+    const draft = AGENT_MD.replace('name: slack-watcher', 'name: brand-new');
+    const result = createHarnessCheck(baseDeps({ gate: OPEN_GATE }))(draft);
+
+    expect('verdicts' in result && result.verdicts['claude-code']).toEqual({ ok: true });
+  });
+
+  it("refuses a CLI that can't run in a container, as the wake does", () => {
+    const CONTAINER_MD = AGENT_MD.replace(
+      'limits:',
+      'container:\n  runtime: docker\n  name: devbox\n  workspace: /work\n  hive_dir: /hive\nlimits:',
+    );
+    const any: HarnessAdapter['id'][] = ['claude-code', 'codex', 'copilot'];
+    const check = createHarnessCheck(
+      baseDeps({
+        gate: OPEN_GATE,
+        cliToken: () => 'tok',
+        // Every CLI passes every other check, so only the container rule can refuse one.
+        adapter: (id) => (any.includes(id) ? { ...claudeCodeAdapter, id } : undefined),
+      }),
+    );
+
+    expect(check(CONTAINER_MD)).toEqual({
+      verdicts: {
+        'claude-code': { ok: true },
+        codex: { ok: false, reason: 'codex agents cannot run in a container yet.' },
+        copilot: { ok: false, reason: 'copilot agents cannot run in a container yet.' },
+      },
+    });
+  });
+});
