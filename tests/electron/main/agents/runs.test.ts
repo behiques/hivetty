@@ -363,6 +363,41 @@ describe('createRunTracker', () => {
     expect(state.read('a').runsSinceRotate).toBe(0);
   });
 
+  it('records the model and effort on a run whose spawn threw (HIVE-401)', () => {
+    const throwing = createRunTracker({
+      spawn: () => {
+        throw new Error('EMFILE: too many open files');
+      },
+      command: (_name: string) => ({
+        file: '/opt/bin/claude',
+        args: [],
+        env: {},
+        cwd: '/tmp/work',
+        sessionUuid: 'sess-1',
+        namesConversation: true,
+        lastTurn: false,
+        kind: 'standing' as const,
+        model: 'opus',
+        effort: 'high',
+      }),
+      parallelFor: () => 1,
+      state,
+      appendLedger: (entry) => ledger.push(entry),
+      openAsksFor: () => false,
+      hasOpenAsk: () => false,
+      handoffFor: () => undefined,
+      newUuid: () => 'uuid-minted',
+      pushStatus: (name) => statuses.push(name),
+      pushLines: () => {},
+      now: () => 1_000,
+      newRunId: () => 'run-1',
+    });
+
+    throwing.run('a', 'ledger');
+
+    expect(state.read('a').runs.at(-1)).toMatchObject({ outcome: 'failed', model: 'opus', effort: 'high' });
+  });
+
   it('pushes folded lines as the child writes', () => {
     tracker.run('a', 'ledger');
     childInstances[0]?.emitStdout(
@@ -418,6 +453,25 @@ describe('createRunTracker', () => {
     // The command fixture names no harness, which reads as claude-code.
     expect(persisted.runs.at(-1)?.harness).toBe('claude-code');
     expect(persisted.harness).toBe('claude-code');
+  });
+
+  it('records the model and effort a run launched with (HIVE-401)', () => {
+    commandOver = { model: 'gpt-6.1-sol', effort: 'high' };
+    tracker.run('a', 'ledger');
+    childInstances[0]?.emitStdout(resultLine());
+    childInstances[0]?.emitClose(0);
+
+    expect(state.read('a').runs.at(-1)).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
+  });
+
+  it('records neither when the command passed no flag (HIVE-401)', () => {
+    tracker.run('a', 'ledger');
+    childInstances[0]?.emitStdout(resultLine());
+    childInstances[0]?.emitClose(0);
+
+    const summary = state.read('a').runs.at(-1);
+    expect(summary).not.toHaveProperty('model');
+    expect(summary).not.toHaveProperty('effort');
   });
 
   it('closes done on close and persists the session uuid, pushing status on start and on close', () => {

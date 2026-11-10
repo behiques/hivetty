@@ -385,6 +385,9 @@ interface LiveRun {
   settleNow?: () => void;
   /** The CLI that launched this run, and so reads its output (HIVE-340). */
   harness: HarnessId;
+  /** See {@link FinalizeInfo.model}. */
+  model?: string;
+  effort?: string;
   fold: EventFold;
   closed: boolean;
   reason: string | null;
@@ -460,6 +463,9 @@ interface FinalizeInfo {
   promptHash?: string;
   /** The CLI that launched this run, and so reads its output (HIVE-340). */
   harness: HarnessId;
+  /** The model and effort the launch was handed (HIVE-401), each only when its flag was passed. */
+  model?: string;
+  effort?: string;
 }
 
 /**
@@ -701,6 +707,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       ...(end?.turns === undefined ? {} : { turns: end.turns }),
       ...(end?.usage === undefined ? {} : { usage: end.usage }),
       harness: info.harness,
+      ...(info.model === undefined ? {} : { model: info.model }),
+      ...(info.effort === undefined ? {} : { effort: info.effort }),
       ...(reason === null ? {} : { reason }),
       // Recorded on every run, not only the ones that rotate: "which
       // conversation did run 14 belong to" is the audit trail HIVE-122 needs.
@@ -1319,6 +1327,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
             startedAt,
             lastTurn: command.lastTurn,
             harness: command.harness ?? 'claude-code',
+            ...(command.model === undefined ? {} : { model: command.model }),
+            ...(command.effort === undefined ? {} : { effort: command.effort }),
             namesConversation: command.namesConversation,
             startsRotation: command.startsRotation === true,
             outputConfirmsStart: command.outputConfirmsStart === true,
@@ -1380,6 +1390,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
                 }
               },
         harness: command.harness ?? 'claude-code',
+        ...(command.model === undefined ? {} : { model: command.model }),
+        ...(command.effort === undefined ? {} : { effort: command.effort }),
         reader: headlessAdapter(command.harness ?? 'claude-code').headless.reader(command.usageFile, command.sessionUuid),
         stderrTail: '',
         fold: NO_EVENTS,

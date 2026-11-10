@@ -1249,4 +1249,32 @@ describe('the CLI a run ran on (HIVE-340)', () => {
 
     expect(getAllByHint(receipts(container), 'Ran on Claude Code')).toHaveLength(2);
   });
+
+  it('shows the model and effort the run used after the mark, and in its hint (HIVE-401)', () => {
+    seed({ runs: [run(1, { harness: 'codex', model: 'gpt-6.1-sol', effort: 'high' })] });
+
+    const { container } = render(<AgentRunLog name="watcher" />);
+
+    const mark = getByHint(receipts(container), 'Ran on Codex · gpt-6.1-sol · high');
+    expect(within(mark).getByText('gpt-6.1-sol · high')).not.toHaveClass('sr-only');
+    expect(mark.querySelector('svg[data-cli="codex"]')).toBeInTheDocument();
+  });
+
+  it('shows an effort passed without a model on its own (HIVE-401)', () => {
+    seed({ runs: [run(1, { harness: 'claude-code', effort: 'high' })] });
+
+    const { container } = render(<AgentRunLog name="watcher" />);
+
+    const mark = getByHint(receipts(container), 'Ran on Claude Code · high');
+    expect(within(mark).getByText('high')).toBeInTheDocument();
+  });
+
+  it('shows the mark only when the run passed neither flag (HIVE-401)', () => {
+    seed({ runs: [run(1, { harness: 'codex' })] });
+
+    const { container } = render(<AgentRunLog name="watcher" />);
+
+    // The sr-only CLI name is the whole of its text: no model, no separator.
+    expect(getByHint(receipts(container), 'Ran on Codex')).toHaveTextContent(/^Codex$/);
+  });
 });
