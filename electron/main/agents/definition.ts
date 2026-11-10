@@ -427,6 +427,16 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
     });
   }
 
+  // As `parallel`: a cap of 1.5 tokens is a cap that pretends (HIVE-398).
+  const dailyTokensRaw = shaped('limits.daily_tokens');
+
+  if (dailyTokensRaw !== undefined && !Number.isInteger(Number(dailyTokensRaw))) {
+    problems.push({
+      field: 'limits.daily_tokens',
+      reason: 'Must be a whole number of tokens, 1 or more.',
+    });
+  }
+
   /*
     The container block (HIVE-137). Validate-never-default: absent keys stay
     absent all the way to `wake-command.ts`, which is the layer that knows
@@ -511,6 +521,7 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
   const effort = shaped('effort');
   const budget = shaped('limits.budget_usd');
   const daily = shaped('limits.daily_usd');
+  const dailyTokens = shaped('limits.daily_tokens');
   const limit = (path: string, fallback: number): number => {
     const value = shaped(path);
 
@@ -565,6 +576,7 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
           this agent is worth in a day, and nobody but its author can guess it.
         */
         ...(daily === undefined ? {} : { dailyUsd: Number(daily) }),
+        ...(dailyTokens === undefined ? {} : { dailyTokens: Number(dailyTokens) }),
         rotateAfter: limit('limits.rotate_after', AGENT_LIMIT_DEFAULTS.rotateAfter),
         parallel: limit('limits.parallel', AGENT_LIMIT_DEFAULTS.parallel),
       },

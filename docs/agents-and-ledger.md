@@ -733,6 +733,29 @@ clear, so the spent card can still fire later. The first sweep of a new day
 flushes a queue the budget held. The scheduled tick keeps its own check, because
 it also defers the agent's clock to midnight.
 
+**The token ceiling, since HIVE-398.** `limits.daily_tokens` caps the day in
+tokens, so a CLI that reports no USD (Codex, Copilot) can be capped too. Spent
+tokens are `spentTokens(usage)`: `inputTokens + outputTokens`, where every
+reader normalises `inputTokens` to new input plus cache writes, and a cache read
+never counts:
+
+| CLI | Raw report | `inputTokens` |
+| --- | --- | --- |
+| Claude Code | `result.usage` | `input_tokens + cache_creation_input_tokens`; `cachedTokens` is `cache_read_input_tokens` |
+| Codex | `turn.completed.usage`, whose `input_tokens` includes the cached part | `input_tokens − cached_input_tokens`, floored at 0 |
+| Copilot | the usage file's `tokenDetails` | `input + cache_write` |
+
+`state.recordRun` adds each run's spend to `today.tokens`. Both checks read it:
+the scheduler's tick (which arms the agent for midnight, as for dollars) and
+`RunTracker.run` on every wake, after the dollar check. There is no reservation,
+because nothing caps one run's tokens: the check asks only whether the day is
+already spent, so parallel live runs, or one long Copilot run whose usage lands
+at exit, can finish past the cap. The card is the same `meta.dailyCap` event
+with `unit: 'tokens'` (`notify.ts` raises on the numeric `dailyCap`), sharing
+the once-a-day `today.capped` gate; with both caps set, the dollar cap is checked
+first and the card names the one that tripped. A CLI must report tokens
+(`Capabilities.reportsTokens`) to run a token-capped agent.
+
 The card
 is an `agent.failed` titled "Hit its daily cap" — its own branch in `notify.ts`,
 above the run-receipt path, because that path consumes `spokenFor` on any
@@ -1709,7 +1732,8 @@ candidate that passes every check runs:
 4. it is enabled for agents on its page in Settings › Harnesses (HIVE-341, HIVE-376);
 5. its fence can express every rule `HIVE_GRANTS` carries (HIVE-339);
 6. it reports cost in USD, if the agent sets `budget_usd` or `daily_usd`;
-7. it can serve every `mcp:` integration (`Capabilities.agentMcp`).
+7. it reports tokens, if the agent sets `daily_tokens`;
+8. it can serve every `mcp:` integration (`Capabilities.agentMcp`).
 
 When none passes, the run is refused as `invalid` with every candidate and its reason,
 for example: "No CLI can run reviewer: codex: Codex is in Solo and above;

@@ -632,6 +632,7 @@ describe('createDeliver', () => {
         meters: [],
         contextDelivery: 'none',
         reportsCostUsd: false,
+        reportsTokens: false,
         enforcesTurns: false,
         enforcesBudget: false,
         reportsMcpStatus: false,

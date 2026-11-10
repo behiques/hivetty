@@ -92,8 +92,10 @@ describe('createRunTracker', () => {
   }[];
   /** What `limits.parallel` says for the agent under test (HIVE-128). */
   let parallel: number;
-  /** `daily_usd` and `budget_usd` for the agent under test (HIVE-187). */
-  let limits: { dailyUsd?: number; budgetUsd?: number };
+  /** `daily_usd`, `budget_usd` (HIVE-187) and `daily_tokens` (HIVE-398) for the agent under test. */
+  let limits: { dailyUsd?: number; budgetUsd?: number; dailyTokens?: number };
+  /** The tracker's clock; moved only by the specs that turn the day over (HIVE-398). */
+  let clock: number;
   let runIds: number;
   let closed: string[];
   let statusWhenClosed: string | undefined;
@@ -113,6 +115,7 @@ describe('createRunTracker', () => {
     left = { ask: undefined, claims: [] };
     promptHash = undefined;
     commandCalls = 0;
+    clock = 1_000;
     commandOver = {};
     commandArgs = [];
     parallel = 1;
@@ -164,7 +167,7 @@ describe('createRunTracker', () => {
         closed.push(name);
         statusWhenClosed = state.read(name).status;
       },
-      now: () => 1_000,
+      now: () => clock,
       newRunId: () => {
         runIds += 1;
 
@@ -658,7 +661,7 @@ describe('createRunTracker', () => {
       expect(summary).toMatchObject({
         harness: 'copilot',
         outcome: 'done',
-        usage: { inputTokens: 6, outputTokens: 85, cachedTokens: 23244 },
+        usage: { inputTokens: 23_360, outputTokens: 85, cachedTokens: 23244 },
       });
       expect(summary).not.toHaveProperty('costUsd');
       expect(lines.flatMap((entry) => entry.pushed).map((line) => line.text)).toContain('DONE');
@@ -873,7 +876,7 @@ describe('createRunTracker', () => {
         outcome: 'done',
         sessionUuid: thread.thread_id,
         usage: {
-          inputTokens: usage['input_tokens'],
+          inputTokens: (usage['input_tokens'] ?? 0) - (usage['cached_input_tokens'] ?? 0),
           outputTokens: usage['output_tokens'],
           cachedTokens: usage['cached_input_tokens'],
         },
@@ -2273,6 +2276,64 @@ describe('createRunTracker', () => {
     it('does nothing at all for an agent with no daily_usd', () => {
       parallel = 2;
       limits = { budgetUsd: 100 };
+      expect(tracker.run('a', 'ledger')).toMatchObject({ started: true });
+    });
+  });
+
+  describe('the daily token cap (HIVE-398)', () => {
+    const used = (inputTokens: number, at = clock): void => {
+      state.recordRun(
+        'a',
+        { run: 'old', kind: 'standing', trigger: 'ledger', startedAt: 0, endedAt: 1, outcome: 'done', usage: { inputTokens } },
+        at,
+      );
+    };
+
+    it('runs under the cap', () => {
+      limits = { dailyTokens: 1_000 };
+      used(999);
+
+      expect(tracker.run('a', 'ledger')).toMatchObject({ started: true });
+    });
+
+    it('refuses budget at the cap and over it, carding once', () => {
+      limits = { dailyTokens: 1_000 };
+      used(1_000);
+
+      expect(tracker.run('a', 'ledger')).toMatchObject({ started: false, refused: 'budget' });
+      used(500);
+      expect(tracker.run('a', 'ledger')).toMatchObject({
+        started: false,
+        refused: 'budget',
+        reason: "a has spent today's tokens: 1,500 of 1,000 tokens.",
+      });
+      expect(commandCalls).toBe(0);
+
+      const cards = ledger.filter((entry) => entry.meta?.['dailyCap'] !== undefined);
+      expect(cards).toEqual([
+        expect.objectContaining({
+          from: 'overmind',
+          kind: 'event',
+          body: 'a reached its daily token cap — 1,000 tokens',
+          meta: { dailyCap: 1_000, unit: 'tokens', agent: 'a' },
+        }),
+      ]);
+      expect(state.read('a').today?.capped).toBe(true);
+    });
+
+    it('ignores tokens an earlier day spent', () => {
+      limits = { dailyTokens: 1_000 };
+      used(5_000, clock - 2 * 24 * 60 * 60 * 1_000);
+
+      expect(tracker.run('a', 'ledger')).toMatchObject({ started: true });
+    });
+
+    it('runs again once the day turns over', () => {
+      limits = { dailyTokens: 1_000 };
+      used(1_000);
+      expect(tracker.run('a', 'ledger')).toMatchObject({ refused: 'budget' });
+
+      clock += 24 * 60 * 60 * 1_000;
       expect(tracker.run('a', 'ledger')).toMatchObject({ started: true });
     });
   });

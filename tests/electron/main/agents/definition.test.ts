@@ -649,6 +649,22 @@ describe('parseAgent — check, and the daily cap', () => {
         .limits.dailyUsd,
     ).toBe(2.5);
   });
+
+  it('reads a daily token cap the file names, and leaves it unset otherwise (HIVE-398)', () => {
+    expect(definition(GOOD).limits.dailyTokens).toBeUndefined();
+    expect(
+      definition(GOOD.replace('budget_usd: 0.50', 'budget_usd: 0.50\n  daily_tokens: 2000000'))
+        .limits.dailyTokens,
+    ).toBe(2_000_000);
+  });
+
+  it.each(['0', '-5', '1.5', 'lots'])('rejects daily_tokens: %s', (raw) => {
+    const found = problems(
+      GOOD.replace('budget_usd: 0.50', `budget_usd: 0.50\n  daily_tokens: ${raw}`),
+    );
+
+    expect(found.map((problem) => problem.field)).toContain('limits.daily_tokens');
+  });
 });
 
 describe('limits.parallel (HIVE-128)', () => {

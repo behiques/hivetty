@@ -72,7 +72,10 @@ async function usageOf(file: string | undefined): Promise<{ usage?: RunUsage; re
     };
     const details = parsed.tokenDetails;
     const requests = typeof parsed.totalUserRequests === 'number' ? parsed.totalUserRequests : 0;
-    const inputTokens = count(details?.['input']);
+    // `input` is new input only; a cache write is new input too, a cache read is not (HIVE-398).
+    const fresh = count(details?.['input']);
+    const written = count(details?.['cache_write']);
+    const inputTokens = fresh === undefined && written === undefined ? undefined : (fresh ?? 0) + (written ?? 0);
     const outputTokens = count(details?.['output']);
     const cachedTokens = count(details?.['cache_read']);
 

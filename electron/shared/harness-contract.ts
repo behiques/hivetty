@@ -61,6 +61,8 @@ export interface Capabilities {
    */
   /** The run's end carries its cost in USD. */
   reportsCostUsd: boolean;
+  /** The run's end carries its tokens (HIVE-398): what `limits.daily_tokens` counts. */
+  reportsTokens: boolean;
   /** The CLI stops a run at the definition's turn limit. */
   enforcesTurns: boolean;
   /** The CLI stops a run at the definition's USD budget. */
@@ -107,6 +109,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     meters: ['model', 'effort', 'context', 'fiveHour', 'sevenDay'],
     contextDelivery: 'prompt-marker',
     reportsCostUsd: true,
+    reportsTokens: true,
     enforcesTurns: true,
     enforcesBudget: true,
     reportsMcpStatus: true,
@@ -126,6 +129,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     meters: ['model', 'effort', 'context', 'fiveHour', 'sevenDay', 'credits'],
     contextDelivery: 'prompt-marker',
     reportsCostUsd: false,
+    reportsTokens: true,
     enforcesTurns: false,
     enforcesBudget: false,
     reportsMcpStatus: false,
@@ -150,6 +154,7 @@ export const CAPABILITIES: Readonly<Record<HarnessId, Capabilities>> = {
     // HIVE-362: the marker rule in COPILOT_CUSTOM_INSTRUCTIONS_DIRS gets the entry read (FINDINGS P11).
     contextDelivery: 'prompt-marker',
     reportsCostUsd: false,
+    reportsTokens: true,
     enforcesTurns: false,
     enforcesBudget: false,
     reportsMcpStatus: false,
