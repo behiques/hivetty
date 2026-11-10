@@ -13,6 +13,7 @@ import { CopilotToken, HarnessAgentsGroup } from '@features/settings/components/
 import { HarnessCapabilities } from '@features/settings/components/harness-capabilities';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { CodexModelField } from '@features/shared/components/codex-model-field';
+import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import { OptionStepper } from '@features/shared/components/option-stepper';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useCliDetection } from '@hooks/use-cli-detection';
@@ -41,6 +42,13 @@ const SKIP_PERMISSIONS_FLAG: Record<HarnessId, string> = {
   'claude-code': '--dangerously-skip-permissions',
   codex: '--dangerously-bypass-approvals-and-sandbox',
   copilot: '--allow-all',
+};
+
+/** Codex's flag drops its sandbox too, which the switch must say rather than leave to the flag's name. */
+const SKIP_PERMISSIONS_EXTRA: Record<HarnessId, string> = {
+  'claude-code': '',
+  codex: " Commands also run outside Codex's sandbox, with full access to the machine.",
+  copilot: '',
 };
 
 const SIGN_IN_COPY: Record<HarnessId, string> = {
@@ -238,13 +246,40 @@ function SessionDefaultsGroup({ cli, clis }: { cli: HarnessId; clis: ClisConfig 
           disabledReason={`not for ${model}`}
         />
       </div>
-      <Switch
-        label="Skip permission prompts"
-        description={`Sessions start with ${SKIP_PERMISSIONS_FLAG[cli]}: nothing asks before a tool runs, so no permission card reaches the inbox. Agents keep their fence.`}
-        checked={clis[cli].skipPermissions === true}
-        onCheckedChange={(next) => void setCliConfig({ cli, skipPermissions: next })}
-      />
+      <SkipPermissionsSwitch cli={cli} checked={clis[cli].skipPermissions === true} />
     </SettingsGroup>
+  );
+}
+
+/** On asks first, inline as every confirm in Settings does (`config-reset-confirm.tsx`); off is the safe way and writes at once. */
+function SkipPermissionsSwitch({ cli, checked }: { cli: HarnessId; checked: boolean }) {
+  const [confirming, setConfirming] = useState(false);
+
+  if (confirming) {
+    return (
+      <InlineConfirm
+        label="Skip permission prompts?"
+        title={`Start every ${CLI_NAMES[cli]} session with ${SKIP_PERMISSIONS_FLAG[cli]}?`}
+        confirmLabel="Skip prompts"
+        className="rounded-lg border border-red"
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          setConfirming(false);
+          void setCliConfig({ cli, skipPermissions: true });
+        }}
+      >
+        {`New sessions run tools, edit files and run commands without asking, and no permission card reaches the inbox.${SKIP_PERMISSIONS_EXTRA[cli]} Sessions already running and headless agents are unchanged.`}
+      </InlineConfirm>
+    );
+  }
+
+  return (
+    <Switch
+      label="Skip permission prompts"
+      description={`Sessions start with ${SKIP_PERMISSIONS_FLAG[cli]}: nothing asks before a tool runs, so no permission card reaches the inbox.${SKIP_PERMISSIONS_EXTRA[cli]} Agents keep their fence.`}
+      checked={checked}
+      onCheckedChange={(next) => (next ? setConfirming(true) : void setCliConfig({ cli, skipPermissions: false }))}
+    />
   );
 }
 

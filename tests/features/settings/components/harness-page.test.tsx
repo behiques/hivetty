@@ -118,20 +118,43 @@ describe('HarnessPage (HIVE-376)', () => {
     expect(screen.getByRole('switch', { name: 'Use for sessions' })).toBeDisabled();
   });
 
-  it.each(['claude-code', 'codex', 'copilot'] as const)('%s: the skip-permissions switch writes true, and false off', async (cli) => {
+  it.each(['claude-code', 'codex', 'copilot'] as const)('%s: skip permission prompts asks before on, and writes off at once', async (cli) => {
     const user = userEvent.setup();
     const { unmount } = renderPage(cli);
     const off = screen.getByRole('switch', { name: 'Skip permission prompts' });
     expect(off).not.toBeChecked();
+
     await user.click(off);
+    expect(setCliConfig).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(setCliConfig).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('switch', { name: 'Skip permission prompts' }));
+    expect(screen.getByRole('alertdialog', { name: 'Skip permission prompts?' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Skip prompts' }));
     expect(setCliConfig).toHaveBeenCalledWith({ cli, skipPermissions: true });
     unmount();
+    setCliConfig.mockClear();
 
     renderPage(cli, { clis: resolveClis({ [cli]: { skipPermissions: true } }) });
     const on = screen.getByRole('switch', { name: 'Skip permission prompts' });
     expect(on).toBeChecked();
     await user.click(on);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(setCliConfig).toHaveBeenCalledWith({ cli, skipPermissions: false });
+  });
+
+  it('Codex says its sandbox goes too, in the description and the confirm; the others do not', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderPage('codex');
+    expect(screen.getByText(/outside Codex's sandbox/)).toBeInTheDocument();
+    await user.click(screen.getByRole('switch', { name: 'Skip permission prompts' }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(/outside Codex's sandbox/);
+    unmount();
+
+    renderPage('copilot');
+    expect(screen.queryByText(/sandbox/)).not.toBeInTheDocument();
   });
 
   it('sign-in is read again when the saved command changes, and not on an unrelated config change', async () => {

@@ -300,7 +300,7 @@ test("installing HiveTTY's skills into Codex, on and off, against a scratch CODE
   }
 });
 
-test('skip permission prompts writes clis.<id>.skipPermissions, and off deletes it', async ({}, testInfo) => {
+test('skip permission prompts asks, then writes clis.<id>.skipPermissions, and off deletes it', async ({}, testInfo) => {
   const configPath = testInfo.outputPath('hive-config.json');
   writeFileSync(configPath, JSON.stringify({ version: 2, projects: [] }));
 
@@ -317,6 +317,12 @@ test('skip permission prompts writes clis.<id>.skipPermissions, and off deletes 
       const toggle = page.getByRole('switch', { name: 'Skip permission prompts' });
       await expect(toggle).toHaveAttribute('aria-checked', 'false');
       await toggle.click();
+      // On asks first; nothing is written until the confirm says so.
+      const confirm = page.getByRole('alertdialog', { name: 'Skip permission prompts?' });
+      await expect(confirm).toBeVisible();
+      expect(read(configPath).clis?.[id]?.skipPermissions).toBeUndefined();
+      await page.screenshot({ path: testInfo.outputPath(`skip-permissions-confirm-${id}.png`) });
+      await confirm.getByRole('button', { name: 'Skip prompts' }).click();
       await expect.poll(() => read(configPath).clis?.[id]?.skipPermissions).toBe(true);
       await expect(toggle).toHaveAttribute('aria-checked', 'true');
     }
