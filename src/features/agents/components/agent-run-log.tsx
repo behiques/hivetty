@@ -1039,6 +1039,9 @@ function RunHeader({ run, dim, brand, first, selected, amber, red, onJump }: Run
     minute: '2-digit',
   });
   const cost = formatRunCost(run.costUsd);
+  const cli = CLI_NAMES[run.harness ?? 'claude-code'];
+  // Each flag the run was launched with, and only those (HIVE-401): absent means the CLI chose.
+  const ran = [run.model, run.effort].filter((part) => part !== undefined).join(' · ');
   const outcomeColor = run.outcome === 'failed' ? red : run.outcome === 'asking' ? amber : undefined;
   const outcome = run.reason === undefined ? run.outcome : `${run.outcome} · ${run.reason}`;
 
@@ -1059,13 +1062,19 @@ function RunHeader({ run, dim, brand, first, selected, amber, red, onJump }: Run
       */}
       <span className="flex min-w-0 items-baseline gap-1.5" style={{ color: brand }}>
         <Hint label={run.run}>
-          <span className="truncate">{`#${run.run.slice(0, 8)}`}</span>
+          <span className="shrink-0">{`#${run.run.slice(0, 8)}`}</span>
         </Hint>
-        {/* The CLI on every run, Claude's included; a run from before HIVE-340 ran on Claude. */}
-        <Hint label={`Ran on ${CLI_NAMES[run.harness ?? 'claude-code']}`}>
-          <span className="flex shrink-0 self-center">
-            <CliMark cli={run.harness ?? 'claude-code'} className="size-3.5" />
-            <span className="sr-only">{CLI_NAMES[run.harness ?? 'claude-code']}</span>
+        {/*
+          The CLI on every run, Claude's included; a run from before HIVE-340 ran on Claude. The model and effort
+          share its hint (HIVE-401) and truncate first in the narrow column, so the id and the mark keep their width.
+        */}
+        <Hint label={ran === '' ? `Ran on ${cli}` : `Ran on ${cli} · ${ran}`}>
+          <span className="flex min-w-0 items-baseline gap-1">
+            <span className="flex shrink-0 self-center">
+              <CliMark cli={run.harness ?? 'claude-code'} className="size-3.5" />
+              <span className="sr-only">{cli}</span>
+            </span>
+            {ran === '' ? null : <span className="truncate">{ran}</span>}
           </span>
         </Hint>
       </span>
