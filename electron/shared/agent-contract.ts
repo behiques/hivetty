@@ -18,6 +18,7 @@
  * rather than a leak — `hive-store.ts` imports `@shared/ledger-derive` and
  * `env-editor.tsx` imports `unsafeEnvReason` the same way.
  */
+import { CODEX_EFFORTS, COPILOT_EFFORTS, COPILOT_MODELS } from './cli-contract';
 import type { HarnessId } from './harness-contract';
 import { OVERMIND } from './ledger-contract';
 import {
@@ -27,6 +28,16 @@ import {
   type SessionModel,
 } from './session-contract';
 import { RESERVED_SKILL_NAME, SKILL_NAME_PATTERN } from './skills-contract';
+
+/** The CLIs whose model and effort an AGENT.md may name in a block of their own (HIVE-396). Claude's stay top-level. */
+export const AGENT_CLI_BLOCKS = ['codex', 'copilot'] as const;
+export type AgentCliBlock = (typeof AGENT_CLI_BLOCKS)[number];
+
+/** A CLI's model and effort for this agent; absent means that CLI's Settings card decides (HIVE-341). */
+export interface CliModelChoice {
+  model?: string;
+  effort?: string;
+}
 
 /** Folder under `~/.hivetty` holding one directory per agent. */
 export const AGENTS_DIR = 'agents';
@@ -291,6 +302,10 @@ export interface AgentDefinition {
   effort?: SessionEffort;
   /** The CLIs this agent may run on, in preference order (HIVE-340). Absent: the Settings default, else `claude-code`. */
   harness?: HarnessId[];
+  /** Codex's model and effort for this agent (HIVE-396). */
+  codex?: CliModelChoice;
+  /** Copilot's model and effort for this agent (HIVE-396). */
+  copilot?: CliModelChoice;
   wake: WakeSpec;
   skills: string[];
   mcp: string[];
@@ -631,6 +646,11 @@ export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'mcp', kind: 'list', required: false },
   { path: 'tools', kind: 'list', required: false },
   { path: 'harness', kind: 'list', required: false },
+  // HIVE-396. Codex's list is the account's, so its model is a shape the parser checks, not an enum.
+  { path: 'codex.model', kind: 'text', required: false },
+  { path: 'codex.effort', kind: 'enum', required: false, values: CODEX_EFFORTS },
+  { path: 'copilot.model', kind: 'enum', required: false, values: COPILOT_MODELS },
+  { path: 'copilot.effort', kind: 'enum', required: false, values: COPILOT_EFFORTS },
   { path: 'autonomy', kind: 'enum', required: false, values: AUTONOMIES },
   { path: 'lane', kind: 'enum', required: false, values: AGENT_LANES },
   { path: 'limits.turns', kind: 'number', required: false },
@@ -701,7 +721,7 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
  * - `icon: ChatCircleDots        # a Phosphor name` — aligned, a comment
  * - `on: [… slack.channel:#incorp-dev]` — no space, part of the value
  */
-function stripComment(line: string): string {
+export function stripComment(line: string): string {
   const at = line.search(/\s{2,}#/);
 
   return at === -1 ? line : line.slice(0, at);
@@ -1145,6 +1165,21 @@ export interface LaneState {
   /** When a thread lane's ask closed. Pruned a day later (HIVE-188). */
   closedAt?: number;
 }
+
+/** What the form offers to fix an unavailable CLI with (HIVE-396). A fence failure has none. */
+export type HarnessFix = 'install' | 'sign-in' | 'enable' | 'upgrade' | 'remove-budget' | 'remove-mcp';
+
+/** Whether one CLI can run a draft definition, with `resolveHarness`'s own reason when not. */
+export type HarnessVerdict = { ok: true } | { ok: false; reason: string; fix?: HarnessFix };
+
+export interface AgentHarnessCheckRequest {
+  source: string;
+}
+
+/** Every CLI's verdict, or the first parse problem when the draft cannot be read at all. */
+export type AgentHarnessCheckResult =
+  | { verdicts: Record<HarnessId, HarnessVerdict> }
+  | { problem: string };
 
 /** What `~/.hivetty/ledger/agents.json` holds per agent. */
 export interface AgentRunState {
