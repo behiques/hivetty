@@ -22,7 +22,10 @@ import {
   patchFrontmatter,
   readFrontmatter,
   type AgentProblem,
+  type HarnessVerdict,
 } from '@shared/agent-contract';
+import type { CliModel } from '@shared/cli-contract';
+import type { HarnessId } from '@shared/harness-contract';
 import { SESSION_MODELS } from '@shared/session-contract';
 
 
@@ -39,6 +42,22 @@ interface AgentFormProps {
    */
   taken: readonly string[];
   onChange: (source: string) => void;
+  /** What the Runs on group needs from outside the form (HIVE-396); the form itself stays hook-free. */
+  runsOn: RunsOnContext;
+}
+
+/** What the agent form's Runs on group reads from outside the form (HIVE-396). */
+export interface RunsOnContext {
+  /** Every CLI's verdict on this draft; `null` until main answers, or with no bridge: every CLI pickable. */
+  verdicts: Record<HarnessId, HarnessVerdict> | null;
+  /** The CLI an agent with no `harness:` line runs on: Settings › Agents' default, else Claude Code. */
+  defaultCli: HarnessId;
+  /** Each CLI's card model (Settings › Harnesses › <CLI>), named in the "CLI default" option. */
+  cardModels: Partial<Record<HarnessId, string>>;
+  /** Codex's models for this account, or the fallback list. */
+  codexModels: readonly CliModel[];
+  /** Open Settings › Harnesses › <cli>. */
+  openHarness: (cli: HarnessId) => void;
 }
 
 /**

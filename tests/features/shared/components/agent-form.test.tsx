@@ -10,8 +10,10 @@ import {
   AgentForm,
   FIELD_HELP,
   RENDERED_PATHS,
+  type RunsOnContext,
 } from '@features/shared/components/agent-form';
 import { readFrontmatter } from '@shared/agent-contract';
+import { runsOn } from '@tests/support/runs-on';
 
 const SOURCE = `---
 name: slack-watcher
@@ -38,15 +40,18 @@ function Harness({
   initial,
   taken,
   onSource,
+  context = runsOn(),
 }: {
   initial: string;
   taken: readonly string[];
   onSource: (source: string) => void;
+  context?: RunsOnContext;
 }) {
   const [source, setSource] = useState(initial);
 
   return (
     <AgentForm
+      runsOn={context}
       source={source}
       problems={[]}
       taken={taken}
@@ -59,7 +64,7 @@ function Harness({
 }
 
 const setup = (
-  over: { source?: string; taken?: readonly string[] } = {},
+  over: { source?: string; taken?: readonly string[]; runsOn?: RunsOnContext } = {},
 ) => {
   const onChange = vi.fn();
 
@@ -68,6 +73,7 @@ const setup = (
       initial={over.source ?? SOURCE}
       taken={over.taken ?? []}
       onSource={onChange}
+      context={over.runsOn ?? runsOn()}
     />,
   );
 
@@ -157,6 +163,7 @@ describe('AgentForm', () => {
     it('drops the rename notice when the buffer becomes another agent', async () => {
       const { rerender } = render(
         <AgentForm
+          runsOn={runsOn()}
           source={SOURCE.replace('slack-watcher', 'watcher')}
           problems={[]}
           taken={['watcher']}
@@ -169,6 +176,7 @@ describe('AgentForm', () => {
 
       rerender(
         <AgentForm
+          runsOn={runsOn()}
           source={SOURCE.replace('slack-watcher', 'someone-else')}
           problems={[]}
           taken={['watcher']}
@@ -406,6 +414,7 @@ describe('AgentForm', () => {
               rewrite
             </button>
             <AgentForm
+              runsOn={runsOn()}
               source={source}
               problems={[]}
               taken={[]}
@@ -645,6 +654,7 @@ describe('AgentForm', () => {
     it('shows a check problem in the banner when the mode hides the control', () => {
       render(
         <AgentForm
+          runsOn={runsOn()}
           source={CAL}
           problems={[
             {
@@ -1100,6 +1110,7 @@ describe('AgentForm', () => {
     it('renders a name problem beside the name field, not in the banner', () => {
       render(
         <AgentForm
+          runsOn={runsOn()}
           source={SOURCE}
           problems={[{ field: 'name', reason: 'That name is reserved.' }]}
           taken={[]}
@@ -1117,6 +1128,7 @@ describe('AgentForm', () => {
     it('still banners a problem naming a field it does not render', () => {
       render(
         <AgentForm
+          runsOn={runsOn()}
           source={SOURCE}
           problems={[{ field: 'wobble', reason: 'Unknown key.' }]}
           taken={[]}
@@ -1146,6 +1158,7 @@ describe('AgentForm', () => {
   it('banners a wake problem the current mode is not showing', () => {
     render(
       <AgentForm
+        runsOn={runsOn()}
         source={SOURCE.replace('  every: 5m\n', '')}
         problems={[
           { field: 'wake.every', reason: 'Cannot be faster than 1m.' },
@@ -1207,6 +1220,7 @@ describe('AgentForm', () => {
       const onChange = vi.fn();
       render(
         <AgentForm
+          runsOn={runsOn()}
           source={CONTAINER_SOURCE}
           problems={[{ field: 'container.name', reason: 'A container name: no spaces.' }]}
           taken={[]}
