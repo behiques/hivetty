@@ -421,6 +421,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > model and effort 1
     "You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
+  "effort": "high",
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
@@ -432,6 +433,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > model and effort 1
     "PATH": "/usr/bin",
   },
   "file": "/opt/bin/claude",
+  "model": "opus",
   "namesConversation": true,
 }
 `;

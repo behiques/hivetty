@@ -1103,6 +1103,10 @@ export interface RunSummary {
   usage?: RunUsage;
   /** The CLI this run ran on (HIVE-340). Absent on records before it, which were all `claude-code`. */
   harness?: HarnessId;
+  /** The `--model` this run was launched with (HIVE-401). Absent when no flag was passed: the CLI chose. */
+  model?: string;
+  /** The effort flag this run was launched with (HIVE-401). Absent when none was passed. */
+  effort?: string;
   /** Why it ended that way, when the outcome alone does not say. */
   reason?: string;
   /**

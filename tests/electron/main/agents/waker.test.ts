@@ -657,6 +657,12 @@ describe('a container wake (HIVE-137)', () => {
     expect(command.container?.sessionUuid).toBe('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
   });
 
+  it('carries the model and effort on a container wake too (HIVE-401)', () => {
+    const command = build({ container, paths: containerPaths, def: def({ model: 'opus', effort: 'high' }) });
+
+    expect(command).toMatchObject({ model: 'opus', effort: 'high' });
+  });
+
   it("crosses only HIVE_*, the marker and the foreground switch, re-addressed by the alias, never main's environment", () => {
     const command = built();
 
@@ -895,6 +901,27 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
 
     expect(args[args.indexOf('--model') + 1]).toBe('kimi-k3');
     expect(args).not.toContain('--effort');
+  });
+
+  it('carries the model and effort it launched with on the command (HIVE-401)', () => {
+    const command = build({ adapter: other, def: def({ codex: { model: 'gpt-6.1-sol', effort: 'high' } }) });
+
+    expect(command).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
+  });
+
+  it('carries neither when no flag was passed (HIVE-401)', () => {
+    const command = build();
+
+    expect(command).not.toHaveProperty('model');
+    expect(command).not.toHaveProperty('effort');
+  });
+
+  it('carries an effort only when it reached the launch, off Claude (HIVE-401)', () => {
+    const copilot = { ...claudeCodeAdapter, id: 'copilot' as const };
+    const command = build({ adapter: copilot, def: def({ copilot: { effort: 'high' } }), defaults: { model: 'kimi-k3' } });
+
+    expect(command.model).toBe('kimi-k3');
+    expect(command).not.toHaveProperty('effort');
   });
 
   it("never reads another CLI's block on Claude (HIVE-396)", () => {

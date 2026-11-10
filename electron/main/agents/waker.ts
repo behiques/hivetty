@@ -159,6 +159,9 @@ export interface WakeCommand {
   usageFile?: string;
   /** The plan's files, written by the core before the spawn (HIVE-343). */
   files?: readonly { path: string; text: string }[];
+  /** The model and effort handed to the launch, each only when its flag was passed (HIVE-401). */
+  model?: string;
+  effort?: string;
 }
 
 export function wakePrompt(
@@ -364,12 +367,14 @@ export function wakeCommand(input: WakeInput): WakeCommand {
   const wanted = own?.effort ?? input.defaults?.effort;
   const effort = !claude && model !== undefined && !cliTakesEffort(adapter.id, model) ? undefined : wanted;
 
+  // What the flags say, kept for the run's summary (HIVE-401): exactly what the launch is handed.
+  const ran = { ...(model === undefined ? {} : { model }), ...(effort === undefined ? {} : { effort }) };
+
   const plan = adapter.headless.launch({
     conversation:
       input.sessionUuid === undefined ? { start: input.newUuid } : { resume: input.sessionUuid },
     name: def.name,
-    ...(model === undefined ? {} : { model }),
-    ...(effort === undefined ? {} : { effort }),
+    ...ran,
     // A sandbox is Codex's (HIVE-342): the card's, else `workspace-write`.
     ...(claude ? {} : { sandbox: input.defaults?.sandbox ?? 'workspace-write' }),
     limits: {
@@ -486,6 +491,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
       cwd: paths.workdir,
       namesConversation: plan.namesConversation,
       ...planFiles,
+      ...ran,
       container: {
         runtime: config.runtime,
         name: config.name,
@@ -504,5 +510,6 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     cwd: paths.workdir,
     namesConversation: plan.namesConversation,
     ...planFiles,
+    ...ran,
   };
 }
