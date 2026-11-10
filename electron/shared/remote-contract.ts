@@ -94,8 +94,9 @@ import { isThisMachineAction } from './notification-contract';
  * 38 → 39 (the Account centre): `CH` gained `account:billing` (process-local).
  * 39 → 40 (desktop billing): `CH` gained `account:payments`, `account:revoke-device`, `account:open-billing` and
  *   `account:open-invoice` (process-local).
+ * 40 → 41 (HIVE-396): `CH` gained `agents:harness-check` (a forwarded read).
  */
-export const REMOTE_PROTOCOL_VERSION = 40;
+export const REMOTE_PROTOCOL_VERSION = 41;
 
 /**
  * What a frame is for.
