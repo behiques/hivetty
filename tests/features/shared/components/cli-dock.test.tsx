@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { CliDock } from '@features/sessions/components/cli-dock';
+import { CliDock } from '@features/shared/components/cli-dock';
 import { openAccountWeb } from '@lib/account';
 import type { HarnessId } from '@shared/harness-contract';
 

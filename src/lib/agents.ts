@@ -4,6 +4,7 @@ import {
   formatRunCost,
   isReservedAgentName,
   readFrontmatter,
+  type AgentHarnessCheckResult,
   type AgentStatus,
   type AgentsSnapshot,
   type AgentWriteResult,
@@ -290,6 +291,19 @@ export async function saveAgent(
       ],
     };
   }
+}
+
+/**
+ * Every CLI's verdict on a draft (HIVE-396), or `null` with no bridge: the browser demo has no CLIs
+ * to ask about, and the form reads `null` as "all pickable". A rejection propagates; the hook keeps
+ * its last answer.
+ */
+export async function checkAgentHarness(source: string): Promise<AgentHarnessCheckResult | null> {
+  const bridge = window.hive;
+
+  if (!bridge) return null;
+
+  return bridge.agents.harnessCheck({ source });
 }
 
 /** Remove one agent, folder and all. */

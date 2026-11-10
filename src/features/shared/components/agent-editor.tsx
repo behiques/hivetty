@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { EditorSurface } from '@components/editor/editor-surface';
 import { Button } from '@components/ui/button';
 import { SplitHandle } from '@components/ui/split-handle';
-import { AgentForm } from '@features/shared/components/agent-form';
+import { AgentForm, type RunsOnContext } from '@features/shared/components/agent-form';
 import { languageFor } from '@lib/explorer/language';
 import { onTablistKeyDown } from '@lib/tablist';
 import type { AgentProblem } from '@shared/agent-contract';
@@ -100,6 +100,8 @@ interface AgentEditorProps {
    * (Settings, whose detail pane is too narrow for two panes).
    */
   layout?: 'split' | 'tabs';
+  /** What the form's Runs on group needs (HIVE-396), built by `AgentDefinition`. */
+  runsOn: RunsOnContext;
 }
 
 /**
@@ -149,6 +151,7 @@ export function AgentEditor({
   notice,
   actionsHidden = false,
   layout = 'split',
+  runsOn,
 }: AgentEditorProps) {
   const split = layout === 'split';
   const [tab, setTab] = useState<Tab>('form');
@@ -356,6 +359,7 @@ export function AgentEditor({
             problems={problems}
             taken={taken}
             onChange={onChange}
+            runsOn={runsOn}
           />
         </div>
         {split ? (

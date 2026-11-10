@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ICON_NAMES } from '@components/ui/icon';
 import {
@@ -10,8 +10,10 @@ import {
   AgentForm,
   FIELD_HELP,
   RENDERED_PATHS,
+  type RunsOnContext,
 } from '@features/shared/components/agent-form';
 import { readFrontmatter } from '@shared/agent-contract';
+import { runsOn } from '@tests/support/runs-on';
 
 const SOURCE = `---
 name: slack-watcher
@@ -38,15 +40,18 @@ function Harness({
   initial,
   taken,
   onSource,
+  context = runsOn(),
 }: {
   initial: string;
   taken: readonly string[];
   onSource: (source: string) => void;
+  context?: RunsOnContext;
 }) {
   const [source, setSource] = useState(initial);
 
   return (
     <AgentForm
+      runsOn={context}
       source={source}
       problems={[]}
       taken={taken}
@@ -59,7 +64,7 @@ function Harness({
 }
 
 const setup = (
-  over: { source?: string; taken?: readonly string[] } = {},
+  over: { source?: string; taken?: readonly string[]; runsOn?: RunsOnContext } = {},
 ) => {
   const onChange = vi.fn();
 
@@ -68,6 +73,7 @@ const setup = (
       initial={over.source ?? SOURCE}
       taken={over.taken ?? []}
       onSource={onChange}
+      context={over.runsOn ?? runsOn()}
     />,
   );
 
@@ -157,6 +163,7 @@ describe('AgentForm', () => {
     it('drops the rename notice when the buffer becomes another agent', async () => {
       const { rerender } = render(
         <AgentForm
+          runsOn={runsOn()}
           source={SOURCE.replace('slack-watcher', 'watcher')}
           problems={[]}
           taken={['watcher']}
@@ -169,6 +176,7 @@ describe('AgentForm', () => {
 
       rerender(
         <AgentForm
+          runsOn={runsOn()}
           source={SOURCE.replace('slack-watcher', 'someone-else')}
           problems={[]}
           taken={['watcher']}
@@ -406,6 +414,7 @@ describe('AgentForm', () => {
               rewrite
             </button>
             <AgentForm
+              runsOn={runsOn()}
               source={source}
               problems={[]}
               taken={[]}
@@ -645,6 +654,7 @@ describe('AgentForm', () => {
     it('shows a check problem in the banner when the mode hides the control', () => {
       render(
         <AgentForm
+          runsOn={runsOn()}
           source={CAL}
           problems={[
             {
@@ -1100,6 +1110,7 @@ describe('AgentForm', () => {
     it('renders a name problem beside the name field, not in the banner', () => {
       render(
         <AgentForm
+          runsOn={runsOn()}
           source={SOURCE}
           problems={[{ field: 'name', reason: 'That name is reserved.' }]}
           taken={[]}
@@ -1117,6 +1128,7 @@ describe('AgentForm', () => {
     it('still banners a problem naming a field it does not render', () => {
       render(
         <AgentForm
+          runsOn={runsOn()}
           source={SOURCE}
           problems={[{ field: 'wobble', reason: 'Unknown key.' }]}
           taken={[]}
@@ -1146,6 +1158,7 @@ describe('AgentForm', () => {
   it('banners a wake problem the current mode is not showing', () => {
     render(
       <AgentForm
+        runsOn={runsOn()}
         source={SOURCE.replace('  every: 5m\n', '')}
         problems={[
           { field: 'wake.every', reason: 'Cannot be faster than 1m.' },
@@ -1207,6 +1220,7 @@ describe('AgentForm', () => {
       const onChange = vi.fn();
       render(
         <AgentForm
+          runsOn={runsOn()}
           source={CONTAINER_SOURCE}
           problems={[{ field: 'container.name', reason: 'A container name: no spaces.' }]}
           taken={[]}
@@ -1240,5 +1254,218 @@ describe('AgentForm', () => {
 
       expect(screen.queryByText(/rewrite/)).toBeNull();
     });
+  });
+});
+
+describe('Runs on: the dock and the primary model (HIVE-396)', () => {
+  const lastSource = (onChange: ReturnType<typeof vi.fn>) => onChange.mock.calls.at(-1)![0] as string;
+  const field = (source: string, path: string) => readFrontmatter(source)?.fields.get(path)?.value;
+
+  it('shows the default CLI, captioned, when the file names none', () => {
+    setup({ runsOn: runsOn({ defaultCli: 'codex' }) });
+    const dock = screen.getByRole('radiogroup', { name: 'cli' });
+
+    expect(within(dock).getByRole('radio', { checked: true })).toHaveAccessibleName('Codex');
+    expect(screen.getByText('Default CLI for agents')).toBeInTheDocument();
+  });
+
+  it('writes harness: on the first pick, and keeps the rest of the list after the primary', async () => {
+    const onChange = setup({ source: SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [claude-code, copilot]') });
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Codex' }));
+    expect(field(lastSource(onChange), 'harness')).toBe('[codex, claude-code, copilot]');
+  });
+
+  it('cannot pick a CLI the check refused, by click or by key', async () => {
+    const verdicts = {
+      'claude-code': { ok: true as const },
+      codex: { ok: false as const, reason: 'codex cannot start: not found', fix: 'install' as const },
+      copilot: { ok: true as const },
+    };
+    const onChange = setup({ runsOn: runsOn({ verdicts }) });
+
+    await userEvent.click(screen.getByRole('radio', { name: /Codex/ }));
+    expect(onChange).not.toHaveBeenCalled();
+    screen.getByRole('radio', { name: 'Claude Code' }).focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(field(lastSource(onChange), 'harness')).toBe('[copilot]');
+  });
+
+  it("keeps Claude's segmented model control for Claude Code", async () => {
+    const onChange = setup();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'opus' }));
+    expect(field(lastSource(onChange), 'model')).toBe('opus');
+  });
+
+  it("writes Codex's model into its block, and Use the CLI default removes the block", async () => {
+    const source = SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [codex]\ncodex:   # mine\n  model: gpt-6-luna');
+    const onChange = setup({ source });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use the CLI default' }));
+    const next = lastSource(onChange);
+    expect(field(next, 'codex.model')).toBeUndefined();
+    expect(next).not.toMatch(/^codex:/m); // the commented parent line went too (the clearParent fix)
+  });
+
+  it("offers Copilot's list behind a CLI default naming the card's model", async () => {
+    const onChange = setup({
+      source: SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [copilot]'),
+      runsOn: runsOn({ cardModels: { copilot: 'claude-sonnet-5.5' } }),
+    });
+    const select = screen.getByRole('combobox', { name: /Copilot model/ });
+
+    expect(within(select).getByRole('option', { name: 'CLI default (claude-sonnet-5.5)' })).toBeInTheDocument();
+    await userEvent.selectOptions(select, 'claude-opus-5.5');
+    expect(field(lastSource(onChange), 'copilot.model')).toBe('claude-opus-5.5');
+  });
+});
+
+describe('Runs on: fallbacks (HIVE-396)', () => {
+  const lastSource = (onChange: ReturnType<typeof vi.fn>) => onChange.mock.calls.at(-1)![0] as string;
+  const field = (source: string, path: string) => readFrontmatter(source)?.fields.get(path)?.value;
+  const withHarness = (list: string) => SOURCE.replace('autonomy: ask', `autonomy: ask\nharness: ${list}`);
+
+  it('turns a fallback on after the primary, in the order turned on', async () => {
+    const onChange = setup({ source: withHarness('[codex]') });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Claude Code', pressed: false }));
+    expect(field(lastSource(onChange), 'harness')).toBe('[codex, claude-code]');
+  });
+
+  it('with no harness: line, a fallback joins the default', async () => {
+    const onChange = setup();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Codex', pressed: false }));
+    expect(field(lastSource(onChange), 'harness')).toBe('[claude-code, codex]');
+  });
+
+  it('turns a fallback off', async () => {
+    const onChange = setup({ source: withHarness('[codex, claude-code, copilot]') });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Claude Code', pressed: true }));
+    expect(field(lastSource(onChange), 'harness')).toBe('[codex, copilot]');
+  });
+
+  it('gives each fallback that is on its own model row', () => {
+    setup({ source: withHarness('[codex, claude-code]') });
+
+    expect(screen.getByRole('radio', { name: 'opus' })).toBeInTheDocument();
+  });
+
+  it('cannot turn on a fallback the check refused, but can turn one off', async () => {
+    const verdicts = {
+      'claude-code': { ok: true as const },
+      codex: { ok: true as const },
+      copilot: { ok: false as const, reason: 'copilot cannot start: no Copilot token', fix: 'sign-in' as const },
+    };
+    const onChange = setup({ source: withHarness('[claude-code]'), runsOn: runsOn({ verdicts }) });
+
+    expect(screen.getByRole('button', { name: /Copilot/, pressed: false })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Codex', pressed: false }));
+    expect(field(lastSource(onChange), 'harness')).toBe('[claude-code, codex]');
+  });
+});
+
+describe('Runs on: what cannot run, and the fix (HIVE-396)', () => {
+  const verdict = (reason: string, fix?: string) => ({ ok: false as const, reason, ...(fix ? { fix } : {}) });
+  const ok = { ok: true as const };
+
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('lists each refused CLI with its reason, and a CLI in harness: stays, marked', () => {
+    setup({
+      source: SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [claude-code, copilot]'),
+      runsOn: runsOn({ verdicts: { 'claude-code': ok, codex: ok, copilot: verdict('copilot cannot start: not found', 'install') } as never }),
+    });
+
+    expect(screen.getByText(/Skipped at wake: copilot cannot start: not found/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copilot/, pressed: true })).toBeInTheDocument();
+  });
+
+  it("opens the CLI's Settings page for install, sign-in and enable", async () => {
+    const openHarness = vi.fn();
+    setup({
+      runsOn: runsOn({
+        openHarness,
+        verdicts: { 'claude-code': ok, codex: verdict('codex is turned off for agents', 'enable'), copilot: verdict('no token', 'sign-in') } as never,
+      }),
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open Settings › Harnesses › Codex' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Open Settings › Harnesses › Copilot' }));
+    expect(openHarness.mock.calls).toEqual([['codex'], ['copilot']]);
+  });
+
+  it('focuses the budget limit for remove-budget, and integrations for remove-mcp', async () => {
+    const source = SOURCE.replace('autonomy: ask', 'autonomy: ask\nmcp: [slack]\nlimits:\n  daily_usd: 5');
+    setup({
+      source,
+      runsOn: runsOn({
+        verdicts: {
+          'claude-code': ok,
+          codex: verdict('codex does not report cost in USD', 'remove-budget'),
+          copilot: verdict('copilot cannot serve the slack integration', 'remove-mcp'),
+        } as never,
+      }),
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go to the budget limit' }));
+    expect(document.activeElement?.closest('[data-field]')).toHaveAttribute('data-field', 'limits.daily_usd');
+    await userEvent.click(screen.getByRole('button', { name: 'Go to integrations' }));
+    expect(document.activeElement?.closest('[data-field]')).toHaveAttribute('data-field', 'mcp');
+  });
+
+  it('a fence failure shows its reason and no fix', () => {
+    setup({ runsOn: runsOn({ verdicts: { 'claude-code': ok, codex: verdict('codex cannot enforce Bash'), copilot: ok } as never }) });
+
+    expect(screen.getByText(/codex cannot enforce Bash/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Settings › Harnesses › Codex/ })).toBeNull();
+  });
+});
+
+describe('Runs on: problems in place (HIVE-396)', () => {
+  it('draws a problem on harness and each CLI model beside its control (HIVE-396)', () => {
+    expect(RENDERED_PATHS).toEqual(expect.arrayContaining(['harness', 'codex.model', 'copilot.model']));
+    render(
+      <AgentForm
+        source={SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [codex]')}
+        problems={[{ field: 'codex.model', reason: 'Not a Codex model id.' }]}
+        taken={[]}
+        onChange={vi.fn()}
+        runsOn={runsOn()}
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Not a Codex model id.');
+  });
+
+  it('draws a problem on harness under the dock', () => {
+    render(
+      <AgentForm
+        source={SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [nope]')}
+        problems={[{ field: 'harness', reason: 'Not a CLI this app knows.' }]}
+        taken={[]}
+        onChange={vi.fn()}
+        runsOn={runsOn()}
+      />,
+    );
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Not a CLI this app knows.');
+    expect(alert.closest('[data-field]')).toHaveAttribute('data-field', 'harness');
+  });
+
+  it("banners a model problem for a CLI the list does not name, whose row is not drawn", () => {
+    render(
+      <AgentForm
+        source={SOURCE.replace('autonomy: ask', 'autonomy: ask\ncopilot:\n  model: nope')}
+        problems={[{ field: 'copilot.model', reason: 'Not a Copilot model.' }]}
+        taken={[]}
+        onChange={vi.fn()}
+        runsOn={runsOn()}
+      />,
+    );
+    expect(screen.getByText('Not a Copilot model.')).toBeInTheDocument();
   });
 });

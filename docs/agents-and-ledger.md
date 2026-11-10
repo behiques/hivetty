@@ -1733,6 +1733,56 @@ session with no handoff turn, and the prompt's first line says so. A lapse never
 touches a live run: the next wake resolves again. Each run's receipt records
 `harness`, and the run log chips any run that was not `claude-code`.
 
+### Per-CLI models (HIVE-396)
+
+Each CLI other than Claude Code has its own block for its model and effort:
+
+```yaml
+harness: [codex, claude-code]
+model: opus            # Claude Code's, as before
+codex:
+  model: gpt-6-luna
+  effort: high
+copilot:
+  model: claude-opus-5.5
+```
+
+- Top-level `model:` and `effort:` stay Claude's. A wake on `claude-code` reads them and nothing else.
+- `codex.model` is free text, checked for shape only, because Codex's model list belongs to the
+  account. `copilot.model` must be one of `COPILOT_MODELS`. Each block's `effort` must be one of
+  that CLI's efforts. An effort beside a model that takes none is a problem.
+- A CLI with no block, or a block with no `model`, uses its card in Settings › Harnesses › <CLI>.
+  When the card names none either, the flag is omitted and the CLI picks.
+- A block for a CLI that `harness:` doesn't name is legal. It does nothing until that CLI runs.
+
+#### The Runs on group
+
+In the agent's Form tab, the **Runs on** group sits above Limits and edits these keys:
+
+- **The dock** picks the primary CLI. It shows the first CLI `harness:` names. With no
+  `harness:` line it shows the default CLI, captioned "Default CLI for agents". Picking a CLI
+  writes `harness: [picked, …the rest]`.
+- **The model row** under the dock edits the primary's model:
+  - Claude Code: the familiar segments, writing `model`.
+  - Codex: the family picker, writing `codex.model`. Once it's set, "Use the CLI default" clears
+    it, and clears the emptied block too.
+  - Copilot: a list headed "CLI default (<the card's model>)", writing `copilot.model`.
+- **Fallback chips**, under "If <primary> can't run". A chip turns another CLI on, appended to
+  `harness:`, or off. Each fallback that's on gets its own model row.
+- **The unavailable list.** The form asks main (`agents:harness-check`) about the draft, 300 ms
+  after typing stops. Each CLI that can't run the draft is dimmed in the dock, and its chip
+  can't be turned on. It also gets a line with its reason and a fix:
+  - Install, sign in or enable: "Open Settings › Harnesses › <CLI>".
+  - A plan lock: Upgrade.
+  - A budget the CLI can't meter: "Go to the budget limit".
+  - An integration it can't serve: "Go to integrations".
+  - A fence it can't express: the reason alone, with no fix.
+
+  A CLI that `harness:` names reads "Skipped at wake:" and stays in the list. The form never
+  removes it, because the wake skips it on its own and it may be fixed by the next wake.
+- **Problems.** A problem on `harness`, `codex.model` or `copilot.model` is shown beside its
+  control. If that control isn't drawn (another CLI's model), the problem goes in the banner.
+
 ### The shipper's merge grant (HIVE-166)
 
 A project's `autoMerge: true` becomes, at wake time and for the agent named

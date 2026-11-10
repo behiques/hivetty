@@ -18,12 +18,18 @@ import {
 } from '@/lib/shipped';
 
 import { AgentEditor } from '@features/shared/components/agent-editor';
+import type { RunsOnContext } from '@features/shared/components/agent-form';
 import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import { HeldBanner, ShippedStrip } from '@features/shared/components/shipped-marker';
+import { useAgentHarnessCheck } from '@hooks/use-agent-harness-check';
 import { useAgents } from '@hooks/use-agents';
+import { useCodexModels } from '@hooks/use-codex-models';
+import { useProjectConfig } from '@hooks/use-project-config';
 import { useShipped } from '@hooks/use-shipped';
 import type { AgentProblem } from '@shared/agent-contract';
+import { HARNESS_IDS } from '@shared/harness-contract';
 import { useAgentDraft, useAgentDraftActions } from '@stores/editor-store';
+import { useSettingsActions } from '@stores/ui-store';
 
 interface AgentDefinitionProps {
   /** The agent, or `null` for a new one never saved. */
@@ -164,6 +170,24 @@ export function AgentDefinition({ name, notice, onRename, onClose, layout = 'spl
   }, [name, listed, editAgentDraft]);
 
   const text = draft?.text ?? null;
+
+  /** What the form's Runs on group reads from outside it (HIVE-396). */
+  const verdicts = useAgentHarnessCheck(text ?? '');
+  const config = useProjectConfig();
+  const { models: codexModels } = useCodexModels(verdicts?.codex.ok !== false, true);
+  const { openSettings } = useSettingsActions();
+  const runsOn: RunsOnContext = {
+    verdicts,
+    defaultCli: config?.agentsDefaultCli ?? 'claude-code',
+    cardModels: Object.fromEntries(
+      HARNESS_IDS.flatMap((id) => {
+        const model = config?.clis[id].agents.model;
+        return model === undefined ? [] : [[id, model]];
+      }),
+    ),
+    codexModels,
+    openHarness: (cli) => openSettings(cli),
+  };
   const dirty = draft?.dirty ?? false;
   const typed = text === null ? '' : frontmatterName(text);
   const localProblem = text === null ? null : nameProblem(typed, taken);
@@ -313,6 +337,7 @@ export function AgentDefinition({ name, notice, onRename, onClose, layout = 'spl
         notice={notice ?? ownNotice}
         actionsHidden={pending !== null}
         layout={layout}
+        runsOn={runsOn}
       />
 
       {pending === null ? null : (

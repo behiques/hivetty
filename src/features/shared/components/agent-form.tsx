@@ -1,12 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { cn } from '@/lib/utils';
+
+import { Button } from '@components/ui/button';
+import { CliMark } from '@components/ui/cli-mark';
+import { Hint } from '@components/ui/hint';
 import { IconPicker } from '@components/ui/icon-picker';
+import { UpgradeLink } from '@components/ui/lock';
 import {
   SegmentedControl,
   type SegmentedOption,
 } from '@components/ui/segmented-control';
+import { SelectField } from '@components/ui/select-field';
 import { Switch } from '@components/ui/switch';
+import { CliDock } from '@features/shared/components/cli-dock';
+import { CodexModelField } from '@features/shared/components/codex-model-field';
 import { SettingsGroup } from '@features/shared/components/settings-group';
+import { CLI_NAMES } from '@lib/harness/cli-names';
 import {
   AGENT_FIELDS,
   AGENT_LIMIT_DEFAULTS,
@@ -21,8 +31,13 @@ import {
   parseTimes,
   patchFrontmatter,
   readFrontmatter,
+  stripComment,
   type AgentProblem,
+  type HarnessFix,
+  type HarnessVerdict,
 } from '@shared/agent-contract';
+import { COPILOT_MODELS, type CliModel } from '@shared/cli-contract';
+import { HARNESS_IDS, isHarnessId, type HarnessId } from '@shared/harness-contract';
 import { SESSION_MODELS } from '@shared/session-contract';
 
 
@@ -39,6 +54,22 @@ interface AgentFormProps {
    */
   taken: readonly string[];
   onChange: (source: string) => void;
+  /** What the Runs on group needs from outside the form (HIVE-396); the form itself stays hook-free. */
+  runsOn: RunsOnContext;
+}
+
+/** What the agent form's Runs on group reads from outside the form (HIVE-396). */
+export interface RunsOnContext {
+  /** Every CLI's verdict on this draft; `null` until main answers, or with no bridge: every CLI pickable. */
+  verdicts: Record<HarnessId, HarnessVerdict> | null;
+  /** The CLI an agent with no `harness:` line runs on: Settings › Agents' default, else Claude Code. */
+  defaultCli: HarnessId;
+  /** Each CLI's card model (Settings › Harnesses › <CLI>), named in the "CLI default" option. */
+  cardModels: Partial<Record<HarnessId, string>>;
+  /** Codex's models for this account, or the fallback list. */
+  codexModels: readonly CliModel[];
+  /** Open Settings › Harnesses › <cli>. */
+  openHarness: (cli: HarnessId) => void;
 }
 
 /**
@@ -341,8 +372,14 @@ export const FIELD_HELP: Record<string, string> = {
     'Tools it may call without stopping to ask, as [a, b]. Narrow one with a glob — Bash(git *), Read(/repo/src/**), WebFetch(domain:github.com) — not with Claude Code’s own Bash(git status:*) syntax, which this fence reads literally and matches nothing. Widen instead with a bare tool name — Bash grants every command — or with [*], which grants everything and stops the fence asking at all; both skip the guard that keeps a glob from matching a piped or redirected command. The hive ledger tools are always granted. A tool this list omits is not refused outright — the agent’s turn ends and the attempt reaches your inbox, where you can allow it once or add it here for good.',
   autonomy:
     'ask first — it posts a question to the ledger and waits for an answer. act — it proceeds and reports afterwards. Neither changes the tool fence: act does not pre-allow permission prompts, so a tool outside "what it can do" still reaches your inbox.',
+  harness:
+    "Tried in this order at each wake; the first that can run this agent wins. A CLI that can't is skipped, never removed.",
   model:
-    'Which model each wake runs on. Default follows the model Claude Code would pick on its own.',
+    'Which model each wake runs on. Default is what the CLI picks on its own, or its Settings card.',
+  'codex.model':
+    "Codex's model for this agent. Use the CLI default to follow Settings › Harnesses › Codex instead.",
+  'copilot.model':
+    "Copilot's model for this agent. CLI default follows Settings › Harnesses › Copilot, or Copilot's own choice.",
   'limits.turns': `Most turns in one wake before it is cut off — one turn is one reply from the model, tool call included. Default ${AGENT_LIMIT_DEFAULTS.turns}.`,
   /*
     Says list-priced outright, because the intuition it corrects is a costly
@@ -404,6 +441,10 @@ export const RENDERED_PATHS: readonly string[] = [
   'mcp',
   'autonomy',
   'model',
+  // HIVE-396: the Runs on group. The effort paths join with HIVE-397.
+  'harness',
+  'codex.model',
+  'copilot.model',
   ...LIMIT_FIELDS.map((field) => field.path),
   // HIVE-137. Every container key with an input — `freshness` has none, so
   // a problem naming it belongs in the banner, not beside a control that is
@@ -552,6 +593,7 @@ export function AgentForm({
   problems,
   taken,
   onChange,
+  runsOn,
 }: AgentFormProps) {
   /**
    * What the name field did to the name on its way out, or `null`.
@@ -596,6 +638,9 @@ export function AgentForm({
   const [draft, setDraft] = useState<{ path: string; text: string } | null>(
     null,
   );
+
+  /** The form's root, which {@link focusField} searches for a field's control. */
+  const formRoot = useRef<HTMLDivElement>(null);
 
   const read = readFrontmatter(source);
   const fields = read?.fields;
@@ -663,7 +708,7 @@ export function AgentForm({
     const lines = from.split('\n');
     const close = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
     const opens = lines.findIndex(
-      (line, i) => i > 0 && i < close && line.trim() === `${parent}:`,
+      (line, i) => i > 0 && i < close && stripComment(line).trim() === `${parent}:`,
     );
     if (opens === -1) return from;
     const next = lines[opens + 1] ?? '';
@@ -687,6 +732,131 @@ export function AgentForm({
     }
 
     onChange(patchFrontmatter(source, path, trimmed));
+  };
+
+  // ---- runs on (HIVE-396) ----------------------------------------------
+
+  const { verdicts, defaultCli, cardModels, codexModels } = runsOn;
+  /** The CLIs `harness:` names, in order; the default alone when it names none (HIVE-340). */
+  const saved = (parseList(at('harness') || '[]') ?? []).filter(isHarnessId);
+  const list = saved.length > 0 ? saved : [defaultCli];
+  const primary = list[0]!;
+  /** The check's refusal for a CLI, or `null` when it can run this draft (or nobody has asked yet). */
+  const refused = (cli: HarnessId) => {
+    const verdict = verdicts?.[cli];
+    return verdict !== undefined && !verdict.ok ? verdict : null;
+  };
+  const unavailable = Object.fromEntries(
+    HARNESS_IDS.flatMap((cli) => {
+      const verdict = refused(cli);
+      return verdict === null ? [] : [[cli, verdict.reason]];
+    }),
+  ) as Partial<Record<HarnessId, string>>;
+  const locked = Object.fromEntries(
+    HARNESS_IDS.flatMap((cli) => {
+      const verdict = refused(cli);
+      return verdict?.fix === 'upgrade' ? [[cli, verdict.reason]] : [];
+    }),
+  ) as Partial<Record<HarnessId, string>>;
+  const writeHarness = (next: HarnessId[]) => onChange(patchFrontmatter(source, 'harness', `[${next.join(', ')}]`));
+  const pickPrimary = (cli: HarnessId) =>
+    writeHarness(saved.length === 0 ? [cli] : [cli, ...saved.filter((id) => id !== cli)]);
+  /** A fallback on or off: on joins the end of the list, so the order is the order turned on. */
+  const toggleFallback = (cli: HarnessId) =>
+    writeHarness(list.includes(cli) ? list.filter((id) => id !== cli) : [...list, cli]);
+  const others = HARNESS_IDS.filter((cli) => cli !== primary);
+  /** Focus a field's first control and bring it into view: the unavailable list's fixes (HIVE-396). */
+  const focusField = (path: string) => {
+    const target = formRoot.current?.querySelector<HTMLElement>(
+      `[data-field="${path}"] :is(input, select, textarea, button)`,
+    );
+    target?.scrollIntoView({ block: 'center' });
+    target?.focus();
+  };
+  /** What a refused CLI's line offers to put it right; a fence failure has nothing to offer. */
+  const fixFor = (cli: HarnessId, fix: HarnessFix | undefined) => {
+    switch (fix) {
+      case 'install':
+      case 'sign-in':
+      case 'enable':
+        return (
+          <Button size="sm" variant="ghost" onClick={() => runsOn.openHarness(cli)}>
+            Open Settings › Harnesses › {CLI_NAMES[cli]}
+          </Button>
+        );
+      case 'upgrade':
+        return <UpgradeLink className="text-micro" />;
+      case 'remove-budget':
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => focusField(has('limits.daily_usd') ? 'limits.daily_usd' : 'limits.budget_usd')}
+          >
+            Go to the budget limit
+          </Button>
+        );
+      case 'remove-mcp':
+        return (
+          <Button size="sm" variant="ghost" onClick={() => focusField('mcp')}>
+            Go to integrations
+          </Button>
+        );
+      default:
+        return null;
+    }
+  };
+  /** Clear a CLI's model, and its block with it once nothing is left under it. */
+  const clearModel = (cli: 'codex' | 'copilot') => onChange(clearParent(cli, clear(`${cli}.model`)));
+
+  /** One CLI's model control: Claude's segments, Codex's family picker, Copilot's list. */
+  const modelControl = (cli: HarnessId) => {
+    if (cli === 'claude-code') {
+      return (
+        <SegmentedControl
+          label="Model"
+          options={MODEL_OPTIONS}
+          value={
+            (SESSION_MODELS as readonly string[]).includes(at('model'))
+              ? (at('model') as (typeof MODEL_OPTIONS)[number]['value'])
+              : 'default'
+          }
+          onChange={(next) => {
+            // Same absence-is-a-value argument as the wake keys.
+            if (next === 'default') onChange(clear('model'));
+            else set('model', next);
+          }}
+        />
+      );
+    }
+    if (cli === 'codex') {
+      const own = at('codex.model');
+      return (
+        <div className="flex min-w-0 flex-col gap-1">
+          <CodexModelField
+            models={codexModels}
+            value={own || cardModels.codex || codexModels[0]?.slug || ''}
+            onChange={(slug) => set('codex.model', slug)}
+          />
+          {own === '' ? null : (
+            <button type="button" className="self-start text-micro text-subtle underline" onClick={() => clearModel('codex')}>
+              Use the CLI default
+            </button>
+          )}
+        </div>
+      );
+    }
+    return (
+      <SelectField
+        label="Copilot model"
+        value={at('copilot.model')}
+        options={[
+          { value: '', label: `CLI default (${cardModels.copilot ?? "Copilot's choice"})` },
+          ...COPILOT_MODELS.map((model) => ({ value: model, label: model })),
+        ]}
+        onChange={(next) => (next === '' ? clearModel('copilot') : set('copilot.model', next))}
+      />
+    );
   };
 
   /*
@@ -870,7 +1040,7 @@ export function AgentForm({
     const help = FIELD_HELP[path];
 
     return (
-      <div key={path} className="grid grid-cols-[86px_minmax(0,1fr)] gap-2.5">
+      <div key={path} data-field={path} className="grid grid-cols-[86px_minmax(0,1fr)] gap-2.5">
         <label className="pt-1 text-right text-micro text-subtle">
           {label}
         </label>
@@ -982,11 +1152,21 @@ export function AgentForm({
           ['wake.every', 'wake.check']
         : ['wake.every', 'wake.at', 'wake.days', 'wake.check'];
 
+  /*
+    HIVE-396: the same failure for the Runs on group. A CLI's model row is drawn
+    only while `harness:` names that CLI, so a problem on another CLI's block
+    belongs in the banner.
+  */
+  const hiddenModels = HARNESS_IDS.filter((cli) => !list.includes(cli)).map((cli) =>
+    cli === 'claude-code' ? 'model' : `${cli}.model`,
+  );
+
   const homeless = problems.filter(
     (problem) =>
       problem.field !== '' &&
       (!RENDERED_PATHS.includes(problem.field) ||
-        hiddenByMode.includes(problem.field)),
+        hiddenByMode.includes(problem.field) ||
+        hiddenModels.includes(problem.field)),
   );
 
   /*
@@ -1028,7 +1208,7 @@ export function AgentForm({
       : WAKE_OPTIONS;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 py-3">
+    <div ref={formRoot} className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 py-3">
       {homeless.map((problem) => (
         <p
           key={`${problem.field}:${problem.reason}`}
@@ -1291,28 +1471,76 @@ export function AgentForm({
       </SettingsGroup>
 
       <SettingsGroup
+        title="Runs on"
+        description="The CLI each wake runs on, and the model it uses there."
+      >
+        <div className="flex flex-col gap-3">
+          {row(
+            'harness',
+            'cli',
+            <CliDock
+              value={primary}
+              onChange={pickPrimary}
+              unavailable={unavailable}
+              locked={locked}
+              caption={saved.length === 0 ? 'Default CLI for agents' : null}
+            />,
+          )}
+          {row(primary === 'claude-code' ? 'model' : `${primary}.model`, 'model', modelControl(primary))}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-micro text-subtle">If {CLI_NAMES[primary]} can&apos;t run</span>
+            <div className="flex flex-wrap gap-1.5">
+              {others.map((cli) => {
+                const on = list.includes(cli);
+                const verdict = refused(cli);
+                return (
+                  <Hint key={cli} label={verdict?.reason}>
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      aria-label={CLI_NAMES[cli]}
+                      disabled={!on && verdict !== null}
+                      onClick={() => toggleFallback(cli)}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-micro',
+                        on ? 'border-brand bg-chip text-ink' : 'border-border text-muted hover:bg-hover',
+                        verdict !== null && 'opacity-45',
+                        !on && verdict !== null && 'cursor-not-allowed hover:bg-transparent',
+                      )}
+                    >
+                      <CliMark cli={cli} className="size-3.5" />
+                      {CLI_NAMES[cli]}
+                    </button>
+                  </Hint>
+                );
+              })}
+            </div>
+          </div>
+          {list.slice(1).map((cli) =>
+            row(cli === 'claude-code' ? 'model' : `${cli}.model`, `${CLI_NAMES[cli]} model`, modelControl(cli)),
+          )}
+          {HARNESS_IDS.flatMap((cli) => {
+            const verdict = refused(cli);
+            if (verdict === null) return [];
+            return [
+              <div key={cli} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-subtle">
+                <CliMark cli={cli} className="size-3.5 opacity-45" />
+                <span className="min-w-0">
+                  {list.includes(cli) ? 'Skipped at wake: ' : ''}
+                  {verdict.reason}
+                </span>
+                {fixFor(cli, verdict.fix)}
+              </div>,
+            ];
+          })}
+        </div>
+      </SettingsGroup>
+
+      <SettingsGroup
         title="Limits"
         description="Ceilings on one wake, and on how long the agent keeps one session. All have defaults."
       >
         <div className="flex flex-col gap-2.5">
-          {row(
-            'model',
-            'model',
-            <SegmentedControl
-              label="Model"
-              options={MODEL_OPTIONS}
-              value={
-                (SESSION_MODELS as readonly string[]).includes(at('model'))
-                  ? (at('model') as (typeof MODEL_OPTIONS)[number]['value'])
-                  : 'default'
-              }
-              onChange={(next) => {
-                // Same absence-is-a-value argument as the wake keys.
-                if (next === 'default') onChange(clear('model'));
-                else set('model', next);
-              }}
-            />,
-          )}
           {LIMIT_FIELDS.map(({ path, label, hint }) =>
             row(path, label, input(path, label, hint)),
           )}

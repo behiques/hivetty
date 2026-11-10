@@ -10,7 +10,9 @@ import {
 } from '@features/shared/components/agent-editor';
 import { DEFAULT_AGENT_SPLIT_RATIO, useAppearanceStore } from '@stores/appearance-store';
 import { surfaceText } from '@tests/support/editor-surface';
+import { runsOn } from '@tests/support/runs-on';
 
+import type { RunsOnContext } from '@features/shared/components/agent-form';
 import type { AgentProblem } from '@shared/agent-contract';
 
 const SOURCE = `---
@@ -38,6 +40,7 @@ interface Props {
   onRevert: () => void;
   notice: string | null;
   taken: readonly string[];
+  runsOn: RunsOnContext;
 }
 
 const props: Props = {
@@ -51,6 +54,7 @@ const props: Props = {
   onDelete: vi.fn(),
   onRevert: vi.fn(),
   notice: null,
+  runsOn: runsOn(),
 };
 
 const setup = (over: Partial<Props> = {}) => {
