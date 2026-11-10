@@ -372,8 +372,14 @@ export const FIELD_HELP: Record<string, string> = {
     'Tools it may call without stopping to ask, as [a, b]. Narrow one with a glob — Bash(git *), Read(/repo/src/**), WebFetch(domain:github.com) — not with Claude Code’s own Bash(git status:*) syntax, which this fence reads literally and matches nothing. Widen instead with a bare tool name — Bash grants every command — or with [*], which grants everything and stops the fence asking at all; both skip the guard that keeps a glob from matching a piped or redirected command. The hive ledger tools are always granted. A tool this list omits is not refused outright — the agent’s turn ends and the attempt reaches your inbox, where you can allow it once or add it here for good.',
   autonomy:
     'ask first — it posts a question to the ledger and waits for an answer. act — it proceeds and reports afterwards. Neither changes the tool fence: act does not pre-allow permission prompts, so a tool outside "what it can do" still reaches your inbox.',
+  harness:
+    "Tried in this order at each wake; the first that can run this agent wins. A CLI that can't is skipped, never removed.",
   model:
-    'Which model each wake runs on. Default follows the model Claude Code would pick on its own.',
+    'Which model each wake runs on. Default is what the CLI picks on its own, or its Settings card.',
+  'codex.model':
+    "Codex's model for this agent. Use the CLI default to follow Settings › Harnesses › Codex instead.",
+  'copilot.model':
+    "Copilot's model for this agent. CLI default follows Settings › Harnesses › Copilot, or Copilot's own choice.",
   'limits.turns': `Most turns in one wake before it is cut off — one turn is one reply from the model, tool call included. Default ${AGENT_LIMIT_DEFAULTS.turns}.`,
   /*
     Says list-priced outright, because the intuition it corrects is a costly
@@ -435,6 +441,10 @@ export const RENDERED_PATHS: readonly string[] = [
   'mcp',
   'autonomy',
   'model',
+  // HIVE-396: the Runs on group. The effort paths join with HIVE-397.
+  'harness',
+  'codex.model',
+  'copilot.model',
   ...LIMIT_FIELDS.map((field) => field.path),
   // HIVE-137. Every container key with an input — `freshness` has none, so
   // a problem naming it belongs in the banner, not beside a control that is
@@ -1142,11 +1152,21 @@ export function AgentForm({
           ['wake.every', 'wake.check']
         : ['wake.every', 'wake.at', 'wake.days', 'wake.check'];
 
+  /*
+    HIVE-396: the same failure for the Runs on group. A CLI's model row is drawn
+    only while `harness:` names that CLI, so a problem on another CLI's block
+    belongs in the banner.
+  */
+  const hiddenModels = HARNESS_IDS.filter((cli) => !list.includes(cli)).map((cli) =>
+    cli === 'claude-code' ? 'model' : `${cli}.model`,
+  );
+
   const homeless = problems.filter(
     (problem) =>
       problem.field !== '' &&
       (!RENDERED_PATHS.includes(problem.field) ||
-        hiddenByMode.includes(problem.field)),
+        hiddenByMode.includes(problem.field) ||
+        hiddenModels.includes(problem.field)),
   );
 
   /*
@@ -1455,13 +1475,17 @@ export function AgentForm({
         description="The CLI each wake runs on, and the model it uses there."
       >
         <div className="flex flex-col gap-3">
-          <CliDock
-            value={primary}
-            onChange={pickPrimary}
-            unavailable={unavailable}
-            locked={locked}
-            caption={saved.length === 0 ? 'Default CLI for agents' : null}
-          />
+          {row(
+            'harness',
+            'cli',
+            <CliDock
+              value={primary}
+              onChange={pickPrimary}
+              unavailable={unavailable}
+              locked={locked}
+              caption={saved.length === 0 ? 'Default CLI for agents' : null}
+            />,
+          )}
           {row(primary === 'claude-code' ? 'model' : `${primary}.model`, 'model', modelControl(primary))}
           <div className="flex flex-col gap-1.5">
             <span className="text-micro text-subtle">If {CLI_NAMES[primary]} can&apos;t run</span>

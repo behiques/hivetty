@@ -260,6 +260,25 @@ The core keeps the prompt (`wakePrompt()`), the host↔container path map, the e
 files it needs written, and how to stop and recognise the run. A container's default binary is
 `headless.containerCommand`.
 
+### Asking without waking: `checkHarness` (HIVE-396)
+
+`checkHarness(def, rules, resolve, id)` (`agents/resolve-harness.ts`) is the per-candidate test
+`resolveHarness` runs for every CLI in the definition's list. It returns a reason and, where
+the user can do something about it, a `fix` (`install`, `sign-in`, `enable`, `upgrade`,
+`remove-budget`, `remove-mcp`). The fence check and "no headless runner" give no fix.
+`resolveHarness`'s wording for a refused wake is unchanged.
+
+The agent form asks the same question before anything runs. `createHarnessCheck(deps)`
+(`agents/wake-command.ts`) serves `agents:harness-check`. It parses the draft with
+`parseForWake`, builds the standing rules (`fencedRules(def, [])`, since a draft has no one-shot
+grants), and asks `checkHarness` about all three CLIs. Then it applies the wake's own container
+rule. A draft that can't be parsed answers `{ problem }`. Both paths share one dependency object
+(`wakeDeps` in `ipc/index.ts`) and one binary resolver, `binaryFor(def, deps)`. So the form
+never offers a CLI that a wake would skip.
+
+The caveat is containers. For a container agent the binary is inside the image, and the check
+does not probe it there. A missing binary in the image surfaces at the wake, not in the form.
+
 ### `HeadlessSpec` and `HeadlessPlan`
 
 `HeadlessSpec`, what the core knows (`port.ts`):

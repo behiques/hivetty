@@ -1425,3 +1425,47 @@ describe('Runs on: what cannot run, and the fix (HIVE-396)', () => {
     expect(screen.queryByRole('button', { name: /Settings › Harnesses › Codex/ })).toBeNull();
   });
 });
+
+describe('Runs on: problems in place (HIVE-396)', () => {
+  it('draws a problem on harness and each CLI model beside its control (HIVE-396)', () => {
+    expect(RENDERED_PATHS).toEqual(expect.arrayContaining(['harness', 'codex.model', 'copilot.model']));
+    render(
+      <AgentForm
+        source={SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [codex]')}
+        problems={[{ field: 'codex.model', reason: 'Not a Codex model id.' }]}
+        taken={[]}
+        onChange={vi.fn()}
+        runsOn={runsOn()}
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Not a Codex model id.');
+  });
+
+  it('draws a problem on harness under the dock', () => {
+    render(
+      <AgentForm
+        source={SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [nope]')}
+        problems={[{ field: 'harness', reason: 'Not a CLI this app knows.' }]}
+        taken={[]}
+        onChange={vi.fn()}
+        runsOn={runsOn()}
+      />,
+    );
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Not a CLI this app knows.');
+    expect(alert.closest('[data-field]')).toHaveAttribute('data-field', 'harness');
+  });
+
+  it("banners a model problem for a CLI the list does not name, whose row is not drawn", () => {
+    render(
+      <AgentForm
+        source={SOURCE.replace('autonomy: ask', 'autonomy: ask\ncopilot:\n  model: nope')}
+        problems={[{ field: 'copilot.model', reason: 'Not a Copilot model.' }]}
+        taken={[]}
+        onChange={vi.fn()}
+        runsOn={runsOn()}
+      />,
+    );
+    expect(screen.getByText('Not a Copilot model.')).toBeInTheDocument();
+  });
+});
