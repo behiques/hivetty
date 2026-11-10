@@ -871,6 +871,15 @@ describe('codex: and copilot: blocks (HIVE-396)', () => {
     expect(problems(withBlocks(block))).toContainEqual(expect.objectContaining({ field }));
   });
 
+  it("refuses Claude's top-level effort beside haiku, as it does the blocks' (HIVE-397)", () => {
+    // GOOD carries `effort: medium`.
+    expect(problems(GOOD.replace('model: sonnet', 'model: haiku'))).toContainEqual({
+      field: 'effort',
+      reason: 'haiku takes no effort setting.',
+    });
+    expect(definition(GOOD.replace('model: sonnet', 'model: opus')).effort).toBe('medium');
+  });
+
   it('parses every shipped agent exactly as before', () => {
     const root = join(process.cwd(), 'resources/agents');
     const folders = readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory());

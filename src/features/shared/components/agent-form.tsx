@@ -15,6 +15,7 @@ import { SelectField } from '@components/ui/select-field';
 import { Switch } from '@components/ui/switch';
 import { CliDock } from '@features/shared/components/cli-dock';
 import { CodexModelField } from '@features/shared/components/codex-model-field';
+import { OptionStepper } from '@features/shared/components/option-stepper';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import {
@@ -36,7 +37,13 @@ import {
   type HarnessFix,
   type HarnessVerdict,
 } from '@shared/agent-contract';
-import { COPILOT_MODELS, type CliModel } from '@shared/cli-contract';
+import {
+  CLI_VOCAB,
+  CODEX_FALLBACK_MODELS,
+  COPILOT_MODELS,
+  cliTakesEffort,
+  type CliModel,
+} from '@shared/cli-contract';
 import { HARNESS_IDS, isHarnessId, type HarnessId } from '@shared/harness-contract';
 import { SESSION_MODELS } from '@shared/session-contract';
 
@@ -380,6 +387,9 @@ export const FIELD_HELP: Record<string, string> = {
     "Codex's model for this agent. Use the CLI default to follow Settings › Harnesses › Codex instead.",
   'copilot.model':
     "Copilot's model for this agent. CLI default follows Settings › Harnesses › Copilot, or Copilot's own choice.",
+  effort: 'How hard Claude thinks on each wake. Default leaves it to the CLI, or its Settings card.',
+  'codex.effort': "How hard Codex reasons on each wake, from this model's own list. Default follows Settings › Harnesses › Codex.",
+  'copilot.effort': 'How hard Copilot reasons on each wake. Default follows Settings › Harnesses › Copilot.',
   'limits.turns': `Most turns in one wake before it is cut off — one turn is one reply from the model, tool call included. Default ${AGENT_LIMIT_DEFAULTS.turns}.`,
   /*
     Says list-priced outright, because the intuition it corrects is a costly
@@ -417,7 +427,7 @@ export const FIELD_HELP: Record<string, string> = {
  * The paths this form actually draws a control for.
  *
  * Not the same as `AGENT_FIELDS`, and the difference is load-bearing. `effort`
- * is in the table and has no control yet, so a problem naming it would have no
+ * was in the table with no control until HIVE-397, so a problem naming it had no
  * row to sit beside — testing membership against the table rather than against
  * this set made those problems render nowhere at all: refused Save, no visible
  * reason.
@@ -441,10 +451,13 @@ export const RENDERED_PATHS: readonly string[] = [
   'mcp',
   'autonomy',
   'model',
-  // HIVE-396: the Runs on group. The effort paths join with HIVE-397.
+  // HIVE-396 and HIVE-397: the Runs on group.
   'harness',
   'codex.model',
   'copilot.model',
+  'effort',
+  'codex.effort',
+  'copilot.effort',
   ...LIMIT_FIELDS.map((field) => field.path),
   // HIVE-137. Every container key with an input — `freshness` has none, so
   // a problem naming it belongs in the banner, not beside a control that is
@@ -806,8 +819,31 @@ export function AgentForm({
         return null;
     }
   };
-  /** Clear a CLI's model, and its block with it once nothing is left under it. */
-  const clearModel = (cli: 'codex' | 'copilot') => onChange(clearParent(cli, clear(`${cli}.model`)));
+  const modelPath = (cli: HarnessId) => (cli === 'claude-code' ? 'model' : `${cli}.model`);
+  const effortPath = (cli: HarnessId) => (cli === 'claude-code' ? 'effort' : `${cli}.effort`);
+  /** The model a wake runs on this CLI: the file's line, else the card's, else (Codex) the first it lists. */
+  const runningModel = (cli: HarnessId, own: string = at(modelPath(cli))) =>
+    own || cardModels[cli] || (cli === 'codex' ? (codexModels[0]?.slug ?? '') : '');
+  /** The efforts `model` takes on `cli`: none when it takes no effort, Codex's per model (HIVE-397). */
+  const effortsFor = (cli: HarnessId, model: string): readonly string[] => {
+    if (!cliTakesEffort(cli, model)) return [];
+    if (cli !== 'codex') return CLI_VOCAB[cli].efforts;
+    return codexModels.find((each) => each.slug === model)?.efforts ?? CODEX_FALLBACK_MODELS[0]!.efforts;
+  };
+
+  /**
+   * Write or clear a CLI's model, and in the same patch the saved effort when the model that will
+   * now run does not take it (HIVE-397); a block left empty goes too. One `onChange`, so a second
+   * write cannot land on a `source` that had not moved yet.
+   */
+  const writeModel = (cli: HarnessId, next: string) => {
+    let draft = next === '' ? clear(modelPath(cli)) : patchFrontmatter(source, modelPath(cli), next);
+    const effort = at(effortPath(cli));
+    if (effort !== '' && !effortsFor(cli, runningModel(cli, next)).includes(effort)) {
+      draft = clear(effortPath(cli), draft);
+    }
+    onChange(clearParent(cli, draft)); // Claude has no block, so this leaves its draft alone.
+  };
 
   /** One CLI's model control: Claude's segments, Codex's family picker, Copilot's list. */
   const modelControl = (cli: HarnessId) => {
@@ -821,11 +857,8 @@ export function AgentForm({
               ? (at('model') as (typeof MODEL_OPTIONS)[number]['value'])
               : 'default'
           }
-          onChange={(next) => {
-            // Same absence-is-a-value argument as the wake keys.
-            if (next === 'default') onChange(clear('model'));
-            else set('model', next);
-          }}
+          // Same absence-is-a-value argument as the wake keys.
+          onChange={(next) => writeModel(cli, next === 'default' ? '' : next)}
         />
       );
     }
@@ -833,13 +866,9 @@ export function AgentForm({
       const own = at('codex.model');
       return (
         <div className="flex min-w-0 flex-col gap-1">
-          <CodexModelField
-            models={codexModels}
-            value={own || cardModels.codex || codexModels[0]?.slug || ''}
-            onChange={(slug) => set('codex.model', slug)}
-          />
+          <CodexModelField models={codexModels} value={runningModel(cli)} onChange={(slug) => writeModel(cli, slug)} />
           {own === '' ? null : (
-            <button type="button" className="self-start text-micro text-subtle underline" onClick={() => clearModel('codex')}>
+            <button type="button" className="self-start text-micro text-subtle underline" onClick={() => writeModel(cli, '')}>
               Use the CLI default
             </button>
           )}
@@ -854,8 +883,31 @@ export function AgentForm({
           { value: '', label: `CLI default (${cardModels.copilot ?? "Copilot's choice"})` },
           ...COPILOT_MODELS.map((model) => ({ value: model, label: model })),
         ]}
-        onChange={(next) => (next === '' ? clearModel('copilot') : set('copilot.model', next))}
+        onChange={(next) => writeModel(cli, next)}
       />
+    );
+  };
+
+  /**
+   * One CLI's effort, as a stepper whose first stop is `default`: no line, the CLI decides
+   * (HIVE-397). Hidden, not dimmed, when the model that will run takes no effort. That departs
+   * from `OptionStepper`'s disable-with-a-reason convention (HIVE-100) at the reviewer's call:
+   * here the model is chosen one row up, so there is no scale to come back to.
+   */
+  const effortRow = (cli: HarnessId, label: string) => {
+    const efforts = effortsFor(cli, runningModel(cli));
+    if (efforts.length === 0) return null;
+    const path = effortPath(cli);
+    const saved = at(path);
+    return row(
+      path,
+      label,
+      <OptionStepper
+        label={label === 'effort' ? 'thinking effort' : `${CLI_NAMES[cli]} thinking effort`}
+        options={['default', ...efforts]}
+        value={saved || 'default'}
+        onChange={(next) => (next === 'default' ? onChange(clearParent(cli, clear(path))) : set(path, next))}
+      />,
     );
   };
 
@@ -1129,7 +1181,7 @@ export function AgentForm({
 
   /*
     Problems with nowhere to sit: an unknown key (whose `field` is whatever the
-    user typed) and `effort`. The name is no longer among them — it has a row.
+    user typed). The name and the efforts are no longer among them — they have rows.
 
     At the **top** rather than the bottom. This form scrolls past a dozen rows,
     and a homeless problem is the most global one there is — putting it below
@@ -1153,12 +1205,17 @@ export function AgentForm({
         : ['wake.every', 'wake.at', 'wake.days', 'wake.check'];
 
   /*
-    HIVE-396: the same failure for the Runs on group. A CLI's model row is drawn
-    only while `harness:` names that CLI, so a problem on another CLI's block
-    belongs in the banner.
+    HIVE-396: the same failure for the Runs on group. A CLI's model and effort
+    rows are drawn only while `harness:` names that CLI, and the effort row only
+    while the model that runs takes one (HIVE-397), so a problem on a row not
+    drawn belongs in the banner.
   */
-  const hiddenModels = HARNESS_IDS.filter((cli) => !list.includes(cli)).map((cli) =>
-    cli === 'claude-code' ? 'model' : `${cli}.model`,
+  const hiddenModels = HARNESS_IDS.flatMap((cli) =>
+    !list.includes(cli)
+      ? [modelPath(cli), effortPath(cli)]
+      : effortsFor(cli, runningModel(cli)).length === 0
+        ? [effortPath(cli)]
+        : [],
   );
 
   const homeless = problems.filter(
@@ -1486,7 +1543,8 @@ export function AgentForm({
               caption={saved.length === 0 ? 'Default CLI for agents' : null}
             />,
           )}
-          {row(primary === 'claude-code' ? 'model' : `${primary}.model`, 'model', modelControl(primary))}
+          {row(modelPath(primary), 'model', modelControl(primary))}
+          {effortRow(primary, 'effort')}
           <div className="flex flex-col gap-1.5">
             <span className="text-micro text-subtle">If {CLI_NAMES[primary]} can&apos;t run</span>
             <div className="flex flex-wrap gap-1.5">
@@ -1516,9 +1574,10 @@ export function AgentForm({
               })}
             </div>
           </div>
-          {list.slice(1).map((cli) =>
-            row(cli === 'claude-code' ? 'model' : `${cli}.model`, `${CLI_NAMES[cli]} model`, modelControl(cli)),
-          )}
+          {list.slice(1).flatMap((cli) => [
+            row(modelPath(cli), `${CLI_NAMES[cli]} model`, modelControl(cli)),
+            effortRow(cli, `${CLI_NAMES[cli]} effort`),
+          ])}
           {HARNESS_IDS.flatMap((cli) => {
             const verdict = refused(cli);
             if (verdict === null) return [];

@@ -384,6 +384,12 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
     than silently dropped: the author wrote it expecting it to apply.
   */
   const cliBlocks: Partial<Record<AgentCliBlock, CliModelChoice>> = {};
+  // HIVE-397: Claude's top-level pair follows the same rule.
+  const claudeModel = shaped('model');
+
+  if (claudeModel !== undefined && shaped('effort') !== undefined && !cliTakesEffort('claude-code', claudeModel)) {
+    problems.push({ field: 'effort', reason: `${claudeModel} takes no effort setting.` });
+  }
 
   for (const cli of AGENT_CLI_BLOCKS) {
     const model = shaped(`${cli}.model`);
