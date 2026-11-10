@@ -8,7 +8,7 @@ carrying all of it every turn.
 
 ## Project overview
 
-HiveTTY is a **command center for multiple agentic terminal sessions** running on
+HiveTTY Pro is a **command center for multiple agentic terminal sessions** running on
 a single machine. An orchestrator ("Concierge"-style coordinator, called *maestro*
 in the console) routes messages between the user and sessions, surfaces questions
 and permission requests as an inbox, tracks PRs and tickets, and spawns new
@@ -17,23 +17,25 @@ the screen** — everything else exists to route the user's attention to the rig
 terminal at the right moment.
 
 Current phase: terminals are **real PTYs**, projects come from a config file,
-tickets from **Jira**, PRs from `gh`, and notifications from Claude Code's hooks.
+tickets from **Jira**, PRs from `gh`, and notifications from each CLI's hooks
+(Claude Code, Codex and Copilot, behind the harness port).
 The session panel's Files tab is a **project explorer** over the active session's
 repository, opening files into a CodeMirror editor on the centre stage. Full
 context and scope: the **HIVE project in Jira**, the backlog.
 
-## This repository is HiveTTY Pro
+## HiveTTY Pro
 
-This checkout is **HiveTTY Pro**, the commercial app, in the private `behiques/hivetty` repo: a
-fork of the free Apache-2.0 **HiveTTY** (`yunidbauza/hivetty`) that no longer tracks it.
+This is **HiveTTY Pro**, a commercial, proprietary app by Behiques Consulting LLC, in the private
+`behiques/hivetty` repo. Every PR targets **`behiques/hivetty`**.
 
-- Every PR targets **`behiques/hivetty`**. There is no upstream: nothing merges in, nothing goes back.
-- Paid code needs no extension seam. Each paid feature lives in its own directory
-  (`electron/main/licence/`, a `src/features/<slice>/`) and turns on from a lease entitlement,
-  never an `isPro` check in a core file. Everything HiveTTY does stays in Community.
-- Pro's data lives in `~/.hivetty`. `~/.hive` is HiveTTY's: only the importer (HIVE-269) reads it,
-  as a copy the user starts, and nothing writes there. Pro's name, bundle ID, data folders and
-  release feed are its own (HIVE-350). So is the `hivetty://` scheme sign-in returns on (HIVE-264): the free HiveTTY must never register it, and unpackaged dev builds use `hivetty-dev://` so they never steal it.
+- Paid features need no extension seam. Each lives in its own directory (`electron/main/licence/`,
+  a `src/features/<slice>/`) and turns on from a lease entitlement, never from an `isPro` check in a
+  core file. Core features need no entitlement.
+- Pro's data lives in `~/.hivetty`. `~/.hive` belongs to the free HiveTTY: only the importer
+  (HIVE-269) reads it, as a copy the user starts, and nothing writes there. Pro's name, bundle ID,
+  data folders and release feed are its own (HIVE-350). So is the `hivetty://` scheme sign-in
+  returns on (HIVE-264): the free HiveTTY must never register it, and unpackaged dev builds use
+  `hivetty-dev://` so they never steal it.
 
 ## Essential commands
 
