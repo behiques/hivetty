@@ -156,6 +156,7 @@ export const sessionCommand = (
     subscriptionAuth = false,
     task,
     container,
+    skipPermissions = false,
   }: SessionOptions = {},
 ): string => {
   /*
@@ -193,6 +194,7 @@ export const sessionCommand = (
     ...(settings === undefined ? [] : ['--settings', shellQuote(settings)]),
     ...(plugin === undefined ? [] : ['--plugin-dir', shellQuote(plugin)]),
     ...(mcp === undefined ? [] : ['--mcp-config', shellQuote(mcp)]),
+    ...(skipPermissions ? ['--dangerously-skip-permissions'] : []),
   ];
   /**
    * Unset the API credentials **here**, not only in the spawned environment

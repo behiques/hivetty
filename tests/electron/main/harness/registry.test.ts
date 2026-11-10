@@ -43,6 +43,7 @@ describe('harness registry', () => {
       meters: ['model', 'effort', 'context', 'fiveHour', 'sevenDay'],
       contextDelivery: 'prompt-marker',
       reportsCostUsd: true,
+      reportsTokens: true,
       enforcesTurns: true,
       enforcesBudget: true,
       reportsMcpStatus: true,

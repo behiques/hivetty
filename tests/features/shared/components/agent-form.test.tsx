@@ -251,6 +251,7 @@ describe('AgentForm', () => {
       'turns',
       'budget $',
       'daily cap $',
+      'daily cap tokens',
       'rotate after',
     ]) {
       expect(screen.getByRole('textbox', { name: label })).toBeInTheDocument();
@@ -1079,6 +1080,17 @@ describe('AgentForm', () => {
     });
   });
 
+  describe('the daily token cap (HIVE-398)', () => {
+    it('writes daily_tokens and explains what counts', async () => {
+      const onChange = setup();
+
+      expect(screen.getByText(/cache writes and output, not cached input read back/)).toBeInTheDocument();
+      await userEvent.type(screen.getByRole('textbox', { name: 'daily cap tokens' }), '2000000');
+
+      expect(patched(onChange, 'limits.daily_tokens')).toBe('2000000');
+    });
+  });
+
   describe('the four groups', () => {
     it('sorts thirteen fields into four titled groups', () => {
       setup();
@@ -1398,6 +1410,23 @@ describe('Runs on: what cannot run, and the fix (HIVE-396)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Open Settings › Harnesses › Codex' }));
     await userEvent.click(screen.getByRole('button', { name: 'Open Settings › Harnesses › Copilot' }));
     expect(openHarness.mock.calls).toEqual([['codex'], ['copilot']]);
+  });
+
+  it('focuses the token cap first for remove-budget when it is set (HIVE-398)', async () => {
+    const source = SOURCE.replace('autonomy: ask', 'autonomy: ask\nlimits:\n  daily_usd: 5\n  daily_tokens: 2000000');
+    setup({
+      source,
+      runsOn: runsOn({
+        verdicts: {
+          'claude-code': ok,
+          codex: verdict('codex does not report token usage', 'remove-budget'),
+          copilot: ok,
+        } as never,
+      }),
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go to the budget limit' }));
+    expect(document.activeElement?.closest('[data-field]')).toHaveAttribute('data-field', 'limits.daily_tokens');
   });
 
   it('focuses the budget limit for remove-budget, and integrations for remove-mcp', async () => {

@@ -202,6 +202,24 @@ describe('resolveHarness: can it honour this definition (HIVE-340)', () => {
     expect(result).toEqual({ problem: 'No CLI can run reviewer: claude-code cannot enforce Bash.' });
   });
 
+  it('skips a CLI that reports no tokens when the agent has a daily token cap (HIVE-398)', () => {
+    const blind = { codex: fake('codex', { caps: { reportsTokens: false } }), 'claude-code': claude };
+    const limits = { turns: 40, rotateAfter: 50, parallel: 1, dailyTokens: 2_000_000 };
+
+    expect(resolveHarness(def({ harness: [cli('codex')], limits }), [], deps(blind, { gate: gate() }))).toEqual({
+      problem: "No CLI can run reviewer: codex does not report token usage, which reviewer's daily token cap needs.",
+    });
+  });
+
+  it('runs a token-capped agent with no USD limit on a CLI that reports no cost (HIVE-398)', () => {
+    const codex = fake('codex', { caps: { reportsCostUsd: false } });
+    const limits = { turns: 40, rotateAfter: 50, parallel: 1, dailyTokens: 2_000_000 };
+
+    expect(
+      resolveHarness(def({ harness: [cli('codex')], limits }), [], deps({ codex, 'claude-code': claude }, { gate: gate() })),
+    ).toMatchObject({ adapter: codex });
+  });
+
   it('skips a CLI that reports no USD cost when the agent has a budget or a daily ceiling', () => {
     const blind = { codex: fake('codex', { caps: { reportsCostUsd: false } }), 'claude-code': claude };
 
@@ -293,6 +311,19 @@ describe('checkHarness: a fix for each failure (HIVE-396)', () => {
     const result = fail(
       checkHarness(
         def({ limits: { turns: 40, rotateAfter: 50, parallel: 1, budgetUsd: 1 } }),
+        [],
+        deps({ codex }, { gate: gate() }),
+        cli('codex'),
+      ),
+    );
+    expect(result.fix).toBe('remove-budget');
+  });
+
+  it('a daily token cap on a CLI that reports no tokens (HIVE-398)', () => {
+    const codex = fake('codex', { caps: { reportsTokens: false } });
+    const result = fail(
+      checkHarness(
+        def({ limits: { turns: 40, rotateAfter: 50, parallel: 1, dailyTokens: 1_000 } }),
         [],
         deps({ codex }, { gate: gate() }),
         cli('codex'),

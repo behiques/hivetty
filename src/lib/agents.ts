@@ -127,6 +127,21 @@ export function runsToday(
   };
 }
 
+const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+
+/** Today's tokens against `limits.daily_tokens` (HIVE-398); nothing for an agent without that cap. */
+export function tokensToday(
+  today: { day: string; tokens?: number } | undefined,
+  cap: number | undefined,
+  now: number = Date.now(),
+): string | undefined {
+  if (cap === undefined) return undefined;
+
+  const used = today?.day === dayKey(now) ? (today.tokens ?? 0) : 0;
+
+  return `${compact.format(used)} of ${compact.format(cap)} tokens`;
+}
+
 /**
  * `skipped 3`, or nothing at all.
  *

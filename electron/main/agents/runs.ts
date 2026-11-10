@@ -175,11 +175,11 @@ export interface RunTrackerDeps {
    */
   parallelFor: (name: string) => number;
   /**
-   * `daily_usd` and `budget_usd` for this agent (HIVE-187), from the same
-   * cache as `parallelFor`. Optional so a spec without a budget needs none;
-   * absent means no ceiling.
+   * `daily_usd`, `budget_usd` (HIVE-187) and `daily_tokens` (HIVE-398) for
+   * this agent, from the same cache as `parallelFor`. Optional so a spec
+   * without a budget needs none; absent means no ceiling.
    */
-  limitsFor?: (name: string) => { dailyUsd?: number; budgetUsd?: number };
+  limitsFor?: (name: string) => { dailyUsd?: number; budgetUsd?: number; dailyTokens?: number };
   state: AgentState;
   appendLedger: (entry: {
     from: string;
@@ -1166,6 +1166,38 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
             started: false,
             refused: 'budget',
             reason: `${name} is out of today's budget for now: ${spentText} spent and $${reserved.toFixed(2)} held by live runs, of ${dailyText}.`,
+          };
+        }
+      }
+
+      /*
+        The day's token ceiling (HIVE-398). No reservation: nothing caps one run's tokens, so this asks only whether
+        the day is spent, and a long run, or parallel ones, can finish past it — as `daily_usd` with no `budget_usd`.
+        Carded through `meta.dailyCap`, the key notify.ts raises on, once a day through `today.capped`.
+      */
+      if (limits.dailyTokens !== undefined) {
+        const day = dayKey(deps.now());
+        const agent = deps.state.read(name);
+        const today = agent.today?.day === day ? agent.today : undefined;
+        const used = today?.tokens ?? 0;
+
+        if (used >= limits.dailyTokens) {
+          const capText = `${limits.dailyTokens.toLocaleString('en-US')} tokens`;
+
+          if (today?.capped !== true) {
+            deps.state.patch(name, { today: { ...(today ?? { day, runs: 0, usd: 0 }), capped: true } });
+            deps.appendLedger({
+              from: OVERMIND,
+              kind: 'event',
+              body: `${name} reached its daily token cap — ${capText}`,
+              meta: { dailyCap: limits.dailyTokens, unit: 'tokens', agent: name },
+            });
+          }
+
+          return {
+            started: false,
+            refused: 'budget',
+            reason: `${name} has spent today's tokens: ${used.toLocaleString('en-US')} of ${capText}.`,
           };
         }
       }

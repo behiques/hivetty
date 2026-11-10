@@ -126,6 +126,20 @@ describe('list', () => {
     expect(agents[0]?.dailyUsd).toBe(0.5);
   });
 
+  it('carries a daily token cap the definition names (HIVE-398)', async () => {
+    seed(
+      'capped',
+      GOOD.replace('slack-watcher', 'capped').replace(
+        'icon: ChatCircleDots',
+        'icon: ChatCircleDots\nlimits:\n  daily_tokens: 2000000',
+      ),
+    );
+
+    const { agents } = await registry().list();
+
+    expect(agents[0]?.dailyTokens).toBe(2_000_000);
+  });
+
   it('leaves the cap absent when the definition names none', async () => {
     seed('slack-watcher', GOOD);
 

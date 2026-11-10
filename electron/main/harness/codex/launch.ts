@@ -24,6 +24,7 @@ import { hookEntry, toml, tomlList, tomlTable } from './toml';
  * - `-c tui.disable_paste_burst=true`: an injected Enter is a keystroke, not the tail of a paste (P7).
  * - `--dangerously-bypass-hook-trust`: `-c` hooks fire only with it (P1). It also runs a repo's own
  *   `.codex` hooks (P2), so the core asks for it only where a repo has none (D4).
+ * - `--dangerously-bypass-approvals-and-sandbox`: only with `clis.codex.skipPermissions`, the user's opt-in.
  * - `Stop` runs goal-on's verifier beside the status hook when the skills are rendered (HIVE-370;
  *   FINDINGS P10: both hooks in one group run, and the verifier's block holds the turn).
  */
@@ -96,6 +97,8 @@ export function launchCodexSession(spec: LaunchSpec): LaunchPlan {
           ...config('mcp_servers.hive.tools.session_done.approval_mode="approve"'),
         ]),
     ...(spec.bypassHookTrust === true ? ['--dangerously-bypass-hook-trust'] : []),
+    // No approvals and no sandbox: Claude's `--dangerously-skip-permissions`, so PermissionRequest never fires.
+    ...(spec.skipPermissions === true ? ['--dangerously-bypass-approvals-and-sandbox'] : []),
   ];
 
   // As Claude's `sessionCommand` does (HIVE-79): the login shell re-sources the user's profile

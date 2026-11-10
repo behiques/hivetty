@@ -168,6 +168,19 @@ describe('AgentView', () => {
       expect(screen.getByText('31 runs · $2.14')).toBeInTheDocument();
     });
 
+    it('adds today’s tokens against the cap for a token-capped agent (HIVE-398)', () => {
+      render(
+        <Harness
+          entity={seed({
+            dailyTokens: 2_000_000,
+            today: { day: dayKey(Date.now()), runs: 3, usd: 0.41, tokens: 1_234_567 },
+          })}
+        />,
+      );
+
+      expect(screen.getByText('3 runs · $0.41 · 1.2M of 2M tokens')).toBeInTheDocument();
+    });
+
     it('reads a quiet day as none rather than as unmeasured', () => {
       render(<Harness entity={seed({ today: undefined })} />);
 

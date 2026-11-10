@@ -28,6 +28,7 @@ describe('copilotAdapter', () => {
       meters: ['model', 'context', 'tokens', 'aiCredits'],
       contextDelivery: 'prompt-marker',
       reportsCostUsd: false,
+      reportsTokens: true,
       enforcesTurns: false,
       enforcesBudget: false,
       reportsMcpStatus: false,

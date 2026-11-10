@@ -112,6 +112,10 @@ export function checkHarness(
     };
   }
 
+  if (def.limits.dailyTokens !== undefined && !caps.reportsTokens) {
+    return { fail: `${id} does not report token usage, which ${def.name}'s daily token cap needs`, fix: 'remove-budget' };
+  }
+
   const unserved = def.mcp.filter((integration) => !caps.agentMcp.includes(integration));
 
   if (unserved.length > 0) {

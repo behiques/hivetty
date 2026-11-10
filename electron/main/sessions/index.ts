@@ -2724,6 +2724,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       resume,
       ...(hive === null ? {} : { hiveServer: hive }),
       ...(harness === 'codex' ? { bypassHookTrust: !ownCodexConfig } : {}),
+      ...(snapshot.clis[harness].skipPermissions === true ? { skipPermissions: true } : {}),
       ...(harnessStateDir === undefined || harness === 'claude-code'
         ? {}
         : { stateDir: harnessStateDir(harness) }),

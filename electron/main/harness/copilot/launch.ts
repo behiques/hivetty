@@ -138,6 +138,8 @@ export function launchCopilotSession(spec: LaunchSpec): LaunchPlan {
           // HIVE-368: `done` is this one call, so it must not ask. `server(tool)`, COPILOT_DENY_PATTERN's shape.
           ...COPILOT_SESSION_PREAPPROVED.flatMap((tool) => ['--allow-tool', shellQuote(tool)]),
         ]),
+    // `/yolo on` from the start: tools, paths and URLs. The env keys stay unset; this is the user's opt-in.
+    ...(spec.skipPermissions === true ? ['--allow-all'] : []),
   ];
   const initialPrompt =
     task === undefined || task.trim() === '' || resume

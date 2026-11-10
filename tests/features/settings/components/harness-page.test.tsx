@@ -118,6 +118,22 @@ describe('HarnessPage (HIVE-376)', () => {
     expect(screen.getByRole('switch', { name: 'Use for sessions' })).toBeDisabled();
   });
 
+  it.each(['claude-code', 'codex', 'copilot'] as const)('%s: the skip-permissions switch writes true, and false off', async (cli) => {
+    const user = userEvent.setup();
+    const { unmount } = renderPage(cli);
+    const off = screen.getByRole('switch', { name: 'Skip permission prompts' });
+    expect(off).not.toBeChecked();
+    await user.click(off);
+    expect(setCliConfig).toHaveBeenCalledWith({ cli, skipPermissions: true });
+    unmount();
+
+    renderPage(cli, { clis: resolveClis({ [cli]: { skipPermissions: true } }) });
+    const on = screen.getByRole('switch', { name: 'Skip permission prompts' });
+    expect(on).toBeChecked();
+    await user.click(on);
+    expect(setCliConfig).toHaveBeenCalledWith({ cli, skipPermissions: false });
+  });
+
   it('sign-in is read again when the saved command changes, and not on an unrelated config change', async () => {
     const { rerender } = renderPage('codex');
     expect(await screen.findByText('Signed in as dev@example.com')).toBeInTheDocument();

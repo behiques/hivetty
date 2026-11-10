@@ -213,3 +213,11 @@ describe('the OTel export (HIVE-335)', () => {
     expect(out.stdout).toBe('/state/otel/s.jsonl');
   });
 });
+
+describe('copilot skipPermissions (goal: skip permission prompts)', () => {
+  it('passes --allow-all only when asked, before the task', () => {
+    expect(launchCopilotSession({ ...BASE, skipPermissions: true, task: 'go' }).command).toMatch(/ --allow-all -i 'go' && exit$/);
+    expect(launchCopilotSession(BASE).command).not.toContain('--allow-all');
+    expect(launchCopilotSession({ ...BASE, skipPermissions: false }).command).not.toContain('--allow-all');
+  });
+});

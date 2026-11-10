@@ -323,6 +323,8 @@ export interface AgentDefinition {
     turns: number;
     budgetUsd?: number;
     dailyUsd?: number;
+    /** Tokens a day may spend (HIVE-398), counted by {@link spentTokens}. Absent: no ceiling. A scheduler limit like `dailyUsd`. */
+    dailyTokens?: number;
     rotateAfter: number;
     /** Concurrent runs of any kind. See {@link AGENT_LIMIT_DEFAULTS.parallel}. */
     parallel: number;
@@ -442,7 +444,7 @@ export interface AgentSummary {
    * processes share: what is stored is the day it belongs to, not the claim
    * that it is today.
    */
-  today?: { day: string; runs: number; usd: number; capped?: boolean };
+  today?: { day: string; runs: number; usd: number; tokens?: number; capped?: boolean };
   /** Scheduled ticks skipped since the last run — the `· skipped 3` on `Next`. */
   skipsSinceRun?: number;
   /**
@@ -468,6 +470,8 @@ export interface AgentSummary {
    * definition that would not parse.
    */
   dailyUsd?: number;
+  /** `limits.dailyTokens` (HIVE-398); a definition fact like {@link AgentSummary.dailyUsd}. */
+  dailyTokens?: number;
   /**
    * `limits.budget_usd`, the per-run cap; the reservation a run holds against
    * the day (HIVE-187). Absent when the definition sets none.
@@ -656,6 +660,7 @@ export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'limits.turns', kind: 'number', required: false },
   { path: 'limits.budget_usd', kind: 'number', required: false },
   { path: 'limits.daily_usd', kind: 'number', required: false },
+  { path: 'limits.daily_tokens', kind: 'number', required: false },
   { path: 'limits.rotate_after', kind: 'number', required: false },
   { path: 'limits.parallel', kind: 'number', required: false },
   /*
@@ -1074,8 +1079,9 @@ export interface RunLine {
 export type RunOutcome = 'done' | 'asking' | 'budget' | 'turns' | 'failed';
 
 /**
- * Tokens a run reported (HIVE-338), for a CLI that reports no USD. Each meter is absent when the
- * CLI did not report it, never `0`.
+ * Tokens a run reported (HIVE-338), normalised per CLI by its reader (HIVE-398) so the three mean the same:
+ * `inputTokens` is new input, cache writes included, cache reads excluded; `cachedTokens` is the cache read
+ * back; `outputTokens` is output. Each meter is absent when the CLI did not report it, never `0`.
  */
 export interface RunUsage {
   inputTokens?: number;
@@ -1093,7 +1099,7 @@ export interface RunSummary {
   outcome: RunOutcome;
   costUsd?: number;
   turns?: number;
-  /** Tokens, from a CLI that reports them (HIVE-338). Absent for Claude, whose cost is `costUsd`. */
+  /** Tokens the run reported (HIVE-338), on every CLI that reports them (HIVE-398). */
   usage?: RunUsage;
   /** The CLI this run ran on (HIVE-340). Absent on records before it, which were all `claude-code`. */
   harness?: HarnessId;
@@ -1213,7 +1219,7 @@ export interface AgentRunState {
    * Replaced wholesale when the day changes, which is what resets `capped` and
    * why nothing anywhere needs a midnight timer.
    */
-  today?: { day: string; runs: number; usd: number; capped?: boolean };
+  today?: { day: string; runs: number; usd: number; tokens?: number; capped?: boolean };
   /**
    * Scheduled ticks skipped since the last run that actually started.
    *
@@ -1375,6 +1381,11 @@ export function runReservation(
   return limits.dailyUsd / parallel;
 }
 
+/** What a run spent against `limits.dailyTokens` (HIVE-398): new input and output, never the cache read back. */
+export function spentTokens(usage: RunUsage | undefined): number {
+  return (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
+}
+
 /** A run in flight (HIVE-128). In memory only — an app restart has none. */
 export interface LiveRunSummary {
   run: string;
@@ -1496,7 +1507,7 @@ export interface AgentStatusPush {
    */
   sessionUuid?: string;
   /** As {@link AgentSummary.today} — the accumulator, not a sum over `runs`. */
-  today?: { day: string; runs: number; usd: number; capped?: boolean };
+  today?: { day: string; runs: number; usd: number; tokens?: number; capped?: boolean };
   /** As {@link AgentSummary.skipsSinceRun}. */
   skipsSinceRun?: number;
   /** The last run's cost, already formatted — see {@link formatRunCost}. */

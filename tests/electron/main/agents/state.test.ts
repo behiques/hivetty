@@ -250,6 +250,25 @@ describe('createAgentState', () => {
   });
 
   describe("today's accumulator", () => {
+    it('counts the tokens a run spent, and starts the next day from none (HIVE-398)', () => {
+      const state = createAgentState({ path });
+      const usage = { inputTokens: 1_000, outputTokens: 200, cachedTokens: 50_000 };
+
+      state.recordRun('drone', { ...summary('r1'), usage }, NOON);
+      state.recordRun('drone', { ...summary('r2'), usage }, NOON);
+      expect(state.read('drone').today?.tokens).toBe(2_400);
+
+      state.recordRun('drone', { ...summary('r3'), usage }, NEXT_MORNING);
+      expect(state.read('drone').today).toMatchObject({ day: '2026-09-01', runs: 1, tokens: 1_200 });
+    });
+
+    it('writes no tokens key for runs that reported none (HIVE-398)', () => {
+      const state = createAgentState({ path });
+
+      state.recordRun('drone', { ...summary('r1'), costUsd: 0.07 }, NOON);
+      expect(state.read('drone').today).not.toHaveProperty('tokens');
+    });
+
     /*
       The number a daily ceiling is compared against, and the reason it is
       accumulated rather than summed from `runs`: that array is capped at

@@ -64,7 +64,7 @@ describe('readCopilotHeadless', () => {
         kind: 'end',
         stop: 'done',
         detail: 'completed',
-        usage: { inputTokens: 6, outputTokens: 85, cachedTokens: 23244 },
+        usage: { inputTokens: 23_360, outputTokens: 85, cachedTokens: 23244 },
       },
     ]);
     expect(existsSync(file)).toBe(false);
@@ -120,7 +120,7 @@ describe('readCopilotHeadless', () => {
         kind: 'end',
         stop: 'error',
         detail: 'boom',
-        usage: { inputTokens: 6, outputTokens: 85, cachedTokens: 23244 },
+        usage: { inputTokens: 23_360, outputTokens: 85, cachedTokens: 23244 },
       },
     ]);
   });
