@@ -95,8 +95,10 @@ import { isThisMachineAction } from './notification-contract';
  * 39 → 40 (desktop billing): `CH` gained `account:payments`, `account:revoke-device`, `account:open-billing` and
  *   `account:open-invoice` (process-local).
  * 40 → 41 (HIVE-396): `CH` gained `agents:harness-check` (a forwarded read).
+ * 41 → 42 (HIVE-398): `AgentSummary` gained `dailyTokens`; `today` gained `tokens`; `RunSummary.usage` is normalised
+ *   and Claude Code now sends it.
  */
-export const REMOTE_PROTOCOL_VERSION = 41;
+export const REMOTE_PROTOCOL_VERSION = 42;
 
 /**
  * What a frame is for.
