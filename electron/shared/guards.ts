@@ -1908,7 +1908,7 @@ export function parseSetCliSessionsRequest(input: unknown): SetCliSessionsReques
 
 /** `config:set-cli` (HIVE-376). An empty command clears it; claude-code takes no command. */
 export function parseSetCliRequest(input: unknown): SetCliRequest {
-  const raw = assertShape(input, ['cli'], 'setCli', ['command', 'sessionModel', 'sessionEffort', 'installSkills']);
+  const raw = assertShape(input, ['cli'], 'setCli', ['command', 'sessionModel', 'sessionEffort', 'installSkills', 'skipPermissions']);
   const cli = assertOneOf(raw.cli, HARNESS_IDS, 'setCli.cli');
   const out: SetCliRequest = { cli };
   if (raw.command !== undefined) {
@@ -1932,6 +1932,7 @@ export function parseSetCliRequest(input: unknown): SetCliRequest {
     if (typeof raw.installSkills !== 'boolean') return fail('setCli.installSkills: expected a boolean');
     out.installSkills = raw.installSkills;
   }
+  if (raw.skipPermissions !== undefined) out.skipPermissions = assertBoolean(raw.skipPermissions, 'setCli.skipPermissions');
   return out;
 }
 

@@ -387,6 +387,8 @@ export interface LaunchSpec {
   hiveServer?: StdioServerSpec;
   /** Codex: pass `--dangerously-bypass-hook-trust` (D4, measured in tests/fixtures/codex/interactive-0.164). */
   bypassHookTrust?: boolean;
+  /** `clis.<id>.skipPermissions`: the session starts with every permission granted, in the CLI's own flag. */
+  skipPermissions?: boolean;
   /** An app-owned directory for what a launch writes: Copilot's hooks plugin (HIVE-280). */
   stateDir?: string;
   /** Where a `meterExport` harness writes its telemetry for `foldMeters` (HIVE-335). */

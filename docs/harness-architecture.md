@@ -70,6 +70,15 @@ moved there verbatim, and owns `SUBMIT_DELAY_MS`. `sessions/index.ts` makes the 
 (paths, the hook env, the container map, the session uuid) is hoisted above the spawn;
 every side effect keeps its old place after it.
 
+**`skipPermissions`** is `clis.<id>.skipPermissions`, off unless the user turns it on in
+Settings › Harnesses. Each launcher turns it into its own CLI's flag, a literal that holds no
+user text: Claude Code `--dangerously-skip-permissions`, Codex
+`--dangerously-bypass-approvals-and-sandbox` (no approvals and no sandbox, the same thing Claude's
+flag does), Copilot `--allow-all` (what `/yolo on` turns on). With it on, the CLI never asks, so no
+permission hook fires and no card reaches the inbox. Copilot still unsets `COPILOT_ALLOW_ALL` and
+`COPILOT_ASSISTED_APPROVAL` (HIVE-363), because the flag is how the user opts in and the env is not.
+Headless agent runs never read it: their fence is HIVE-119's.
+
 `shellQuote`, the `{env}` expansion (`container-command.ts`) and the host↔container path
 map live in `electron/main/container/`, not `sessions/`: the adapter needs them, fence 2
 forbids it `sessions/**`, and the headless agent waker uses them too.

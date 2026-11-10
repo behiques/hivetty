@@ -299,3 +299,34 @@ test("installing HiveTTY's skills into Codex, on and off, against a scratch CODE
     await app.close();
   }
 });
+
+test('skip permission prompts writes clis.<id>.skipPermissions, and off deletes it', async ({}, testInfo) => {
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeFileSync(configPath, JSON.stringify({ version: 2, projects: [] }));
+
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
+  const page = await app.firstWindow();
+
+  try {
+    await page.waitForSelector('nav[aria-label="Places"]');
+    for (const [label, id] of [
+      ['Codex', 'codex'],
+      ['Copilot', 'copilot'],
+    ] as const) {
+      await openPane(page, label);
+      const toggle = page.getByRole('switch', { name: 'Skip permission prompts' });
+      await expect(toggle).toHaveAttribute('aria-checked', 'false');
+      await toggle.click();
+      await expect.poll(() => read(configPath).clis?.[id]?.skipPermissions).toBe(true);
+      await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    }
+    await page.waitForFunction(() => document.getAnimations().length === 0);
+    await page.screenshot({ path: testInfo.outputPath('skip-permissions-on.png') });
+
+    await page.getByRole('switch', { name: 'Skip permission prompts' }).click();
+    await expect.poll(() => read(configPath).clis.copilot.skipPermissions).toBeUndefined();
+    expect(read(configPath).clis.codex.skipPermissions).toBe(true);
+  } finally {
+    await app.close();
+  }
+});

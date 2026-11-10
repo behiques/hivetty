@@ -485,3 +485,42 @@ describe('clis.codex.installSkills (HIVE-372)', () => {
     expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis.codex).toEqual({ command: '/opt/codex' });
   });
 });
+
+describe('clis.<id>.skipPermissions (goal: skip permission prompts)', () => {
+  let dir: string;
+  let saved: string | undefined;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-clis-'));
+    saved = process.env[CONFIG_PATH_ENV];
+    process.env[CONFIG_PATH_ENV] = join(dir, 'config.json');
+  });
+  afterEach(() => {
+    if (saved === undefined) delete process.env[CONFIG_PATH_ENV];
+    else process.env[CONFIG_PATH_ENV] = saved;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('reads a boolean on every CLI, claude-code included, and refuses anything else', () => {
+    writeFileSync(
+      process.env[CONFIG_PATH_ENV]!,
+      doc({ clis: { 'claude-code': { skipPermissions: true }, codex: { skipPermissions: 'yes' } } }),
+    );
+    const snapshot = reloadConfig();
+    expect(snapshot.clis['claude-code'].skipPermissions).toBe(true);
+    expect(snapshot.clis.codex.skipPermissions).toBeUndefined();
+    expect(snapshot.clis.copilot.skipPermissions).toBeUndefined();
+    expect(snapshot.errors.some((error) => error.includes('codex.skipPermissions: expected a boolean'))).toBe(true);
+  });
+
+  it('setCli writes skipPermissions true and deletes it on false', () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({ clis: { copilot: { command: '/opt/copilot' } } }));
+    reloadConfig();
+    expect(setCli({ cli: 'copilot', skipPermissions: true }).clis.copilot).toMatchObject({
+      skipPermissions: true,
+      command: '/opt/copilot',
+    });
+    setCli({ cli: 'copilot', skipPermissions: false });
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis.copilot).toEqual({ command: '/opt/copilot' });
+  });
+});

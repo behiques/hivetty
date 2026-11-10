@@ -194,3 +194,12 @@ describe('codex session command (HIVE-279)', () => {
     }
   });
 });
+
+describe('codex skipPermissions (goal: skip permission prompts)', () => {
+  it('bypasses approvals and the sandbox only when asked', () => {
+    expect(line({ skipPermissions: true })).toContain(' --dangerously-bypass-approvals-and-sandbox ');
+    expect(line({ skipPermissions: true, task: 'go' })).toMatch(/--dangerously-bypass-approvals-and-sandbox -- 'go' && exit$/);
+    expect(line()).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+    expect(line({ skipPermissions: false })).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+  });
+});

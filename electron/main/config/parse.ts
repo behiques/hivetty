@@ -1365,7 +1365,7 @@ function optionalSlack(
   return slack;
 }
 
-const CLI_KEYS = ['agents', 'sessions', 'command', 'sessionModel', 'sessionEffort', 'installSkills'] as const;
+const CLI_KEYS = ['agents', 'sessions', 'command', 'sessionModel', 'sessionEffort', 'installSkills', 'skipPermissions'] as const;
 const CLI_AGENT_KEYS = ['enabled', 'model', 'effort', 'sandbox', 'deny'] as const;
 
 /**
@@ -1432,6 +1432,10 @@ function optionalClis(
       if (id !== 'codex') errors.push(`${cliAt}.installSkills: only codex installs HiveTTY's skills — ignored`);
       else if (typeof entry.installSkills === 'boolean') top.installSkills = entry.installSkills;
       else errors.push(`${cliAt}.installSkills: expected a boolean — ignored`);
+    }
+    if (entry.skipPermissions !== undefined) {
+      if (typeof entry.skipPermissions === 'boolean') top.skipPermissions = entry.skipPermissions;
+      else errors.push(`${cliAt}.skipPermissions: expected a boolean — ignored`);
     }
     if (entry.agents === undefined) {
       clis[id] = top;

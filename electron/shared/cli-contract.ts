@@ -165,6 +165,8 @@ export interface CliConfig {
   sessionEffort?: string;
   /** HIVE-372. Codex only: install HiveTTY's skills as the `hive@hivetty` Codex plugin. Absent means off. */
   installSkills?: boolean;
+  /** Sessions start with every permission granted, through the CLI's own flag. Absent means off; agents never. */
+  skipPermissions?: boolean;
 }
 
 /** Every CLI, always resolved: a CLI the file never names is enabled with no defaults. */
@@ -178,6 +180,7 @@ export interface RawCli {
   sessionModel?: string;
   sessionEffort?: string;
   installSkills?: boolean;
+  skipPermissions?: boolean;
 }
 export type RawClis = Partial<Record<HarnessId, RawCli>>;
 
@@ -241,6 +244,8 @@ export interface SetCliRequest {
   sessionEffort?: string | null;
   /** HIVE-372. Codex only. `false` deletes the key. */
   installSkills?: boolean;
+  /** Every CLI. `false` deletes the key. */
+  skipPermissions?: boolean;
 }
 
 /** HIVE-372. What the opt-in Codex plugin install last found or did. */
