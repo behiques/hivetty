@@ -1,4 +1,4 @@
-import type { AgentDefinition } from '@shared/agent-contract';
+import type { AgentDefinition, HarnessFix } from '@shared/agent-contract';
 import type { CliAgents } from '@shared/cli-contract';
 import type { HarnessId } from '@shared/harness-contract';
 
@@ -27,8 +27,8 @@ export interface HarnessGate {
 
 export interface ResolveDeps {
   adapter(id: HarnessId): HarnessAdapter | undefined;
-  /** The binary a run of this CLI spawns, or why there is none. */
-  binary(id: HarnessId): { path: string } | { problem: string };
+  /** The binary a run of this CLI spawns, or why there is none and what would fix it (HIVE-396). */
+  binary(id: HarnessId): { path: string } | { problem: string; fix?: HarnessFix };
   gate?: HarnessGate;
 }
 
@@ -37,12 +37,12 @@ export interface Resolved {
   path: string;
 }
 
-type Check<T> = { pass: T } | { fail: string };
+type Check<T> = { pass: T } | { fail: string; fix?: HarnessFix };
 
 /** The first id `check` passes, else every id's reason in order. Generic over the id, so a test needs no real CLI. */
 export function firstPassing<Id extends string, T>(
   ids: readonly Id[],
-  check: (id: Id) => Check<T>,
+  check: (id: Id) => { pass: T } | { fail: string },
 ): { pass: T } | { fail: string[] } {
   const reasons: string[] = [];
 
@@ -66,7 +66,8 @@ const toolOf = (rule: string): string =>
     ? (rule.slice(LITERAL_PREFIX.length).split(':')[0] ?? rule)
     : (rule.split('(')[0] ?? rule);
 
-function check(
+/** Whether one CLI can run this definition, and the fix when not (HIVE-396). `resolveHarness` asks it of each candidate; the form asks it of all three. */
+export function checkHarness(
   def: AgentDefinition,
   rules: readonly string[],
   deps: ResolveDeps,
@@ -78,16 +79,16 @@ function check(
 
   const binary = deps.binary(id);
 
-  if ('problem' in binary) return { fail: `${id} cannot start: ${binary.problem}` };
+  if ('problem' in binary) return { fail: `${id} cannot start: ${binary.problem}`, fix: binary.fix ?? 'install' };
 
   // HIVE-332: fail closed. No gate means no licence was consulted, and only Claude is every plan's.
   const locked =
     deps.gate === undefined ? (id === 'claude-code' ? null : 'not entitled: no licence gate') : deps.gate.entitled(id);
 
-  if (locked !== null) return { fail: `${id}: ${locked}` };
+  if (locked !== null) return { fail: `${id}: ${locked}`, fix: 'upgrade' };
 
   if (deps.gate !== undefined && !deps.gate.enabled(id)) {
-    return { fail: `${id} is turned off for agents in Settings › Harnesses` };
+    return { fail: `${id} is turned off for agents in Settings › Harnesses`, fix: 'enable' };
   }
 
   /*
@@ -105,12 +106,17 @@ function check(
 
   // A ceiling on a meter the CLI never reports would silently never trip.
   if ((def.limits.budgetUsd !== undefined || def.limits.dailyUsd !== undefined) && !caps.reportsCostUsd) {
-    return { fail: `${id} does not report cost in USD, which ${def.name}'s budget limit needs` };
+    return {
+      fail: `${id} does not report cost in USD, which ${def.name}'s budget limit needs`,
+      fix: 'remove-budget',
+    };
   }
 
   const unserved = def.mcp.filter((integration) => !caps.agentMcp.includes(integration));
 
-  if (unserved.length > 0) return { fail: `${id} cannot serve the ${unserved.join(', ')} integration` };
+  if (unserved.length > 0) {
+    return { fail: `${id} cannot serve the ${unserved.join(', ')} integration`, fix: 'remove-mcp' };
+  }
 
   return { pass: { adapter, path: binary.path } };
 }
@@ -128,7 +134,7 @@ export function resolveHarness(
   const fallback = deps.gate?.defaultCli();
   const candidates: readonly HarnessId[] =
     def.harness ?? (fallback === undefined ? ['claude-code'] : [fallback]);
-  const result = firstPassing(candidates, (id) => check(def, rules, deps, id));
+  const result = firstPassing(candidates, (id) => checkHarness(def, rules, deps, id));
 
   return 'pass' in result
     ? result.pass
