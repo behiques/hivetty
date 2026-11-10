@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
 
 /** `HH:MM`, the age a section shows beside a failed re-read. */
@@ -39,5 +41,18 @@ export function LinesSkeleton({ label }: { label: string }) {
       <SkeletonBar className="w-[84%]" />
       <SkeletonBar className="w-[58%]" />
     </div>
+  );
+}
+
+/** A titled block of a ticket reader, with an optional count beside the title. */
+export function Section({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-1.5">
+      <h3 className="flex items-baseline gap-1.5 text-micro font-semibold tracking-[0.06em] text-subtle uppercase">
+        {title}
+        {count === undefined ? null : <span className="tabular-nums text-muted">{count}</span>}
+      </h3>
+      {children}
+    </section>
   );
 }

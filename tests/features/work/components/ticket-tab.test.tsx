@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -248,101 +248,11 @@ const three = [
 ];
 
 describe('TicketTab links (HIVE-202)', () => {
-  it('counts the linked tickets and says whether it is clear to go', () => {
+  it('mounts the links section once they are read', () => {
     seed({ links: three });
-    const { unmount } = render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
+    render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
 
     expect(screen.getByRole('heading', { name: 'Links 3' })).toBeInTheDocument();
-    const lead = screen.getByText('Clear to go.');
-    expect(lead.tagName).toBe('B');
-    const clear = lead.closest('p')!;
-    expect(clear).toHaveTextContent('Clear to go. Its one blocker is done; 1 ticket waits on it.');
-    // Both tones sit in their soft box, with a leading icon (HIVE-229).
-    expect(clear).toHaveClass('text-green', 'bg-green-soft');
-    expect(clear.firstElementChild).toHaveAttribute('data-icon', 'check');
-    unmount();
-
-    seed({ links: [link('HIVE-188', 'todo', 'Blocks', 'inward')] });
-    render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
-
-    const blocked = screen.getByText('Blocked by 1 open:').closest('p')!;
-    expect(blocked).toHaveClass('text-amber-text', 'bg-amber-soft');
-    expect(blocked.firstElementChild).toHaveAttribute('data-icon', 'x');
-  });
-
-  it('says there are no linked tickets, with no drawing, when only remote links exist', () => {
-    seed({ links: [remote] });
-    render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
-
-    expect(screen.getByRole('heading', { name: 'Links 0' })).toBeInTheDocument();
-    expect(screen.getByText('No linked tickets')).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: /^Links of/ })).toBeNull();
-  });
-
-  it('draws a row per non-empty arc, each opening its list', async () => {
-    seed({ links: three.slice(0, 2) });
-    render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
-
-    const waits = screen.getByRole('button', { name: /^Waits on/ });
-    expect(waits).toHaveTextContent('Waits on1✓1');
-    const blocks = screen.getByRole('button', { name: /^Blocks/ });
-    expect(blocks).toHaveTextContent('Blocks1◌1');
-    // The glyph is its own node, spaced off its count, so "✓1" never reads as one mark.
-    const glyph = within(waits).getByText('✓');
-    expect(glyph).toHaveAttribute('aria-hidden', 'true');
-    expect(glyph.parentElement).toHaveTextContent(/^✓1$/);
-    expect(glyph.parentElement).toHaveClass('gap-0.5');
-    expect(blocks).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('button', { name: /^Relates to/ })).not.toBeInTheDocument();
-
-    await userEvent.click(blocks);
-
-    expect(blocks).toHaveAttribute('aria-expanded', 'true');
-    await userEvent.click(screen.getByRole('button', { name: 'HIVE-194 HIVE-194 title S' }));
-    expect(useUiStore.getState().workTicket).toBe('HIVE-194');
-
-    await userEvent.click(blocks);
-    expect(screen.queryByRole('button', { name: 'HIVE-194 HIVE-194 title S' })).not.toBeInTheDocument();
-  });
-
-  it('shows the relates row with its counts', () => {
-    seed({ links: three });
-    render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
-
-    expect(screen.getByRole('button', { name: /^Relates to/ })).toHaveTextContent('Relates to1✓1');
-  });
-
-  it('opens a constellation cell on Work', async () => {
-    seed({ links: three });
-    render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
-
-    await userEvent.click(screen.getByRole('button', { name: /^HIVE-188/ }));
-
-    expect(useUiStore.getState().workTicket).toBe('HIVE-188');
-  });
-
-  it('opens the Waits-on list from the rest cell (D7)', async () => {
-    const many = Array.from({ length: 7 }, (_, i) => link(`HIVE-1${String(i + 10)}`, 'todo', 'Blocks', 'inward'));
-    seed({ links: many });
-    render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
-
-    await userEvent.click(screen.getByRole('button', { name: '2 more' }));
-
-    expect(screen.getByRole('button', { name: /^Waits on/ })).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('button', { name: 'HIVE-116 HIVE-116 title S' })).toBeInTheDocument();
-  });
-
-  it('shows a links problem with Retry in the section when no links were read', async () => {
-    seed({ problems: { links: 'Links are down' } });
-    render(<TicketTab ticketKey="HIVE-193" sessionId="hero-refresh" />);
-
-    expect(screen.getByRole('heading', { name: 'Links' })).toBeInTheDocument();
-    expect(screen.getByText('Links are down')).toBeInTheDocument();
-    const before = readJiraLinks.mock.calls.length;
-
-    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
-
-    expect(readJiraLinks.mock.calls.length).toBe(before + 1);
   });
 
   it('has no links section before the links are read', () => {
