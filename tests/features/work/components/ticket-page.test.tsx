@@ -24,7 +24,7 @@ vi.mock('@/lib/jira', () => ({
   readJiraComments: (request: unknown) => readJiraComments(request),
   readJiraTransitions: (request: unknown) => readJiraTransitions(request),
   readJiraIssue: (request: unknown) => readJiraIssue(request),
-  readJiraLinks: () => Promise.resolve(null),
+  readJiraLinks: () => Promise.resolve({ ok: true, value: [] }),
   applyJiraTransition: () => Promise.resolve(null),
   addJiraComment: () => Promise.resolve(null),
 }));
