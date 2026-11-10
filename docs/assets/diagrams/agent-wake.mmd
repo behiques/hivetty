@@ -1,11 +1,11 @@
 sequenceDiagram
   participant T as Trigger
   participant H as HiveTTY
-  participant A as Agent (claude -p)
+  participant A as Agent (claude -p · codex exec · copilot -p)
   participant L as Ledger
   participant U as You (inbox)
   T->>H: schedule, message, Run now or Slack
-  H->>A: resume the agent's session
+  H->>A: pick the first CLI that can run it, resume its session
   A->>L: ledger_read
   A->>A: do the job in the body
   alt needs you

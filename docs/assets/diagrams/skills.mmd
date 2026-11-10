@@ -1,5 +1,6 @@
 flowchart TD
-  src[~/.hivetty/skills · your skill folders] -->|read before every spawn| plug[Generated plugin]
+  src[~/.hivetty/skills · your skill folders] -->|read before every spawn| plug[Generated plugin, rendered per CLI]
   builtin[Built-in done skill] --> plug
-  plug -->|passed as plugin-dir| hive[Sessions and agents HiveTTY starts]
-  own[claude in your own terminal] -.->|no flag, no skills| same[Unchanged]
+  plug -->|Claude Code and Copilot: plugin-dir| hive[Sessions and agents HiveTTY starts]
+  plug -->|Codex: skill catalog as instructions| hive
+  own[claude · codex · copilot in your own terminal] -.->|no flag, no skills| same[Unchanged]

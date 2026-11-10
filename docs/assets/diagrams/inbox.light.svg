@@ -27,8 +27,8 @@
   </marker>
 </defs>
 <polyline points="270.5375,76 270.5375,133" fill="none" stroke="var(--_line)" stroke-width="0.75" marker-end="url(#arrowhead)" />
-<polyline points="270.5375,169 270.5375,189 145.37500000000003,189 145.37500000000003,209" fill="none" stroke="var(--_line)" stroke-width="0.75" marker-end="url(#arrowhead)" />
-<polyline points="145.37500000000003,245 145.37500000000003,387.95" fill="none" stroke="var(--_line)" stroke-width="0.75" marker-end="url(#arrowhead)" />
+<polyline points="270.5375,169 270.5375,189 145.375,189 145.375,209" fill="none" stroke="var(--_line)" stroke-width="0.75" marker-end="url(#arrowhead)" />
+<polyline points="145.375,245 145.375,387.95" fill="none" stroke="var(--_line)" stroke-width="0.75" marker-end="url(#arrowhead)" />
 <polyline points="270.5375,169 270.5375,189 395.70000000000005,189 395.70000000000005,209" fill="none" stroke="var(--_line)" stroke-width="0.75" marker-end="url(#arrowhead)" />
 <polyline points="395.70000000000005,245 395.70000000000005,285" fill="none" stroke="var(--_line)" stroke-width="0.75" marker-end="url(#arrowhead)" />
 <polyline points="324.09410018426263,455.29410018426256 324.09410018426263,555.4 178.82500000000005,555.4 178.82500000000005,583.9" fill="none" stroke="var(--_line)" stroke-width="0.75" marker-end="url(#arrowhead)" />
@@ -42,19 +42,19 @@
 <text x="395.70000000000005" y="555.4" text-anchor="middle" dy="0.35em" font-size="11" font-weight="400" fill="var(--_text-muted)">Both</text>
 <rect x="531.645" y="541.9" width="33.16" height="27" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
 <text x="548.225" y="555.4" text-anchor="middle" dy="0.35em" font-size="11" font-weight="400" fill="var(--_text-muted)">Off</text>
-<rect x="175.88750000000002" y="40" width="189.3" height="36" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="111.53750000000002" y="40" width="318" height="36" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
 <rect x="186.6125" y="133" width="167.85000000000002" height="36" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
-<rect x="79.32500000000002" y="209" width="132.10000000000002" height="36" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
-<rect x="40.000000000000014" y="387.95" width="210.75000000000003" height="36" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="79.32499999999999" y="209" width="132.10000000000002" height="36" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="39.999999999999986" y="387.95" width="210.75000000000003" height="36" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
 <rect x="304.62500000000006" y="209" width="182.15" height="36" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
 <polygon points="395.70000000000005,285 516.6500000000001,405.95 395.70000000000005,526.9 274.75000000000006,405.95" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
 <rect x="73.45000000000003" y="583.9" width="210.75000000000003" height="36" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
 <rect x="308.20000000000005" y="583.9" width="175" height="36" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
 <rect x="507.20000000000005" y="583.9" width="82.05000000000001" height="36" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
-<text x="270.5375" y="58" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="var(--_text)">claude in its terminal</text>
+<text x="270.5375" y="58" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="var(--_text)">claude · codex · copilot in its terminal</text>
 <text x="270.5375" y="151" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="var(--_text)">Receiver in HiveTTY</text>
-<text x="145.37500000000003" y="227" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="var(--_text)">Status tracker</text>
-<text x="145.37500000000003" y="405.95" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="var(--_text)">Status dot and bar counts</text>
+<text x="145.375" y="227" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="var(--_text)">Status tracker</text>
+<text x="145.375" y="405.95" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="var(--_text)">Status dot and bar counts</text>
 <text x="395.70000000000005" y="227" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="var(--_text)">Notifier picks a kind</text>
 <text x="395.70000000000005" y="405.95" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="var(--_text)">Your setting for that kind</text>
 <text x="178.82500000000005" y="601.9" text-anchor="middle" dy="0.35em" font-size="13" font-weight="500" fill="var(--_text)">Inbox card and pill count</text>
