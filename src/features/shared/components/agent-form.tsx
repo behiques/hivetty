@@ -5,7 +5,10 @@ import {
   SegmentedControl,
   type SegmentedOption,
 } from '@components/ui/segmented-control';
+import { SelectField } from '@components/ui/select-field';
 import { Switch } from '@components/ui/switch';
+import { CliDock } from '@features/shared/components/cli-dock';
+import { CodexModelField } from '@features/shared/components/codex-model-field';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import {
   AGENT_FIELDS,
@@ -21,11 +24,12 @@ import {
   parseTimes,
   patchFrontmatter,
   readFrontmatter,
+  stripComment,
   type AgentProblem,
   type HarnessVerdict,
 } from '@shared/agent-contract';
-import type { CliModel } from '@shared/cli-contract';
-import type { HarnessId } from '@shared/harness-contract';
+import { COPILOT_MODELS, type CliModel } from '@shared/cli-contract';
+import { HARNESS_IDS, isHarnessId, type HarnessId } from '@shared/harness-contract';
 import { SESSION_MODELS } from '@shared/session-contract';
 
 
@@ -571,6 +575,7 @@ export function AgentForm({
   problems,
   taken,
   onChange,
+  runsOn,
 }: AgentFormProps) {
   /**
    * What the name field did to the name on its way out, or `null`.
@@ -682,7 +687,7 @@ export function AgentForm({
     const lines = from.split('\n');
     const close = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
     const opens = lines.findIndex(
-      (line, i) => i > 0 && i < close && line.trim() === `${parent}:`,
+      (line, i) => i > 0 && i < close && stripComment(line).trim() === `${parent}:`,
     );
     if (opens === -1) return from;
     const next = lines[opens + 1] ?? '';
@@ -715,6 +720,86 @@ export function AgentForm({
     rather than a deleted key that `patchFrontmatter` would later re-add at the
     bottom of the frontmatter, below the block it was declared above.
   */
+  // ---- runs on (HIVE-396) ----------------------------------------------
+
+  const { verdicts, defaultCli, cardModels, codexModels } = runsOn;
+  /** The CLIs `harness:` names, in order; the default alone when it names none (HIVE-340). */
+  const saved = (parseList(at('harness') || '[]') ?? []).filter(isHarnessId);
+  const list = saved.length > 0 ? saved : [defaultCli];
+  const primary = list[0]!;
+  /** The check's refusal for a CLI, or `null` when it can run this draft (or nobody has asked yet). */
+  const refused = (cli: HarnessId) => {
+    const verdict = verdicts?.[cli];
+    return verdict !== undefined && !verdict.ok ? verdict : null;
+  };
+  const unavailable = Object.fromEntries(
+    HARNESS_IDS.flatMap((cli) => {
+      const verdict = refused(cli);
+      return verdict === null ? [] : [[cli, verdict.reason]];
+    }),
+  ) as Partial<Record<HarnessId, string>>;
+  const locked = Object.fromEntries(
+    HARNESS_IDS.flatMap((cli) => {
+      const verdict = refused(cli);
+      return verdict?.fix === 'upgrade' ? [[cli, verdict.reason]] : [];
+    }),
+  ) as Partial<Record<HarnessId, string>>;
+  const writeHarness = (next: HarnessId[]) => onChange(patchFrontmatter(source, 'harness', `[${next.join(', ')}]`));
+  const pickPrimary = (cli: HarnessId) =>
+    writeHarness(saved.length === 0 ? [cli] : [cli, ...saved.filter((id) => id !== cli)]);
+  /** Clear a CLI's model, and its block with it once nothing is left under it. */
+  const clearModel = (cli: 'codex' | 'copilot') => onChange(clearParent(cli, clear(`${cli}.model`)));
+
+  /** One CLI's model control: Claude's segments, Codex's family picker, Copilot's list. */
+  const modelControl = (cli: HarnessId) => {
+    if (cli === 'claude-code') {
+      return (
+        <SegmentedControl
+          label="Model"
+          options={MODEL_OPTIONS}
+          value={
+            (SESSION_MODELS as readonly string[]).includes(at('model'))
+              ? (at('model') as (typeof MODEL_OPTIONS)[number]['value'])
+              : 'default'
+          }
+          onChange={(next) => {
+            // Same absence-is-a-value argument as the wake keys.
+            if (next === 'default') onChange(clear('model'));
+            else set('model', next);
+          }}
+        />
+      );
+    }
+    if (cli === 'codex') {
+      const own = at('codex.model');
+      return (
+        <div className="flex min-w-0 flex-col gap-1">
+          <CodexModelField
+            models={codexModels}
+            value={own || cardModels.codex || codexModels[0]?.slug || ''}
+            onChange={(slug) => set('codex.model', slug)}
+          />
+          {own === '' ? null : (
+            <button type="button" className="self-start text-micro text-subtle underline" onClick={() => clearModel('codex')}>
+              Use the CLI default
+            </button>
+          )}
+        </div>
+      );
+    }
+    return (
+      <SelectField
+        label="Copilot model"
+        value={at('copilot.model')}
+        options={[
+          { value: '', label: `CLI default (${cardModels.copilot ?? "Copilot's choice"})` },
+          ...COPILOT_MODELS.map((model) => ({ value: model, label: model })),
+        ]}
+        onChange={(next) => (next === '' ? clearModel('copilot') : set('copilot.model', next))}
+      />
+    );
+  };
+
   const setName = (value: string) => {
     const trimmed = value.trim();
 
@@ -1310,28 +1395,26 @@ export function AgentForm({
       </SettingsGroup>
 
       <SettingsGroup
+        title="Runs on"
+        description="The CLI each wake runs on, and the model it uses there."
+      >
+        <div className="flex flex-col gap-3">
+          <CliDock
+            value={primary}
+            onChange={pickPrimary}
+            unavailable={unavailable}
+            locked={locked}
+            caption={saved.length === 0 ? 'Default CLI for agents' : null}
+          />
+          {row(primary === 'claude-code' ? 'model' : `${primary}.model`, 'model', modelControl(primary))}
+        </div>
+      </SettingsGroup>
+
+      <SettingsGroup
         title="Limits"
         description="Ceilings on one wake, and on how long the agent keeps one session. All have defaults."
       >
         <div className="flex flex-col gap-2.5">
-          {row(
-            'model',
-            'model',
-            <SegmentedControl
-              label="Model"
-              options={MODEL_OPTIONS}
-              value={
-                (SESSION_MODELS as readonly string[]).includes(at('model'))
-                  ? (at('model') as (typeof MODEL_OPTIONS)[number]['value'])
-                  : 'default'
-              }
-              onChange={(next) => {
-                // Same absence-is-a-value argument as the wake keys.
-                if (next === 'default') onChange(clear('model'));
-                else set('model', next);
-              }}
-            />,
-          )}
           {LIMIT_FIELDS.map(({ path, label, hint }) =>
             row(path, label, input(path, label, hint)),
           )}

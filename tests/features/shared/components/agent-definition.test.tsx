@@ -464,3 +464,16 @@ describe('AgentDefinition — a shipped agent the user changed', () => {
     expect(shipped.keepMine).toHaveBeenCalledWith({ kind: 'agents', name: 'slack-watcher' });
   });
 });
+
+describe('the Runs on context (HIVE-396)', () => {
+  it('reaches the form: before any verdict every CLI is pickable and the default is Claude Code', async () => {
+    stub([]);
+    render(<AgentDefinition {...page} name={null} notice={null} />);
+
+    const dock = await screen.findByRole('radiogroup', { name: 'cli' });
+    for (const radio of within(dock).getAllByRole('radio')) {
+      expect(radio).not.toHaveAttribute('aria-disabled');
+    }
+    expect(within(dock).getByRole('radio', { checked: true })).toHaveAccessibleName('Claude Code');
+  });
+});

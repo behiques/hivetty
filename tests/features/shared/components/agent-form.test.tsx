@@ -1256,3 +1256,67 @@ describe('AgentForm', () => {
     });
   });
 });
+
+describe('Runs on: the dock and the primary model (HIVE-396)', () => {
+  const lastSource = (onChange: ReturnType<typeof vi.fn>) => onChange.mock.calls.at(-1)![0] as string;
+  const field = (source: string, path: string) => readFrontmatter(source)?.fields.get(path)?.value;
+
+  it('shows the default CLI, captioned, when the file names none', () => {
+    setup({ runsOn: runsOn({ defaultCli: 'codex' }) });
+    const dock = screen.getByRole('radiogroup', { name: 'cli' });
+
+    expect(within(dock).getByRole('radio', { checked: true })).toHaveAccessibleName('Codex');
+    expect(screen.getByText('Default CLI for agents')).toBeInTheDocument();
+  });
+
+  it('writes harness: on the first pick, and keeps the rest of the list after the primary', async () => {
+    const onChange = setup({ source: SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [claude-code, copilot]') });
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Codex' }));
+    expect(field(lastSource(onChange), 'harness')).toBe('[codex, claude-code, copilot]');
+  });
+
+  it('cannot pick a CLI the check refused, by click or by key', async () => {
+    const verdicts = {
+      'claude-code': { ok: true as const },
+      codex: { ok: false as const, reason: 'codex cannot start: not found', fix: 'install' as const },
+      copilot: { ok: true as const },
+    };
+    const onChange = setup({ runsOn: runsOn({ verdicts }) });
+
+    await userEvent.click(screen.getByRole('radio', { name: /Codex/ }));
+    expect(onChange).not.toHaveBeenCalled();
+    screen.getByRole('radio', { name: 'Claude Code' }).focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(field(lastSource(onChange), 'harness')).toBe('[copilot]');
+  });
+
+  it("keeps Claude's segmented model control for Claude Code", async () => {
+    const onChange = setup();
+
+    await userEvent.click(screen.getByRole('radio', { name: 'opus' }));
+    expect(field(lastSource(onChange), 'model')).toBe('opus');
+  });
+
+  it("writes Codex's model into its block, and Use the CLI default removes the block", async () => {
+    const source = SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [codex]\ncodex:   # mine\n  model: gpt-6-luna');
+    const onChange = setup({ source });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use the CLI default' }));
+    const next = lastSource(onChange);
+    expect(field(next, 'codex.model')).toBeUndefined();
+    expect(next).not.toMatch(/^codex:/m); // the commented parent line went too (the clearParent fix)
+  });
+
+  it("offers Copilot's list behind a CLI default naming the card's model", async () => {
+    const onChange = setup({
+      source: SOURCE.replace('autonomy: ask', 'autonomy: ask\nharness: [copilot]'),
+      runsOn: runsOn({ cardModels: { copilot: 'claude-sonnet-5.5' } }),
+    });
+    const select = screen.getByRole('combobox', { name: /Copilot model/ });
+
+    expect(within(select).getByRole('option', { name: 'CLI default (claude-sonnet-5.5)' })).toBeInTheDocument();
+    await userEvent.selectOptions(select, 'claude-opus-5.5');
+    expect(field(lastSource(onChange), 'copilot.model')).toBe('claude-opus-5.5');
+  });
+});
