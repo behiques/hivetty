@@ -1,8 +1,8 @@
-# HiveTTY documentation
+# HiveTTY Pro documentation
 
-Two layers. **Guides** show you how to use HiveTTY, one task per section, with a
-screenshot or a diagram on every page. **Internals** explain how each part is built, for
-anyone changing the code.
+Two layers. **Guides** show you how to use HiveTTY Pro with Claude Code, Codex and Copilot,
+one task per section, with a screenshot or a diagram on every page. **Internals** explain how
+each part is built, for the team changing the code.
 
 New here? Start with [Getting started](guide/getting-started.md), then
 [A tour of the window](guide/tour.md).
@@ -13,7 +13,7 @@ New here? Start with [Getting started](guide/getting-started.md), then
 
 | Page | What you will learn |
 | --- | --- |
-| [Getting started](guide/getting-started.md) | Install, map a project, start your first session |
+| [Getting started](guide/getting-started.md) | Install, sign in, map a project, start your first session on any CLI |
 | [A tour of the window](guide/tour.md) | What every rail, tab and button is, plus keyboard shortcuts |
 | [Troubleshooting](guide/troubleshooting.md) | The errors people hit first, and the fix for each |
 
@@ -21,20 +21,20 @@ New here? Start with [Getting started](guide/getting-started.md), then
 
 | Page | What you will learn |
 | --- | --- |
-| [Sessions and terminals](guide/sessions.md) | Start, watch, finish and resume sessions; plain terminals |
+| [Sessions and terminals](guide/sessions.md) | Pick a CLI; start, watch, finish and resume sessions; plain terminals |
 | [The plan panel](guide/plan-panel.md) | The task rail beside a session's terminal, where its tasks come from, and the row count |
 | [The overmind console](guide/overmind-console.md) | The fleet table and every console command, with examples |
 | [The inbox](guide/inbox.md) | Why a card appears, how to answer it, and how to quiet it |
 | [Jira and pull requests](guide/work-and-prs.md) | Connect Jira, start from a ticket, follow your PRs |
 | [Working a ticket](guide/workflow.md) | From a ticket to Done: the skills, the agents, and what the cards show |
 | [Files and the editor](guide/explorer.md) | Browse, search and edit the session's repository |
-| [Custom skills](guide/skills.md) | Write slash commands that only Hive sessions get |
+| [Custom skills](guide/skills.md) | Write skills that only HiveTTY sessions get, on every CLI |
 
 ### Automation
 
 | Page | What you will learn |
 | --- | --- |
-| [Agents](guide/agents.md) | Background `claude` runs that wake on their own |
+| [Agents](guide/agents.md) | Background runs on Claude Code, Codex or Copilot that wake on their own |
 | [The ledger](guide/ledger.md) | The shared log sessions and agents talk through |
 | [Slack](guide/slack.md) | Let agents read Slack, and command them from it |
 | [Containers](guide/containers.md) | Run sessions and agents inside a Docker container |
@@ -44,7 +44,7 @@ New here? Start with [Getting started](guide/getting-started.md), then
 
 | Page | What you will learn |
 | --- | --- |
-| [Settings](guide/settings.md) | Every Settings section, what it changes |
+| [Settings](guide/settings.md) | Every Settings section, what it changes, and the Account centre |
 | [The config file](guide/configuration.md) | `~/.hivetty/config.json`, key by key |
 | [Themes](guide/themes.md) | Pick, import and write a theme |
 | [Updates](guide/updates.md) | How updates arrive, and `hivetty --update` |
@@ -52,12 +52,13 @@ New here? Start with [Getting started](guide/getting-started.md), then
 ## Internals
 
 Start with [Architecture](architecture.md) for the map, then open the deep dive for the
-part you are changing. [Contributing](contributing.md) has the commands and test layers.
+part you are changing. [Development](contributing.md) has the commands and test layers.
 
 | Deep dive | Covers |
 | --- | --- |
 | [Architecture](architecture.md) | Processes, the bridge, the fences, where to look |
-| [Contributing](contributing.md) | Commands, test layers, live suites, the definition of done |
+| [Development](contributing.md) | Commands, test layers, live suites, the definition of done |
+| [Harness architecture](harness-architecture.md) | The harness port, the Claude Code, Codex and Copilot adapters, adding a CLI |
 | [Desktop architecture](desktop-architecture.md) | Main process, IPC, the PTY host, session status, names |
 | [Terminal architecture](terminal-architecture.md) | The terminal seam, transports, colour, fitting |
 | [Explorer and editor](explorer-and-editor.md) | The fs IPC surface, the watcher, the editor seam |

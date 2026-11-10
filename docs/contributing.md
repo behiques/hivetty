@@ -1,6 +1,8 @@
-# Contributing
+# Development
 
-How to build, test and verify a change. The rules for code live in
+How to build, test and verify a change to HiveTTY Pro. The repository is private and
+proprietary ([LICENSE](../LICENSE)): changes come from the team, through pull requests to
+`behiques/hivetty`, and there are no outside contributions. The rules for code live in
 [`AGENTS.md`](../AGENTS.md); this page is the commands.
 
 **On this page:** [Set up](#set-up) · [Commands](#commands) · [Test layers](#test-layers) ·

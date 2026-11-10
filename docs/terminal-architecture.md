@@ -162,8 +162,12 @@ terminal — collapse to:
 pty.write(sessionId, text + '\r')
 ```
 
-Claude Code's TUI sits at a prompt, so text plus a carriage return is what a
-person typing would produce. There is no message bus, no protocol, no injection
+Every agent CLI's TUI (Claude Code, Codex, Copilot) sits at a prompt, so text plus a carriage
+return is what a person typing would produce. Where the CLIs differ, the session's **input
+profile** (`src/lib/harness/input-profile.ts`, reached through the `inputProfile` prop so the
+seam still imports no store) carries it: the line break inside a message is Claude Code's
+default, Ctrl+J for Codex and Alt+Enter (ESC CR) for Copilot. See
+[Harness architecture › Input profile](harness-architecture.md#input-profile-renderer-hive-240). There is no message bus, no protocol, no injection
 format, and adding one would be the wrong shape.
 
 Three details are load-bearing:
@@ -274,7 +278,8 @@ keeps a theme toggle repainting transcript text written minutes ago.
 ### Why this is what makes a running session follow the theme
 
 `harness/claude-code/settings.ts` pins Claude Code's own theme to **`dark-ansi`**, and that is
-the other half of the fix rather than a cosmetic preference.
+the other half of the fix rather than a cosmetic preference. Codex and Copilot draw their own
+chrome and are not pinned.
 
 Under `dark` or `light`, Claude emits **24-bit** colour — measured against
 2.1.245, the submitted-prompt row is `rgb(55,55,55)` and `rgb(240,240,240)`. A
@@ -465,6 +470,10 @@ Two gotchas worth knowing before writing a spec:
   terminal mounts.
 
 ## Reading Claude Code's screen
+
+This section was measured against Claude Code. Codex and Copilot share its `claimBareBack` rule
+through `DEFAULT_INPUT_PROFILE` until a recording of their own screen says otherwise; their
+measured findings live under `tests/fixtures/{codex,copilot}/`.
 
 One rule in `lib/terminal/keymap.ts` is a screen-scrape of a UI this app does not
 own: `claimBareBack`, which decides whether a bare `←` at a live terminal belongs

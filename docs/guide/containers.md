@@ -2,7 +2,8 @@
 
 Run a project's sessions, or an agent, inside a Docker (or Podman) container you already
 have running. HiveTTY never starts, stops or names the container; it only runs `claude`
-inside it.
+inside it. Containers are Claude Code only: Codex and Copilot sessions and agents do not run
+in one, and an agent with a container must list `claude-code` first in its `harness:`.
 
 **On this page:** [How it works](#how-it-works) · [A containerised session](#a-containerised-session) ·
 [A containerised agent](#a-containerised-agent) · [Limits](#limits)

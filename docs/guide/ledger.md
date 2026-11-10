@@ -50,15 +50,15 @@ token, so no one can post as someone else.
 ## Nudges into a live session
 
 An ask or answer addressed to a running session is delivered as a one-line marker typed at
-its prompt, like `📒 a12`. The full entry reaches Claude as hook context, not as typed text.
+its prompt, like `📒 a12`. The full entry reaches the CLI as hook context, not as typed text.
 
 A nudge only lands at an idle prompt, and never into an input box where you have started
 typing. Held nudges retry until they fit.
 
 ## The hive MCP tools
 
-Every session and agent HiveTTY starts gets one MCP server, `hive`. The tools appear to
-Claude as `mcp__hive__<name>`.
+Every session and agent HiveTTY starts gets one MCP server, `hive`, on every CLI. The tools
+appear to Claude Code and Codex as `mcp__hive__<name>`, and to Copilot as `hive-<name>`.
 
 | Tool | Does |
 | --- | --- |
