@@ -56,9 +56,11 @@ function toolOf(item: Record<string, unknown>): RunEvent | null {
 
 function endOf(usage: Record<string, unknown> | null): RunEvent {
   if (usage === null) return { kind: 'end', stop: 'done', detail: 'completed' };
-  const inputTokens = num(usage['input_tokens']);
+  // Codex's input_tokens includes the cached part; the cap counts only new input (HIVE-398).
+  const total = num(usage['input_tokens']);
   const outputTokens = num(usage['output_tokens']);
   const cachedTokens = num(usage['cached_input_tokens']);
+  const inputTokens = total === undefined ? undefined : Math.max(0, total - (cachedTokens ?? 0));
   return {
     kind: 'end',
     stop: 'done',

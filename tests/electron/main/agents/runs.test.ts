@@ -658,7 +658,7 @@ describe('createRunTracker', () => {
       expect(summary).toMatchObject({
         harness: 'copilot',
         outcome: 'done',
-        usage: { inputTokens: 6, outputTokens: 85, cachedTokens: 23244 },
+        usage: { inputTokens: 23_360, outputTokens: 85, cachedTokens: 23244 },
       });
       expect(summary).not.toHaveProperty('costUsd');
       expect(lines.flatMap((entry) => entry.pushed).map((line) => line.text)).toContain('DONE');
@@ -873,7 +873,7 @@ describe('createRunTracker', () => {
         outcome: 'done',
         sessionUuid: thread.thread_id,
         usage: {
-          inputTokens: usage['input_tokens'],
+          inputTokens: (usage['input_tokens'] ?? 0) - (usage['cached_input_tokens'] ?? 0),
           outputTokens: usage['output_tokens'],
           cachedTokens: usage['cached_input_tokens'],
         },
