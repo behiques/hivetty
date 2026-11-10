@@ -137,6 +137,7 @@ Keys are snake_case. An unknown key is an error, not ignored.
 | `lane` | `thread` or `repo`, see [Lanes](#lanes) | none |
 | `limits.turns` | turns per wake (Claude Code only) | 40 |
 | `limits.budget_usd` / `limits.daily_usd` | per-wake / per-day spend cap (Claude Code only) | none |
+| `limits.daily_tokens` | per-day token cap, on every CLI | none |
 | `limits.rotate_after` | wakes before a fresh session | 50 |
 | `limits.parallel` | runs at once, across lanes and task runs | 1 |
 | `container.*` | run inside a container, see [Containers](containers.md) | none |
@@ -162,6 +163,10 @@ A `#` after two or more spaces starts a comment; after one space it is text, so
 - An agent that is **asking** skips scheduled wakes; your answer is its wake.
 - `limits.daily_usd` holds every wake once the day's spend reaches it, and says so in the
   inbox. A held wake runs when a run ends or the next day.
+- `limits.daily_tokens` does the same with tokens, on Claude Code, Codex and Copilot alike.
+  It counts new input, cache writes and output, never cached input read back. It is checked
+  before each wake and nothing caps one run's tokens, so one long run (Copilot reports its
+  tokens only when it exits) or runs in parallel can finish past it. It resumes at midnight.
 
 ## Lanes
 
