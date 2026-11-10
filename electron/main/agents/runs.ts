@@ -1170,6 +1170,38 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         }
       }
 
+      /*
+        The day's token ceiling (HIVE-398). No reservation: nothing caps one run's tokens, so this asks only whether
+        the day is spent, and a long run, or parallel ones, can finish past it — as `daily_usd` with no `budget_usd`.
+        Carded through `meta.dailyCap`, the key notify.ts raises on, once a day through `today.capped`.
+      */
+      if (limits.dailyTokens !== undefined) {
+        const day = dayKey(deps.now());
+        const agent = deps.state.read(name);
+        const today = agent.today?.day === day ? agent.today : undefined;
+        const used = today?.tokens ?? 0;
+
+        if (used >= limits.dailyTokens) {
+          const capText = `${limits.dailyTokens.toLocaleString('en-US')} tokens`;
+
+          if (today?.capped !== true) {
+            deps.state.patch(name, { today: { ...(today ?? { day, runs: 0, usd: 0 }), capped: true } });
+            deps.appendLedger({
+              from: OVERMIND,
+              kind: 'event',
+              body: `${name} reached its daily token cap — ${capText}`,
+              meta: { dailyCap: limits.dailyTokens, unit: 'tokens', agent: name },
+            });
+          }
+
+          return {
+            started: false,
+            refused: 'budget',
+            reason: `${name} has spent today's tokens: ${used.toLocaleString('en-US')} of ${capText}.`,
+          };
+        }
+      }
+
       const command = deps.command(name, trigger, extra, { kind, ...(onLane ? { lane } : {}) });
 
       if ('problem' in command) {
