@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { TicketLinks } from '@features/work/components/ticket-links-section';
 import { TicketNextAction } from '@features/work/components/ticket-next-action';
 import { TicketPrRow } from '@features/work/components/ticket-pr-row';
 import { TicketSessionRow } from '@features/work/components/ticket-session-row';
@@ -17,8 +18,8 @@ function Heading({ children }: { children: ReactNode }) {
 }
 
 /**
- * The ticket page's right column (HIVE-203): its key/values, the sessions and
- * pull requests on it, and what can be done next. A row with no value is left
+ * The ticket page's right column (HIVE-203): its key/values, its links, the
+ * sessions and pull requests on it, and what can be done next. A row with no value is left
  * out rather than drawn empty; Assignee alone always shows, as `Unassigned`.
  */
 export function TicketProperties({ ticketKey }: { ticketKey: string }) {
@@ -52,6 +53,11 @@ export function TicketProperties({ ticketKey }: { ticketKey: string }) {
           ),
         )}
       </dl>
+
+      {/* The dependency picture belongs before the pick-up decision, so it sits above Session and Actions. */}
+      <div className="pt-3 empty:hidden">
+        <TicketLinks ticketKey={ticketKey} pr={prs[0]?.n ?? null} />
+      </div>
 
       {sessions.length > 0 ? (
         <>

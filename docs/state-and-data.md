@@ -266,12 +266,14 @@ oldest falls off. An answer that lands for an evicted key is dropped.
 
 - `loadTicketDetail(key, want)` reads in parallel through `readTicketParts`:
   `jira:detail`, the newest comments (`jira:comments { newest: true }`),
-  `jira:transitions`, and `jira:issue` only when the list does not hold the
-  key. `want` says who is asking. `'page'` adds `ledger:list { ticket }`;
-  `'tab'` adds `jira:links` instead. **Each part merges as it lands**, so one
+  `jira:transitions`, `jira:links`, and `jira:issue` only when the list does
+  not hold the key. `want` says who is asking: `'page'` adds
+  `ledger:list { ticket }`; `'tab'` adds nothing. Links are read for both,
+  since the Work page's right column draws the same Links section as the
+  Ticket tab. **Each part merges as it lands**, so one
   failed read never blanks another: a failure sets `problems.detail`,
   `problems.comments` or `problems.links` and keeps what the last read found.
-- The tab's **second hop**: for each link that is a Blocks link pointing
+- The **second hop**: for each link that is a Blocks link pointing
   outward (the tickets this one blocks), `jira:links` is read again and the
   ticket's own outward Blocks links go in `secondHop`, keyed by that ticket. It
   is read only at five issue links or fewer (`SECOND_HOP_MAX_LINKS`). A later
@@ -282,8 +284,8 @@ oldest falls off. An answer that lands for an evicted key is dropped.
   the search was cut. The epic key is checked against the issue-key pattern
   before it goes into the JQL. A failed search **clears** `epicProgress`; the
   ring's label then shows the epic without a count.
-- `refreshTicketDetail(key, want)` is the pollers' call: detail, comments and
-  transitions again (and links, for `'tab'`), not the ledger history (the tail
+- `refreshTicketDetail(key)` is the pollers' call: detail, comments,
+  transitions and links again, not the ledger history (the tail
   carries what is appended after the open). A key never loaded does nothing.
   The page and the Ticket tab each poll only after their own first load, so a
   ticket the map already holds is read once on open, not twice.
@@ -463,7 +465,7 @@ Components never read a store object directly and never call `getState()`.
 | `useTicketProperties(key)` | the page's key/values: status, priority (tag, else Jira), side, project, assignee, agent, epic |
 | `useTicketEvents(key)` | the ticket's ledger events: `ticketDetails[key].history` plus the tail, deduped and in id order |
 | `useTicketTransitions(key)` | every transition the workflow allows from the ticket's status, from `ticketDetails[key].transitions` (empty until read) |
-| `useTicketLinks(key)` | the Ticket tab's links on three arcs (waits on, blocks, relates) with the verdict, open blockers and per-arc status counts (HIVE-202) |
+| `useTicketLinks(key)` | the ticket's links (Work page and Ticket tab) on three arcs (waits on, blocks, relates) with the verdict, open blockers and per-arc status counts (HIVE-202) |
 | `useTicketCriteria(key)` | the acceptance-criteria list under its heading, else the description, else nothing |
 | `useLatestComment(key)` | the newest comment read |
 | `useEpicLabel(key)` | the ring's label, `KEY · title · done/total` (`+` when capped), only for an epic |

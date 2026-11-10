@@ -196,7 +196,7 @@ describe('loadTicketDetail (HIVE-203)', () => {
 
   it(`holds at most ${String(TICKET_DETAIL_CAP)} tickets; a load or refresh makes one the newest`, async () => {
     for (let n = 1; n <= TICKET_DETAIL_CAP; n += 1) await state().loadTicketDetail(`HIVE-${String(n)}`, 'tab');
-    await state().refreshTicketDetail('HIVE-1', 'tab');
+    await state().refreshTicketDetail('HIVE-1');
     await state().loadTicketDetail('HIVE-99', 'tab');
     const keys = Object.keys(state().ticketDetails);
     expect(keys).toHaveLength(TICKET_DETAIL_CAP);
@@ -206,7 +206,7 @@ describe('loadTicketDetail (HIVE-203)', () => {
   });
 
   it('refresh of a key never loaded does nothing (the poller runs before the load)', async () => {
-    await state().refreshTicketDetail('HIVE-7', 'page');
+    await state().refreshTicketDetail('HIVE-7');
     expect(state().ticketDetails).toEqual({});
     expect(readJiraDetail).not.toHaveBeenCalled();
   });
@@ -241,7 +241,7 @@ describe('refreshTicketDetail (HIVE-203)', () => {
     vi.clearAllMocks();
     readJiraComments.mockResolvedValue(ok({ comments: [comment('1'), comment('2')], total: 4 }));
 
-    await state().refreshTicketDetail('HIVE-7', 'page');
+    await state().refreshTicketDetail('HIVE-7');
 
     expect(readJiraDetail).toHaveBeenCalledWith({ key: 'HIVE-7' });
     expect(readJiraComments).toHaveBeenCalledWith({ key: 'HIVE-7', newest: true });
@@ -255,7 +255,7 @@ describe('refreshTicketDetail (HIVE-203)', () => {
     await state().loadTicketDetail('HIVE-8', 'page');
     vi.clearAllMocks();
 
-    await state().refreshTicketDetail('HIVE-8', 'page');
+    await state().refreshTicketDetail('HIVE-8');
 
     expect(readJiraIssue).toHaveBeenCalledWith({ key: 'HIVE-8' });
   });
@@ -264,7 +264,7 @@ describe('refreshTicketDetail (HIVE-203)', () => {
     await state().loadTicketDetail('HIVE-7', 'page');
     vi.clearAllMocks();
 
-    await state().refreshTicketDetail('HIVE-8', 'page');
+    await state().refreshTicketDetail('HIVE-8');
 
     expect(readJiraDetail).not.toHaveBeenCalled();
     expect(Object.keys(state().ticketDetails)).toEqual(['HIVE-7']);
@@ -457,7 +457,7 @@ describe("loadTicketDetail(key, 'tab') (HIVE-202)", () => {
     readJiraLinks.mockResolvedValueOnce(null);
     await state().loadTicketDetail('HIVE-7', 'tab');
     expect(state().ticketDetails['HIVE-7']?.problems.links).toBe(BRIDGE_ERROR);
-    await state().refreshTicketDetail('HIVE-7', 'tab');
+    await state().refreshTicketDetail('HIVE-7');
     expect(state().ticketDetails['HIVE-7']?.problems.links).toBeUndefined();
     expect(state().ticketDetails['HIVE-7']?.links).toEqual([]);
   });
@@ -482,15 +482,25 @@ describe("loadTicketDetail(key, 'tab') (HIVE-202)", () => {
     expect(state().ticketDetails['HIVE-7']?.detail).toEqual(epicDetail);
   });
 
-  it('no progress read for a non-epic parent, an invalid key, or the page', async () => {
+  it('no progress read for a non-epic parent or an invalid key', async () => {
     readJiraDetail.mockResolvedValue(ok({ description: [], parent: { key: 'HIVE-1', summary: 'S', issueType: 'Story' } }));
     await state().loadTicketDetail('HIVE-7', 'tab');
     readJiraDetail.mockResolvedValue(ok({ description: [], parent: { key: 'x) OR 1=1', summary: 'S', issueType: 'Epic' } }));
     await state().loadTicketDetail('HIVE-8', 'tab');
-    readJiraDetail.mockResolvedValue(ok(epicDetail));
-    await state().loadTicketDetail('HIVE-9', 'page');
     expect(searchJiraIssues).not.toHaveBeenCalled();
-    expect(readJiraLinks).not.toHaveBeenCalledWith({ key: 'HIVE-9' });
+  });
+
+  it('the page reads the links and the epic progress too, on open and on refresh', async () => {
+    readJiraDetail.mockResolvedValue(ok(epicDetail));
+    searchJiraIssues.mockResolvedValue(ok({ issues: [issue], capped: false }));
+    readJiraLinks.mockResolvedValue(ok([issueLink('HIVE-188', 'Blocks', 'inward', 'done')]));
+    await state().loadTicketDetail('HIVE-9', 'page');
+    await vi.waitFor(() =>
+      expect(state().ticketDetails['HIVE-9']?.epicProgress).toEqual({ done: 0, total: 1, capped: false }),
+    );
+    expect(state().ticketDetails['HIVE-9']?.links).toHaveLength(1);
+    await state().refreshTicketDetail('HIVE-9');
+    expect(readJiraLinks).toHaveBeenCalledTimes(2);
   });
 
   it('a refresh past the cap clears the earlier second hop', async () => {
@@ -501,7 +511,7 @@ describe("loadTicketDetail(key, 'tab') (HIVE-202)", () => {
     await state().loadTicketDetail('HIVE-7', 'tab');
     expect(state().ticketDetails['HIVE-7']?.secondHop).toBeDefined();
     mine = [mine[0]!, ...['A-1', 'A-2', 'A-3', 'A-4', 'A-5'].map((k) => issueLink(k, 'Blocks', 'outward'))];
-    await state().refreshTicketDetail('HIVE-7', 'tab');
+    await state().refreshTicketDetail('HIVE-7');
     expect(state().ticketDetails['HIVE-7']?.secondHop).toBeUndefined();
     const model = renderHook(() => useTicketLinks('HIVE-7')).result.current;
     expect(model?.blocks).toHaveLength(6);
@@ -516,7 +526,7 @@ describe("loadTicketDetail(key, 'tab') (HIVE-202)", () => {
     await state().loadTicketDetail('HIVE-7', 'tab');
     expect(state().ticketDetails['HIVE-7']?.secondHop).toBeDefined();
     mine = [issueLink('HIVE-188', 'Blocks', 'inward')];
-    await state().refreshTicketDetail('HIVE-7', 'tab');
+    await state().refreshTicketDetail('HIVE-7');
     expect(state().ticketDetails['HIVE-7']?.secondHop).toBeUndefined();
   });
 
@@ -526,7 +536,7 @@ describe("loadTicketDetail(key, 'tab') (HIVE-202)", () => {
     await state().loadTicketDetail('HIVE-7', 'tab');
     expect(state().ticketDetails['HIVE-7']?.epicProgress).toEqual({ done: 0, total: 1, capped: false });
     searchJiraIssues.mockResolvedValue(fail('no search'));
-    await state().refreshTicketDetail('HIVE-7', 'tab');
+    await state().refreshTicketDetail('HIVE-7');
     expect(state().ticketDetails['HIVE-7']?.epicProgress).toBeUndefined();
   });
 

@@ -18,6 +18,7 @@ vi.mock('@/lib/jira', () => ({
   searchJiraIssues: () => Promise.resolve(null),
   readJiraIssue: () => Promise.resolve(null),
   readJiraTransitions: () => Promise.resolve({ ok: true, value: [] }),
+  readJiraLinks: () => Promise.resolve(null),
   applyJiraTransition: (request: unknown) => applyJiraTransition(request),
 }));
 
@@ -116,6 +117,38 @@ describe('TicketProperties (HIVE-203)', () => {
     const link = screen.getByRole('link', { name: 'Open in Jira' });
     expect(link).toHaveAttribute('href', ticket.url);
     expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('draws the links after the properties, before the sessions, with its PR in the constellation', () => {
+    useHiveStore.setState((state) => ({
+      ticketDetails: {
+        'GRAC-3018': {
+          ...state.ticketDetails['GRAC-3018']!,
+          links: [
+            {
+              kind: 'issue',
+              title: 'HIVE-188 — t',
+              url: 'https://x/browse/HIVE-188',
+              relationship: 'is blocked by',
+              status: 'Done',
+              key: 'HIVE-188',
+              summary: 'Blocker',
+              statusCategory: 'done',
+              linkType: 'Blocks',
+              direction: 'inward',
+            },
+          ],
+        },
+      },
+    }));
+    render(<TicketProperties ticketKey="GRAC-3018" />);
+
+    const links = screen.getByRole('heading', { name: 'Links 1' });
+    expect(screen.getByText('Clear to go.')).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: /^Links of/ })).getByText('#482')).toBeInTheDocument();
+    const order = (a: Element, b: Element) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(order(screen.getByText('Epic', { selector: 'dt' }), links)).toBeTruthy();
+    expect(order(links, screen.getByRole('heading', { name: 'Session' }))).toBeTruthy();
   });
 
   it('draws nothing for a ticket it does not know', () => {
