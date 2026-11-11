@@ -208,7 +208,7 @@ session will not start.
 ## The tree
 
 The root follows the **active session's project**. There is no project picker:
-the app is already organised around "which session am I watching", the session
+the app is already organized around "which session am I watching", the session
 already names its project, and a second selector would be one more thing to keep
 in sync with the first. The orchestrator tab — which names no session — falls
 back to the last project the tree was rooted at, then to the first mapped one.

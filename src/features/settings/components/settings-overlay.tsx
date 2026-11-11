@@ -64,7 +64,7 @@ import { useSettingsActions, useSettingsAnchor, useSettingsLast, useSettingsSect
  * in the product lives. Projects holds what this app works on and the services around it (Integrations, the Jira
  * ticket workflow). Harnesses is only the CLIs. Environment is where sessions run: Runtime (shell, environment and
  * containers, one pane in two bands, as Integrations bands GitHub, Jira and Slack) and Server mode. Automation is
- * Agents and Skills. Account is not a group: the profile card above the groups opens the Account centre, whose tabs
+ * Agents and Skills. Account is not a group: the profile card above the groups opens the Account center, whose tabs
  * are the three account pane ids.
  *
  * A group heading is a label, never a button. A group with no pane yet is not listed, the same rule that keeps a
@@ -173,10 +173,10 @@ const ClaudeCodePage = () => <HarnessPage cli="claude-code" />;
 const CodexPage = () => <HarnessPage cli="codex" />;
 const CopilotPage = () => <HarnessPage cli="copilot" />;
 
-/** The Account centre serves the three account ids the same way, one tab each. */
+/** The Account center serves the three account ids the same way, one tab each. */
 const ProfileDevicesPage = () => <AccountCentre tab="account-devices" />;
 const PlanBillingPage = () => <AccountCentre tab="plan-licence" />;
-const OrganisationPage = () => <AccountCentre tab="account-org" />;
+const OrganizationPage = () => <AccountCentre tab="account-org" />;
 
 /**
  * Section id → pane, the same shape `list-panel.tsx` uses for its panels.
@@ -201,7 +201,7 @@ const PANES: Record<SectionId, ComponentType> = {
   'server-mode': ServerModeSection,
   'account-devices': ProfileDevicesPage,
   'plan-licence': PlanBillingPage,
-  'account-org': OrganisationPage,
+  'account-org': OrganizationPage,
   'updates-about': UpdatesAboutSection,
   advanced: AdvancedSection,
 };

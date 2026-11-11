@@ -9,7 +9,7 @@ import { initialOf } from '@lib/account';
 import { planLine } from '@lib/licence';
 
 /**
- * The top of the Settings nav: who is signed in and on which plan, opening the Account centre. It replaced the
+ * The top of the Settings nav: who is signed in and on which plan, opening the Account center. It replaced the
  * Account group's three rows, which are the centre's tabs now. It is the nav row for all three account pane ids, so
  * it carries `data-pane="account-devices"` and is current whenever one of them is showing.
  */

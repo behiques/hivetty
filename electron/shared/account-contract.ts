@@ -50,7 +50,7 @@ export interface BillingSubscription {
 }
 
 /**
- * `GET /api/billing` for the active org (the Account centre's Plan & billing). `seated` is seats in use; `canManage`
+ * `GET /api/billing` for the active org (the Account center's Plan & billing). `seated` is seats in use; `canManage`
  * says the org has a billing customer. Main answers `null` when the cloud has nothing to show this caller (billing
  * off, not the org's Owner or Billing member, signed out, offline), and the pane falls back to the lease.
  */

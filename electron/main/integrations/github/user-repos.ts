@@ -16,7 +16,7 @@ import type { RunAsync } from './run';
  *
  * ## Why GraphQL and not `gh repo list`
  *
- * `gh repo list` lists one owner per call, so organisation repositories would
+ * `gh repo list` lists one owner per call, so organization repositories would
  * need a call each. `viewer.repositories` with all three affiliations is one
  * call for everything the account reaches, already ordered by last push.
  */

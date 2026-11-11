@@ -88,7 +88,7 @@ describe('SettingsOverlay', () => {
     ]) {
       expect(within(nav).getByRole('button', { name: present })).toBeInTheDocument();
     }
-    // Containers is a band inside Runtime now, not a row; the account rows are the Account centre's tabs.
+    // Containers is a band inside Runtime now, not a row; the account rows are the Account center's tabs.
     expect(within(nav).queryByRole('button', { name: 'Containers' })).toBeNull();
     expect(within(nav).queryByRole('button', { name: 'Plan & licence' })).toBeNull();
     expect(within(nav).getByRole('button', { name: /^Account/ })).toHaveAttribute('data-pane', 'account-devices');
@@ -179,7 +179,7 @@ describe('SettingsOverlay', () => {
   });
 
   it.each(['account-devices', 'plan-licence', 'account-org'] as const)(
-    'the profile card is the current row for %s, and opens the Account centre',
+    'the profile card is the current row for %s, and opens the Account center',
     async (id) => {
       const user = userEvent.setup();
       useUiStore.getState().openSettings(id);
@@ -600,7 +600,7 @@ describe('Account › Plan & licence (HIVE-268)', () => {
     locks = { licence: null, settled: true };
   });
 
-  it('opens from the profile card, as the Account centre’s Plan & billing tab', async () => {
+  it('opens from the profile card, as the Account center’s Plan & billing tab', async () => {
     const user = userEvent.setup();
     render(<SettingsOverlay />);
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
@@ -641,7 +641,7 @@ describe('Account › Account & devices (HIVE-265)', () => {
     useUiStore.getState().reset();
   });
 
-  it('the profile card opens the Account centre on Profile & devices; signed out it says so', async () => {
+  it('the profile card opens the Account center on Profile & devices; signed out it says so', async () => {
     const user = userEvent.setup();
     useUiStore.getState().openSettings();
     render(<SettingsOverlay />);
@@ -652,7 +652,7 @@ describe('Account › Account & devices (HIVE-265)', () => {
     expect(screen.getByRole('tabpanel', { name: 'Profile & devices' })).toHaveTextContent('Sign in to see your account.');
   });
 
-  it("openSettings('account-devices') shows the Account centre on that tab", () => {
+  it("openSettings('account-devices') shows the Account center on that tab", () => {
     useUiStore.getState().openSettings('account-devices');
     render(<SettingsOverlay />);
     expect(screen.getByRole('heading', { name: 'Account', level: 2 })).toBeInTheDocument();

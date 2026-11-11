@@ -57,13 +57,13 @@ describe('AccountMenu (HIVE-265)', () => {
     expect(screen.queryByText('Team')).toBeNull();
   });
 
-  it('Account centre opens the Account centre in Settings, not the web; the old web rows are gone', async () => {
+  it('Account center opens the Account center in Settings, not the web; the old web rows are gone', async () => {
     render(<AccountMenu />);
     await userEvent.click(screen.getByRole('button', { name: 'Account' }));
     expect(screen.queryByRole('menuitem', { name: 'Plan & billing…' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Account…' })).toBeNull();
 
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Account centre' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Account center' }));
 
     expect(useUiStore.getState()).toMatchObject({ settings: true, settingsSection: 'account-devices' });
     expect(openAccountWeb).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe('AccountMenu (HIVE-265)', () => {
     render(<AccountMenu />);
     expect(screen.queryByText('PE')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Account, Personal' }));
-    expect(screen.queryByText('Organisation')).toBeNull();
+    expect(screen.queryByText('Organization')).toBeNull();
     expect(screen.queryAllByRole('menuitemcheckbox')).toHaveLength(0);
   });
 
@@ -105,7 +105,7 @@ describe('AccountMenu (HIVE-265)', () => {
     render(<AccountMenu />);
     expect(screen.getByText('PE')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Account, Personal' }));
-    expect(screen.getByText('Organisation')).toBeInTheDocument();
+    expect(screen.getByText('Organization')).toBeInTheDocument();
     expect(screen.getByRole('menuitemcheckbox', { name: /^Personal/ })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('menuitemcheckbox', { name: /^Acme/ })).toHaveAttribute('aria-checked', 'false');
     expect(screen.getByText('Solo · Owner')).toBeInTheDocument();
@@ -149,13 +149,13 @@ describe('AccountMenu (HIVE-265)', () => {
   });
 
   it.each([['Owner'], ['Admin'], ['Billing']])(
-    'Manage organisation… opens /admin?org=<id> for a team %s, with one org too (HIVE-291 D1)',
+    'Manage organization… opens /admin?org=<id> for a team %s, with one org too (HIVE-291 D1)',
     async (role) => {
       orgs.list = [{ ...ACME, role }];
       orgs.active = { ...ACME, role };
       render(<AccountMenu />);
       await userEvent.click(screen.getByRole('button', { name: 'Account, Acme' }));
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Manage organisation…' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Manage organization…' }));
       expect(openAccountWeb).toHaveBeenCalledWith('/admin?org=org-acme');
     },
   );
@@ -164,11 +164,11 @@ describe('AccountMenu (HIVE-265)', () => {
     ['a Member of a team', { ...ACME, role: 'Member' }],
     ['the Owner of a personal Solo org', PERSONAL],
     ['no active org', undefined],
-  ])('no Manage organisation… for %s (HIVE-291)', async (_label, org) => {
+  ])('no Manage organization… for %s (HIVE-291)', async (_label, org) => {
     orgs.list = org ? [org] : [];
     orgs.active = org;
     render(<AccountMenu />);
     await userEvent.click(screen.getByRole('button', { name: /^Account/ }));
-    expect(screen.queryByRole('menuitem', { name: 'Manage organisation…' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Manage organization…' })).toBeNull();
   });
 });

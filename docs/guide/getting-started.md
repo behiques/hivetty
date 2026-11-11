@@ -53,7 +53,7 @@ needed, the Team plan) or **Choose a plan**, which opens the plan page in your b
 ![Signed in, the trial offer and Choose a plan](../assets/guide/07-start-trial.png)
 
 The licence renews itself while you are online and keeps working offline until the date shown
-in **Settings › Account centre › Plan & billing** ([Account centre](settings.md#account-centre)).
+in **Settings › Account center › Plan & billing** ([Account center](settings.md#account-center)).
 
 ## First launch
 

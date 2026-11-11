@@ -11,7 +11,7 @@ test.afterEach(async () => {
   await stub.close();
 });
 
-test('the avatar menu opens the Account centre; Plan & billing shows the cloud’s seats and renewal', async ({}, testInfo) => {
+test('the avatar menu opens the Account center; Plan & billing shows the cloud’s seats and renewal', async ({}, testInfo) => {
   stub.controls.setBilling({
     orgId: 'org-ada',
     subscription: {
@@ -29,7 +29,7 @@ test('the avatar menu opens the Account centre; Plan & billing shows the cloud�
   const { app, page } = await signedIn({ stub, testInfo });
   try {
     await page.getByRole('navigation', { name: 'Places' }).getByRole('button', { name: /^Account/ }).click();
-    await page.getByRole('menuitem', { name: 'Account centre' }).click();
+    await page.getByRole('menuitem', { name: 'Account center' }).click();
 
     await expect(page.getByRole('heading', { name: 'Account', level: 2 })).toBeVisible();
     const nav = page.getByRole('navigation', { name: 'Settings sections' });
@@ -51,7 +51,7 @@ test('with billing off the Plan & billing tab is the lease alone', async ({}, te
   const { app, page } = await signedIn({ stub, testInfo });
   try {
     await page.getByRole('navigation', { name: 'Places' }).getByRole('button', { name: /^Account/ }).click();
-    await page.getByRole('menuitem', { name: 'Account centre' }).click();
+    await page.getByRole('menuitem', { name: 'Account center' }).click();
     await page.getByRole('tab', { name: 'Plan & billing' }).click();
 
     const panel = page.getByRole('tabpanel', { name: 'Plan & billing' });
@@ -82,7 +82,7 @@ test('Plan & billing shows the card and invoices from the cloud; Profile & devic
   const { app, page } = await signedIn({ stub, testInfo });
   try {
     await page.getByRole('navigation', { name: 'Places' }).getByRole('button', { name: /^Account/ }).click();
-    await page.getByRole('menuitem', { name: 'Account centre' }).click();
+    await page.getByRole('menuitem', { name: 'Account center' }).click();
 
     const devices = page.getByRole('tabpanel', { name: 'Profile & devices' });
     await expect(devices.getByText('Ada’s Air')).toBeVisible();

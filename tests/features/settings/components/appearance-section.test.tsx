@@ -155,8 +155,8 @@ describe('AppearanceSection', () => {
     expect(screen.getByText('Compact tightens the rows in the list and session panels.')).toBeInTheDocument();
   });
 
-  it("says Home shows the organisation's name while you're in one (HIVE-291)", () => {
+  it("says Home shows the organization's name while you're in one (HIVE-291)", () => {
     render(<AppearanceSection />);
-    expect(screen.getByText(/Home shows your organisation's name while you're in one\./)).toBeInTheDocument();
+    expect(screen.getByText(/Home shows your organization's name while you're in one\./)).toBeInTheDocument();
   });
 });

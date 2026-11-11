@@ -666,7 +666,7 @@ describe('registerRemoteProxy', () => {
       // Not started in this test: account:orgs answers [] and account:switch-org the unlicensed state, locally.
       await expect(invoke('account:orgs', trustedEvent, undefined)).resolves.toEqual([]);
       await expect(invoke('account:switch-org', trustedEvent, 'org-b')).resolves.toEqual({ kind: 'unlicensed' });
-      // The Account centre's billing read: this machine's own account, so local too; null before sign-in.
+      // The Account center's billing read: this machine's own account, so local too; null before sign-in.
       await expect(invoke('account:billing', trustedEvent, 'org-b')).resolves.toBeNull();
       // Desktop billing: the card and invoices, a device removal and the portal are this machine's account too.
       await expect(invoke('account:payments', trustedEvent, 'org-b')).resolves.toBeNull();

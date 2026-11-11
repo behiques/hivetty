@@ -11,7 +11,7 @@ import { useActiveEntity, useProjects } from '@stores/hive-store';
  * **One rule: the active session's or terminal's project, or nothing** (HIVE-93,
  * HIVE-201: a terminal on stage gets Files too).
  *
- * The app is organised around "which session am I watching", the session already
+ * The app is organized around "which session am I watching", the session already
  * names its project, and a second selector would be one more thing to keep in
  * sync with the first. When no session is being watched — the overmind tab, an
  * agent tab — the answer is `null` and the panel says so.

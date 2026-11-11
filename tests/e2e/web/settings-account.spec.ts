@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { bar } from '../fixtures/places';
 
 /**
- * The Account centre's Plan & billing tab on the browser target (HIVE-268's Plan & licence). There is no bridge
+ * The Account center's Plan & billing tab on the browser target (HIVE-268's Plan & licence). There is no bridge
  * here, so the licence reads `null` and the tab asks to sign in, with no buttons.
  */
 
@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
   await gear(page).click();
 });
 
-test('the profile card opens the Account centre; Plan & billing asks to sign in on the browser target', async ({ page }) => {
+test('the profile card opens the Account center; Plan & billing asks to sign in on the browser target', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Settings sections' });
   const card = nav.getByRole('button', { name: 'Account' });
   await expect(card).toContainText('Not signed in');

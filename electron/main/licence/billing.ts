@@ -10,7 +10,7 @@ import type {
 import { isOrgId } from './orgs';
 
 /**
- * The Account centre's Plan & billing, against hivetty-cloud's `GET /api/billing`. The cloud's AccountGuard takes the
+ * The Account center's Plan & billing, against hivetty-cloud's `GET /api/billing`. The cloud's AccountGuard takes the
  * desktop's bearer for GETs, so this reads what /account/plan reads. The body is checked here, at the trust boundary;
  * anything short of a well-formed summary is `null`, which the pane reads as "show the lease".
  */
@@ -132,7 +132,7 @@ export async function openBillingPortal(
   },
   orgId: unknown,
 ): Promise<OpenWebResult> {
-  if (orgId !== undefined && !isOrgId(orgId)) return { error: 'That is not one of your organisations.' };
+  if (orgId !== undefined && !isOrgId(orgId)) return { error: 'That is not one of your organizations.' };
   let url: unknown = null;
   try {
     const response = await deps.authedFetch('/api/billing/portal', {

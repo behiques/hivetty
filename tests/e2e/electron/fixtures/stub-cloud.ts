@@ -37,7 +37,7 @@ export interface StubControls {
   completeCheckout(plan: PlanKey): void;
   /** HIVE-291: GET /api/orgs answers these; a lease signs for the asked org when it seats the caller, else the first seated. */
   setOrgs(orgs: StubOrg[]): void;
-  /** The Account centre: GET /api/billing answers this summary for any org; `null` (the default) answers 404, billing off. */
+  /** The Account center: GET /api/billing answers this summary for any org; `null` (the default) answers 404, billing off. */
   setBilling(summary: Record<string, unknown> | null): void;
   /** GET /api/billing/payments answers this card and invoices; `null` (the default) answers 404, an older cloud. */
   setPayments(payments: Record<string, unknown> | null): void;

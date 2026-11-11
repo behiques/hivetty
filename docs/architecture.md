@@ -38,7 +38,7 @@ Codex and Copilot among them; the renderer's gate covers the window until a leas
 | Explorer and editor, the fs surface | [Explorer and editor](explorer-and-editor.md) |
 | Ledger, MCP host, agents | [Agents and the ledger](agents-and-ledger.md) |
 | The harness port, the Claude Code, Codex and Copilot adapters | [Harness architecture](harness-architecture.md) |
-| Sign-in, the lease, entitlements, billing | `electron/main/licence/`, `src/features/account/`; the user's view is [Settings › Account centre](guide/settings.md#account-centre) |
+| Sign-in, the lease, entitlements, billing | `electron/main/licence/`, `src/features/account/`; the user's view is [Settings › Account center](guide/settings.md#account-center) |
 | Remote listener and pairing | [Server mode](server-mode.md) |
 | Build, sign, publish, update | [Packaging and updates](packaging-and-updates.md) |
 

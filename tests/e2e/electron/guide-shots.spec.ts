@@ -336,7 +336,7 @@ test('guide shots', async ({}, testInfo) => {
     await settings.getByText('Runs on', { exact: true }).first().scrollIntoViewIfNeeded();
     await shot(page, '21-agent-form.png');
 
-    // 19: the Account centre on Plan & billing: the trial's plan, seats and licence.
+    // 19: the Account center on Plan & billing: the trial's plan, seats and licence.
     await settings.getByRole('button', { name: /^Account, / }).click();
     await page.getByRole('tab', { name: 'Plan & billing' }).click();
     await expect(page.getByRole('tabpanel', { name: 'Plan & billing' }).getByText('3 of 5 in use')).toBeVisible();

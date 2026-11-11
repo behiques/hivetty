@@ -133,7 +133,7 @@ describe('src/lib/account', () => {
     });
   });
 
-  describe('readBilling (the Account centre)', () => {
+  describe('readBilling (the Account center)', () => {
     it('answers null with no bridge', async () => {
       await expect(readBilling('org-a')).resolves.toBeNull();
     });

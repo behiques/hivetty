@@ -91,7 +91,7 @@ import { isThisMachineAction } from './notification-contract';
  * 35 → 36 (HIVE-265): CH gained server:licence (a forwarded read) and server:licence-changed (a relayed event).
  * 36 → 37 (HIVE-372): `CH` gained `cli:codex-plugin-status`; `CliConfig` and `SetCliRequest` gained `installSkills`.
  * 37 → 38 (HIVE-291): `CH` gained `account:orgs` and `account:switch-org` (process-local).
- * 38 → 39 (the Account centre): `CH` gained `account:billing` (process-local).
+ * 38 → 39 (the Account center): `CH` gained `account:billing` (process-local).
  * 39 → 40 (desktop billing): `CH` gained `account:payments`, `account:revoke-device`, `account:open-billing` and
  *   `account:open-invoice` (process-local).
  * 40 → 41 (HIVE-396): `CH` gained `agents:harness-check` (a forwarded read).
@@ -1025,9 +1025,9 @@ const PROCESS_LOCAL_REFUSALS = {
   [CH.appQuit]:
     "app:quit quits the answering machine's app. A server refuses to quit on a peer's say-so; the asking machine quits itself.",
   [CH.accountOrgs]:
-    "account:orgs lists the organisations of the answering machine's own account. A server refuses to show its account's organisations to a peer; the asking machine lists its own.",
+    "account:orgs lists the organizations of the answering machine's own account. A server refuses to show its account's organizations to a peer; the asking machine lists its own.",
   [CH.accountSwitchOrg]:
-    "account:switch-org changes which organisation the answering machine's own lease comes from. A server refuses to switch on a peer's say-so; the asking machine switches its own.",
+    "account:switch-org changes which organization the answering machine's own lease comes from. A server refuses to switch on a peer's say-so; the asking machine switches its own.",
   [CH.accountBilling]:
     "account:billing reads the billing of the answering machine's own account. A server refuses to show its account's billing to a peer; the asking machine reads its own.",
   [CH.accountPayments]:

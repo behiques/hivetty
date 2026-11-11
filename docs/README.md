@@ -44,7 +44,7 @@ New here? Start with [Getting started](guide/getting-started.md), then
 
 | Page | What you will learn |
 | --- | --- |
-| [Settings](guide/settings.md) | Every Settings section, what it changes, and the Account centre |
+| [Settings](guide/settings.md) | Every Settings section, what it changes, and the Account center |
 | [The config file](guide/configuration.md) | `~/.hivetty/config.json`, key by key |
 | [Themes](guide/themes.md) | Pick, import and write a theme |
 | [Updates](guide/updates.md) | How updates arrive, and `hivetty --update` |
