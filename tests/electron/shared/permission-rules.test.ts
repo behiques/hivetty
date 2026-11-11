@@ -24,7 +24,7 @@ describe('matches', () => {
   });
 
   it('matches a Bash specifier as a prefix glob over the command', () => {
-    expect(matches('Bash(git *)', 'Bash', { command: 'git push origin main' })).toBe(true);
+    expect(matches('Bash(git *)', 'Bash', { command: 'git push origin feat/x' })).toBe(true);
     expect(matches('Bash(git *)', 'Bash', { command: 'npm test' })).toBe(false);
   });
 
@@ -375,7 +375,7 @@ describe('a literal rule', () => {
 
 describe('rungsFor', () => {
   it('offers once, the command family, and the whole tool for Bash', () => {
-    const rungs = rungsFor('Bash', { command: 'git push origin main' });
+    const rungs = rungsFor('Bash', { command: 'git push origin feat/x' });
     expect(rungs.map((rung) => rung.id)).toEqual(['allow-once', 'allow-family', 'allow-tool']);
     expect(rungs[1]?.label).toBe('git *');
     expect(rungs[1]?.rule).toBe('Bash(git *)');
@@ -423,7 +423,7 @@ describe('rungsFor', () => {
   });
 
   it('still offers the family rung for an ordinary command', () => {
-    expect(rungsFor('Bash', { command: 'git push origin main' })[1]?.rule).toBe('Bash(git *)');
+    expect(rungsFor('Bash', { command: 'git push origin feat/x' })[1]?.rule).toBe('Bash(git *)');
   });
 
   it('gives every rung a caption', () => {
@@ -850,5 +850,61 @@ describe('a PR merge: the consent checkpoint survives a wide Bash grant', () => 
 
   it('offers only once on the card, since no standing rung would cover it', () => {
     expect(rungsFor('Bash', { command: merges[0] }).map((rung) => rung.id)).toEqual(['allow-once']);
+  });
+});
+
+describe('a push to the default branch: refused to every wide rule (HIVE-395)', () => {
+  const pushes = [
+    'git push origin HEAD:main',
+    'git -C /w/repo push origin feature:main',
+    'git push origin main',
+    'git push origin master',
+    'git push --force origin x:main',
+    'git push --force-with-lease origin x:main',
+    'git push origin +main',
+    'git push origin +x:main',
+    'git push origin x:refs/heads/main',
+    'git push origin refs/heads/master',
+    'git push origin :main',
+    'git push origin --delete main',
+    'git push --all origin',
+    'git push --mirror origin',
+    "git push origin 'HEAD:main'",
+    'cd /w && git push origin HEAD:main',
+  ];
+
+  it('is granted by no wide rule: bare Bash, the blanket, a git glob or the push glob', () => {
+    for (const command of pushes) {
+      for (const rule of ['Bash', '*', 'Bash(git *)', 'Bash(git -C * push *)', 'Bash(*)']) {
+        expect(matches(rule, 'Bash', { command }), `${rule} / ${command}`).toBe(false);
+      }
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
+    }
+  });
+
+  it('is granted by a one-shot literal for that exact command', () => {
+    const command = 'git push origin HEAD:main';
+    expect(matches(oneShotRuleFor('Bash', { command })!, 'Bash', { command })).toBe(true);
+    expect(matches(oneShotRuleFor('Bash', { command })!, 'Bash', { command: 'git push origin x:main' })).toBe(false);
+  });
+
+  it('leaves every other push alone: feature branches, PR branches, tags and branch deletes', () => {
+    for (const command of [
+      'git push -u origin feat/hive-395-x',
+      'git -C /w push origin HEAD:feat/x',
+      'git -C /w/main push origin HEAD:feat/x',
+      'git push origin feat/main',
+      'git push origin main-v2',
+      'git push origin main:feature',
+      'git push origin v1.0.0',
+      'git -C /repo push origin --delete feat/x',
+      'git push',
+    ]) {
+      expect(matches('Bash', 'Bash', { command }), command).toBe(true);
+    }
+  });
+
+  it('offers only once on the card', () => {
+    expect(rungsFor('Bash', { command: pushes[0] }).map((rung) => rung.id)).toEqual(['allow-once']);
   });
 });

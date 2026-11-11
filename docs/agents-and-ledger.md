@@ -2392,7 +2392,8 @@ skills. The shipper is a patrol: a ten-minute wake with
 `ledger_ask` per wake because an ask ends the wake. It holds all of Bash but
 never the merge: `isPrMerge` (`permission-rules.ts`) refuses `gh pr merge`, a
 REST merge through `gh api` and the GraphQL merge mutations to every wide rule,
-and no Bash rule reaches Claude's `--allowedTools`, so `approve` decides each
+and `isDefaultBranchPush` refuses a `git push` to `main` or `master` the same
+way (HIVE-395: a one-shot card, for every agent holding Bash), and no Bash rule reaches Claude's `--allowedTools`, so `approve` decides each
 command. HIVE-166's grant or the fence's card decides each merge, and
 `tests/resources/agents/shipped-agents.test.ts` proves it against the real
 `matches`, and pins every shipped icon to the Settings list so none draws as

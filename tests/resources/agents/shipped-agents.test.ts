@@ -73,6 +73,25 @@ describe('shipped agents', () => {
     expect(allows('git -C /w branch --show-current')).toBe(true);
   });
 
+  it('never lets the shipper push to the default branch unasked, and still to a PR branch (HIVE-395)', () => {
+    const source = readFileSync(join(resources, 'agents', 'shipper', 'AGENT.md'), 'utf8');
+    const result = parseAgent(source, {
+      folder: 'shipper',
+      skillNames: shippedSkills,
+      hiveSkillNames: shippedSkills,
+      integrations: ['slack'],
+    });
+    if (!('def' in result)) throw new Error('shipper does not parse');
+    const allows = (command: string) =>
+      result.def.tools.some((rule) => matches(rule, 'Bash', { command }));
+
+    expect(allows('git -C /w push origin HEAD:main')).toBe(false);
+    expect(allows('git -C /w push origin main')).toBe(false);
+    expect(allows('git -C /w push --force origin feat:master')).toBe(false);
+    expect(allows('git -C /w push origin feat/x')).toBe(true);
+    expect(allows('git -C /w push origin --delete feat/x')).toBe(true);
+  });
+
   it('gives the shipper a gather it can run: the ship skill names no gh api, no jq and no prefetch script', () => {
     const source = readFileSync(join(resources, 'agents', 'shipper', 'AGENT.md'), 'utf8');
     const result = parseAgent(source, {
