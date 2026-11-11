@@ -276,6 +276,28 @@ const PR_MERGE =
 export const isPrMerge = (toolName: string, input: Record<string, unknown>): boolean =>
   toolName === 'Bash' && PR_MERGE.test(str(input, 'command') ?? '');
 
+/**
+ * A `git push` that writes the default branch (HIVE-395): a target of `main` or `master`, bare, as a
+ * refspec's destination (`HEAD:main`), forced (`+main`), as `refs/heads/main`, deleted (`:main`,
+ * `--delete main`), or swept up by `--all` or `--mirror`.
+ *
+ * It reaches what a merge reaches with no PR at all, so it is fenced the way {@link isPrMerge} is: no
+ * wide rule grants it, only a one-shot literal, and anywhere in the command for the same reason. A
+ * local `main:feature` (main pushed to a feature branch), `feat/main` and `main-v2` stay allowed; a
+ * commit message reading "push to main" asks, which fails closed. A backslash-newline is a line
+ * continuation, not a new command, so the gaps cross it (`git push origin \<newline>  main`) and a
+ * target may end at one (`main\<newline>  --force`).
+ * shortcut: the default branch is `main` or `master` by name, not the repository's own; pass each
+ * project's real default branch into the fence if one ever differs.
+ * shortcut: a `git push` with no refspec while on the default branch, and a ref written through
+ * `gh api`, are not caught; the fence is pure and cannot read the current branch.
+ */
+const DEFAULT_BRANCH_PUSH =
+  /\bgit\b(?:[^;&|\n]|\\\r?\n)*?\bpush\b(?:[^;&|\n]|\\\r?\n)*?(\s--(?:all|mirror)\b|[\s:+'"](?:refs\/heads\/)?(?:main|master)(?=['"\s;&|)]|\\\r?\n|$))/;
+
+export const isDefaultBranchPush = (toolName: string, input: Record<string, unknown>): boolean =>
+  toolName === 'Bash' && DEFAULT_BRANCH_PUSH.test(str(input, 'command') ?? '');
+
 export function matches(
   rule: string,
   toolName: string,
@@ -303,6 +325,9 @@ export function matches(
 
   // Only a rule that names the merge may allow one: see PR_MERGE.
   if (isPrMerge(toolName, input) && !rule.startsWith('Bash(gh pr merge ')) return false;
+
+  // No rule but the literal may allow one: see DEFAULT_BRANCH_PUSH.
+  if (isDefaultBranchPush(toolName, input)) return false;
 
   if (rule === '*') return true;
 
@@ -516,8 +541,10 @@ export function rungsFor(
     },
   ];
 
-  // No standing rung grants a merge (`matches`), so the card offers none.
-  if (ONCE_ONLY_TOOLS.has(toolName) || isPrMerge(toolName, input)) return rungs;
+  // No standing rung grants a merge or a default-branch push (`matches`), so the card offers none.
+  if (ONCE_ONLY_TOOLS.has(toolName) || isPrMerge(toolName, input) || isDefaultBranchPush(toolName, input)) {
+    return rungs;
+  }
 
   /*
     Both rules below embed `toolName`, so both are gated on `isToolName`
