@@ -70,10 +70,10 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
       <span className="flex w-full items-center gap-2">
         {/* Decoration: the status label sits right beside it. */}
         <StatusComb status={entity.status} detail={entity.idleDetail} />
-        <span className="min-w-0 truncate text-left text-ui">{label}</span>
-        {/* The CLI on every row, Claude's included: the model chip's order, name then mark. */}
-        <CliMark cli={cli} className="text-muted" />
+        {/* The CLI on every row, Claude's included, in front of the name. */}
+        <CliMark cli={cli} className="shrink-0 text-muted" />
         <span className="sr-only">{CLI_NAMES[cli]}</span>
+        <span className="min-w-0 truncate text-left text-ui">{label}</span>
         {/* The id after the name; an unnamed session already reads as its id. */}
         {label === entity.id ? null : (
           <Tag tone="subtle" className="shrink-0 tabular-nums">

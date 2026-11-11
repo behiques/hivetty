@@ -180,6 +180,16 @@ describe('SessionRow', () => {
     expect(container.querySelector('svg[data-cli="claude-code"]')).toBeInTheDocument();
     expect(screen.getByText('Claude Code')).toHaveClass('sr-only');
   });
+
+  it('draws the CLI mark in front of the session name, after the comb', () => {
+    const { container } = render(<SessionRow id="hero-refresh" />);
+    const mark = container.querySelector('svg[data-cli="claude-code"]');
+    const name = screen.getByText('hero-refresh');
+    const comb = row().querySelector('svg');
+    expect(comb).not.toBe(mark);
+    expect(mark?.compareDocumentPosition(name)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(comb?.compareDocumentPosition(mark as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
 });
 
 /**
