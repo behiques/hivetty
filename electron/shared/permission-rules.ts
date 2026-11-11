@@ -284,14 +284,16 @@ export const isPrMerge = (toolName: string, input: Record<string, unknown>): boo
  * It reaches what a merge reaches with no PR at all, so it is fenced the way {@link isPrMerge} is: no
  * wide rule grants it, only a one-shot literal, and anywhere in the command for the same reason. A
  * local `main:feature` (main pushed to a feature branch), `feat/main` and `main-v2` stay allowed; a
- * commit message reading "push to main" asks, which fails closed.
+ * commit message reading "push to main" asks, which fails closed. A backslash-newline is a line
+ * continuation, not a new command, so the gaps cross it (`git push origin \<newline>  main`) and a
+ * target may end at one (`main\<newline>  --force`).
  * shortcut: the default branch is `main` or `master` by name, not the repository's own; pass each
  * project's real default branch into the fence if one ever differs.
  * shortcut: a `git push` with no refspec while on the default branch, and a ref written through
  * `gh api`, are not caught; the fence is pure and cannot read the current branch.
  */
 const DEFAULT_BRANCH_PUSH =
-  /\bgit\b[^;&|\n]*?\bpush\b[^;&|\n]*?(\s--(?:all|mirror)\b|[\s:+'"](?:refs\/heads\/)?(?:main|master)(?=['"\s;&|)]|$))/;
+  /\bgit\b(?:[^;&|\n]|\\\r?\n)*?\bpush\b(?:[^;&|\n]|\\\r?\n)*?(\s--(?:all|mirror)\b|[\s:+'"](?:refs\/heads\/)?(?:main|master)(?=['"\s;&|)]|\\\r?\n|$))/;
 
 export const isDefaultBranchPush = (toolName: string, input: Record<string, unknown>): boolean =>
   toolName === 'Bash' && DEFAULT_BRANCH_PUSH.test(str(input, 'command') ?? '');

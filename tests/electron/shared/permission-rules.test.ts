@@ -871,6 +871,11 @@ describe('a push to the default branch: refused to every wide rule (HIVE-395)', 
     'git push --mirror origin',
     "git push origin 'HEAD:main'",
     'cd /w && git push origin HEAD:main',
+    // A backslash-newline is a continuation, not a new command: the push carries on past it.
+    'git push origin \\\n  main',
+    'git push origin \\\nHEAD:main',
+    'git \\\n  push origin x:main',
+    'git push origin main\\\n  --force',
   ];
 
   it('is granted by no wide rule: bare Bash, the blanket, a git glob or the push glob', () => {
@@ -899,6 +904,8 @@ describe('a push to the default branch: refused to every wide rule (HIVE-395)', 
       'git push origin v1.0.0',
       'git -C /repo push origin --delete feat/x',
       'git push',
+      'git push origin \\\n  feat/main',
+      'git push -u origin \\\n  feat/x',
     ]) {
       expect(matches('Bash', 'Bash', { command }), command).toBe(true);
     }
