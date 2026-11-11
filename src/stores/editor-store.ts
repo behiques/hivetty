@@ -315,6 +315,9 @@ export const useEditorStore = create<EditorState>()((set, get) => {
         loading: false,
         refusal: result.value.refused,
         size: result.value.size,
+        // An image overwritten by one too large to read must not keep showing
+        // the old picture under the refusal.
+        image: null,
       });
       return;
     }

@@ -144,6 +144,24 @@ describe('openFile', () => {
     await vi.waitFor(() => expect(fileAt(key)?.image).toBe('data:image/png;base64,BBBB'));
   });
 
+  it('drops the old picture when a reloaded image is refused', async () => {
+    readFile.mockResolvedValue({
+      ok: true,
+      value: { dataUrl: 'data:image/png;base64,AAAA', mtimeMs: 300, size: 3 },
+    });
+    store().openFile('demo', 'logo.png');
+    const key = fileKey('demo', 'logo.png');
+    await vi.waitFor(() => expect(fileAt(key)?.loading).toBe(false));
+
+    readFile.mockResolvedValue({
+      ok: true,
+      value: { refused: 'too-large', size: 30_000_000 },
+    });
+    await store().reload(key);
+
+    expect(fileAt(key)).toMatchObject({ refusal: 'too-large', image: null });
+  });
+
   it('records a failure, and marks a missing file as missing', async () => {
     readFile.mockResolvedValue({
       ok: false,
