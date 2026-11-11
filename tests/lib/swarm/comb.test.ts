@@ -316,12 +316,14 @@ describe('drawComb', () => {
     expect(texts).toContain('THE SWARM');
   });
 
-  it('tags only Summons and Failed cells at scale', () => {
+  it('tags Summons and Failed cells, and Morphing agents, at scale', () => {
     const l = layoutComb(heavy(HEAVY_COUNTS).entities, heavy(HEAVY_COUNTS).projects);
     const { texts } = draw(l);
     expect(texts).toContain('agent-0'); // summons
     expect(texts).toContain('agent-1'); // failed
-    expect(texts).not.toContain('agent-2'); // morphing
+    expect(texts).toContain('agent-2'); // morphing agent
+    expect(l.cells.some((c) => c.id === 'the-hive-0')).toBe(true);
+    expect(texts).not.toContain('the-hive-0'); // morphing session
   });
 
   it('rings the focused cell in brand, and nothing without one (HIVE-223)', () => {
