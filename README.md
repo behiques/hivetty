@@ -79,8 +79,8 @@ HiveTTY Pro needs an account with a plan or a trial. The trial is the Team plan.
 | Shared team ledger | | ✓ | ✓ |
 
 A feature your plan does not include is shown locked, with an **Upgrade** button, never hidden.
-Your plan, seats, devices and invoices are in **Settings › Account centre**
-([Settings](docs/guide/settings.md#account-centre)).
+Your plan, seats, devices and invoices are in **Settings › Account center**
+([Settings](docs/guide/settings.md#account-center)).
 
 ## Requirements
 

@@ -30,7 +30,7 @@ The bar runs down the left edge.
 | **PRs** | Your pull requests. See [Jira and pull requests](work-and-prs.md) |
 | Connection item | Where this Hive runs. See below |
 | Sun / moon | Switch between the theme's light and dark mode. From System, it picks the opposite of what is showing |
-| Your avatar, last | **Account centre** (your profile, devices, plan and billing) and **Settings…**. When no one is signed in, a gear that opens Settings takes its place |
+| Your avatar, last | **Account center** (your profile, devices, plan and billing) and **Settings…**. When no one is signed in, a gear that opens Settings takes its place |
 
 Counts sit on the icons. Sessions and Agents show how many are working, in grey. PRs shows how
 many need you, in amber. A zero shows nothing.

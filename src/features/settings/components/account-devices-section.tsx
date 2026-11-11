@@ -19,7 +19,7 @@ const ordered = (devices: AccountDevice[]): AccountDevice[] =>
   );
 
 /**
- * The Account centre's Profile & devices tab (HIVE-265's Account & devices pane): who is signed in, and this
+ * The Account center's Profile & devices tab (HIVE-265's Account & devices pane): who is signed in, and this
  * account's devices from the cloud. Remove revokes another device in place, confirmed first; this Mac has Sign out
  * instead. Manage devices still opens the account site.
  */

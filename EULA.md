@@ -7,9 +7,9 @@
 Version: draft 1 · Last updated: [DATE]
 
 This End User Licence Agreement ("Agreement") is between **Behiques Consulting LLC** ("we", "us")
-and the person or organisation that installs or uses HiveTTY Pro ("you"). By installing, signing
+and the person or organization that installs or uses HiveTTY Pro ("you"). By installing, signing
 in to or using HiveTTY Pro, you agree to this Agreement. If you are accepting on behalf of an
-organisation, you confirm you have authority to bind it.
+organization, you confirm you have authority to bind it.
 
 ## 1. Definitions
 
@@ -35,7 +35,7 @@ A trial gives the same licence for the trial period only.
 
 The Software needs a HiveTTY account and a valid licence lease. It renews the lease online and works
 offline only until the lease expires. We may revoke a device or seat when your Subscription ends,
-is not paid, or when you or your organisation's administrator remove it. You are responsible for
+is not paid, or when you or your organization's administrator remove it. You are responsible for
 keeping your account credentials secure and for activity under your account.
 
 ## 4. Restrictions
@@ -70,7 +70,7 @@ and are responsible for the results.
 
 Your projects, terminal output, transcripts and configuration stay on your devices, in folders such
 as `~/.hivetty`, unless you send them elsewhere through a Third-party tool or integration. To
-provide the Subscription, our service processes account, organisation, device, licence and billing
+provide the Subscription, our service processes account, organization, device, licence and billing
 information, as described in our Privacy Policy at [URL]. Payments are handled by our payment
 processor, Stripe, under its own terms.
 

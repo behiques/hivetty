@@ -15,15 +15,15 @@ import { useSettingsActions } from '@stores/ui-store';
 export const ACCOUNT_TABS = [
   { id: 'account-devices', label: 'Profile & devices', Body: AccountDevicesSection },
   { id: 'plan-licence', label: 'Plan & billing', Body: PlanLicenceSection },
-  { id: 'account-org', label: 'Organisation', Body: AccountOrgSection },
+  { id: 'account-org', label: 'Organization', Body: AccountOrgSection },
 ] as const satisfies readonly { id: string; label: string; Body: ComponentType }[];
 
 export type AccountTab = (typeof ACCOUNT_TABS)[number]['id'];
 
 /**
- * The native Account centre, inside Settings: reached from the profile card at the top of the Settings nav and from
- * the avatar menu's Account centre. One pane, three tabs. A tab is `openSettings(id)`, the same request a deep link
- * makes, so the nav, the menu and the tabs agree on where the user is. Organisation is a tab only for a team org.
+ * The native Account center, inside Settings: reached from the profile card at the top of the Settings nav and from
+ * the avatar menu's Account center. One pane, three tabs. A tab is `openSettings(id)`, the same request a deep link
+ * makes, so the nav, the menu and the tabs agree on where the user is. Organization is a tab only for a team org.
  */
 export function AccountCentre({ tab }: { tab: AccountTab }) {
   const active = useActiveOrg();

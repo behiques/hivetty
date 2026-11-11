@@ -35,9 +35,9 @@ const orgLine = (org: OrgSummary): string =>
   org.plan ? `${PLAN_NAMES[org.plan as PlanKey] ?? org.plan} · ${org.role}` : org.role;
 
 /**
- * The account menu, last at the foot of the activity bar (HIVE-265): who, which plan, the Account centre (in
- * Settings: profile, devices, plan and billing, organisation), Settings (the bar's only way in while signed in; a bare
- * open, so it lands on the last pane), and Sign out behind a confirm. Only Manage organisation still opens the web. HIVE-291: with two or more orgs, an Organisation section to
+ * The account menu, last at the foot of the activity bar (HIVE-265): who, which plan, the Account center (in
+ * Settings: profile, devices, plan and billing, organization), Settings (the bar's only way in while signed in; a bare
+ * open, so it lands on the last pane), and Sign out behind a confirm. Only Manage organization still opens the web. HIVE-291: with two or more orgs, an Organization section to
  * switch the org the lease comes from, and the active org's badge on the avatar.
  */
 export function AccountMenu() {
@@ -84,7 +84,7 @@ export function AccountMenu() {
           {switching ? (
             <>
               <DropdownMenuLabel className="pt-0 pb-1 text-ui-sm font-semibold tracking-[0.06em] text-subtle uppercase">
-                Organisation
+                Organization
               </DropdownMenuLabel>
               {orgs.map((org) => (
                 <Fragment key={org.id}>
@@ -105,10 +105,10 @@ export function AccountMenu() {
             </>
           ) : null}
           <DropdownMenuSeparator className="my-1 bg-border-soft" />
-          <DropdownMenuItem onSelect={() => openSettings('account-devices')}>Account centre</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openSettings('account-devices')}>Account center</DropdownMenuItem>
           {managed ? (
             <DropdownMenuItem onSelect={() => void openAccountWeb(`/admin?org=${encodeURIComponent(managed.id)}`)}>
-              Manage organisation…
+              Manage organization…
             </DropdownMenuItem>
           ) : null}
           <DropdownMenuItem onSelect={() => openSettings()}>Settings…</DropdownMenuItem>

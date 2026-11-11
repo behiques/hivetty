@@ -687,7 +687,7 @@ A lazy tree of the active session's repository. Replaced `<ActivityFeedPanel />`
 which rendered fixture rows narrating events the app already shows elsewhere.
 
 - **The root follows the session**, through `useExplorerProject()`. There is no
-  project picker: the app is already organised around "which session am I
+  project picker: the app is already organized around "which session am I
   watching", and a second selector would be one more thing to keep in sync with
   the first. The orchestrator tab falls back to the last project the tree was
   rooted at.

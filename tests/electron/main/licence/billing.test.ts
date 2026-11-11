@@ -20,7 +20,7 @@ const SUMMARY = {
 const answer = (status: number, body: unknown) =>
   vi.fn(() => Promise.resolve(new Response(JSON.stringify(body), { status })));
 
-describe('readBilling (the Account centre, against GET /api/billing)', () => {
+describe('readBilling (the Account center, against GET /api/billing)', () => {
   it('GETs the active org’s billing and keeps only what the pane shows', async () => {
     const fetch = answer(200, SUMMARY);
     const { provider: _provider, ...subscription } = SUMMARY.subscription;

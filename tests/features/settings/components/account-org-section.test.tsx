@@ -45,6 +45,6 @@ describe('AccountOrgSection (HIVE-291)', () => {
   ])('with %s: the empty state, never hidden (D3)', (_label, org) => {
     active.org = org;
     render(<AccountOrgSection />);
-    expect(screen.getByText("You're not in a team organisation.")).toBeInTheDocument();
+    expect(screen.getByText("You're not in a team organization.")).toBeInTheDocument();
   });
 });

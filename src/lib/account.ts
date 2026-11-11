@@ -71,7 +71,7 @@ export async function listDevices(): Promise<DevicesResult | null> {
   }
 }
 
-/** The Account centre: the org's billing (the personal org without one), or `null` when there is nothing to show. */
+/** The Account center: the org's billing (the personal org without one), or `null` when there is nothing to show. */
 export async function readBilling(orgId: string | undefined): Promise<BillingSummary | null> {
   const bridge = window.hive;
   if (!bridge) return null;
@@ -83,7 +83,7 @@ export async function readBilling(orgId: string | undefined): Promise<BillingSum
   }
 }
 
-/** The Account centre: the org's card and last 12 invoices, or `null` when the cloud has none to show. */
+/** The Account center: the org's card and last 12 invoices, or `null` when the cloud has none to show. */
 export async function readPayments(orgId: string | undefined): Promise<BillingPayments | null> {
   const bridge = window.hive;
   if (!bridge) return null;
@@ -138,7 +138,7 @@ export async function listOrgs(): Promise<OrgSummary[] | null> {
   try {
     return await bridge.account.orgs();
   } catch (cause) {
-    console.error('[hive] listing organisations failed:', cause);
+    console.error('[hive] listing organizations failed:', cause);
     return null;
   }
 }
@@ -150,7 +150,7 @@ export async function switchOrg(id: string): Promise<LicenceState | null> {
   try {
     return await bridge.account.switchOrg(id);
   } catch (cause) {
-    console.error('[hive] switching organisation failed:', cause);
+    console.error('[hive] switching organization failed:', cause);
     return null;
   }
 }

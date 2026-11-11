@@ -91,7 +91,7 @@ describe('PlanLicenceSection', () => {
     expect(screen.getByRole('button', { name: 'Manage plan' })).toBeInTheDocument();
   });
 
-  describe('the subscription, from the cloud (the Account centre)', () => {
+  describe('the subscription, from the cloud (the Account center)', () => {
     const SUB = { plan: 'team', status: 'active', interval: 'month', seats: 10, renewsAt: '2026-12-01T00:00:00.000Z', cancelAtPeriodEnd: false };
 
     it('asks for the active org, then shows seats in use of total, the period and the renewal', async () => {

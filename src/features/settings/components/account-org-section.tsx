@@ -9,7 +9,7 @@ import { PLAN_NAMES, type PlanKey } from '@shared/feature-plans';
 import { canManage, isTeam } from '@shared/orgs';
 
 /**
- * The Account centre's Organisation tab (HIVE-291's pane): the active org, when it is a team (D2). The tab is shown
+ * The Account center's Organization tab (HIVE-291's pane): the active org, when it is a team (D2). The tab is shown
  * only then; a deep link with no team org says so (D3). Members and seats are managed on the web (D1).
  */
 export function AccountOrgSection() {
@@ -34,6 +34,6 @@ export function AccountOrgSection() {
           ) : null}
         </SettingsGroup>
   ) : (
-    <p className="text-control text-subtle">You&apos;re not in a team organisation.</p>
+    <p className="text-control text-subtle">You&apos;re not in a team organization.</p>
   );
 }

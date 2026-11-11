@@ -24,7 +24,7 @@ describe('Lock', () => {
   });
 
   it('managed by policy: ask your admin, and no button', () => {
-    render(<Lock kind="policy" reason="Your organisation manages Copilot." />);
+    render(<Lock kind="policy" reason="Your organization manages Copilot." />);
     expect(screen.getByText('Ask your admin.')).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
   });

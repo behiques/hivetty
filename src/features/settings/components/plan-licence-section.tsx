@@ -14,7 +14,7 @@ import { PLAN_NAMES, type PlanKey } from '@shared/feature-plans';
 import type { LapseReason, LicenceTerms } from '@shared/licence-contract';
 
 /**
- * The Account centre's Plan & billing tab (HIVE-268's Plan & licence pane): the org's subscription from the cloud,
+ * The Account center's Plan & billing tab (HIVE-268's Plan & licence pane): the org's subscription from the cloud,
  * then what this Mac's lease includes and until when it works offline. The subscription (seats, period, renewal) is
  * read with `GET /api/billing`; when the cloud has nothing to show this caller it is left out and the lease stands
  * alone. The card and invoices are BillingPayments'; Manage billing opens Stripe's portal. Changing the plan stays on
@@ -93,7 +93,7 @@ function Subscription({ billing, sub, orgId }: { billing: BillingSummary; sub: B
     setError(result && 'error' in result ? result.error : null);
   };
   return (
-    <SettingsGroup title="Subscription" description="What the account site bills for this organisation.">
+    <SettingsGroup title="Subscription" description="What the account site bills for this organization.">
       <div className="flex flex-col gap-1 rounded-lg border border-border-soft p-3">
         <Fact label="Plan" value={PLAN_NAMES[sub.plan as PlanKey] ?? sub.plan} />
         <Fact label="Status" value={STATUS[sub.status] ?? sub.status} />

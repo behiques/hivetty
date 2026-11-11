@@ -1019,7 +1019,7 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(channel, arg);
   });
 
-  it('account.billing invokes its channel with the org (the Account centre)', async () => {
+  it('account.billing invokes its channel with the org (the Account center)', async () => {
     await (account().billing as (orgId?: string) => Promise<unknown>)('org-acme');
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.accountBilling, 'org-acme');
   });

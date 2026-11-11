@@ -931,9 +931,9 @@ export const CH = {
   accountOrgs: 'account:orgs',
   /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. Process-local. */
   accountSwitchOrg: 'account:switch-org',
-  /** The Account centre: an org's billing summary from the cloud; `null` when it has nothing to show. Process-local. */
+  /** The Account center: an org's billing summary from the cloud; `null` when it has nothing to show. Process-local. */
   accountBilling: 'account:billing',
-  /** The Account centre: an org's card and last 12 invoices; `null` when the cloud has none to show. Process-local. */
+  /** The Account center: an org's card and last 12 invoices; `null` when the cloud has none to show. Process-local. */
   accountPayments: 'account:payments',
   /** Remove one of this account's devices (not this one: that is Sign out). Process-local. */
   accountRevokeDevice: 'account:revoke-device',
@@ -3239,9 +3239,9 @@ export interface HiveBridge {
     orgs(): Promise<OrgSummary[]>;
     /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. */
     switchOrg(id: string): Promise<LicenceState>;
-    /** The Account centre: this org's billing (the personal org without one); `null` when the cloud has nothing to show. */
+    /** The Account center: this org's billing (the personal org without one); `null` when the cloud has nothing to show. */
     billing(orgId?: string): Promise<BillingSummary | null>;
-    /** The Account centre: this org's card and last 12 invoices; `null` when the cloud has none to show. */
+    /** The Account center: this org's card and last 12 invoices; `null` when the cloud has none to show. */
     payments(orgId?: string): Promise<BillingPayments | null>;
     /** Remove one of this account's other devices. */
     revokeDevice(id: string): Promise<RevokeResult>;

@@ -215,7 +215,7 @@ export const ACCOUNT_CALLS = {
    * HIVE-291: lease from this org from now on. The first refresh may join a renewal that was already out and
    * asked for the old org; the second always starts after `activeOrg` is written, so it asks for the new one.
    */
-  /** The Account centre: an org's billing, `null` when the cloud has nothing to show (the pane shows the lease). */
+  /** The Account center: an org's billing, `null` when the cloud has nothing to show (the pane shows the lease). */
   [CH.accountBilling]: (orgId: unknown): Promise<BillingSummary | null> =>
     client ? readBilling(client.authedFetch, orgId) : Promise.resolve(null),
   [CH.accountPayments]: (orgId: unknown): Promise<BillingPayments | null> =>
