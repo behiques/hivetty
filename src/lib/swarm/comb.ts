@@ -552,9 +552,12 @@ export function drawComb(
     for (const f of flyers) drawMuta(ctx, f.spine, t, f.k * 3.7, f.turn, scale, ps, tone);
   });
 
-  const tagged = (c: CombCell): boolean =>
-    c.state === 'summons' || c.state === 'failed' || (c.state === 'morphing' && c.project === SWARM);
-  if (sc) for (const cell of layout.cells) if (tagged(cell)) drawTag(ctx, cell, layout.R, palette);
+  // Working agents' tags first, so a long one never covers a tag that needs you or failed.
+  if (sc) {
+    const working = layout.cells.filter((c) => c.state === 'morphing' && c.project === SWARM);
+    const urgent = layout.cells.filter((c) => c.state === 'summons' || c.state === 'failed');
+    for (const cell of [...working, ...urgent]) drawTag(ctx, cell, layout.R, palette);
+  }
 
   // A keyboard-focused cell (HIVE-223): the sr-only buttons are invisible, so the canvas shows which one has focus.
   const focused = focusedId === null ? undefined : layout.cells.find((cell) => cell.id === focusedId);

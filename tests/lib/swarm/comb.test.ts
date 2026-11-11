@@ -326,6 +326,17 @@ describe('drawComb', () => {
     expect(texts).not.toContain('the-hive-0'); // morphing session
   });
 
+  it('draws Morphing tags under Summons and Failed tags at scale', () => {
+    const l = layoutComb(heavy(HEAVY_COUNTS).entities, heavy(HEAVY_COUNTS).projects);
+    const { texts } = draw(l);
+    const stateOf = new Map(l.cells.map((c) => [c.name, c.state]));
+    const tagStates = texts.map((t) => stateOf.get(String(t))).filter((s) => s === 'morphing' || s === 'summons' || s === 'failed');
+    const lastMorphing = tagStates.lastIndexOf('morphing');
+    const firstUrgent = tagStates.findIndex((s) => s === 'summons' || s === 'failed');
+    expect(lastMorphing).toBeGreaterThanOrEqual(0);
+    expect(firstUrgent).toBeGreaterThan(lastMorphing);
+  });
+
   it('rings the focused cell in brand, and nothing without one (HIVE-223)', () => {
     const layout = layoutComb([agent('s1', 'morphing')], []);
     const ringed = (focusedId: string | null) => {
