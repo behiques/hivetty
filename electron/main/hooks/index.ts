@@ -20,6 +20,7 @@ import {
   type HookTicketIntentEvent,
 } from '@shared/hook-contract';
 import type { JiraToolHandlers } from '@shared/jira-contract';
+import { OVERMIND } from '@shared/ledger-contract';
 import type { SessionMetrics } from '@shared/metrics-contract';
 import type { PlanUpdate } from '@shared/plan-contract';
 
@@ -492,6 +493,19 @@ export function createHookRuntime(options: HookRuntimeOptions): HookRuntime {
           read back its own correspondence.
         */
         onLedgerRead: (_caller, query) => ledger.read(query),
+        // The confirmation that the model, not only the pty, has each entry (HIVE-408).
+        onMarkerServed: (caller, ids) => {
+          for (const id of ids) {
+            const written = ledger.append({
+              from: OVERMIND,
+              to: caller,
+              kind: 'event',
+              body: `nudge served (${id})`,
+              meta: { served: id },
+            });
+            if (!written.ok) console.warn(`[ledger] nudge ${id} was served to ${caller} but its confirmation was refused`);
+          }
+        },
         onLedgerPost: (caller, request) => ledger.append({ ...request, from: caller }),
         onAgentsList,
         onProjectsList,

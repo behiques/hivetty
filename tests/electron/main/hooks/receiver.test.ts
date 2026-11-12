@@ -245,11 +245,13 @@ describe('hook receiver', () => {
   let cleared: string[];
   let dones: string[];
   let readies: string[];
+  let served: { caller: string; ids: readonly string[] }[];
   let url: string;
   let dir: string;
   let ledger: Ledger;
 
   beforeEach(async () => {
+    served = [];
     events = [];
     intents = [];
     promptNames = [];
@@ -274,6 +276,7 @@ describe('hook receiver', () => {
       // `visibleTo` inside the receiver is the only identity filter.
       onLedgerRead: (_caller, query) => ledger.read(query),
       onLedgerPost: (caller, request) => ledger.append({ ...request, from: caller }),
+      onMarkerServed: (caller, ids) => served.push({ caller, ids }),
     });
     const started = await receiver.start();
     expect(started).not.toBeNull();
@@ -1617,6 +1620,24 @@ describe('hook receiver', () => {
       expect(json.hookSpecificOutput.hookEventName).toBe('UserPromptSubmit');
       return json.hookSpecificOutput.additionalContext;
     };
+
+    it('serves every ref a marker names, and reports them served (HIVE-408)', async () => {
+      const a = ledger.append({ from: 'overmind', to: 'sess-01', kind: 'ask', body: 'first question' });
+      const b = ledger.append({ from: 'overmind', to: 'sess-01', kind: 'ask', body: 'second question' });
+
+      const response = await prompt(`📒 ${a.ok ? a.ref : ''} ${b.ok ? b.ref : ''}`);
+      const text = await context(response);
+
+      expect(text).toContain('first question');
+      expect(text).toContain('second question');
+      expect(text.indexOf('first question')).toBeLessThan(text.indexOf('second question'));
+      expect(served).toEqual([{ caller: 'sess-01', ids: [a.ok ? a.id : '', b.ok ? b.id : ''] }]);
+    });
+
+    it('reports nothing served for a marker that resolves nothing (HIVE-408)', async () => {
+      await prompt('📒 a999');
+      expect(served).toEqual([]);
+    });
 
     it('serves the context of a failed entry named by its marker (HIVE-408)', async () => {
       const asked = ledger.append({ from: 'sess-01', to: 'builder', kind: 'ask', body: 'build it' });

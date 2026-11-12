@@ -150,10 +150,11 @@ describe('createDeliver', () => {
       held('sess-a', 'a/b#3');
       closed(3, 'a/b', 'sess-a');
 
-      // The first owed entry goes in; the next waits for the next idle.
+      // One line carries both, in ledger order (HIVE-408, Task 6); the next idle owes nothing.
       expect(write).toHaveBeenCalledTimes(1);
+      expect(lastWrite().split(' ')).toHaveLength(3);
       deliver.onIdle('sess-a');
-      expect(write).toHaveBeenCalledTimes(2);
+      expect(write).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -379,22 +380,53 @@ describe('createDeliver', () => {
    * turn — so writing the rest of the backlog behind it would be writing
    * mid-turn, the one thing this module must never do.
    */
-  it('writes one nudge per idle window, not the whole backlog', () => {
+  it('writes every owed entry on one line, with a receipt each (HIVE-408)', () => {
+    /*
+      Was "one nudge per idle window": each line ended in `\r`, so a second
+      line behind the first would land mid-turn. One line naming the whole
+      backlog ends in one `\r`, so one submit carries it all and the invariant
+      (nothing typed mid-turn) still holds (HIVE-408, Task 6).
+    */
     idle.delete('sess-a');
-    const first = ask('sess-a', 'first question');
-    const second = ask('sess-a', 'second question');
-    expect(write).not.toHaveBeenCalled();
-
+    const a = ask('sess-a', 'one');
+    const b = ask('sess-a', 'two');
     idle.add('sess-a');
+    write.mockClear();
+
     deliver.onIdle('sess-a');
 
     expect(write).toHaveBeenCalledTimes(1);
-    expect(lastWrite()).toBe(`📒 ${first.ok ? first.ref : ''}\r`);
+    expect(lastWrite()).toBe(`📒 ${a.ok ? a.ref : ''} ${b.ok ? b.ref : ''}\r`);
+    expect(receipts().map((r) => r.meta?.delivered)).toEqual([a.ok ? a.id : '', b.ok ? b.id : '']);
 
-    // The remainder was not lost — it has no receipt, so the next idle takes it.
+    // Nothing is left over for the next idle.
     deliver.onIdle('sess-a');
-    expect(write).toHaveBeenCalledTimes(2);
-    expect(lastWrite()).toBe(`📒 ${second.ok ? second.ref : ''}\r`);
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends an entry whose token cannot share a line on a line of its own (HIVE-408)', () => {
+    idle.delete('sess-a');
+    const a = ask('sess-a', 'one');
+    // What `markerListable` refuses, as a hand-edited ledger file would carry it.
+    const odd = { id: 'hand-edited', ts: AT, from: OVERMIND, to: 'sess-a', kind: 'post' as const, body: 'note' };
+    const b = ask('sess-a', 'two');
+    idle.add('sess-a');
+    const real = ledger.read;
+    ledger.read = (query) => {
+      const snapshot = real(query);
+      if (query.to !== 'sess-a') return snapshot;
+      const entries = [...snapshot.entries];
+      entries.splice(entries.findIndex((e) => a.ok && e.id === a.id) + 1, 0, odd);
+      return { ...snapshot, entries };
+    };
+    write.mockClear();
+
+    deliver.onIdle('sess-a');
+    expect(lastWrite()).toBe(`📒 ${a.ok ? a.ref : ''}\r`);
+    deliver.onIdle('sess-a');
+    expect(lastWrite()).toBe('📒 hand-edited\r');
+    deliver.onIdle('sess-a');
+    expect(lastWrite()).toBe(`📒 ${b.ok ? b.ref : ''}\r`);
   });
 
   /**

@@ -1,5 +1,5 @@
 import type { PromptInput } from '../../shared/ipc-contract';
-import { OVERMIND, type LedgerEntry, type LedgerKind } from '../../shared/ledger-contract';
+import { markerListable, OVERMIND, type LedgerEntry, type LedgerKind } from '../../shared/ledger-contract';
 import { afterTarget, isHeld, releasesAfter } from '../../shared/ledger-derive';
 import type { HarnessAdapter } from '../harness/port';
 import type { SurfaceId } from '../ipc/surfaces';
@@ -217,66 +217,75 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
     return owed.filter((entry) => !isHeld(entry, log));
   }
 
-  /** Write one nudge, and record it only if it landed. Reports whether it did. */
-  function deliverOne(entityId: string, entry: LedgerEntry): boolean {
-    const handle = handleFor(entry);
+  /** Write one nudge line naming `entries`, and receipt each only if it landed. */
+  function deliverAll(entityId: string, entries: readonly LedgerEntry[]): void {
     /*
       Not delivering is the same answer as a write that did not land: no receipt, so the next idle
       or ready transition asks again. A `none` harness reads the ledger through its tools.
     */
     const adapter = adapterOf(entityId);
-    if (adapter?.capabilities.contextDelivery !== 'prompt-marker') return false;
-    if (!write(entityId, adapter.promptMarker([entry]))) return false;
+    if (adapter?.capabilities.contextDelivery !== 'prompt-marker') return;
+    if (!write(entityId, adapter.promptMarker(entries))) return;
 
-    /*
-      `from: OVERMIND` is asserted rather than derived. The party set is
-      `overmind | session | agent` and there is no identity for "the app
-      itself" — main is the coordinator's body, so the coordinator is who this
-      is from. Addressed `to` the session so `visibleTo` lets that session read
-      its own receipts, and so a broadcast is never created by accident.
-    */
-    const recorded = ledger.append({
-      from: OVERMIND,
-      to: entityId,
-      kind: 'event',
-      body: `nudge written (${handle})`,
-      meta: { delivered: entry.id },
-    });
+    for (const entry of entries) {
+      const handle = handleFor(entry);
+      /*
+        `from: OVERMIND` is asserted rather than derived. The party set is
+        `overmind | session | agent` and there is no identity for "the app
+        itself" — main is the coordinator's body, so the coordinator is who this
+        is from. Addressed `to` the session so `visibleTo` lets that session read
+        its own receipts, and so a broadcast is never created by accident.
+      */
+      const recorded = ledger.append({
+        from: OVERMIND,
+        to: entityId,
+        kind: 'event',
+        body: `nudge written (${handle})`,
+        meta: { delivered: entry.id },
+      });
 
-    /*
-      A refused receipt is reported, not swallowed. `Ledger.append` returns a
-      refusal as a value (ENOSPC, a `~/.hivetty` moved out from under the app), and
-      without a receipt this exact nudge is rewritten on every subsequent idle —
-      forever, into a real terminal. Saying so once is what makes that
-      diagnosable; the alternative is a session that mysteriously repeats a
-      question it already asked.
-    */
-    if (!recorded.ok) {
-      console.warn(
-        `[ledger] nudge ${handle} was written to ${entityId} but its receipt was refused ` +
-          `(${recorded.status}: ${recorded.reason}) — it may be delivered again`,
-      );
+      /*
+        A refused receipt is reported, not swallowed. `Ledger.append` returns a
+        refusal as a value (ENOSPC, a `~/.hivetty` moved out from under the app), and
+        without a receipt this exact nudge is rewritten on every subsequent idle —
+        forever, into a real terminal. Saying so once is what makes that
+        diagnosable; the alternative is a session that mysteriously repeats a
+        question it already asked.
+      */
+      if (!recorded.ok) {
+        console.warn(
+          `[ledger] nudge ${handle} was written to ${entityId} but its receipt was refused ` +
+            `(${recorded.status}: ${recorded.reason}) — it may be delivered again`,
+        );
+      }
     }
-
-    return true;
   }
 
   /**
-   * Write everything this session is owed, one nudge per idle window.
+   * The owed entries one line can carry (HIVE-408): the longest run from the
+   * front whose tokens may share a line, or the first entry alone when even it
+   * may not. The rest has no receipt and goes on the next idle, in order.
+   */
+  function batch(owed: readonly LedgerEntry[]): readonly LedgerEntry[] {
+    const stop = owed.findIndex((entry) => !markerListable(entry));
+    if (stop === -1) return owed;
+    return owed.slice(0, Math.max(stop, 1));
+  }
+
+  /**
+   * Write everything this session is owed, on one line (HIVE-408).
    *
-   * **The preconditions are checked once, before the loop, and the loop stops
-   * at the first delivery.** Each nudge ends in `\r`, which submits it — so
-   * the instant one lands the session is mid-turn, and writing the rest of
-   * the backlog behind it would break the single invariant this module
-   * exists to hold. The remainder is not lost: it has no receipt, so the
-   * next idle transition picks up exactly where this one stopped.
+   * **The preconditions are checked once, and one line is written.** The line
+   * ends in a single `\r`, which submits it, so the instant it lands the
+   * session is mid-turn: one submit carries the whole backlog, and nothing is
+   * typed behind it, which is the single invariant this module exists to hold.
+   * An entry left off the line (see {@link batch}) has no receipt, so the next
+   * idle transition picks it up.
    */
   function flush(entityId: string): void {
     if (!isLive(entityId) || !isIdle(entityId) || !clear(entityId)) return;
-
-    for (const entry of undelivered(entityId)) {
-      if (deliverOne(entityId, entry)) return;
-    }
+    const owed = undelivered(entityId);
+    if (owed.length > 0) deliverAll(entityId, batch(owed));
   }
 
   /**

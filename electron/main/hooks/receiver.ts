@@ -234,6 +234,13 @@ export interface ReceiverOptions {
    */
   onLedgerRead: (caller: string, query: LedgerReadQuery) => LedgerSnapshot;
   /**
+   * A marker prompt was answered with the context of these entries, in order (HIVE-408).
+   *
+   * The model has them now, not only the pty the bytes: the confirmation HIVE-410's
+   * `delivered` state reads. Not called for a marker that resolved nothing.
+   */
+  onMarkerServed?: (caller: string, ids: readonly string[]) => void;
+  /**
    * A party asked to append to the ledger (HIVE-111).
    *
    * `request` has already had any `from` in the body stripped by
@@ -555,6 +562,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     onDone,
     onReady,
     onLedgerRead,
+    onMarkerServed,
     onLedgerPost,
     onAgentsList,
     onProjectsList = () => ({ projects: [] }),
@@ -814,7 +822,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    * not its own. An ask is also checked for openness, so a marker re-typed
    * after the ask closed does not tell the model to answer it.
    */
-  function markerContext(caller: string, token: string): string | undefined {
+  function markerContext(caller: string, token: string): { id: string; text: string } | undefined {
     const snapshot = onLedgerRead(caller, { to: caller });
     const mine = snapshot.entries.filter(
       (entry) =>
@@ -830,9 +838,9 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     if (resolved.kind !== 'found') return undefined;
     const entry = mine.find((candidate) => candidate.id === resolved.id);
     if (entry === undefined) return undefined;
-    if (entry.kind === 'post') return entryContext(entry);
+    if (entry.kind === 'post') return { id: entry.id, text: entryContext(entry) };
     if (entry.kind === 'ask') {
-      return entryContext(entry, { open: snapshot.openAsks.some((ask) => ask.id === entry.id) });
+      return { id: entry.id, text: entryContext(entry, { open: snapshot.openAsks.some((ask) => ask.id === entry.id) }) };
     }
     const ask =
       entry.thread === undefined
@@ -840,7 +848,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
         : onLedgerRead(caller, { thread: entry.thread }).entries.find(
             (candidate) => candidate.kind === 'ask' && visibleTo(caller, candidate),
           );
-    return entryContext(entry, { ask });
+    return { id: entry.id, text: entryContext(entry, { ask }) };
   }
 
   /**
@@ -1678,11 +1686,14 @@ export function createReceiver(options: ReceiverOptions): Receiver {
            * which is what the turn it starts is.
            */
           const markers = effect.text === undefined ? undefined : parseLedgerMarkers(effect.text);
-          // shortcut: serves the first token only; Task 6 of HIVE-408 serves them all.
-          const marker = markers?.[0];
-          if (marker !== undefined) {
-            const context = markerContext(entityId, marker);
-            if (context !== undefined) reply = { status: 200, json: adapter.contextReply(context) };
+          if (markers !== undefined) {
+            // Every token the line names, in its order (HIVE-408); one that resolves nothing is skipped.
+            const served = markers.flatMap((token) => markerContext(entityId, token) ?? []);
+            if (served.length > 0) {
+              reply = { status: 200, json: adapter.contextReply(served.map((s) => s.text).join('\n\n')) };
+              // The model has the context now, not only the pty the bytes (HIVE-408): what HIVE-410's `delivered` reads.
+              onMarkerServed?.(entityId, served.map((s) => s.id));
+            }
             break;
           }
           if (effect.text !== undefined) {
