@@ -995,3 +995,30 @@ describe('the fence evasion checklist (HIVE-407)', () => {
     expect(rungsFor('Bash', { command }).map((rung) => rung.id)).toEqual(['allow-once']);
   });
 });
+
+describe('a read-only command that only mentions a fenced act (HIVE-407)', () => {
+  it('runs under bare Bash: grep or cat alone, as one command', () => {
+    for (const command of [
+      "grep -n 'git push origin main' electron/shared/permission-rules.ts",
+      "grep -rn 'gh pr merge' skills/",
+      'cat notes/git-push-origin-main.txt "gh pr merge 1"',
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'allow' });
+    }
+  });
+
+  it('still asks once anything else runs: an operator, a substitution, a heredoc, or another first word', () => {
+    for (const command of [
+      'grep x f; git push origin main',
+      'grep x f && gh pr merge 1',
+      'cat <(git push origin main)',
+      'cat $(git push origin main)',
+      'cat <<EOF\ngit push origin main\nEOF',
+      "rg --pre 'git push origin main' x",
+      "sed -n 'e git push origin main' f",
+      'echo git push origin main',
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
+    }
+  });
+});

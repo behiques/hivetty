@@ -260,6 +260,20 @@ export function isToolName(value: unknown): value is string {
  */
 const LITERAL_PREFIX = 'literal:';
 
+/** First words that read and never run anything; `rg` (`--pre`) and `sed` (`e`) can run a program, so they are absent. */
+const READ_ONLY_TOOLS = new Set(['grep', 'cat']);
+
+/**
+ * A lone `grep` or `cat` that only *mentions* a merge or a push (HIVE-407): reviewing the fence's own
+ * code raised a card for it seven times in one audit week. One command and nothing else, since an
+ * operator, a substitution or a process substitution each parse as a second command. A heredoc is
+ * excluded outright: the tokeniser skips its body as data, and the exemption is not meant to cover one.
+ */
+const readsOnly = (command: string): boolean => {
+  const segments = shellSegments(command);
+  return segments?.length === 1 && READ_ONLY_TOOLS.has(segments[0][0]) && !command.includes('<<');
+};
+
 /**
  * A command that merges a pull request: `gh pr merge`, a REST merge through `gh api` (a pull's
  * `/pulls/<n>/merge` or the branch-merge `repos/<o>/<r>/merges`), or the GraphQL mutations that merge,
@@ -277,8 +291,10 @@ const LITERAL_PREFIX = 'literal:';
 const PR_MERGE =
   /\bgh\b[\s\S]*?(\bpr(?:\s|\\\r?\n)+merge\b|\/pulls\/[^\s/]+\/merge\b|\brepos\/[^\s/]+\/[^\s/]+\/merges\b|\bmergePullRequest\b|\benablePullRequestAutoMerge\b|\benqueuePullRequest\b|\baddPullRequestToMergeQueue\b)/;
 
-export const isPrMerge = (toolName: string, input: Record<string, unknown>): boolean =>
-  toolName === 'Bash' && PR_MERGE.test(str(input, 'command') ?? '');
+export const isPrMerge = (toolName: string, input: Record<string, unknown>): boolean => {
+  const command = str(input, 'command') ?? '';
+  return toolName === 'Bash' && PR_MERGE.test(command) && !readsOnly(command);
+};
 
 /**
  * A `git push` that writes the default branch (HIVE-395, HIVE-407). This text match is one half of
@@ -369,8 +385,10 @@ const pushesDefault = (command: string, depth = 0): boolean => {
   );
 };
 
-export const isDefaultBranchPush = (toolName: string, input: Record<string, unknown>): boolean =>
-  toolName === 'Bash' && pushesDefault(str(input, 'command') ?? '');
+export const isDefaultBranchPush = (toolName: string, input: Record<string, unknown>): boolean => {
+  const command = str(input, 'command') ?? '';
+  return toolName === 'Bash' && pushesDefault(command) && !readsOnly(command);
+};
 
 export function matches(
   rule: string,
