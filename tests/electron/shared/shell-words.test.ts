@@ -48,6 +48,11 @@ describe('shellSegments (HIVE-407)', () => {
     expect(shellSegments(command)).toEqual(words);
   });
 
+  it('still reads a heredoc written against its command, and `<<` in quotes as text', () => {
+    expect(shellSegments("cat<<EOF\ngit push origin main\nEOF")).toEqual([['cat']]);
+    expect(shellSegments('echo "a << b"')).toEqual([['echo', 'a << b']]);
+  });
+
   it('reads `((` inside double quotes as text, not arithmetic', () => {
     expect(shellSegments('git commit -m "fix ((x))"')).toEqual([['git', 'commit', '-m', 'fix ((x))']]);
   });
@@ -73,6 +78,12 @@ describe('shellSegments (HIVE-407)', () => {
     // Arithmetic reads `<<` as a shift, not a heredoc; following it is too far (#281 round 3).
     ['an arithmetic expansion', 'echo $((1<<2))\ngh pr merge 2\n2'],
     ['an arithmetic command', '((x = 1<<2))\ngh pr merge 2\n2'],
+    // #281 round 4: every expansion that can hold `<<` (a shift, or text) ahead of a line that ends it.
+    ['old-style arithmetic', 'echo $[1<<2]\ngh pr merge 2\n2]'],
+    ['old-style arithmetic in double quotes', 'echo "$[1<<2]"'],
+    ['a `<<` inside a parameter expansion', 'echo ${x:1<<2}\ngh pr merge 2\n2}'],
+    ['a `<<` straight after an expansion', 'echo $X<<EOF\ngh pr merge 2\nEOF'],
+    ['a `<<` inside an array assignment', 'x=( 1<<D )\ngh pr merge 2\nD'],
   ])('cannot parse %s', (_name, command) => {
     expect(shellSegments(command)).toBeUndefined();
   });

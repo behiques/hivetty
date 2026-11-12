@@ -80,7 +80,7 @@ export function shellSegments(command: string): string[][] | undefined {
     inDouble = frame.quoted;
     dropNext = frame.dropNext;
     // A substitution's value is not known here; a plain subshell is just a nested command.
-    word = frame.opener === '(' ? frame.word : (frame.word ?? '') + '$';
+    word = frame.opener === '(' || frame.opener === '=(' ? frame.word : (frame.word ?? '') + '$';
   };
 
   for (let i = 0; i < command.length; i++) {
@@ -100,6 +100,8 @@ export function shellSegments(command: string): string[][] | undefined {
     // Arithmetic (`$((…))`, `((…))`) reads `<<` as a shift; read here it opens a heredoc that hides the
     // lines after it (#281 round 3). Outside the subset, so the command cannot be parsed.
     if (next === '(' && ((c === '$' && command[i + 2] === '(') || (c === '(' && !inDouble))) return undefined;
+    // Old-style arithmetic, quoted or not: the same shift, the same hidden lines (#281 round 4).
+    if (c === '$' && next === '[') return undefined;
     if (c === '$' && next === '(') {
       i++;
       open('$(');
@@ -141,8 +143,10 @@ export function shellSegments(command: string): string[][] | undefined {
       continue;
     }
     if (c === '(') {
+      // `x=( … )` is an array's words, where bash reads `<<` as text, not a heredoc (#281 round 4).
+      const array = word?.endsWith('=') === true;
       endSegment();
-      open('(');
+      open(array ? '=(' : '(');
       continue;
     }
     if (c === ')') {
@@ -152,6 +156,10 @@ export function shellSegments(command: string): string[][] | undefined {
     }
     if (c === '<' && next === '<' && command[i + 2] !== '<') {
       // A heredoc: its body starts after this line and is skipped there, never read as commands.
+      // Not inside a word that began an expansion (`${x:1<<2}`, `$X<<EOF`): there `<<` may be a shift or
+      // text, and reading it as a heredoc hides the lines after it (#281 round 4); nor inside an array's
+      // words. Refused, so callers fall back to their text match.
+      if (word?.includes('$') === true || stack.some((frame) => frame.opener === '=(')) return undefined;
       const match = HEREDOC.exec(command.slice(i));
       if (match === null) return undefined;
       if (word !== undefined && /^\d+$/.test(word)) word = undefined;

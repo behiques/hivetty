@@ -1398,3 +1398,18 @@ describe('PR #281 self-review round 3: a merge behind arithmetic is not hidden',
     expect(decide('Bash', { command: 'cat <<< x\ngh pr merge 2 --repo victim/other\nx' }, GRANTS)).toEqual({ behavior: 'ask' });
   });
 });
+
+describe('PR #281 self-review round 4: no expansion can hide a merge behind `<<`', () => {
+  const GRANTS = ['Bash', 'Bash(gh pr merge * --repo behiques/hivetty)'];
+
+  it.each([
+    ['$[1<<2]', 'gh pr merge 1 --repo behiques/hivetty; echo $[1<<2]\ngh pr merge 2 --repo victim/other\n2]'],
+    ['${x:1<<2}', 'gh pr merge 1 --repo behiques/hivetty; echo ${x:1<<2}\ngh pr merge 2 --repo victim/other\n2}'],
+    ['$X<<EOF', 'gh pr merge 1 --repo behiques/hivetty; echo $X<<EOF\ngh pr merge 2 --repo victim/other\nEOF'],
+  ])('asks for a merge after %s, with bare Bash and on an auto-merge project', (_name, command) => {
+    expect(decide('Bash', { command }, GRANTS)).toEqual({ behavior: 'ask' });
+    expect(decide('Bash', { command: command.replace('gh pr merge 1 --repo behiques/hivetty; ', '') }, ['Bash'])).toEqual({
+      behavior: 'ask',
+    });
+  });
+});
