@@ -15,7 +15,7 @@ import { RESERVED_SKILL_NAME } from '@shared/skills-contract';
 
 import { legacyBase, readHistory, type History } from './history';
 import { liftGrants } from './lift-grants';
-import { baseOf, mergeParts, parseParts, type PartBase } from './merge';
+import { baseOf, mergeParts, ownKey, parseParts, type PartBase } from './merge';
 
 /**
  * Seeding the skills and agents the app ships into `~/.hivetty` (HIVE-162).
@@ -327,8 +327,9 @@ export async function seedShipped(options: SeedOptions): Promise<SeedReport> {
           continue;
         }
 
-        // HIVE-409: card grants leave tools: once, so the shipped tools: can arrive.
-        const lifted = AGENT_DEFINITION.test(rel) ? liftGrants(current, text) : current;
+        // HIVE-409: card grants leave tools: once, so the shipped tools: can arrive. HIVE-418: against the
+        // base, so an older shipped list (or its prefix) is never read as a card's grant.
+        const lifted = AGENT_DEFINITION.test(rel) ? liftGrants(current, text, ownKey(base.keys, 'tools')) : current;
         const result = mergeParts(lifted, text, base);
 
         parts[rel] = result.base;
