@@ -22,6 +22,7 @@ import {
   laneOfRun,
   expiredAsks,
   isHeld,
+  mergeTarget,
   openAsks,
   releasesAfter,
 } from '@shared/ledger-derive';
@@ -235,7 +236,17 @@ interface SchedulerDeps {
   clearIntervalFn?: typeof clearInterval;
   /** HIVE-267: while true, a due schedule re-arms and does not run, so renewal never catches it up. */
   lapsed?: () => boolean;
+  /**
+   * Whether a PR has merged (HIVE-409), for the moot sweep: `true` merged, `false` not, `undefined`
+   * unknown (offline, `gh` missing, not in the sweep). Optional, so every existing harness stands.
+   * shortcut: the PR sweep holds open and recently merged PRs only, so a PR closed without merging reads
+   * `undefined` and its card waits for a person; give the sweep closed PRs if that ever costs time.
+   */
+  prMerged?: (repo: string, number: number) => Promise<boolean | undefined>;
 }
+
+/** How often the moot sweep asks whether one merge card's PR has merged (HIVE-409). */
+const PR_LOOKUP_EVERY_MS = 5 * 60_000;
 
 export interface Scheduler {
   /** One entry landed, from any party. */
@@ -313,17 +324,25 @@ const EXPIRED_KIND = 'expired';
 
 /**
  * Open permission cards nothing is waiting on any more (HIVE-409): the run that asked worked for a job
- * thread that has since closed. Answered `moot` by the sweep. That is an answer, so every derivation
- * already treats the card as closed and `Ledger.append` refuses a later grant. Never by time (D7).
+ * thread that has since closed, or the card's merge names a PR already seen merged (`merged`, ask ids).
+ * Answered `moot` by the sweep. That is an answer, so every derivation already treats the card as closed
+ * and `Ledger.append` refuses a later grant. Never by time (D7).
  */
-export function mootCards(entries: readonly LedgerEntry[], now: number): { ask: LedgerEntry; reason: string }[] {
+export function mootCards(
+  entries: readonly LedgerEntry[],
+  now: number,
+  merged: ReadonlySet<string> = new Set(),
+): { ask: LedgerEntry; reason: string }[] {
   const out: { ask: LedgerEntry; reason: string }[] = [];
   const threadPrefix = threadLane('');
   for (const ask of openAsks(entries, now)) {
     if (ask.to !== OVERMIND || !isPermissionAsk(ask)) continue;
     const lane = laneOfRun(ask.from, ask.meta?.['run'], entries);
+    const target = mergeTarget(ask.meta);
     if (lane.startsWith(threadPrefix) && isClosedLane(lane, entries)) {
       out.push({ ask, reason: `its job ${lane.slice(threadPrefix.length)} closed` });
+    } else if (target !== undefined && merged.has(ask.id)) {
+      out.push({ ask, reason: `${target.repo}#${String(target.number)} merged` });
     }
   }
   return out;
@@ -396,6 +415,40 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
    * prevent, so the gate has to cover the callbacks and not just the timer.
    */
   let stopped = false;
+
+  /*
+    HIVE-409. Merge cards whose PR was seen merged, applied by the next sweep, and when each card's
+    PR was last asked about. Only open cards are kept: an entry leaves both once its card is closed.
+  */
+  const mergedCards = new Set<string>();
+  const lastPrLookup = new Map<string, number>();
+
+  /**
+   * Ask, outside the synchronous sweep, whether each open merge card's PR has merged: at most once
+   * every {@link PR_LOOKUP_EVERY_MS} per card. A lookup that fails or answers unknown closes nothing.
+   */
+  const lookUpMerges = (entries: readonly LedgerEntry[], now: number): void => {
+    const prMerged = deps.prMerged;
+    if (prMerged === undefined) return;
+    const open = new Set<string>();
+    for (const ask of openAsks(entries, now)) {
+      if (ask.to !== OVERMIND || !isPermissionAsk(ask)) continue;
+      open.add(ask.id);
+      const target = mergeTarget(ask.meta);
+      if (target === undefined || mergedCards.has(ask.id)) continue;
+      if (now - (lastPrLookup.get(ask.id) ?? -Infinity) < PR_LOOKUP_EVERY_MS) continue;
+      lastPrLookup.set(ask.id, now);
+      prMerged(target.repo, target.number).then(
+        (yes) => {
+          if (yes === true) mergedCards.add(ask.id);
+        },
+        () => undefined,
+      );
+    }
+    // A card closed some other way (answered, expired) leaves the maps too.
+    for (const id of lastPrLookup.keys()) if (!open.has(id)) lastPrLookup.delete(id);
+    for (const id of mergedCards) if (!open.has(id)) mergedCards.delete(id);
+  };
 
   /**
    * Retire the asks time has taken, once a minute.
@@ -483,10 +536,16 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       asker in `Ledger.append`, and the ledger's own `onChange` routes it, so nothing is
       woken here. A failed write is retried by the next sweep, a minute later, as expiry is.
     */
-    for (const { ask, reason } of mootCards(entries, now)) {
+    for (const { ask, reason } of mootCards(entries, now, mergedCards)) {
       const written = deps.ledger.append({ from: OVERMIND, kind: 'answer', thread: ask.id, body: MOOT, meta: { moot: reason } });
-      if (!written.ok) console.warn(`[hive] could not close ${ask.id} as moot; leaving it open`);
+      if (!written.ok) {
+        console.warn(`[hive] could not close ${ask.id} as moot; leaving it open`);
+        continue;
+      }
+      mergedCards.delete(ask.id);
+      lastPrLookup.delete(ask.id);
     }
+    lookUpMerges(entries, now);
 
     /*
       A closed thread lane is kept a day, so a late question about it can still

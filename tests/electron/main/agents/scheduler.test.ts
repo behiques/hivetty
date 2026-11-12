@@ -78,6 +78,8 @@ describe('createScheduler', () => {
   let removed: string[];
   /** HIVE-267: what the injected licence gate answers. */
   let lapsed: boolean;
+  /** HIVE-409: what the injected PR-merged lookup answers. */
+  let prMergedFn: ReturnType<typeof vi.fn<(repo: string, n: number) => Promise<boolean | undefined>>>;
 
   /** Fire every armed interval once — the sweep and the schedule tick. */
   const tick = (): void => {
@@ -132,6 +134,7 @@ describe('createScheduler', () => {
       },
       now: () => clock,
       lapsed: () => lapsed,
+      prMerged: (repo, n) => prMergedFn(repo, n),
       setIntervalFn: ((handler: () => void) => {
         const id = nextTimerId;
         nextTimerId += 1;
@@ -166,6 +169,7 @@ describe('createScheduler', () => {
     reenter = false;
     removed = [];
     lapsed = false;
+    prMergedFn = vi.fn(async (_repo: string, _n: number) => undefined as boolean | undefined);
     state = createAgentState({ path: '/dev/null/agents.json', debounceMs: 1 });
     state.patch(AGENT, { status: 'sleeping' });
 
@@ -938,6 +942,70 @@ describe('createScheduler', () => {
       scheduler.start();
       tick();
       expect(answers()).toEqual([]);
+    });
+
+    const mergeCard: LedgerEntry = {
+      id: 'm1', ts: 1, from: AGENT, to: 'overmind', kind: 'ask', body: 'Allow Bash?',
+      meta: { kind: 'permission', tool: 'Bash', input: { command: 'gh pr merge 252 --squash --repo behiques/hivetty' } },
+    };
+    const settle = async (): Promise<void> => {
+      await Promise.resolve();
+      await Promise.resolve();
+    };
+
+    it('answers a merge card moot on the tick after its PR is seen merged', async () => {
+      entries = [mergeCard];
+      prMergedFn.mockResolvedValue(true);
+      clock = 60_000;
+      scheduler.start();
+      tick();
+      await settle();
+      expect(answers()).toEqual([]);
+      tick();
+      expect(prMergedFn).toHaveBeenCalledWith('behiques/hivetty', 252);
+      expect(answers()).toEqual([
+        { from: 'overmind', kind: 'answer', thread: 'm1', body: 'moot', meta: { moot: 'behiques/hivetty#252 merged' } },
+      ]);
+    });
+
+    it('an open or unknown PR, or a failed lookup, closes nothing', async () => {
+      for (const reply of [false, undefined, 'throw'] as const) {
+        appended = [];
+        entries = [mergeCard];
+        if (reply === 'throw') prMergedFn.mockRejectedValue(new Error('gh missing'));
+        else prMergedFn.mockResolvedValue(reply);
+        scheduler = build();
+        scheduler.start();
+        tick();
+        await settle();
+        tick();
+        expect(answers()).toEqual([]);
+        scheduler.stop();
+      }
+    });
+
+    it('looks a card up at most once every five minutes', async () => {
+      entries = [mergeCard];
+      prMergedFn.mockResolvedValue(false);
+      clock = 0;
+      scheduler.start();
+      for (let i = 0; i < 5; i += 1) {
+        clock += 60_000;
+        tick();
+        await settle();
+      }
+      expect(prMergedFn).toHaveBeenCalledTimes(1);
+      clock += 60_000;
+      tick();
+      expect(prMergedFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('never looks up a card that is not a merge', () => {
+      entries = [job, started, card];
+      clock = 60_000;
+      scheduler.start();
+      tick();
+      expect(prMergedFn).not.toHaveBeenCalled();
     });
   });
 

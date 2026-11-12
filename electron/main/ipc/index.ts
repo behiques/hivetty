@@ -3093,6 +3093,16 @@ export function registerIpcHandlers(
     // The watcher's cache, filled in the same pass as `agentSchedules` (HIVE-128).
     parallelFor: (name) => agentParallel.get(name) ?? AGENT_LIMIT_DEFAULTS.parallel,
     laneOf: (name) => agentLanes.get(name),
+    /*
+      HIVE-409: a merge card is moot once its PR merged. `github` is declared further down this
+      function; this runs only from the sweep's interval, after the whole body has executed, as
+      `onPrLookup` argues. The same login-env await, so a boot-window lookup does not read launchd's PATH.
+    */
+    prMerged: async (repo, number) => {
+      await loginEnvStatus();
+      const reply = await answerPrLookup(github, { repo, number });
+      return reply.pr === null ? undefined : reply.pr.state === 'merged';
+    },
     // A pruned lane's directory goes with its record (HIVE-188).
     removeLaneDir: (name, lane) => {
       try {
