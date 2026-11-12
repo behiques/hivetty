@@ -136,6 +136,11 @@ export function useRelativeTime(createdAt: number): string {
   return formatRelativeTime(createdAt, useTickingNow(createdAt));
 }
 
+/** Milliseconds since `since`, kept current on the same cadence (HIVE-409: a card's age decides its default rung). */
+export function useElapsed(since: number): number {
+  return useTickingNow(since) - since;
+}
+
 /** {@link formatLastUsed}, kept current — the fleet table's `LAST USED` cell. */
 export function useLastUsed(usedAt: number): string {
   return formatLastUsed(usedAt, useTickingNow(usedAt));

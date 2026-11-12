@@ -7,7 +7,7 @@ import type { HiveNotification } from '@/types/notification';
 
 import { Button } from '@components/ui/button';
 import { AgentTile } from '@features/shared/components/agent-tile';
-import { useRelativeTime } from '@hooks/use-relative-time';
+import { useElapsed, useRelativeTime } from '@hooks/use-relative-time';
 import { asInbound } from '@shared/ledger-derive';
 import type { Rung, RungId } from '@shared/permission-rules';
 import {
@@ -57,6 +57,9 @@ const text = (value: unknown): string | undefined =>
   typeof value === 'string' && value !== '' ? value : undefined;
 
 const RUNG_IDS: readonly RungId[] = ['allow-once', 'allow-family', 'allow-tool', 'allow-project'];
+
+/** A permission card this old preselects `once`, the narrowest yes (HIVE-409). Never answers it (D7). */
+export const STALE_CARD_MS = 30 * 60_000;
 
 const isRungId = (value: unknown): value is RungId =>
   typeof value === 'string' && (RUNG_IDS as readonly string[]).includes(value);
@@ -153,6 +156,7 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
   const sessionName = useDisplayName(fromIsAgent ? '' : from);
   const asker = fromIsAgent ? from : sessionName;
   const age = useRelativeTime(ask?.ts ?? notif.createdAt);
+  const elapsed = useElapsed(ask?.ts ?? notif.createdAt);
   const askerEntity = useEntity(fromIsAgent ? from : '');
   const openEntity = useOpenEntity();
   const { closeInboxDrawer } = useInboxActions();
@@ -256,12 +260,15 @@ export function AskCard({ notif, thread, onClose, openLink = false }: AskCardPro
    * `@shared/permission-rules`) — this reads it back rather than
    * recomputing it, and falls back to the first rung actually offered if
    * `default` is missing, foreign, or names a rung that got filtered out
-   * above.
+   * above. A card {@link STALE_CARD_MS} old preselects `once` instead
+   * (HIVE-409); `PermissionControls` keeps a rung the person already picked.
    */
   const initialRung: RungId =
-    isRungId(ask?.meta?.default) && rungs.some((rung) => rung.id === ask?.meta?.default)
-      ? (ask?.meta?.default as RungId)
-      : (rungs[0]?.id ?? 'allow-once');
+    elapsed >= STALE_CARD_MS && rungs.some((rung) => rung.id === 'allow-once')
+      ? 'allow-once'
+      : isRungId(ask?.meta?.default) && rungs.some((rung) => rung.id === ask?.meta?.default)
+        ? (ask?.meta?.default as RungId)
+        : (rungs[0]?.id ?? 'allow-once');
 
   /**
    * What an **edited** draft is sent as (whole-branch review, finding 4).

@@ -43,7 +43,9 @@ export function PermissionControls({
   sending,
   onAnswer,
 }: PermissionControlsProps) {
-  const [scope, setScope] = useState<RungId>(initial);
+  // The person's pick wins for good; until then the card's default may change under it (HIVE-409).
+  const [picked, setPicked] = useState<RungId | null>(null);
+  const scope = picked ?? initial;
   const selected = rungs.find((rung) => rung.id === scope) ?? rungs[0];
 
   return (
@@ -59,7 +61,7 @@ export function PermissionControls({
         label="How far this permission reaches"
         options={rungs.map((rung) => ({ value: rung.id, label: rung.label }))}
         value={scope}
-        onChange={setScope}
+        onChange={setPicked}
         disabled={sending}
       />
 
