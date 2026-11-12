@@ -1678,6 +1678,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
            * which is what the turn it starts is.
            */
           const markers = effect.text === undefined ? undefined : parseLedgerMarkers(effect.text);
+          // shortcut: serves the first token only; Task 6 of HIVE-408 serves them all.
           const marker = markers?.[0];
           if (marker !== undefined) {
             const context = markerContext(entityId, marker);

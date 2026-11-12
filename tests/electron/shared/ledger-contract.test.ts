@@ -4,6 +4,7 @@ import {
   LEDGER_MARKER_PREFIX,
   ledgerMarker,
   ledgerMarkers,
+  markerListable,
   parseLedgerMarkers,
 } from '../../../electron/shared/ledger-contract';
 
@@ -63,5 +64,21 @@ describe('ledgerMarkers (HIVE-408)', () => {
   it('reads words after a ref as the person writing, not as more refs', () => {
     expect(parseLedgerMarkers('📒 a7 and also do this')).toBeUndefined();
     expect(parseLedgerMarkers('📒 a7 A8')).toEqual(['a7', 'A8']);
+    expect(parseLedgerMarkers('📒 a7 a8 foo')).toBeUndefined();
+  });
+
+  it('parses back exactly what it writes for every entry it calls listable', () => {
+    const entries = [
+      { id: '20260906-141530-0001', kind: 'ask' as const, ref: 'a12' },
+      { id: '20260906-141530-12345', kind: 'answer' as const },
+      { id: '20260906-141530-0002', kind: 'ask' as const },
+    ];
+    expect(entries.every(markerListable)).toBe(true);
+    expect(parseLedgerMarkers(ledgerMarkers(entries))).toEqual(['a12', '20260906-141530-12345', '20260906-141530-0002']);
+  });
+
+  it('calls an entry with a hand-edited id unlistable, so it never rides with others', () => {
+    expect(markerListable({ id: 'my-note', kind: 'post' })).toBe(false);
+    expect(markerListable({ id: 'my-note', kind: 'ask', ref: 'a3' })).toBe(true);
   });
 });

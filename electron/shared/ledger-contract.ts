@@ -158,9 +158,9 @@ export const LEDGER_REF_PREFIX = 'a';
 /**
  * The line a nudge writes into a session's pty (HIVE-138).
  *
- * A marker names one entry, or several on one line (HIVE-408), and carries nothing else. The entry itself reaches
- * the model as hook-carried context when the receiver sees this prompt on
- * `UserPromptSubmit` (`electron/main/hooks/receiver.ts`), untruncated, every
+ * A marker names the entries a nudge carries, one or several on one line
+ * (HIVE-408), and nothing else. Each entry reaches the model as hook-carried
+ * context when the receiver sees this prompt on `UserPromptSubmit` (`electron/main/hooks/receiver.ts`), untruncated, every
  * meta key intact, and labelled as context rather than passing as the user's
  * own words.
  *
@@ -179,14 +179,26 @@ const MARKER_TOKEN = /^[A-Za-z0-9-]+$/u;
  * (`a12`) or a canonical id (`20261110-100818-0001`). Stricter than {@link MARKER_TOKEN},
  * so `📒 a7 and also do this` stays a person writing rather than six refs.
  */
-const MARKER_LIST_TOKEN = new RegExp(`^(?:${LEDGER_REF_PREFIX}\\d+|\\d{8}-\\d{6}-\\d{4})$`, 'iu');
+const MARKER_LIST_TOKEN = new RegExp(`^(?:${LEDGER_REF_PREFIX}\\d+|\\d{8}-\\d{6}-\\d{4,})$`, 'iu');
 
 /** The token that names one entry: an ask by its ref, anything else by its id. */
 function markerToken(entry: Pick<LedgerEntry, 'id' | 'kind' | 'ref'>): string {
   return entry.kind === 'ask' ? (entry.ref ?? entry.id) : entry.id;
 }
 
-/** One marker line naming every entry, in order, separated by a space (HIVE-408). */
+/**
+ * Whether an entry's token may share a marker line with others (HIVE-408). Main mints refs and
+ * ids in the list shape, but the store accepts any id a hand-edited file carries; an entry that
+ * fails it goes out on a line of its own, where the one-token rule still reads it.
+ */
+export function markerListable(entry: Pick<LedgerEntry, 'id' | 'kind' | 'ref'>): boolean {
+  return MARKER_LIST_TOKEN.test(markerToken(entry));
+}
+
+/**
+ * One marker line naming every entry, in order, separated by a space (HIVE-408). Callers
+ * naming more than one entry pass only {@link markerListable} ones, or the parser refuses the line.
+ */
 export function ledgerMarkers(entries: readonly Pick<LedgerEntry, 'id' | 'kind' | 'ref'>[]): string {
   return `${LEDGER_MARKER_PREFIX}${entries.map(markerToken).join(' ')}`;
 }
