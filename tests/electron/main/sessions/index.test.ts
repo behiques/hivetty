@@ -4284,6 +4284,24 @@ describe('codex sessions (HIVE-279)', () => {
       expect(begun.at(-1)).toMatchObject({ model: 'sonnet', effort: 'low' });
     });
 
+    it('records nothing when the meters repeat the pick the history already holds', () => {
+      const written: Written[] = [];
+      instance = build(written, { all: 'recorded' });
+      instance.open({ ...OPEN, model: 'opus', effort: 'high' });
+      const picks = () => patchesFor(written, 'hero-refresh').filter((patch) => Object.keys(patch).length === 2);
+
+      onMetrics!('hero-refresh', { model: 'Sonnet 5.5', effort: 'low' });
+      onMetrics!('hero-refresh', { model: 'Sonnet 5.5', effort: 'low', contextPct: 40 });
+      onMetrics!('hero-refresh', { model: 'Sonnet 5.5', effort: 'low', fiveHourPct: 12 });
+      expect(picks()).toEqual([{ model: 'sonnet', effort: 'low' }]);
+
+      onMetrics!('hero-refresh', { model: 'Sonnet 5.5', effort: 'max' });
+      expect(picks()).toEqual([
+        { model: 'sonnet', effort: 'low' },
+        { model: 'sonnet', effort: 'max' },
+      ]);
+    });
+
     it('drops the effort when the live model takes none', () => {
       instance = build([], { resumable: { 'hero-refresh': PRIOR }, all: 'recorded' });
       instance.open({ ...OPEN, model: 'opus', effort: 'high' });

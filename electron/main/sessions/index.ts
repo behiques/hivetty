@@ -954,11 +954,19 @@ export function createSessions(options: SessionsOptions): Sessions {
   /**
    * Meters on their way to the renderer. The model and effort in them are what the session runs now, after any
    * `/model` or `/effort` inside it, so the history keeps them: a resume launches with them, not the spawn's pick.
+   * Recorded only when they differ from what the history holds, since every `record` schedules a whole-file rewrite
+   * and the meters repeat the same pick on every status-line tick.
    */
   const sendMetrics = (event: SessionMetricsEvent): void => {
     const harness = harnesses.harnessOf(event.entityId);
     const pick = harness === undefined ? {} : livePick(harness, event.metrics);
-    if (pick.model !== undefined || pick.effort !== undefined) history?.record(event.entityId, pick);
+    if (history !== undefined && (pick.model !== undefined || pick.effort !== undefined)) {
+      const held = history.all().find((record) => record.id === event.entityId);
+      const changed =
+        (pick.model !== undefined && pick.model !== held?.model) ||
+        (pick.effort !== undefined && pick.effort !== held?.effort);
+      if (changed) history.record(event.entityId, pick);
+    }
     send(CH.sessionMetrics, event);
   };
 
