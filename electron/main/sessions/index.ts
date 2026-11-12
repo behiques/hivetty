@@ -268,7 +268,10 @@ export interface SessionsOptions {
    * plugin. `cliHome('<id>-session')` in production, beside the headless home and never in it.
    */
   harnessStateDir?: (harness: HarnessId) => string;
-  /** HIVE-267: while true, a spawn or a restart is refused. Injected; `sessions/` never imports `licence/`. */
+  /**
+   * HIVE-267, HIVE-407: while true, a spawn, a restart, a new terminal or a command is refused; a live
+   * session or terminal still reattaches. Injected; `sessions/` never imports `licence/`.
+   */
   lapsed?: () => boolean;
   /**
    * HIVE-332: why this CLI may not start, or `null` when the plan includes it. Injected; `sessions/` never imports
