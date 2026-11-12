@@ -27,6 +27,7 @@ import {
 } from '@shared/ledger-derive';
 import { SLACK_COMMAND_KIND, SLACK_SERVER_KEY, SLACK_TRIGGER } from '@shared/slack-contract';
 
+import { isPermissionAsk } from './permissions';
 import type { RunStart } from './runs';
 import {
   decide,
@@ -651,6 +652,16 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       if (agent.status !== 'sleeping' && agent.status !== 'failed') continue;
 
       const schedule = listed.get(name);
+
+      /*
+        A repo agent's standing lane only routes (HIVE-408): its work is on its repo lanes, which keep
+        their own clock below. Ledger wakes still reach it.
+      */
+      if (deps.laneOf?.(name) === 'repo') {
+        arm(name, agent.nextRunAt, undefined);
+        continue;
+      }
+
       const next =
         schedule === undefined ? undefined : nextRunFrom(schedule.wake, now);
 
@@ -810,6 +821,10 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       if (schedule.wake.quiet !== undefined && inQuiet(minuteOfDay(now), schedule.wake.quiet)) continue;
 
       const holding = laneClaims(name, entries);
+      const cardOnLane = (agentName: string, key: string): boolean =>
+        openAsks(entries, now).some(
+          (ask) => isPermissionAsk(ask) && ask.from === agentName && laneOfRun(agentName, ask.meta?.['run'], entries) === key,
+        );
 
       for (const [key, lane] of Object.entries(agent.lanes ?? {})) {
         if (!key.startsWith('repo:')) continue;
@@ -834,6 +849,11 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
 
         deps.state.patchLane(name, key, { nextRunAt: next });
         if (deps.lapsed?.() === true) continue;
+        /*
+          Its one PR waits on the person's card (HIVE-408): the answer wakes the lane, and an interval
+          wake would find nothing to do. A lane holding another PR keeps ticking for that one.
+        */
+        if (holding.get(key) === 1 && cardOnLane(name, key)) continue;
         deps.run(name, INTERVAL_TRIGGER, undefined, { lane: key });
       }
     }
@@ -893,13 +913,66 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     trigger: string,
     extra: string | undefined,
     lane: string,
-  ): RunStart =>
-    noteStart(
+  ): RunStart => {
+    const started = noteStart(
       name,
       lane === STANDING_LANE
         ? deps.run(name, trigger, extra)
         : deps.run(name, trigger, extra, { lane }),
     );
+    // A run on the lane ends the refusal it recorded (HIVE-408).
+    if (started.started && deps.state.lane(name, lane).refused !== undefined) {
+      deps.state.patchLane(name, lane, { refused: undefined });
+    }
+    return started;
+  };
+
+  /** Refusals the asker is told about: the ones that do not end on their own (HIVE-408). */
+  const TOLD: ReadonlySet<string> = new Set(['budget', 'cli', 'invalid']);
+  /**
+   * `<ask id> <reason>` told this session, beside the log's own record, so a retry each minute says it once.
+   * shortcut: never pruned; one short string per refused ask per reason, cleared by an app restart. Prune on ask close if it ever shows.
+   */
+  const told = new Set<string>();
+
+  /**
+   * Record why a wake was refused on its lane, and tell each asker once (HIVE-408): one note per ask per
+   * reason on the ask's own thread, to the asker, as a `post` (an `answer` would close it). Deduped
+   * from the log, so a restart does not repeat it.
+   */
+  const tellRefused = (name: string, lane: string, items: readonly PendingWakeEntry[], started: RunStart): void => {
+    if (started.started) return;
+    deps.state.patchLane(name, lane, { refused: { reason: started.refused, at: deps.now() } });
+    if (!TOLD.has(started.refused)) return;
+
+    const asks = items.filter((item) => item.kind === 'ask' && !told.has(`${item.id} ${started.refused}`));
+    if (asks.length === 0) return;
+
+    const log = deps.ledger.read().entries;
+    for (const item of asks) {
+      const key = `${item.id} ${started.refused}`;
+      told.add(key);
+      if (log.some((e) => e.thread === item.id && e.meta?.['refused'] === started.refused)) continue;
+
+      const ref = item.ref ?? item.id;
+      const body =
+        started.refused === 'budget'
+          ? `${name} is out of budget until midnight; ${ref} is queued`
+          : `${name} cannot wake: ${started.reason ?? started.refused}; ${ref} is queued`;
+      const written = deps.ledger.append({
+        from: OVERMIND,
+        to: item.from,
+        kind: 'post',
+        thread: item.id,
+        body,
+        meta: { refused: started.refused, agent: name },
+      });
+      if (!written.ok) {
+        told.delete(key);
+        console.warn(`[hive] could not tell ${item.from} that ${name} refused ${ref}`);
+      }
+    }
+  };
 
   /**
    * Take one lane's queue and wake once for all of it.
@@ -944,6 +1017,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       if (!started.started) {
         back.push(...rest);
         if (started.refused === 'saturated') saturated = true;
+        tellRefused(name, lane, rest, started);
       }
     }
 
@@ -1126,8 +1200,10 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     trigger: string = LEDGER_TRIGGER,
     lane: string = STANDING_LANE,
   ): void => {
-    if (decision === 'wake' && runOnLane(name, trigger, describeEntry(item), lane).started) {
-      return;
+    if (decision === 'wake') {
+      const started = runOnLane(name, trigger, describeEntry(item), lane);
+      if (started.started) return;
+      tellRefused(name, lane, [item], started);
     }
 
     enqueue(name, item, lane);

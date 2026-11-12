@@ -2,7 +2,9 @@ import {
   AGENT_KILL_GRACE_MS,
   AGENT_STALL_GRACE_MS,
   STANDING_LANE,
+  contextOf,
   dayKey,
+  runCost,
   runReservation,
   type LiveRunSummary,
   type QueueableRefusal,
@@ -151,7 +153,8 @@ export interface RunTrackerDeps {
     name: string,
     trigger: string,
     extra?: string,
-    options?: { kind?: RunKind; lane?: string },
+    /** `budgetUsd` caps the run's `--max-budget-usd` at what is left of the day (HIVE-408). */
+    options?: { kind?: RunKind; lane?: string; budgetUsd?: number },
   ) =>
     | (WakeCommand & {
         sessionUuid: string;
@@ -191,6 +194,13 @@ export interface RunTrackerDeps {
     body: string;
     meta: Record<string, unknown>;
   }) => void;
+  /**
+   * Does any run of `lane` hold an open ask from this agent (HIVE-408), from `openAsksOnLane` in
+   * `ledger-derive.ts`? Optional so a spec that never runs a thread lane needs none.
+   */
+  openAsksOnLane?: (name: string, lane: string) => boolean;
+  /** Called with `true` when the first run goes live and `false` when the last one ends (HIVE-408). */
+  onLive?: (live: boolean) => void;
   /**
    * The lane ask a closing run leaves open and the claims it wrote
    * (HIVE-354), from `leftOpen` in `ledger-derive.ts`. Optional so a spec that
@@ -513,11 +523,17 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
   const liveOf = (name: string): LiveRun[] => running.get(name) ?? [];
 
-  const forget = (name: string, live: LiveRun): void => {
-    const rest = liveOf(name).filter((other) => other !== live);
+  /** Tell the host when the first run starts and the last one ends (HIVE-408): it holds the Mac awake between. */
+  const setRunning = (name: string, runs: LiveRun[]): void => {
+    const before = running.size > 0;
+    if (runs.length === 0) running.delete(name);
+    else running.set(name, runs);
+    const after = running.size > 0;
+    if (before !== after) deps.onLive?.(after);
+  };
 
-    if (rest.length === 0) running.delete(name);
-    else running.set(name, rest);
+  const forget = (name: string, live: LiveRun): void => {
+    setRunning(name, liveOf(name).filter((other) => other !== live));
   };
 
   const describe = (live: LiveRun): LiveRunSummary => ({
@@ -698,6 +714,24 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       ]);
     }
 
+    // The lane before this close: its basis is what a resumed run is charged above (HIVE-408).
+    const laneBefore = deps.state.lane(name, info.lane);
+    /*
+      Upgrade seed: a lane closed before `costBasis` existed recorded cumulative figures, so the
+      last run of the same conversation is the basis. Without it the first close after the upgrade
+      would charge a whole conversation once.
+    */
+    const basis =
+      laneBefore.costBasis ??
+      (() => {
+        const last = [...deps.state.read(name).runs]
+          .reverse()
+          .find((run) => run.sessionUuid === sessionUuid && run.costUsd !== undefined);
+        return last === undefined || sessionUuid === undefined ? undefined : { uuid: sessionUuid, usd: last.costUsd ?? 0 };
+      })();
+    const charged =
+      end?.costUsd === undefined || info.kind !== 'standing' ? end?.costUsd : runCost(end.costUsd, sessionUuid, basis);
+
     deps.state.recordRun(name, {
       run: info.run,
       kind: info.kind,
@@ -705,7 +739,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       startedAt: info.startedAt,
       endedAt,
       outcome,
-      ...(end?.costUsd === undefined ? {} : { costUsd: end.costUsd }),
+      ...(charged === undefined ? {} : { costUsd: charged }),
       ...(end?.turns === undefined ? {} : { turns: end.turns }),
       ...(end?.usage === undefined ? {} : { usage: end.usage }),
       harness: info.harness,
@@ -784,6 +818,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       writes its lane's session fields, and a task run writes none.
     */
     if (standing) {
+      const contextTokens = contextOf(end?.usage, end?.turns);
       deps.state.patchLane(name, info.lane, {
         /*
           `lastRunAt` is the **standing** conversation's last run — the `onchange`
@@ -821,6 +856,10 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         ...(sessionUuid === undefined || info.promptHash === undefined
           ? {}
           : { promptHash: info.promptHash }),
+        ...(sessionUuid === undefined || end?.costUsd === undefined
+          ? {}
+          : { costBasis: { uuid: sessionUuid, usd: end.costUsd } }),
+        ...(contextTokens === undefined ? {} : { contextTokens }),
       });
     }
 
@@ -873,7 +912,16 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       `failed` reaches the asker and closes the lane), and frees what the run
       claimed. A paused agent is the person's to resume.
     */
-    if (outcome !== 'asking' && !asking && current.status !== 'paused') {
+    /*
+      Lane-wide (HIVE-408): a queued post re-wakes a thread lane as a second run, which asked
+      nothing while the first run's question is still open. That lane is waiting, not abandoned.
+    */
+    if (
+      outcome !== 'asking' &&
+      !asking &&
+      current.status !== 'paused' &&
+      deps.openAsksOnLane?.(name, info.lane) !== true
+    ) {
       const left = deps.leftOpen?.(name, info.run, info.lane);
 
       if (left?.ask !== undefined) {
@@ -1110,7 +1158,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         real cost replaces it at close. Before the build, like the other gates.
       */
       const limits = deps.limitsFor?.(name) ?? {};
-      const reservation = runReservation(limits, parallel);
+      let reservation = runReservation(limits, parallel);
 
       if (limits.dailyUsd !== undefined) {
         const now = deps.now();
@@ -1118,10 +1166,17 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         const today = agent.today?.day === dayKey(now) ? agent.today : undefined;
         const reserved = live.reduce((sum, other) => sum + other.reserved, 0);
 
+        const spentSoFar = today?.usd ?? 0;
+        /*
+          The room left, in whole cents (HIVE-408). The CLI checks its cap only after a turn, so a run
+          started on a fraction of a cent would pay a whole turn past the day; and a cent figure keeps
+          float noise off the `--max-budget-usd` argv.
+        */
+        const remaining = Math.floor((limits.dailyUsd - spentSoFar - reserved) * 100 + 1e-6) / 100;
         // A day already spent refuses even a run that reserves nothing.
-        const spentOut = (today?.usd ?? 0) >= limits.dailyUsd;
+        const spentOut = spentSoFar >= limits.dailyUsd;
 
-        if (spentOut || (today?.usd ?? 0) + reserved + reservation > limits.dailyUsd + 1e-9) {
+        if (spentOut || remaining <= 0) {
           const day = dayKey(now);
           const spentText = `$${(today?.usd ?? 0).toFixed(2)}`;
           const dailyText = `$${limits.dailyUsd.toFixed(2)}`;
@@ -1179,6 +1234,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
             reason: `${name} is out of today's budget for now: ${spentText} spent and $${reserved.toFixed(2)} held by live runs, of ${dailyText}.`,
           };
         }
+        // Any room left starts the run, holding no more than that room (HIVE-408).
+        reservation = Math.min(reservation, remaining);
       }
 
       /*
@@ -1213,7 +1270,9 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         }
       }
 
-      const command = deps.command(name, trigger, extra, { kind, ...(onLane ? { lane } : {}) });
+      // A reservation below `budget_usd` is the day's last room, and the CLI's own cap holds the run to it (HIVE-408).
+      const capped = limits.budgetUsd !== undefined && reservation < limits.budgetUsd ? { budgetUsd: reservation } : {};
+      const command = deps.command(name, trigger, extra, { kind, ...(onLane ? { lane } : {}), ...capped });
 
       if ('problem' in command) {
         // HIVE-399: a `wait` agent's CLI is down for now, and the queue keeps the wake until it is back.
@@ -1424,7 +1483,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
       // Re-read rather than reusing the snapshot the gates were decided from:
       // `deps.command` runs arbitrary composition code in between.
-      running.set(name, [...liveOf(name), started]);
+      setRunning(name, [...liveOf(name), started]);
       /*
         The skip count is cleared here — at the one door every *standing*
         trigger passes through — rather than in the scheduler's tick (HIVE-121).

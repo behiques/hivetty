@@ -1181,6 +1181,12 @@ export interface LaneState {
   promptHash?: string;
   /** When a thread lane's ask closed. Pruned a day later (HIVE-188). */
   closedAt?: number;
+  /** The conversation's last cumulative `total_cost_usd` (HIVE-408): what the next resumed run is charged above. */
+  costBasis?: { uuid: string; usd: number };
+  /** Why the last wake of this lane was refused, until one starts (HIVE-408). For a panel to show. */
+  refused?: { reason: string; at: number };
+  /** The last run's context size, from {@link contextOf} (HIVE-408). */
+  contextTokens?: number;
 }
 
 /** What the form offers to fix an unavailable CLI with (HIVE-396). A fence failure has none. */
@@ -1205,6 +1211,12 @@ export interface AgentRunState {
   harness?: HarnessId;
   /** The standing lane's {@link LaneState.promptHash}. */
   promptHash?: string;
+  /** The standing lane's {@link LaneState.costBasis} (HIVE-408). */
+  costBasis?: { uuid: string; usd: number };
+  /** The standing lane's {@link LaneState.refused} (HIVE-408). */
+  refused?: { reason: string; at: number };
+  /** The standing lane's {@link LaneState.contextTokens} (HIVE-408). */
+  contextTokens?: number;
   status: AgentStatus;
   lastRunAt?: number;
   /** Stored and pushed here; computed by HIVE-121's scheduler. */
@@ -1395,6 +1407,33 @@ export function runReservation(
   if (limits.budgetUsd !== undefined) return limits.budgetUsd;
   if (limits.dailyUsd === undefined || parallel <= 1) return 0;
   return limits.dailyUsd / parallel;
+}
+
+/**
+ * What one run cost (HIVE-408). Claude reports `total_cost_usd` cumulatively over `--resume`, so a
+ * run that resumed the conversation `basis` names is charged only what it added. A figure below the
+ * basis means the CLI restarted its count, and is the run's own.
+ */
+export function runCost(
+  reported: number,
+  conversation: string | undefined,
+  basis: { uuid: string; usd: number } | undefined,
+): number {
+  if (conversation === undefined || basis?.uuid !== conversation || reported < basis.usd) return reported;
+  return reported - basis.usd;
+}
+
+/** A lane conversation past this is rotated once it holds no claim (HIVE-408). */
+export const ROTATE_CONTEXT_TOKENS = 100_000;
+
+/**
+ * About how much context a conversation carries: the run's input and cache reads per call (HIVE-408).
+ * shortcut: an average reads a little low against the last call's context; read the last assistant
+ * message's usage instead if rotation is seen firing late.
+ */
+export function contextOf(usage: RunUsage | undefined, turns: number | undefined): number | undefined {
+  if (usage === undefined) return undefined;
+  return Math.round(((usage.inputTokens ?? 0) + (usage.cachedTokens ?? 0)) / Math.max(turns ?? 1, 1));
 }
 
 /** What a run spent against `limits.dailyTokens` (HIVE-398): new input and output, never the cache read back. */

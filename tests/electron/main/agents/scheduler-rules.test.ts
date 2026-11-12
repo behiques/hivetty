@@ -245,6 +245,15 @@ describe('laneClaims (HIVE-186)', () => {
       e({ id: 'r', kind: 'release', meta: { task: 'b/y#2', run: 'r2' } }),
       e({ id: 'c3', from: 'builder', meta: { task: 'z#9', run: 'r1' } }),
     ];
-    expect(laneClaims('shipper', log)).toEqual(new Set(['repo:a/x']));
+    expect(laneClaims('shipper', log)).toEqual(new Map([['repo:a/x', 1]]));
+  });
+
+  it('counts two claims on one lane (HIVE-408)', () => {
+    const log = [
+      begun('r1', 'repo:a/x'),
+      e({ id: 'c1', meta: { task: 'a/x#1', run: 'r1' } }),
+      e({ id: 'c2', meta: { task: 'a/x#2', run: 'r1' } }),
+    ];
+    expect(laneClaims('shipper', log).get('repo:a/x')).toBe(2);
   });
 });

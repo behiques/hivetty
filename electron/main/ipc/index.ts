@@ -10,6 +10,7 @@ import {
   app,
   dialog,
   ipcMain,
+  powerSaveBlocker,
   safeStorage,
   shell,
   type IpcMainEvent,
@@ -163,7 +164,7 @@ import type {
   JiraUser,
 } from '@shared/jira-contract';
 import { LEDGER_DIR, OVERMIND } from '@shared/ledger-contract';
-import { closedAskThreads, delegatesOf, leftOpen } from '@shared/ledger-derive';
+import { closedAskThreads, delegatesOf, leftOpen, openAsksOnLane } from '@shared/ledger-derive';
 import {
   isThisMachineAction,
   type NotificationAction,
@@ -220,6 +221,7 @@ import {
   type RunTracker,
 } from '../agents/runs';
 import { createScheduler, type Scheduler } from '../agents/scheduler';
+import { laneClaims } from '../agents/scheduler-rules';
 import { createAgentState, type AgentState } from '../agents/state';
 import { mergeRunState } from '../agents/summary';
 import { createHarnessCheck, createWakeCommand, type WakeCommandDeps } from '../agents/wake-command';
@@ -2857,6 +2859,7 @@ export function registerIpcHandlers(
     userDataPath: () => app.getPath('userData'),
     hostAlias: () => getConfig().receiver.hostAlias,
     agentContainerSettingsPath: (config) => hooks.agentContainerSettingsPathFor(config),
+    laneHolds: (name, lane) => laneClaims(name, ledger.read({}).entries).has(lane),
   };
   const buildWakeCommand = createWakeCommand(wakeDeps);
   const checkAgentHarness = createHarnessCheck(wakeDeps);
@@ -2942,7 +2945,18 @@ export function registerIpcHandlers(
     } satisfies AgentStatusPush);
   };
 
+  /** The blocker held while any agent run is live (HIVE-408). Server mode's own is separate. */
+  let runBlocker: number | null = null;
+
   runs = createRunTracker({
+    onLive: (live) => {
+      // shortcut: one blocker for every agent run, not per run; enough while runs are the only reason.
+      if (live && runBlocker === null) runBlocker = powerSaveBlocker.start('prevent-app-suspension');
+      else if (!live && runBlocker !== null) {
+        powerSaveBlocker.stop(runBlocker);
+        runBlocker = null;
+      }
+    },
     /*
       `spawn` is injected rather than imported by `runs.ts`, which is what lets
       that module's tests drive a recording fake without a real process. The
@@ -3021,6 +3035,7 @@ export function registerIpcHandlers(
     hasOpenAsk,
     handoffFor,
     leftOpen: (name, run, lane) => leftOpen(ledger.read({}).entries, name, run, lane, Date.now()),
+    openAsksOnLane: (name, lane) => openAsksOnLane(ledger.read({}).entries, name, lane, Date.now()),
     newUuid,
     pushStatus: pushAgentStatus,
     pushLines: (name, lines) => {

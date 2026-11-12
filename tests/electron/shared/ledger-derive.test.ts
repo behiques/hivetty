@@ -22,6 +22,7 @@ import {
   keepNewest,
   laneOfRun,
   leftOpen,
+  openAsksOnLane,
   matches,
   mergeAsk,
   mergeWaiting,
@@ -1114,5 +1115,30 @@ describe('delegatesOf (idle with agents)', () => {
       ask('s4', 'shipper', 'sess-a', { pr: 106, repo: 'behiques/hivetty' }),
     ];
     expect(of(log)).toEqual([{ agent: 'shipper', helpers: ['acr', 'fixer'] }]);
+  });
+});
+
+describe('openAsksOnLane (HIVE-408)', () => {
+  const started = (run: string, lane: string) =>
+    entry({ id: `s-${run}`, from: 'builder', kind: 'event', body: 'run.started — ledger', meta: { run, lane } });
+
+  it('sees an open ask any run of the lane wrote', () => {
+    const log = [
+      started('r1', 'thread:k1'),
+      entry({ id: 'q1', from: 'builder', to: 'sess-a', kind: 'ask', body: 'which?', meta: { run: 'r1' } }),
+      started('r2', 'thread:k1'),
+    ];
+    expect(openAsksOnLane(log, 'builder', 'thread:k1', NOW)).toBe(true);
+    expect(openAsksOnLane(log, 'builder', 'thread:k2', NOW)).toBe(false);
+  });
+
+  it('ignores an answered ask and another agent\'s', () => {
+    const log = [
+      started('r1', 'thread:k1'),
+      entry({ id: 'q1', from: 'builder', to: 'sess-a', kind: 'ask', body: 'which?', meta: { run: 'r1' } }),
+      entry({ id: 'a1', from: 'sess-a', to: 'builder', kind: 'answer', thread: 'q1', body: 'main' }),
+      entry({ id: 'q2', from: 'fixer', to: 'sess-a', kind: 'ask', body: 'x', meta: { run: 'r1' } }),
+    ];
+    expect(openAsksOnLane(log, 'builder', 'thread:k1', NOW)).toBe(false);
   });
 });

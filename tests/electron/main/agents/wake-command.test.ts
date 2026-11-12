@@ -198,6 +198,17 @@ describe('createWakeCommand', () => {
     expect(built.cwd).toBe('/home/u/.hive/work/slack-watcher');
   });
 
+  it('lays a reservation over budget_usd on the command line (HIVE-408)', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = AGENT_MD.replace('  turns: 12', '  turns: 12\n  budget_usd: 3');
+    const full = build()('slack-watcher', 'manual');
+    const capped = build()('slack-watcher', 'manual', undefined, { budgetUsd: 1 });
+
+    if ('problem' in full || 'problem' in capped) throw new Error('expected a command');
+
+    expect(full.args[full.args.indexOf('--max-budget-usd') + 1]).toBe('3');
+    expect(capped.args[capped.args.indexOf('--max-budget-usd') + 1]).toBe('1');
+  });
+
   it('writes the preamble and the body into the generated system prompt', () => {
     build()('slack-watcher', 'manual');
 
@@ -953,6 +964,37 @@ describe('lanes (HIVE-185)', () => {
     if ('problem' in built) throw new Error(built.problem);
     expect(built.lastTurn).toBe(false);
     expect(stored['slack-watcher'].forceRotate).toBe(true);
+  });
+});
+
+describe('rotation by size (HIVE-408)', () => {
+  const big = (contextTokens: number): void => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 0, runs: [],
+      lanes: { 'repo:a/x': { sessionUuid: 's1', runsSinceRotate: 1, promptHash: promptHashNow(), contextTokens } },
+    };
+  };
+  const lastTurnOf = (holds: boolean): boolean => {
+    const built = build({ laneHolds: (name, lane) => holds && name === 'slack-watcher' && lane === 'repo:a/x' })(
+      'slack-watcher', 'ledger', undefined, { lane: 'repo:a/x' },
+    );
+    if ('problem' in built) throw new Error(built.problem);
+    return built.lastTurn;
+  };
+
+  it('asks a big conversation that holds no claim for a handoff', () => {
+    big(120_000);
+    expect(lastTurnOf(false)).toBe(true);
+  });
+
+  it('keeps a big conversation that still holds a claim', () => {
+    big(120_000);
+    expect(lastTurnOf(true)).toBe(false);
+  });
+
+  it('keeps a small conversation', () => {
+    big(40_000);
+    expect(lastTurnOf(false)).toBe(false);
   });
 });
 

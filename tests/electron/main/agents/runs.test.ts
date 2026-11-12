@@ -78,6 +78,10 @@ describe('createRunTracker', () => {
   let handoff: string | undefined;
   /** What a closing run leaves open on its lane (HIVE-354). Set per test. */
   let left: { ask: { id: string; ref?: string } | undefined; claims: string[] };
+  /** Does any run of the closing lane hold an open ask (HIVE-408)? Set per test. */
+  let askingOnLane: boolean;
+  /** What `onLive` reported, in order (HIVE-408). */
+  let awake: boolean[];
   /** The prompt hash a session-starting command carries. Set per test. */
   let promptHash: string | undefined;
   let commandCalls: number;
@@ -89,6 +93,7 @@ describe('createRunTracker', () => {
     extra?: string;
     kind?: string;
     lane?: string;
+    budgetUsd?: number;
   }[];
   /** What `limits.parallel` says for the agent under test (HIVE-128). */
   let parallel: number;
@@ -113,6 +118,8 @@ describe('createRunTracker', () => {
     lastTurn = false;
     handoff = undefined;
     left = { ask: undefined, claims: [] };
+    askingOnLane = false;
+    awake = [];
     promptHash = undefined;
     commandCalls = 0;
     clock = 1_000;
@@ -136,6 +143,7 @@ describe('createRunTracker', () => {
           ...(extra === undefined ? {} : { extra }),
           ...(options?.kind === undefined ? {} : { kind: options.kind }),
           ...(options?.lane === undefined ? {} : { lane: options.lane }),
+          ...(options?.budgetUsd === undefined ? {} : { budgetUsd: options.budgetUsd }),
         });
 
         return {
@@ -159,6 +167,8 @@ describe('createRunTracker', () => {
       hasOpenAsk: () => openAskAnywhere,
       handoffFor: () => handoff,
       leftOpen: () => left,
+      openAsksOnLane: (name, lane) => askingOnLane && name === 'a' && lane === 'thread:k1',
+      onLive: (live) => awake.push(live),
       newUuid: () => 'uuid-minted',
       pushStatus: (name) => statuses.push(name),
       pushLines: (name, pushed) =>
@@ -2286,6 +2296,84 @@ describe('createRunTracker', () => {
     expect(childInstances[1]?.killSignals).toEqual(['SIGTERM']);
   });
 
+  it('reports the first live run and the last one ending, once each (HIVE-408)', () => {
+    parallel = 2;
+    tracker.run('a', 'ledger', undefined, { lane: 'thread:A' });
+    tracker.run('b', 'ledger');
+    expect(awake).toEqual([true]);
+
+    childInstances[0]?.emitStdout(resultLine());
+    childInstances[0]?.emitClose(0);
+    expect(awake).toEqual([true]);
+
+    childInstances[1]?.emitStdout(resultLine());
+    childInstances[1]?.emitClose(0);
+    expect(awake).toEqual([true, false]);
+  });
+
+  it('keeps the closing conversation\'s context size on its lane (HIVE-408)', () => {
+    tracker.run('a', 'ledger');
+    childInstances[0]?.emitStdout(
+      resultLine({
+        num_turns: 3,
+        usage: { input_tokens: 52, cache_creation_input_tokens: 8_000, cache_read_input_tokens: 617_226, output_tokens: 10 },
+      }),
+    );
+    childInstances[0]?.emitClose(0);
+    expect(state.read('a').contextTokens).toBe(208_426);
+  });
+
+  describe('what a run is charged (HIVE-408)', () => {
+    const finish = (index: number, cost: number): void => {
+      childInstances[index]?.emitStdout(resultLine({ total_cost_usd: cost, session_id: 'conv-1' }));
+      childInstances[index]?.emitClose(0);
+    };
+
+    it('charges ten resumed runs their real spend, not ten running totals', () => {
+      commandOver = { sessionUuid: 'conv-1' };
+      for (let i = 0; i < 10; i += 1) {
+        tracker.run('a', 'ledger');
+        finish(i, 1 + i * 0.1);
+      }
+      expect(state.read('a').today?.usd).toBeCloseTo(1.9, 10);
+      expect(state.read('a').runs.at(-1)?.costUsd).toBeCloseTo(0.1, 10);
+      expect(state.read('a').costBasis).toEqual({ uuid: 'conv-1', usd: 1.9 });
+    });
+
+    it('charges a new conversation its whole figure', () => {
+      commandOver = { sessionUuid: 'conv-1' };
+      tracker.run('a', 'ledger');
+      finish(0, 2);
+      commandOver = { sessionUuid: 'conv-2' };
+      tracker.run('a', 'ledger');
+      childInstances[1]?.emitStdout(resultLine({ total_cost_usd: 0.25, session_id: 'conv-2' }));
+      childInstances[1]?.emitClose(0);
+      expect(state.read('a').today?.usd).toBeCloseTo(2.25, 10);
+    });
+
+    it('seeds the basis from the last run of the same conversation on upgrade', () => {
+      state.recordRun(
+        'a',
+        { run: 'old', kind: 'standing', trigger: 'ledger', startedAt: 0, endedAt: 1, outcome: 'done', costUsd: 5, sessionUuid: 'conv-1' },
+        1_000,
+      );
+      commandOver = { sessionUuid: 'conv-1' };
+      tracker.run('a', 'ledger');
+      finish(0, 5.2);
+      expect(state.read('a').runs.at(-1)?.costUsd).toBeCloseTo(0.2, 10);
+    });
+
+    it('keeps a thread lane\'s basis on that lane', () => {
+      parallel = 2;
+      commandOver = { sessionUuid: 'conv-t' };
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:k1' });
+      childInstances[0]?.emitStdout(resultLine({ total_cost_usd: 3, session_id: 'conv-t' }));
+      childInstances[0]?.emitClose(0);
+      expect(state.lane('a', 'thread:k1').costBasis).toEqual({ uuid: 'conv-t', usd: 3 });
+      expect(state.read('a').costBasis).toBeUndefined();
+    });
+  });
+
   describe('the daily budget on every wake (HIVE-187)', () => {
     /** Ends run `index` with a done result that cost `cost`. */
     const endRun = (index: number, cost: number): void => {
@@ -2300,12 +2388,38 @@ describe('createRunTracker', () => {
       );
     };
 
-    it('refuses the second of two parallel runs that would overshoot the day, with one card', () => {
+    it('starts a run while any of the day remains, reserving only what is left (HIVE-408)', () => {
+      limits = { budgetUsd: 3, dailyUsd: 5 };
+      spent(4);
+
+      expect(tracker.run('a', 'ledger')).toMatchObject({ started: true });
+      expect(commandArgs.at(-1)).toMatchObject({ budgetUsd: 1 });
+    });
+
+    it('holds whole cents of the room left, and refuses less than one (HIVE-408)', () => {
+      limits = { budgetUsd: 3, dailyUsd: 5 };
+      spent(4.7);
+      expect(tracker.run('a', 'ledger')).toMatchObject({ started: true });
+      expect(commandArgs.at(-1)).toMatchObject({ budgetUsd: 0.3 });
+
+      endRun(0, 0.2993);
+      expect(tracker.run('a', 'ledger')).toMatchObject({ started: false, refused: 'budget' });
+    });
+
+    it('passes no budget override when budget_usd fits (HIVE-408)', () => {
+      limits = { budgetUsd: 1, dailyUsd: 5 };
+      tracker.run('a', 'ledger');
+      expect(commandArgs.at(-1)).not.toHaveProperty('budgetUsd');
+    });
+
+    it('refuses the run that finds the day fully held by live runs, with one card (HIVE-408)', () => {
       parallel = 3;
       limits = { budgetUsd: 3, dailyUsd: 5 };
 
       expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:A' })).toMatchObject({ started: true });
-      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:B' })).toMatchObject({ started: false, refused: 'budget' });
+      // B starts on the $2 that A's $3 leaves, capped at it.
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:B' })).toMatchObject({ started: true });
+      expect(commandArgs.at(-1)).toMatchObject({ budgetUsd: 2 });
       expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:C' })).toMatchObject({ started: false, refused: 'budget' });
 
       const cards = ledger.filter((entry) => entry.meta?.['dailyCap'] !== undefined);
@@ -2321,11 +2435,12 @@ describe('createRunTracker', () => {
       parallel = 3;
       limits = { budgetUsd: 3, dailyUsd: 5 };
       tracker.run('a', 'ledger', undefined, { lane: 'thread:A' });
-      tracker.run('a', 'ledger', undefined, { lane: 'thread:B' }); // refused
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:B' }); // starts on the $2 left (HIVE-408)
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:C' }); // refused
 
       endRun(0, 1); // the first run cost $1 of its $3
 
-      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:C' })).toMatchObject({ started: true });
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:D' })).toMatchObject({ started: true });
     });
 
     it('refuses a ledger wake once the day is spent — it used to run', () => {
@@ -2345,11 +2460,12 @@ describe('createRunTracker', () => {
       parallel = 3;
       limits = { budgetUsd: 3, dailyUsd: 5 };
       tracker.run('a', 'ledger', undefined, { lane: 'thread:A' });
-      tracker.run('a', 'ledger', undefined, { lane: 'thread:B' }); // held back
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:B' }); // starts on the $2 left (HIVE-408)
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:C' }); // held back
 
       endRun(0, 5); // the first run spent the whole day
 
-      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:C' })).toMatchObject({ started: false, refused: 'budget' });
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:D' })).toMatchObject({ started: false, refused: 'budget' });
 
       const cards = ledger.filter((entry) => entry.meta?.['dailyCap'] !== undefined);
       expect(cards.map((card) => card.meta?.['held'] === true)).toEqual([true, false]);
@@ -2361,9 +2477,10 @@ describe('createRunTracker', () => {
       limits = { dailyUsd: 6 };
       spent(3);
 
-      // $3 spent + $2 reserved = $5 fits in $6; another $2 would make $7.
+      // $3 spent + $2 reserved = $5 of $6; the next run holds the last $1, and the one after finds none (HIVE-408).
       expect(tracker.run('a', 'ledger', undefined, { lane: 'repo:a/x' })).toMatchObject({ started: true });
-      expect(tracker.run('a', 'ledger', undefined, { lane: 'repo:b/y' })).toMatchObject({ started: false, refused: 'budget' });
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'repo:b/y' })).toMatchObject({ started: true });
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'repo:c/z' })).toMatchObject({ started: false, refused: 'budget' });
 
       const card = ledger.find((entry) => entry.meta?.['dailyCap'] !== undefined);
       expect(card?.body).toContain('reserving $2.00 per run: daily_usd ÷ parallel, since no budget_usd is set');
@@ -2443,6 +2560,18 @@ describe('createRunTracker', () => {
 
   describe('a thread lane that ends without answering its ask (HIVE-354)', () => {
     const abandoned = () => ledger.filter((item) => item.from === OVERMIND && item.kind !== 'event');
+
+    it('leaves the job alone when an earlier run of the lane is still asking (HIVE-408)', () => {
+      left = { ask: { id: 'k1', ref: 'a93' }, claims: ['HIVE-268'] };
+      askingOnLane = true; // run-1 asked; run-2, from a queued post, asked nothing
+
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:k1' });
+      childInstances[0]?.emitStdout(resultLine());
+      childInstances[0]?.emitClose(0);
+
+      expect(abandoned()).toEqual([]);
+      expect(state.read('a').runs.at(-1)?.outcome).toBe('done');
+    });
 
     it('fails the ask to the asker, naming the run, then releases what the run claimed', () => {
       left = { ask: { id: 'k1', ref: 'a148' }, claims: ['HIVE-342'] };

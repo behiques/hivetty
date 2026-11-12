@@ -468,6 +468,14 @@ spent-out agent's. The same sweep moves an `asking` agent with no open ask back
 to `sleeping`, so its schedule resumes. An `invalid` refusal is warned in the
 main log once per reason; the queue waits for the next minute.
 
+**The asker is told, since HIVE-408.** A refusal that does not end on its own
+(`budget`, `cli`, `invalid`) on a wake an `ask` caused posts one note on that
+ask's thread, from the overmind to the asker: "<agent> is out of budget until
+midnight; a26 is queued", or "<agent> cannot wake: <reason>; a26 is queued". It
+is a `post`, not an `answer`, so the ask stays open and the queued wake still
+answers it. One note per ask per reason, deduped from the log, so a restart does
+not repeat it. The lane records the reason as `refused` until a run starts on it.
+
 `stop()` sets a flag that every entry point honours, not just the interval. Both
 teardowns call it **before** `RunTracker.closeAll`, which finalizes each live run
 synchronously and so re-enters `onRunClosed` — where a flush would spawn a fresh
@@ -726,7 +734,13 @@ trigger: ledger, manual, job and lane. Each live run holds a reservation against
 spend, or else `daily_usd ÷ parallel`, so the cap's worth of parallel runs fits
 in the day. An agent that runs one at a time with no `budget_usd` reserves
 nothing: one run cannot overshoot together with anything, so its ceiling is
-today's spend alone. A refusal is `budget`, which queues like `saturated`. A
+today's spend alone. Since HIVE-408 a run starts while any whole cent of the day
+is left: it reserves `min(budget_usd, what remains)`, and when that is less than
+`budget_usd` it passes that as `--max-budget-usd`, so the day's ceiling holds on
+the command line too. A run is charged what it added to its conversation:
+`total_cost_usd` is cumulative over `--resume`, so the lane keeps `costBasis`,
+the conversation's last reported total, and the next resumed run is charged the
+difference. A refusal is `budget`, which queues like `saturated`. A
 spent day sets `capped` and posts the card once a day. A run held back only by
 live reservations posts a "held back" card once a day and leaves `capped`
 clear, so the spent card can still fire later. The first sweep of a new day
@@ -2173,6 +2187,13 @@ stores `promptHash`, the sha256 of the prompt a session started with, beside
 its `sessionUuid`, and a wake whose prompt hashes otherwise is a last turn. A
 session with no hash predates the check and rotates once. Per lane, like the
 counter.
+
+**So does a big conversation with no work, since HIVE-408.** Every resumed wake
+re-reads the whole conversation, so a lane whose last run carried about 100k
+tokens of context (`contextTokens`, the run's input and cache reads per call,
+against `ROTATE_CONTEXT_TOKENS`) is a last turn when it holds no claim. A lane
+still holding a claim keeps its conversation until the work is done.
+`rotate_after` stays the upper bound.
 
 **The crossing wake still resumes.** When `runsSinceRotate` reaches
 `rotate_after`, `wake-command.ts` builds the same `--resume <uuid>` it always

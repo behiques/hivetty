@@ -21,6 +21,8 @@ import {
   dayKey,
   formatRunCost,
   isQueueableRefusal,
+  contextOf,
+  runCost,
   runReservation,
   isContainerCommand,
   isContainerName,
@@ -469,5 +471,47 @@ describe('spentTokens (HIVE-398)', () => {
   it('reads a missing meter, or no usage at all, as nothing spent', () => {
     expect(spentTokens({ outputTokens: 7 })).toBe(7);
     expect(spentTokens(undefined)).toBe(0);
+  });
+});
+
+describe('runCost (HIVE-408)', () => {
+  const basis = { uuid: 'c1', usd: 2.085 };
+
+  it('charges a resumed run what it added to its conversation', () => {
+    expect(runCost(2.115, 'c1', basis)).toBeCloseTo(0.03, 10);
+  });
+
+  it('charges the whole figure for a fresh conversation, a rotation or no basis', () => {
+    expect(runCost(0.4, 'c2', basis)).toBe(0.4);
+    expect(runCost(0.4, undefined, basis)).toBe(0.4);
+    expect(runCost(0.4, 'c1', undefined)).toBe(0.4);
+  });
+
+  it('charges the whole figure when the CLI restarted its count', () => {
+    expect(runCost(0.5, 'c1', basis)).toBe(0.5);
+  });
+
+  it('adds ten resumed runs up to their real spend', () => {
+    let held: { uuid: string; usd: number } | undefined;
+    let total = 0;
+    for (let i = 0; i < 10; i += 1) {
+      const reported = 1 + i * 0.1; // 1.0, 1.1, … 1.9 cumulative
+      total += runCost(reported, 'c1', held);
+      held = { uuid: 'c1', usd: reported };
+    }
+    expect(total).toBeCloseTo(1.9, 10);
+  });
+});
+
+describe('contextOf (HIVE-408)', () => {
+  it('is the average context per call', () => {
+    expect(contextOf({ inputTokens: 8_052, cachedTokens: 617_226 }, 3)).toBe(208_426);
+  });
+  it('reads a run with no turn count as one call', () => {
+    expect(contextOf({ inputTokens: 10, cachedTokens: 90 }, undefined)).toBe(100);
+    expect(contextOf({ inputTokens: 10, cachedTokens: 90 }, 0)).toBe(100);
+  });
+  it('is undefined without usage', () => {
+    expect(contextOf(undefined, 3)).toBeUndefined();
   });
 });

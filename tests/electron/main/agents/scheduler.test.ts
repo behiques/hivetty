@@ -47,7 +47,7 @@ describe('createScheduler', () => {
    * `working` and `paused` and reports the rest, so a fake that could not say
    * which it was could not drive that difference.
    */
-  let refuse: 'working' | 'paused' | 'saturated' | 'invalid' | 'cli' | false;
+  let refuse: 'working' | 'paused' | 'saturated' | 'invalid' | 'cli' | 'budget' | false;
   /** The `reason` a refusal carries, as `RunTracker` gives one for `invalid`. */
   let refuseReason: string | undefined;
   /** The CLI a `cli` refusal names (HIVE-399). */
@@ -735,6 +735,67 @@ describe('createScheduler', () => {
     expect(state.read(AGENT).pendingWake ?? []).toEqual([]);
   });
 
+  describe('a refused wake tells the asker (HIVE-408)', () => {
+    const asked = entry({ id: 'a26', ref: 'a26', from: 'builder', to: AGENT, kind: 'ask', body: 'ship #226' });
+    const notes = () => appended.filter((a) => a.meta?.['refused'] !== undefined);
+
+    it('posts one note on the ask\'s thread, to the asker, and keeps the ask open', () => {
+      refuse = 'budget';
+      entries = [asked];
+      scheduler.start();
+      scheduler.onEntry(asked);
+      tick();
+      tick();
+
+      expect(notes()).toEqual([
+        {
+          from: 'overmind',
+          to: 'builder',
+          kind: 'post',
+          thread: 'a26',
+          body: `${AGENT} is out of budget until midnight; a26 is queued`,
+          meta: { refused: 'budget', agent: AGENT },
+        },
+      ]);
+      expect(state.read(AGENT).refused).toMatchObject({ reason: 'budget' });
+      expect(state.read(AGENT).pendingWake).toEqual([expect.objectContaining({ id: 'a26' })]);
+    });
+
+    it('does not repeat a note the log already holds', () => {
+      refuse = 'budget';
+      entries = [
+        asked,
+        entry({ id: 'n1', from: 'overmind', to: 'builder', kind: 'post', thread: 'a26', body: 'x', meta: { refused: 'budget', agent: AGENT } }),
+      ];
+      scheduler.start();
+      scheduler.onEntry(asked);
+      expect(notes()).toEqual([]);
+    });
+
+    it('says nothing for a wait (working, paused) or for a post', () => {
+      refuse = 'working';
+      scheduler.start();
+      scheduler.onEntry(asked);
+      refuse = 'budget';
+      scheduler.onEntry(entry({ id: 'p9', from: 'builder', to: AGENT, kind: 'post', body: 'fyi' }));
+      expect(notes()).toEqual([]);
+    });
+
+    it('names the cause for cli and invalid, and clears the lane record when a run starts', () => {
+      refuse = 'cli';
+      refuseReason = 'claude is not signed in';
+      entries = [asked];
+      scheduler.start();
+      scheduler.onEntry(asked);
+      expect(notes().find((a) => a.meta?.['refused'] === 'cli')?.body).toBe(
+        `${AGENT} cannot wake: claude is not signed in; a26 is queued`,
+      );
+      refuse = false;
+      tick();
+      expect(state.read(AGENT).refused).toBeUndefined();
+    });
+  });
+
   describe('a refused wake', () => {
     /** The tracker refuses without ever reaching `onRunClosed`. */
     const refusing = (): void => {
@@ -1030,6 +1091,21 @@ describe('createScheduler', () => {
         live in their own describe, without this.
       */
       scheduler.start();
+    });
+
+    it('starts a wake queued under a spent day on the first tick of the next (HIVE-408)', () => {
+      const DAY = 24 * 60 * 60 * 1000;
+      state.patch(AGENT, {
+        today: { day: dayKey(clock), runs: 3, usd: 40, capped: true },
+        pendingWake: [{ kind: 'ask', id: 'a26', from: 'builder' }],
+      });
+      tick();
+      expect(woke).toEqual([]);
+
+      clock = NOON + DAY;
+      tick();
+      expect(woke).toEqual([expect.objectContaining({ name: AGENT, trigger: 'ledger' })]);
+      expect(state.read(AGENT).pendingWake ?? []).toEqual([]);
     });
 
     /*
@@ -2492,6 +2568,55 @@ describe('createScheduler', () => {
       expect(woke).toContainEqual({ name: AGENT, trigger: 'interval', lane: 'repo:a/x' });
       expect(woke.some((w) => w.lane === 'repo:b/y')).toBe(false);
       expect(state.lane(AGENT, 'repo:b/y').nextRunAt).toBeUndefined();
+    });
+
+    it('gives a repo agent no standing interval wake, and still ticks its claimed lane (HIVE-408)', () => {
+      holding();
+
+      tick();
+      clock = 600_000;
+      tick();
+
+      expect(woke.some((w) => w.lane === undefined)).toBe(false);
+      expect(woke).toContainEqual({ name: AGENT, trigger: 'interval', lane: 'repo:a/x' });
+      expect(state.read(AGENT).nextRunAt).toBeUndefined();
+    });
+
+    it('does not tick a lane whose one claim waits on its own permission card (HIVE-408)', () => {
+      holding();
+      entries.push(entry({ id: 'p1', from: AGENT, to: 'overmind', kind: 'ask', body: 'merge a/x#1?', meta: { run: 'r1', kind: 'permission' } }));
+
+      tick();
+      clock = 600_000;
+      tick();
+
+      expect(woke.some((w) => w.lane === 'repo:a/x')).toBe(false);
+      expect(state.lane(AGENT, 'repo:a/x').nextRunAt).toBe(1_200_000);
+    });
+
+    it('still ticks a lane holding a second claim beside the card (HIVE-408)', () => {
+      holding();
+      entries.push(
+        entry({ id: 'c2', from: AGENT, to: undefined, kind: 'claim', body: 'claimed a/x#2', meta: { task: 'a/x#2', run: 'r1' } }),
+        entry({ id: 'p1', from: AGENT, to: 'overmind', kind: 'ask', body: 'merge a/x#1?', meta: { run: 'r1', kind: 'permission' } }),
+      );
+
+      tick();
+      clock = 600_000;
+      tick();
+
+      expect(woke).toContainEqual({ name: AGENT, trigger: 'interval', lane: 'repo:a/x' });
+    });
+
+    it('still ticks a lane whose one claim waits on a plain question, not a card (HIVE-408)', () => {
+      holding();
+      entries.push(entry({ id: 'q1', from: AGENT, to: 'sess-1', kind: 'ask', body: 'which branch?', meta: { run: 'r1' } }));
+
+      tick();
+      clock = 600_000;
+      tick();
+
+      expect(woke).toContainEqual({ name: AGENT, trigger: 'interval', lane: 'repo:a/x' });
     });
 
     it('does not tick a lane that is running', () => {
