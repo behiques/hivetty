@@ -6,9 +6,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { parseAgent } from '../../../../electron/main/agents/definition';
 import { baseOf } from '../../../../electron/main/seed/merge';
 import { seedShipped, type SeedReport } from '../../../../electron/main/seed/seed';
 import { readUserSkills } from '../../../../electron/main/skills/read';
+import { patchFrontmatter } from '../../../../electron/shared/agent-contract';
 
 /**
  * The seed's one rule, tested from every side: the user's edits win
@@ -173,6 +175,26 @@ describe('seedShipped', () => {
 
     expect(await onDisk(rel)).toBe(lifted);
     expect(second.kept).toEqual([rel]);
+  });
+
+  it("keeps a card's grant through a shipped tools: update, and the wake holds both (HIVE-409)", async () => {
+    const rel = 'agents/drone/AGENT.md';
+    const shipped = (tools: string): string =>
+      `---\nname: drone\ndescription: d\nicon: Robot\ntools: [${tools}]\n---\nPrompt.\n`;
+    await ship(rel, shipped('Read, Bash'));
+    await seed();
+    // The exact call a permission card makes (permissions.ts).
+    await writeFile(join(target, rel), patchFrontmatter(await onDisk(rel), 'grants', '[Edit]'), 'utf8');
+    await ship(rel, shipped('Read, Bash, Grep'));
+
+    await seed();
+
+    const text = await onDisk(rel);
+    expect(text).toContain('tools: [Read, Bash, Grep]\n');
+    expect(text).toContain('grants: [Edit]');
+    const parsed = parseAgent(text, { folder: 'drone', skillNames: [], hiveSkillNames: [], integrations: [] });
+    if (!('def' in parsed)) throw new Error(`expected a definition: ${JSON.stringify(parsed.problems)}`);
+    expect(parsed.def.tools).toEqual(['Read', 'Bash', 'Grep', 'Edit']);
   });
 
   it('never leaves an older app a whole-file hash that would overwrite a merged file', async () => {
