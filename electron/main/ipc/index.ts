@@ -221,6 +221,7 @@ import {
   type RunTracker,
 } from '../agents/runs';
 import { createScheduler, type Scheduler } from '../agents/scheduler';
+import { laneClaims } from '../agents/scheduler-rules';
 import { createAgentState, type AgentState } from '../agents/state';
 import { mergeRunState } from '../agents/summary';
 import { createHarnessCheck, createWakeCommand, type WakeCommandDeps } from '../agents/wake-command';
@@ -2858,6 +2859,7 @@ export function registerIpcHandlers(
     userDataPath: () => app.getPath('userData'),
     hostAlias: () => getConfig().receiver.hostAlias,
     agentContainerSettingsPath: (config) => hooks.agentContainerSettingsPathFor(config),
+    laneHolds: (name, lane) => laneClaims(name, ledger.read({}).entries).has(lane),
   };
   const buildWakeCommand = createWakeCommand(wakeDeps);
   const checkAgentHarness = createHarnessCheck(wakeDeps);

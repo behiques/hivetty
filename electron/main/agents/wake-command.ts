@@ -31,6 +31,7 @@ import { dirname, join } from 'node:path';
 import {
   AGENT_FILE,
   KNOWN_AGENT_MCP,
+  ROTATE_CONTEXT_TOKENS,
   STANDING_LANE,
   parseList,
   readFrontmatter,
@@ -179,6 +180,8 @@ export interface WakeCommandDeps {
   adapter?: (id: HarnessId) => HarnessAdapter | undefined;
   /** Whether a CLI's conversation is still on disk (HIVE-404). Absent: that adapter's `record`. */
   hasTranscript?: (id: HarnessId, cwd: string, sessionUuid: string) => boolean;
+  /** Whether the lane holds an open claim (HIVE-408): a lane with work is never rotated for size. Absent: it holds one. */
+  laneHolds?: (name: string, lane: string) => boolean;
 }
 
 /**
@@ -533,13 +536,16 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
       with no hash predates this check, and what it holds is unknown.
     */
     const stalePrompt = previous.promptHash !== promptHash;
+    // Past about 100k tokens every wake re-reads it, and a lane holding no work loses nothing by a handoff (HIVE-408).
+    const oversized =
+      (previous.contextTokens ?? 0) >= ROTATE_CONTEXT_TOKENS && deps.laneHolds?.(name, lane) === false;
     const lastTurn =
       !task &&
       !switched &&
       lost === undefined &&
       pending === undefined &&
       previous.sessionUuid !== undefined &&
-      (forced || stalePrompt || previous.runsSinceRotate >= def.limits.rotateAfter);
+      (forced || stalePrompt || oversized || previous.runsSinceRotate >= def.limits.rotateAfter);
     const systemPrompt = deps.promptFile(name);
     let agentMcp: string | null = null;
 

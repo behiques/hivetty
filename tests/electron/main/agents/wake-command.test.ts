@@ -967,6 +967,37 @@ describe('lanes (HIVE-185)', () => {
   });
 });
 
+describe('rotation by size (HIVE-408)', () => {
+  const big = (contextTokens: number): void => {
+    stored['slack-watcher'] = {
+      status: 'sleeping', runsSinceRotate: 0, runs: [],
+      lanes: { 'repo:a/x': { sessionUuid: 's1', runsSinceRotate: 1, promptHash: promptHashNow(), contextTokens } },
+    };
+  };
+  const lastTurnOf = (holds: boolean): boolean => {
+    const built = build({ laneHolds: (name, lane) => holds && name === 'slack-watcher' && lane === 'repo:a/x' })(
+      'slack-watcher', 'ledger', undefined, { lane: 'repo:a/x' },
+    );
+    if ('problem' in built) throw new Error(built.problem);
+    return built.lastTurn;
+  };
+
+  it('asks a big conversation that holds no claim for a handoff', () => {
+    big(120_000);
+    expect(lastTurnOf(false)).toBe(true);
+  });
+
+  it('keeps a big conversation that still holds a claim', () => {
+    big(120_000);
+    expect(lastTurnOf(true)).toBe(false);
+  });
+
+  it('keeps a small conversation', () => {
+    big(40_000);
+    expect(lastTurnOf(false)).toBe(false);
+  });
+});
+
 describe('a lane\'s working directory (HIVE-188)', () => {
   it('creates and runs a lane in its own directory, and a standing wake in the agent\'s own', () => {
     const lane = build()('slack-watcher', 'ledger', undefined, { lane: 'thread:A' });
