@@ -164,7 +164,7 @@ describe('createRunTracker', () => {
       hasOpenAsk: () => openAskAnywhere,
       handoffFor: () => handoff,
       leftOpen: () => left,
-      openAsksOnLane: () => askingOnLane,
+      openAsksOnLane: (name, lane) => askingOnLane && name === 'a' && lane === 'thread:k1',
       newUuid: () => 'uuid-minted',
       pushStatus: (name) => statuses.push(name),
       pushLines: (name, pushed) =>

@@ -194,15 +194,15 @@ export interface RunTrackerDeps {
     meta: Record<string, unknown>;
   }) => void;
   /**
-   * The lane ask a closing run leaves open and the claims it wrote
-   * (HIVE-354), from `leftOpen` in `ledger-derive.ts`. Optional so a spec that
-   * never runs a thread lane needs none.
-   */
-  /**
    * Does any run of `lane` hold an open ask from this agent (HIVE-408), from `openAsksOnLane` in
    * `ledger-derive.ts`? Optional so a spec that never runs a thread lane needs none.
    */
   openAsksOnLane?: (name: string, lane: string) => boolean;
+  /**
+   * The lane ask a closing run leaves open and the claims it wrote
+   * (HIVE-354), from `leftOpen` in `ledger-derive.ts`. Optional so a spec that
+   * never runs a thread lane needs none.
+   */
   leftOpen?: (
     name: string,
     run: string,
