@@ -36,10 +36,21 @@ describe('liftGrants (HIVE-409)', () => {
     expect(out).toContain('grants: [Bash]');
   });
 
-  it('a tools: the person narrowed is left alone, and marked done', () => {
+  // Amended (sess-0z): a tools: missing a shipped entry is lifted too. Otherwise a release that adds a tool
+  // to a shipped agent never reaches any installed copy, since every one of them is missing it.
+  it('a tools: missing a shipped entry is lifted too, and the shipped entry arrives', () => {
     const out = liftGrants(agent('tools: [Read]'), agent('tools: [Read, Bash]'));
-    expect(out).toContain('tools: [Read]\n');
+    expect(out).toContain('tools: [Read, Bash]\n');
     expect(out).toContain('grants: []');
+  });
+
+  it('a tool a release adds arrives, and the extras land in grants:', () => {
+    const out = liftGrants(
+      agent('tools: [Read, Skill, Bash, Bash(gh pr view *), mcp__hive__pr]'),
+      agent('tools: [Read, Edit, Skill, Bash]'),
+    );
+    expect(out).toContain('tools: [Read, Edit, Skill, Bash]\n');
+    expect(out).toContain('grants: [mcp__hive__pr]');
   });
 
   it('a file that already has grants: is untouched', () => {

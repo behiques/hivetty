@@ -16,8 +16,11 @@ const UNWRITABLE = /[\n\r[\]#]|^['"\s]|['"\s]$/;
  * shipped change to it was held back. The shipper still carried nineteen scoped Bash rules PR #250 had
  * removed. The ledger only keeps two days, so which entries a card wrote cannot be read back. This keeps
  * every entry beyond the shipped list as a grant and hands `tools:` back to the seed. A scoped `X(…)` is
- * dropped when a bare `X` is held anyway, unless it names the merge, which no bare rule allows. A `tools:` missing a shipped entry was narrowed on purpose and
- * stays as it is. Either way `grants:` is written, which is what makes this run once.
+ * dropped when a bare `X` is held anyway, unless it names the merge, which no bare rule allows. A `tools:`
+ * missing a shipped entry is lifted too: a release that adds a tool to a shipped agent leaves every installed
+ * copy missing it, so treating that as a deliberate narrowing would keep the new tool out for good. The cost
+ * is that a shipped tool someone removed by hand comes back, once. What a wake allows can only grow.
+ * Writing `grants:` is what makes this run once.
  *
  * Its own file, not `merge.ts`: that one runs under plain Node in `scripts/shipped-history.ts` and takes
  * no path aliases. Pure; returns `current` unchanged when there is nothing to do, or nothing safe to do.
@@ -35,8 +38,6 @@ export function liftGrants(current: string, shipped: string): string {
   const ship = listOf(shipFields, 'tools');
   if (mine === null || ship === null) return current;
   if (mine.length === ship.length && mine.every((rule, i) => rule === ship[i])) return current;
-
-  if (ship.some((rule) => !mine.includes(rule))) return patchFrontmatter(current, 'grants', '[]');
 
   const bare = new Set([...ship, ...mine].filter((rule) => !rule.includes('(')));
   const extra = mine.filter((rule) => {
