@@ -27,7 +27,7 @@ import {
 } from '@shared/ledger-derive';
 import { SLACK_COMMAND_KIND, SLACK_SERVER_KEY, SLACK_TRIGGER } from '@shared/slack-contract';
 
-import { isPermissionAsk } from './permissions';
+import { MOOT, isPermissionAsk } from './permissions';
 import type { RunStart } from './runs';
 import {
   decide,
@@ -311,6 +311,24 @@ const describeEntry = (entry: PendingWakeEntry): string => {
 /** The `kind` the sweep queues an expiry under; no ledger entry carries it. */
 const EXPIRED_KIND = 'expired';
 
+/**
+ * Open permission cards nothing is waiting on any more (HIVE-409): the run that asked worked for a job
+ * thread that has since closed. Answered `moot` by the sweep. That is an answer, so every derivation
+ * already treats the card as closed and `Ledger.append` refuses a later grant. Never by time (D7).
+ */
+export function mootCards(entries: readonly LedgerEntry[], now: number): { ask: LedgerEntry; reason: string }[] {
+  const out: { ask: LedgerEntry; reason: string }[] = [];
+  const threadPrefix = threadLane('');
+  for (const ask of openAsks(entries, now)) {
+    if (ask.to !== OVERMIND || !isPermissionAsk(ask)) continue;
+    const lane = laneOfRun(ask.from, ask.meta?.['run'], entries);
+    if (lane.startsWith(threadPrefix) && isClosedLane(lane, entries)) {
+      out.push({ ask, reason: `its job ${lane.slice(threadPrefix.length)} closed` });
+    }
+  }
+  return out;
+}
+
 /** `ask a12 from overmind` — how a wake says what it woke for. */
 const describeEntries = (queued: readonly PendingWakeEntry[]): string =>
   queued.map(describeEntry).join(', ');
@@ -458,6 +476,16 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
           lane,
         );
       }
+    }
+
+    /*
+      A card nothing waits on is closed (HIVE-409). The answer's `to` defaults to the
+      asker in `Ledger.append`, and the ledger's own `onChange` routes it, so nothing is
+      woken here. A failed write is retried by the next sweep, a minute later, as expiry is.
+    */
+    for (const { ask, reason } of mootCards(entries, now)) {
+      const written = deps.ledger.append({ from: OVERMIND, kind: 'answer', thread: ask.id, body: MOOT, meta: { moot: reason } });
+      if (!written.ok) console.warn(`[hive] could not close ${ask.id} as moot; leaving it open`);
     }
 
     /*

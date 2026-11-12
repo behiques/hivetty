@@ -904,6 +904,43 @@ describe('createScheduler', () => {
     expect(woke).toEqual([]);
   });
 
+  describe('the moot sweep (HIVE-409)', () => {
+    const job: LedgerEntry = { id: 'j1', ts: 0, from: 'sess-1', to: AGENT, kind: 'ask', body: 'build' };
+    const started: LedgerEntry = { id: 'e1', ts: 0, from: AGENT, kind: 'event', body: 'run.started', meta: { run: 'r1', lane: 'thread:j1' } };
+    const card: LedgerEntry = {
+      id: 'c1', ts: 1, from: AGENT, to: 'overmind', kind: 'ask', ref: 'a9', body: 'Allow Bash?',
+      meta: { kind: 'permission', tool: 'Bash', input: { command: 'git push' }, run: 'r1' },
+    };
+    const jobDone: LedgerEntry = { id: 'd1', ts: 2, from: AGENT, to: 'sess-1', kind: 'done', thread: 'j1', body: 'done' };
+    const answers = (): LedgerPostRequest[] => appended.filter((e) => e.kind === 'answer');
+
+    it('answers a card moot once its job thread has closed', () => {
+      entries = [job, started, card, jobDone];
+      clock = 60_000;
+      scheduler.start();
+      tick();
+      expect(answers()).toEqual([
+        { from: 'overmind', kind: 'answer', thread: 'c1', body: 'moot', meta: { moot: 'its job j1 closed' } },
+      ]);
+    });
+
+    it('leaves a card alone while its job is open', () => {
+      entries = [job, started, card];
+      clock = 60_000;
+      scheduler.start();
+      tick();
+      expect(answers()).toEqual([]);
+    });
+
+    it('never answers a non-permission ask moot', () => {
+      entries = [job, started, { ...card, meta: { run: 'r1' } }, jobDone];
+      clock = 60_000;
+      scheduler.start();
+      tick();
+      expect(answers()).toEqual([]);
+    });
+  });
+
   describe('the expiry sweep', () => {
     const askedByAgent: LedgerEntry = {
       id: 'a1',
