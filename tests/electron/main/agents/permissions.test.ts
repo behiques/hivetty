@@ -603,10 +603,10 @@ describe('onAnswer', () => {
   /**
    * The second shape check, at the write itself (ship review).
    *
-   * `current` is read off whatever is on disk, and `parseList` splits on `,`
+   * `grants:` is read off whatever is on disk, and `parseList` splits on `,`
    * alone — so an entry already in the file can carry a `]` into the value
    * being composed. Written out, that closes the list early and the file
-   * gains a second `tools:` line, which `readFrontmatter` lets win. The whole
+   * gains a second key line, which `readFrontmatter` lets win. The whole
    * write is refused rather than partially made.
    */
   it.each([
