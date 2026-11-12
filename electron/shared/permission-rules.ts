@@ -386,16 +386,45 @@ const RUNS_TEXT = new Set([
   'osascript', 'expect', 'tclsh', 'make',
 ]);
 
-/** Whether a simple command's own words can run a string it was given as a command. */
+/** Shells and shell runners that run what they read on stdin: a heredoc, a here-string, a pipe. */
+const READS_STDIN = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'ssh', 'su', 'sudo', 'doas', 'source', 'script']);
+
+const baseName = (word: string): string => word.slice(word.lastIndexOf('/') + 1);
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+/**
+ * Whether a simple command's words can run a string it was given as a command. Every word counts, not
+ * only the first, so a runner behind a wrapper or a keyword (`caffeinate bash -c`, `{ bash -c`,
+ * `then sh -c`) is seen; `.` counts only as the command itself, since as an argument it is a path.
+ */
 const runsText = (words: readonly string[]): boolean => {
-  const head = words.find((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word));
-  if (head === undefined) return false;
+  const at = words.findIndex((word) => !ASSIGNMENT.test(word));
+  if (at === -1) return false;
+  const head = words[at]!;
   if (head.includes('$')) return true;
-  const base = head.slice(head.lastIndexOf('/') + 1);
-  if (RUNS_TEXT.has(base) || /^python[\d.]*$/.test(base)) return true;
+  const runs = words.slice(at).some((word, j) => {
+    const base = baseName(word);
+    return (j === 0 || base !== '.') && (RUNS_TEXT.has(base) || /^python[\d.]*$/.test(base));
+  });
+  if (runs) return true;
   // `git -c alias.x='!…'` and `--config-env` define a command and run it in the same breath.
-  return base === 'git' && words.some((word) => word === '-c' || word.startsWith('--config-env'));
+  return baseName(head) === 'git' && words.some((word) => word === '-c' || word.startsWith('--config-env'));
 };
+
+/**
+ * Whether the merge text sits where the tokeniser cannot see it run: in a heredoc, here-string or pipe
+ * feeding a shell (`bash <<EOF`, `echo … | bash`), or in a variable a runner expands (`X=…; $X`,
+ * `eval "$X"`). Those words are data to the tokeniser, so the whole text decides, as the fence's old
+ * text match did. An interpreter fed a heredoc (`python3 - <<EOF`) is not a shell and stays judged on
+ * its words: see the shortcut on {@link runsMerge}.
+ */
+const hidesMerge = (command: string, segments: readonly (readonly string[])[]): boolean =>
+  PR_MERGE.test(command) &&
+  segments.some(
+    (words) =>
+      (/<<|\|/.test(command) && words.some((word) => READS_STDIN.has(baseName(word)))) ||
+      (runsText(words) && words.some((word) => word.includes('$'))),
+  );
 
 /** Whether one simple command, as the tokeniser split it, runs a merge. */
 const segmentMerges = (words: readonly string[]): boolean =>
@@ -423,7 +452,9 @@ const segmentMerges = (words: readonly string[]): boolean =>
  */
 const runsMerge = (command: string): boolean => {
   const segments = shellSegments(command);
-  return segments === undefined ? PR_MERGE.test(command) : segments.some(segmentMerges);
+  return segments === undefined
+    ? PR_MERGE.test(command)
+    : segments.some(segmentMerges) || hidesMerge(command, segments);
 };
 
 export const isPrMerge = (toolName: string, input: Record<string, unknown>): boolean =>
@@ -432,18 +463,68 @@ export const isPrMerge = (toolName: string, input: Record<string, unknown>): boo
 /** The rule `auto-merge.ts` grants the shipper for a project with auto-merge on; group 1 is the slug. */
 const AUTO_MERGE_RULE = /^Bash\(gh pr merge \* --repo ([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\)$/;
 
-/** The repository a merge names: the last `--repo`, `-R`, `--repo=` or `-R<slug>`, as gh reads it. */
-const mergeRepo = (words: readonly string[], at: number): string | undefined => {
+/** `gh pr merge` options that take no value. */
+const MERGE_SWITCHES = new Set([
+  '--admin', '--auto', '--delete-branch', '-d', '--disable-auto', '--merge', '-m', '--rebase', '-r', '--squash', '-s',
+]);
+/** `gh pr merge` options that take a value, attached (`--x=v`, `-xv`) or as the next word, as gh's flag parser reads them. */
+const MERGE_VALUES = new Set([
+  '--author-email', '-A', '--body', '-b', '--body-file', '-F', '--match-head-commit', '--subject', '-t', '--repo', '-R',
+]);
+
+/**
+ * The repository a plain `gh [-R r] pr [-R r] merge <number> [options]` names, read the way gh's flag
+ * parser reads it: a value-taking option consumes its value whatever it looks like, so a `--repo=` spelled
+ * inside `--body` is body text (PR #281 F1). `undefined`, failing closed, unless `gh` is the command
+ * itself (not an argument to `find -exec` or `xargs`, F5), the one selector is a PR number (a URL picks
+ * its own repository, F3), every option is one `gh pr merge` knows, and a repository is named. The last
+ * `--repo` wins, as in gh.
+ */
+const plainMergeRepo = (words: readonly string[]): string | undefined => {
+  const head = words[0];
+  if (head === undefined || !(head === 'gh' || head.endsWith('/gh'))) return undefined;
+  if (words.some((word) => /[$`]/.test(word))) return undefined;
+  const expected = ['pr', 'merge'];
   let repo: string | undefined;
-  for (let i = at + 1; i < words.length; i++) {
+  let selector: string | undefined;
+  let operands = false;
+  for (let i = 1; i < words.length; i++) {
     const word = words[i]!;
-    if (GH_VALUE_OPTIONS.has(word)) {
-      repo = words[i + 1];
+    const inMerge = expected.length === 0;
+    if (operands || !word.startsWith('-') || word === '-') {
+      if (!inMerge) {
+        if (word !== expected.shift()) return undefined;
+        continue;
+      }
+      if (selector !== undefined || !/^\d+$/.test(word)) return undefined;
+      selector = word;
+      continue;
+    }
+    if (word === '--') {
+      if (!inMerge) return undefined;
+      operands = true;
+      continue;
+    }
+    const long = word.startsWith('--');
+    const eq = word.indexOf('=');
+    const name = long ? (eq === -1 ? word : word.slice(0, eq)) : word.slice(0, 2);
+    const attached = long ? (eq === -1 ? undefined : word.slice(eq + 1)) : word.length > 2 ? word.slice(2) : undefined;
+    const isRepo = name === '--repo' || name === '-R';
+    if (!isRepo && !(inMerge && (MERGE_SWITCHES.has(name) || MERGE_VALUES.has(name)))) return undefined;
+    if (MERGE_SWITCHES.has(name)) {
+      // `-sd` or `--squash=true`: a cluster or a spelling this reader does not follow.
+      if (attached !== undefined) return undefined;
+      continue;
+    }
+    let value = attached;
+    if (value === undefined) {
+      value = words[i + 1];
       i += 1;
-    } else if (word.startsWith('--repo=')) repo = word.slice('--repo='.length);
-    else if (word.startsWith('-R') && word.length > 2) repo = word.slice(2);
+      if (value === undefined) return undefined;
+    }
+    if (isRepo) repo = value;
   }
-  return repo;
+  return expected.length === 0 && selector !== undefined ? repo : undefined;
 };
 
 /**
@@ -465,17 +546,14 @@ const autoMergeCovers = (command: string, grants: readonly string[]): boolean =>
   if (segments === undefined) return false;
   const allBash = grants.includes('Bash') || grants.includes('*');
   let merges = 0;
+  if (hidesMerge(command, segments)) return false;
   for (const words of segments) {
-    const gh = words.findIndex((word, i) => namesGh(word) && ghMerges(words, i));
-    if (gh === -1) {
+    if (!words.some((word, i) => namesGh(word) && ghMerges(words, i))) {
       if (!allBash || segmentMerges(words)) return false;
       continue;
     }
-    if (!(words[gh] === 'gh' || words[gh]!.endsWith('/gh')) || words.some((word) => /[$`]/.test(word))) return false;
-    let sub = gh + 1;
-    while (sub < words.length && words[sub]!.startsWith('-')) sub += GH_VALUE_OPTIONS.has(words[sub]!) ? 2 : 1;
-    const repo = mergeRepo(words, gh);
-    if (words[sub] !== 'pr' || repo === undefined || !slugs.has(repo)) return false;
+    const repo = plainMergeRepo(words);
+    if (repo === undefined || !slugs.has(repo)) return false;
     merges += 1;
   }
   return merges > 0;

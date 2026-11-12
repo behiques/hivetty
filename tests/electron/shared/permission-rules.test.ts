@@ -1251,3 +1251,89 @@ describe('auto-merge consent covers the merge however the shipper spells it (HIV
     expect(rungsFor('Bash', { command: C229 }).map((rung) => rung.id)).toEqual(['allow-once', 'allow-project']);
   });
 });
+
+describe('PR #281 self-review findings: the fence reads a merge as gh does', () => {
+  const GRANTS = ['Bash', 'Bash(gh pr merge * --repo behiques/hivetty)'];
+
+  it('never reads another flag value as the repository (F1)', () => {
+    for (const command of [
+      'gh pr merge 5 --repo evil/x --body "--repo=behiques/hivetty"',
+      'gh pr merge 5 --repo evil/x --subject --repo=behiques/hivetty',
+      'gh pr merge 5 --repo evil/x --body -Rbehiques/hivetty',
+      'gh pr merge 5 -R evil/x -t--repo=behiques/hivetty',
+      'gh pr merge 5 --repo evil/x --body-file --repo=behiques/hivetty',
+      'gh pr merge 5 --repo evil/x --unknown-flag --repo=behiques/hivetty',
+      'gh pr merge 5 -sR evil/x --body "--repo behiques/hivetty"',
+    ]) {
+      expect(decide('Bash', { command }, GRANTS), command).toEqual({ behavior: 'ask' });
+    }
+  });
+
+  it('allows the merge flags merge-pr spells, values skipped', () => {
+    for (const command of [
+      'gh pr merge 1 --squash --delete-branch --repo behiques/hivetty',
+      'gh pr merge 1 -s -d --body-file - --repo behiques/hivetty',
+      'gh pr merge 1 --squash --body "see --repo notes" --repo behiques/hivetty',
+      'gh pr merge 1 --squash --author-email a@b.c --match-head-commit abc123 -R behiques/hivetty',
+    ]) {
+      expect(decide('Bash', { command }, GRANTS), command).toEqual({ behavior: 'allow' });
+    }
+  });
+
+  it('asks when the selector is not a PR number (F3)', () => {
+    for (const command of [
+      'gh pr merge https://github.com/evil/x/pull/5 --repo behiques/hivetty',
+      'gh pr merge evil-branch --repo behiques/hivetty',
+      'gh pr merge --squash --repo behiques/hivetty',
+      'gh pr merge 1 2 --repo behiques/hivetty',
+    ]) {
+      expect(decide('Bash', { command }, GRANTS), command).toEqual({ behavior: 'ask' });
+    }
+  });
+
+  it('asks when a segment holds a merge that is not its head command (F5)', () => {
+    for (const command of [
+      "find . -maxdepth 0 -exec gh pr merge 6 --repo evil/x ';' -exec gh pr merge 5 --repo behiques/hivetty ';'",
+      'echo https://github.com/evil/x/pull/5 | xargs gh pr merge --repo behiques/hivetty',
+      'sudo gh pr merge 5 --repo behiques/hivetty',
+    ]) {
+      expect(decide('Bash', { command }, GRANTS), command).toEqual({ behavior: 'ask' });
+    }
+  });
+
+  it('asks for a merge a shell reads from a heredoc, a here-string, a pipe or a variable (F2)', () => {
+    for (const command of [
+      "bash <<'EOF'\ngh pr merge 5 --repo evil/x\nEOF",
+      "echo 'gh pr merge 5 --repo evil/x' | bash",
+      "sh -s <<< 'gh pr merge 5'",
+      "sudo bash <<'EOF'\ngh pr merge 5\nEOF",
+      'X="gh pr merge 1"; $X',
+      'X="gh pr merge 1"; eval "$X"',
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
+    }
+    const hidden = "gh pr merge 1 --repo behiques/hivetty; bash <<'EOF'\ngh pr merge 2 --repo victim/other\nEOF";
+    expect(decide('Bash', { command: hidden }, GRANTS)).toEqual({ behavior: 'ask' });
+  });
+
+  it('asks for a runner that is not the first word (F4)', () => {
+    for (const command of [
+      "caffeinate bash -c 'gh pr merge 1'",
+      "{ bash -c 'gh pr merge 1'; }",
+      "if true; then sh -c 'gh pr merge 1'; fi",
+      "nice -n 5 stdbuf -o0 python3 -c \"import os; os.system('gh pr merge 1')\"",
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
+    }
+  });
+
+  it('still allows a mention beside a pipe or in a search of the current directory', () => {
+    for (const command of [
+      'grep -rn "gh pr merge" . | head',
+      'grep -rn "gh pr merge" resources | wc -l',
+      "cd /x && python3 - <<'EOF'\ns = 'gh pr merge 1 --repo a/b'\nEOF",
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'allow' });
+    }
+  });
+});
