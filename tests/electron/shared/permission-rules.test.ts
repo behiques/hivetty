@@ -1458,3 +1458,22 @@ describe('PR #281 self-review round 5, second run', () => {
     });
   });
 });
+
+describe('a merge piped into a shell that reads its script from stdin (#281 follow-up)', () => {
+  it('asks for parallel, csh, tcsh, ash, pwsh and busybox sh fed the merge on stdin', () => {
+    for (const command of [
+      'echo "gh pr merge 1 --repo a/b" | parallel',
+      "csh <<'EOF'\ngh pr merge 1\nEOF",
+      'echo "gh pr merge 1" | tcsh',
+      'echo "gh pr merge 1" | ash',
+      'echo "gh pr merge 1" | pwsh -',
+      'echo "gh pr merge 1" | busybox sh',
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
+    }
+  });
+
+  it('a mention piped through a filter is still not a merge', () => {
+    expect(decide('Bash', { command: 'grep -rn "gh pr merge" . | sed -n 1,5p' }, ['Bash'])).toEqual({ behavior: 'allow' });
+  });
+});

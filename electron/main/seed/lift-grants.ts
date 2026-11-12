@@ -12,6 +12,19 @@ const NAMES_THE_MERGE = /^(?:Bash\(gh pr merge |mcp__hive__pr_merge\()/;
 const UNWRITABLE = /[\n\r[\]#]|^['"\s]|['"\s]$/;
 
 /**
+ * How much of `mine` is the shipped list the base recorded (HIVE-418): the longest prefix whose `tools:`
+ * line hashes to the base's `tools` part. A card always appended to the end of the list, so what follows
+ * that prefix is what cards granted. `undefined` when there is no base or no prefix matches.
+ */
+const shippedPrefix = (mine: readonly string[], baseTools: string | undefined): number | undefined => {
+  if (baseTools === undefined) return undefined;
+  for (let k = mine.length; k >= 0; k--) {
+    if (hashPart(`tools: [${mine.slice(0, k).join(', ')}]`) === baseTools) return k;
+  }
+  return undefined;
+};
+
+/**
  * Lift a card's grants out of `tools:` into `grants:`, once (HIVE-409, D4).
  *
  * Before `grants:` existed a card wrote into `tools:`, which made `tools:` the person's, so every later
@@ -27,19 +40,6 @@ const UNWRITABLE = /[\n\r[\]#]|^['"\s]|['"\s]$/;
  * Its own file, not `merge.ts`: that one runs under plain Node in `scripts/shipped-history.ts` and takes
  * no path aliases. Pure; returns `current` unchanged when there is nothing to do, or nothing safe to do.
  */
-/**
- * How much of `mine` is the shipped list the base recorded (HIVE-418): the longest prefix whose `tools:`
- * line hashes to the base's `tools` part. A card always appended to the end of the list, so what follows
- * that prefix is what cards granted. `undefined` when there is no base or no prefix matches.
- */
-const shippedPrefix = (mine: readonly string[], baseTools: string | undefined): number | undefined => {
-  if (baseTools === undefined) return undefined;
-  for (let k = mine.length; k >= 0; k--) {
-    if (hashPart(`tools: [${mine.slice(0, k).join(', ')}]`) === baseTools) return k;
-  }
-  return undefined;
-};
-
 export function liftGrants(current: string, shipped: string, baseTools?: string): string {
   const mineFields = readFrontmatter(current)?.fields;
   const shipFields = readFrontmatter(shipped)?.fields;
