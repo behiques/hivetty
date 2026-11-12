@@ -10,6 +10,9 @@ import { isClosedLane } from './scheduler-rules';
 
 const REPO_PREFIX = repoLane('');
 
+/** The overmind's answer that closes a card nothing is waiting on any more (HIVE-409). */
+export const MOOT = 'moot';
+
 /**
  * Answers become grants (HIVE-119).
  *
@@ -370,7 +373,8 @@ export function createPermissions(deps: PermissionDeps): Permissions {
         the `answer` entry itself is already the ledger's record of the
         refusal, so there is nothing further to append here.
       */
-      if (entry.body === 'deny') return;
+      // A moot card (HIVE-409) is closed by the app's sweep: nothing is waiting, so nothing is granted.
+      if (entry.body === 'deny' || entry.body === MOOT) return;
 
       /*
         The ladder is recomputed, never read off the ask. `meta.rungs` is

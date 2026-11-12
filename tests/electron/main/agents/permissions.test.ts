@@ -462,6 +462,15 @@ describe('onAnswer', () => {
     expect(d.write.mock.calls[0]![1]).toMatch(/tools:.*\bBash\b/);
   });
 
+  it('a moot answer grants nothing and refuses nothing (HIVE-409)', async () => {
+    const d = deps([ask('a1', 'drone', RUNGS), answer('n1', 'a1', 'moot')]);
+    const p = createPermissions(d);
+    await p.onAnswer(answer('n1', 'a1', 'moot') as never);
+    expect(d.append).not.toHaveBeenCalledWith(expect.objectContaining({ meta: expect.objectContaining({ grantFailed: 'a1' }) }));
+    expect(d.write).not.toHaveBeenCalled();
+    expect(p.grantsFor('drone')).toEqual([]);
+  });
+
   it('writes nothing for allow-once or deny', async () => {
     for (const body of ['allow-once', 'deny']) {
       const d = deps([ask('a1', 'drone', RUNGS)]);
