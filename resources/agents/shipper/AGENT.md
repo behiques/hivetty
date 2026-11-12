@@ -93,11 +93,13 @@ gate reads through `gh pr view --json`, `gh pr checks` and `gh workflow`; the
 unresolved-thread check is `mcp__hive__pr`'s `findings` plus the `findings`
 claim, both read through `merge-pr`, and the fixer's `clean` is history that
 never stands in for them. When a row reaches
-`merge`, run `hive:merge-pr` anyway. For a project the person marked "Merge
-PRs unattended" the app grants that one call for that one repository on your
-wake, and it goes through, as long as it is its own Bash call with nothing
-before or after it, spelled as `merge-pr` spells it. Anything chained to it
-misses the grant and raises a card. For every other project the call stops at the
+`merge`, run `hive:merge-pr` anyway. Merge with `mcp__hive__pr_merge`, as
+`merge-pr` spells it: HiveTTY runs the merge with no shell, so the subject is
+text. Only when that tool is not in your tools, fall back to the Bash merge.
+For a project the person marked "Merge PRs unattended" the app grants that
+one merge for that one repository on your wake. The Bash fallback goes
+through only as its own Bash call with nothing before or after it; anything
+chained to it misses the grant and raises a card. For every other project the call stops at the
 fence and becomes an inbox card; the person decides on the card, and the
 answer wakes you with a one-shot grant. Do not `ledger_ask` first: the card is
 the ask. Do not reach the merge through `gh api`; that is the line.
