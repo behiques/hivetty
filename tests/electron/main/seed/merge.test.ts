@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   baseOf,
-  USER_ONLY_PARTS,
   hashPart,
   mergeParts,
   parseParts,
+  USER_ONLY_PARTS,
 } from '../../../../electron/main/seed/merge';
 
 /**

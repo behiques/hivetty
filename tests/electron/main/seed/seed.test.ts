@@ -147,6 +147,34 @@ describe('seedShipped', () => {
     expect(manifest.parts['agents/builder/AGENT.md']?.keys.lane).toBeDefined();
   });
 
+  it('lifts card grants out of an agent tools: once, so the shipped tools: arrives (HIVE-409)', async () => {
+    const rel = 'agents/shipper/AGENT.md';
+    const v1 = '---\nname: shipper\ntools: [Read, Write, Skill, Bash(gh pr view *), mcp__hive__jira_transition]\n---\nPrompt v1.\n';
+    const v2 = '---\nname: shipper\ntools: [Read, Write, Skill, Bash, mcp__hive__jira_transition]\n---\nPrompt v2.\n';
+    await ship(rel, v1);
+    await seed();
+    // A card wrote into tools: before grants: existed.
+    await writeFile(
+      join(target, rel),
+      v1.replace('mcp__hive__jira_transition]', 'Bash(git -C * fetch *), Bash, mcp__hive__jira_transition]'),
+      'utf8',
+    );
+    await ship(rel, v2);
+
+    const first = await seed();
+
+    const lifted = await onDisk(rel);
+    expect(lifted).toContain('tools: [Read, Write, Skill, Bash, mcp__hive__jira_transition]\n');
+    expect(lifted).toContain('grants: []');
+    expect(lifted).toContain('Prompt v2.');
+    expect(first.merged).toEqual([rel]);
+
+    const second = await seed();
+
+    expect(await onDisk(rel)).toBe(lifted);
+    expect(second.kept).toEqual([rel]);
+  });
+
   it('never leaves an older app a whole-file hash that would overwrite a merged file', async () => {
     const v1 = '---\nname: builder\nmodel: opus\n---\nPrompt v1.\n';
     await ship('agents/builder/AGENT.md', v1);
