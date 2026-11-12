@@ -633,7 +633,7 @@ describe('a permission wait is visible on the job thread', () => {
     ...ask(id, 'drone', RUNGS), ref: 'a226', meta: { ...ask(id, 'drone', RUNGS).meta, run },
   });
 
-  it('posts the wait on the job thread, addressed to nobody so it wakes nobody', () => {
+  it('posts the wait on the job thread, addressed to the asker (HIVE-409)', () => {
     const card = cardOn('p1', 'rA');
     const d = deps([job, begun('rA', 'thread:J'), card]);
 
@@ -641,9 +641,31 @@ describe('a permission wait is visible on the job thread', () => {
 
     expect(d.append).toHaveBeenCalledTimes(1);
     const note = d.append.mock.calls[0]![0];
-    expect(note).toMatchObject({ from: 'overmind', kind: 'post', thread: 'J', meta: { permission: 'p1' } });
-    expect(note.to).toBeUndefined();
+    expect(note).toEqual(expect.objectContaining({ from: 'overmind', to: 'sess-1', kind: 'post', thread: 'J', meta: { permission: 'p1' } }));
     expect(note.body.split('\n')[0]).toBe('drone is waiting on permission card a226: Allow Bash?');
+  });
+
+  it('a repo-lane card posts to the sender of the newest ask on that repository (HIVE-409)', () => {
+    const intake = { id: 's1', ts: 0, from: 'sess-4', to: 'drone', kind: 'ask' as const, body: 'ship', meta: { pr: 252, repo: 'behiques/hivetty' } };
+    const card = cardOn('p2', 'rB');
+    const d = deps([intake, begun('rB', 'repo:Behiques/HiveTTY'), card]);
+
+    createPermissions(d).onAsk(card);
+
+    expect(d.append).toHaveBeenCalledWith(expect.objectContaining({ kind: 'post', to: 'sess-4', thread: 's1', meta: { permission: 'p2' } }));
+  });
+
+  it('posts nothing on a repo lane with no ask, or to the card raiser itself (HIVE-409)', () => {
+    const self = { id: 'J2', ts: 0, from: 'drone', to: 'drone', kind: 'ask' as const, body: 'x' };
+    const repoCard = cardOn('p3', 'rC');
+    const selfCard = cardOn('p4', 'rD');
+    const d = deps([begun('rC', 'repo:a/b'), repoCard, self, begun('rD', 'thread:J2'), selfCard]);
+    const permissions = createPermissions(d);
+
+    permissions.onAsk(repoCard);
+    permissions.onAsk(selfCard);
+
+    expect(d.append).not.toHaveBeenCalled();
   });
 
   it('posts nothing for a run on the standing lane, or for an ordinary ask', () => {
@@ -664,7 +686,7 @@ describe('a permission wait is visible on the job thread', () => {
     await createPermissions(d).onAnswer(answer('n1', 'p1', 'deny'));
 
     expect(d.append).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'post', thread: 'J', body: 'permission card a226 answered: deny' }),
+      expect.objectContaining({ kind: 'post', to: 'sess-1', thread: 'J', body: 'permission card a226 answered: deny' }),
     );
   });
 });

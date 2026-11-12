@@ -1,12 +1,14 @@
-import { STANDING_LANE, parseList, readFrontmatter, threadLane } from '@shared/agent-contract';
+import { STANDING_LANE, parseList, readFrontmatter, repoLane, threadLane } from '@shared/agent-contract';
 import type { AgentWriteResult } from '@shared/agent-contract';
 import { OVERMIND } from '@shared/ledger-contract';
 import type { LedgerEntry, LedgerPostRequest } from '@shared/ledger-contract';
-import { CLOSING_KINDS, laneOfRun } from '@shared/ledger-derive';
+import { CLOSING_KINDS, askerOf, laneOfRun, repoAskerOf } from '@shared/ledger-derive';
 import { isToolName, oneShotRuleFor, rungsFor } from '@shared/permission-rules';
 
 import { patchFrontmatter } from './patch';
 import { isClosedLane } from './scheduler-rules';
+
+const REPO_PREFIX = repoLane('');
 
 /**
  * Answers become grants (HIVE-119).
@@ -166,22 +168,31 @@ export function createPermissions(deps: PermissionDeps): Permissions {
   };
 
   /**
-   * The job thread the run behind `ask` works for, if it is on a thread lane.
+   * Where a card's note goes (HIVE-409): the thread and party the asking run works for. A thread lane's
+   * job is the ask that opened it; a repo lane's is the newest ask to the agent on that repository
+   * (`repoAskerOf`). Addressed, so `deliver.ts` nudges a session and the scheduler wakes an agent: the
+   * old unaddressed note reached nobody. Never the card's own raiser, so an agent asking itself cannot loop.
    */
-  const jobOf = (ask: LedgerEntry): string | undefined => {
-    const lane = laneOfRun(ask.from, ask.meta?.['run'], deps.entries());
-    const prefix = threadLane('');
-    return lane.startsWith(prefix) ? lane.slice(prefix.length) : undefined;
+  const noteFor = (ask: LedgerEntry): { thread: string; to: string } | undefined => {
+    const log = deps.entries();
+    const lane = laneOfRun(ask.from, ask.meta?.['run'], log);
+    const threadPrefix = threadLane('');
+    let target: { thread: string; to: string | undefined } | undefined;
+    if (lane.startsWith(threadPrefix)) {
+      const job = lane.slice(threadPrefix.length);
+      target = { thread: job, to: askerOf(log, job) };
+    } else if (lane.startsWith(REPO_PREFIX)) {
+      const root = repoAskerOf(log, ask.from, lane.slice(REPO_PREFIX.length));
+      target = root === undefined ? undefined : { thread: root.id, to: root.from };
+    }
+    if (target?.to === undefined || target.to === ask.from) return undefined;
+    return { thread: target.thread, to: target.to };
   };
 
-  /**
-   * A note on the job thread. No `to`: an unaddressed entry wakes nobody
-   * (`scheduler.onEntry`) and nudges nobody, it is only there to be read.
-   */
   const noteOnJob = (ask: LedgerEntry, body: string): void => {
-    const job = jobOf(ask);
-    if (job === undefined) return;
-    deps.append({ from: OVERMIND, kind: 'post', thread: job, body, meta: { permission: ask.id } });
+    const target = noteFor(ask);
+    if (target === undefined) return;
+    deps.append({ from: OVERMIND, to: target.to, kind: 'post', thread: target.thread, body, meta: { permission: ask.id } });
   };
 
   const isOpen = (askId: string): boolean =>
