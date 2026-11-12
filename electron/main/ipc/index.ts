@@ -10,6 +10,7 @@ import {
   app,
   dialog,
   ipcMain,
+  powerMonitor,
   powerSaveBlocker,
   safeStorage,
   shell,
@@ -213,7 +214,7 @@ import {
   laneWorkdir,
   agentsRoot,
 } from '../agents/paths';
-import { createPermissions, type Permissions } from '../agents/permissions';
+import { createPermissions, isPermissionAsk, type Permissions } from '../agents/permissions';
 import { createAgentRunFiles } from '../agents/run-files';
 import {
   createRunTracker,
@@ -299,6 +300,7 @@ import { createSlackTokens } from '../integrations/slack/tokens';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
+import { createPermissionReminder } from '../ledger/reminders';
 import { ACCOUNT_CALLS, hostLicence, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
 import { cliEntitled } from '../licence/entitled';
 import { createSuspender, installSuspender, isLapsed, releaseNow, runContainer } from '../licence/suspend';
@@ -1374,6 +1376,9 @@ const scheduleForegroundChange = (): void => {
 /** Undo {@link watchWindowFocus}, or a no-op before it has run. */
 let unwatchWindowFocus: (() => void) | null = null;
 
+/** Disarm the permission reminder and its focus listener (HIVE-409), or null before it is armed. */
+let stopPermissionReminder: (() => void) | null = null;
+
 /**
  * Wire the app-level focus events. Idempotent: a second call replaces the
  * first rather than doubling the listeners.
@@ -1913,6 +1918,28 @@ export function registerIpcHandlers(
   // report because a hidden window has stopped running. See
   // `scheduleForegroundChange`.
   watchWindowFocus();
+
+  /*
+    HIVE-409: the reminder for an unanswered permission card, on focus and every
+    fifteen active minutes. `ledger` is declared further down; the reminder reads it
+    only from its timer and its focus handler, after this whole body has executed.
+    Replaced, not doubled, if this function runs again, as `watchWindowFocus` is.
+  */
+  stopPermissionReminder?.();
+  const permissionReminder = createPermissionReminder({
+    openCards: () =>
+      ledger.read({}).openAsks.filter((ask) => ask.to === OVERMIND && isPermissionAsk(ask)),
+    remind: (id) => hub.remind(id),
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
+  });
+  const remindOnFocus = (): void => permissionReminder.onFocus();
+  permissionReminder.start();
+  app.on('browser-window-focus', remindOnFocus);
+  stopPermissionReminder = () => {
+    app.removeListener('browser-window-focus', remindOnFocus);
+    permissionReminder.stop();
+    stopPermissionReminder = null;
+  };
 
   /**
    * Two property reads and no subprocess, which is the entire point.
@@ -3581,6 +3608,7 @@ export function registerIpcHandlers(
     */
     slackBridge?.stop();
     scheduler?.stop();
+    stopPermissionReminder?.();
     runs?.closeAll('app-closed');
     agentState?.flush();
     /**
@@ -5985,6 +6013,7 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
   foreground.clear();
   foregroundListeners.clear();
   unwatchWindowFocus?.();
+  stopPermissionReminder?.();
   if (foregroundTick !== null) {
     clearTimeout(foregroundTick);
     foregroundTick = null;

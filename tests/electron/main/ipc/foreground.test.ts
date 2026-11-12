@@ -491,7 +491,8 @@ describe('window focus drives the re-arm', () => {
 
   it('subscribes at the app level, so every window is observed', () => {
     expect(appListeners.get('browser-window-blur')?.size).toBe(1);
-    expect(appListeners.get('browser-window-focus')?.size).toBe(1);
+    // The foreground re-arm, and the permission card reminder (HIVE-409).
+    expect(appListeners.get('browser-window-focus')?.size).toBe(2);
   });
 
   /**
@@ -571,6 +572,7 @@ describe('window focus drives the re-arm', () => {
 
     registerIpcHandlers();
     expect(appListeners.get('browser-window-blur')?.size).toBe(1);
+    expect(appListeners.get('browser-window-focus')?.size).toBe(2);
   });
 
   /** A pending tick must not outlive the handlers it would call into. */
