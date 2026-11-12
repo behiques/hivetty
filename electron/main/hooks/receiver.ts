@@ -61,7 +61,7 @@ import {
 import {
   LEDGER_POST_PATH,
   LEDGER_READ_PATH,
-  parseLedgerMarker,
+  parseLedgerMarkers,
   type LedgerPostRequest,
   type LedgerReadQuery,
   type LedgerResult,
@@ -1677,7 +1677,8 @@ export function createReceiver(options: ReceiverOptions): Receiver {
            * prompt still names the session. It does count as the session working,
            * which is what the turn it starts is.
            */
-          const marker = effect.text === undefined ? undefined : parseLedgerMarker(effect.text);
+          const markers = effect.text === undefined ? undefined : parseLedgerMarkers(effect.text);
+          const marker = markers?.[0];
           if (marker !== undefined) {
             const context = markerContext(entityId, marker);
             if (context !== undefined) reply = { status: 200, json: adapter.contextReply(context) };

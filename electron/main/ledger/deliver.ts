@@ -226,7 +226,7 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
     */
     const adapter = adapterOf(entityId);
     if (adapter?.capabilities.contextDelivery !== 'prompt-marker') return false;
-    if (!write(entityId, adapter.promptMarker(entry))) return false;
+    if (!write(entityId, adapter.promptMarker([entry]))) return false;
 
     /*
       `from: OVERMIND` is asserted rather than derived. The party set is

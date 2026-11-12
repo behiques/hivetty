@@ -36,8 +36,11 @@ export interface HarnessAdapter {
   readHook(input: HookInput): HookReading;
   /** The response body that hands `text` to the model as context, for a prompt hook (HIVE-138). */
   contextReply(text: string): unknown;
-  /** What to type into a `prompt-marker` session to hand it `entry`; `contextReply` answers it (HIVE-240). */
-  promptMarker(entry: LedgerEntry): string;
+  /**
+   * What to type into a `prompt-marker` session to hand it `entries`; `contextReply` answers it (HIVE-240).
+   * One line naming every entry, in order (HIVE-408).
+   */
+  promptMarker(entries: readonly LedgerEntry[]): string;
   /** Transcript lines folded into per-file edit tallies, for the changed-files list (HIVE-201, HIVE-238). */
   foldEdits(tallies: Map<string, FileTally>, lines: readonly string[]): Map<string, FileTally>;
   /** A status-line body read into metrics; `null` for one that is not an object, which the receiver answers 400 (HIVE-239). */

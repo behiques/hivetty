@@ -535,7 +535,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       });
       expect(asked.ok).toBe(true);
       const entry = ledger.read({}).entries.find((e) => asked.ok && e.id === asked.id)!;
-      const typed = codexAdapter.promptMarker(entry);
+      const typed = codexAdapter.promptMarker([entry]);
       expect(typed.endsWith('\r')).toBe(true);
       const log = await run('marker', {}, typed.slice(0, -1)); // the driver types the \r itself
       const id = statuses.find((s) => s.sessionUuid !== undefined)?.sessionUuid;

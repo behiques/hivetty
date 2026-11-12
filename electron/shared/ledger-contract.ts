@@ -158,7 +158,7 @@ export const LEDGER_REF_PREFIX = 'a';
 /**
  * The line a nudge writes into a session's pty (HIVE-138).
  *
- * A marker names one entry and carries nothing else. The entry itself reaches
+ * A marker names one entry, or several on one line (HIVE-408), and carries nothing else. The entry itself reaches
  * the model as hook-carried context when the receiver sees this prompt on
  * `UserPromptSubmit` (`electron/main/hooks/receiver.ts`), untruncated, every
  * meta key intact, and labelled as context rather than passing as the user's
@@ -174,23 +174,45 @@ export const LEDGER_MARKER_PREFIX = '📒 ';
 /** What a marker may name: a ref or a canonical id, nothing a shell would read. */
 const MARKER_TOKEN = /^[A-Za-z0-9-]+$/u;
 
+/**
+ * What each token of a marker naming several entries must look like (HIVE-408): a ref
+ * (`a12`) or a canonical id (`20261110-100818-0001`). Stricter than {@link MARKER_TOKEN},
+ * so `📒 a7 and also do this` stays a person writing rather than six refs.
+ */
+const MARKER_LIST_TOKEN = new RegExp(`^(?:${LEDGER_REF_PREFIX}\\d+|\\d{8}-\\d{6}-\\d{4})$`, 'iu');
+
+/** The token that names one entry: an ask by its ref, anything else by its id. */
+function markerToken(entry: Pick<LedgerEntry, 'id' | 'kind' | 'ref'>): string {
+  return entry.kind === 'ask' ? (entry.ref ?? entry.id) : entry.id;
+}
+
+/** One marker line naming every entry, in order, separated by a space (HIVE-408). */
+export function ledgerMarkers(entries: readonly Pick<LedgerEntry, 'id' | 'kind' | 'ref'>[]): string {
+  return `${LEDGER_MARKER_PREFIX}${entries.map(markerToken).join(' ')}`;
+}
+
 export function ledgerMarker(entry: Pick<LedgerEntry, 'id' | 'kind' | 'ref'>): string {
-  const token = entry.kind === 'ask' ? (entry.ref ?? entry.id) : entry.id;
-  return `${LEDGER_MARKER_PREFIX}${token}`;
+  return ledgerMarkers([entry]);
 }
 
 /**
- * The ref or id a prompt names, when the prompt is exactly one marker.
+ * The refs or ids a prompt names, in order, when the prompt is wholly a marker.
  *
  * Strict on purpose. A prompt that merely starts with the prefix is the user
  * quoting a marker, and the receiver must answer it as it answers any other
- * prompt: with nothing.
+ * prompt: with nothing. One token keeps the rule it always had; several must
+ * each be a ref or an id (HIVE-408).
  */
-export function parseLedgerMarker(prompt: string): string | undefined {
+export function parseLedgerMarkers(prompt: string): string[] | undefined {
   const text = prompt.trim();
   if (!text.startsWith(LEDGER_MARKER_PREFIX)) return undefined;
-  const token = text.slice(LEDGER_MARKER_PREFIX.length);
-  return MARKER_TOKEN.test(token) ? token : undefined;
+  const tokens = text
+    .slice(LEDGER_MARKER_PREFIX.length)
+    .split(' ')
+    .filter((token) => token !== '');
+  if (tokens.length === 0) return undefined;
+  const shape = tokens.length === 1 ? MARKER_TOKEN : MARKER_LIST_TOKEN;
+  return tokens.every((token) => shape.test(token)) ? tokens : undefined;
 }
 
 /** Receiver routes. Both POST — see `receiver.ts`. */
