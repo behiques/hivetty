@@ -1142,11 +1142,16 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         const reserved = live.reduce((sum, other) => sum + other.reserved, 0);
 
         const spentSoFar = today?.usd ?? 0;
-        const remaining = limits.dailyUsd - spentSoFar - reserved;
+        /*
+          The room left, in whole cents (HIVE-408). The CLI checks its cap only after a turn, so a run
+          started on a fraction of a cent would pay a whole turn past the day; and a cent figure keeps
+          float noise off the `--max-budget-usd` argv.
+        */
+        const remaining = Math.floor((limits.dailyUsd - spentSoFar - reserved) * 100 + 1e-6) / 100;
         // A day already spent refuses even a run that reserves nothing.
         const spentOut = spentSoFar >= limits.dailyUsd;
 
-        if (spentOut || remaining <= 1e-9) {
+        if (spentOut || remaining <= 0) {
           const day = dayKey(now);
           const spentText = `$${(today?.usd ?? 0).toFixed(2)}`;
           const dailyText = `$${limits.dailyUsd.toFixed(2)}`;

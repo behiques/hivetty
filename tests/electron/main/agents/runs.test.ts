@@ -2361,6 +2361,16 @@ describe('createRunTracker', () => {
       expect(commandArgs.at(-1)).toMatchObject({ budgetUsd: 1 });
     });
 
+    it('holds whole cents of the room left, and refuses less than one (HIVE-408)', () => {
+      limits = { budgetUsd: 3, dailyUsd: 5 };
+      spent(4.7);
+      expect(tracker.run('a', 'ledger')).toMatchObject({ started: true });
+      expect(commandArgs.at(-1)).toMatchObject({ budgetUsd: 0.3 });
+
+      endRun(0, 0.2993);
+      expect(tracker.run('a', 'ledger')).toMatchObject({ started: false, refused: 'budget' });
+    });
+
     it('passes no budget override when budget_usd fits (HIVE-408)', () => {
       limits = { budgetUsd: 1, dailyUsd: 5 };
       tracker.run('a', 'ledger');
