@@ -2311,6 +2311,18 @@ describe('createRunTracker', () => {
     expect(awake).toEqual([true, false]);
   });
 
+  it('keeps the closing conversation\'s context size on its lane (HIVE-408)', () => {
+    tracker.run('a', 'ledger');
+    childInstances[0]?.emitStdout(
+      resultLine({
+        num_turns: 3,
+        usage: { input_tokens: 52, cache_creation_input_tokens: 8_000, cache_read_input_tokens: 617_226, output_tokens: 10 },
+      }),
+    );
+    childInstances[0]?.emitClose(0);
+    expect(state.read('a').contextTokens).toBe(208_426);
+  });
+
   describe('what a run is charged (HIVE-408)', () => {
     const finish = (index: number, cost: number): void => {
       childInstances[index]?.emitStdout(resultLine({ total_cost_usd: cost, session_id: 'conv-1' }));

@@ -2,6 +2,7 @@ import {
   AGENT_KILL_GRACE_MS,
   AGENT_STALL_GRACE_MS,
   STANDING_LANE,
+  contextOf,
   dayKey,
   runCost,
   runReservation,
@@ -817,6 +818,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       writes its lane's session fields, and a task run writes none.
     */
     if (standing) {
+      const contextTokens = contextOf(end?.usage, end?.turns);
       deps.state.patchLane(name, info.lane, {
         /*
           `lastRunAt` is the **standing** conversation's last run — the `onchange`
@@ -857,6 +859,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         ...(sessionUuid === undefined || end?.costUsd === undefined
           ? {}
           : { costBasis: { uuid: sessionUuid, usd: end.costUsd } }),
+        ...(contextTokens === undefined ? {} : { contextTokens }),
       });
     }
 

@@ -21,6 +21,7 @@ import {
   dayKey,
   formatRunCost,
   isQueueableRefusal,
+  contextOf,
   runCost,
   runReservation,
   isContainerCommand,
@@ -499,5 +500,18 @@ describe('runCost (HIVE-408)', () => {
       held = { uuid: 'c1', usd: reported };
     }
     expect(total).toBeCloseTo(1.9, 10);
+  });
+});
+
+describe('contextOf (HIVE-408)', () => {
+  it('is the average context per call', () => {
+    expect(contextOf({ inputTokens: 8_052, cachedTokens: 617_226 }, 3)).toBe(208_426);
+  });
+  it('reads a run with no turn count as one call', () => {
+    expect(contextOf({ inputTokens: 10, cachedTokens: 90 }, undefined)).toBe(100);
+    expect(contextOf({ inputTokens: 10, cachedTokens: 90 }, 0)).toBe(100);
+  });
+  it('is undefined without usage', () => {
+    expect(contextOf(undefined, 3)).toBeUndefined();
   });
 });
