@@ -163,7 +163,7 @@ import type {
   JiraUser,
 } from '@shared/jira-contract';
 import { LEDGER_DIR, OVERMIND } from '@shared/ledger-contract';
-import { closedAskThreads, delegatesOf, leftOpen } from '@shared/ledger-derive';
+import { closedAskThreads, delegatesOf, leftOpen, openAsksOnLane } from '@shared/ledger-derive';
 import {
   isThisMachineAction,
   type NotificationAction,
@@ -3021,6 +3021,7 @@ export function registerIpcHandlers(
     hasOpenAsk,
     handoffFor,
     leftOpen: (name, run, lane) => leftOpen(ledger.read({}).entries, name, run, lane, Date.now()),
+    openAsksOnLane: (name, lane) => openAsksOnLane(ledger.read({}).entries, name, lane, Date.now()),
     newUuid,
     pushStatus: pushAgentStatus,
     pushLines: (name, lines) => {

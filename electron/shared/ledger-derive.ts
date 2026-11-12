@@ -895,6 +895,16 @@ export function laneOfRun(agent: string, run: unknown, entries: readonly LedgerE
 }
 
 /**
+ * Does any run of `lane` hold an open ask from `agent` (HIVE-408)? A queued post re-wakes a thread
+ * lane as a second run, which asked nothing; the first run's question still holds the lane.
+ */
+export function openAsksOnLane(entries: readonly LedgerEntry[], agent: string, lane: string, now: number): boolean {
+  return openAsks(entries, now).some(
+    (ask) => ask.from === agent && laneOfRun(agent, ask.meta?.['run'], entries) === lane,
+  );
+}
+
+/**
  * What a closing run leaves behind it (HIVE-354): the ask its thread lane
  * exists to answer, while that ask is still open, and every task the agent
  * still holds by a claim this run wrote. A standing or repo lane names no ask:

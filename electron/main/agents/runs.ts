@@ -198,6 +198,11 @@ export interface RunTrackerDeps {
    * (HIVE-354), from `leftOpen` in `ledger-derive.ts`. Optional so a spec that
    * never runs a thread lane needs none.
    */
+  /**
+   * Does any run of `lane` hold an open ask from this agent (HIVE-408), from `openAsksOnLane` in
+   * `ledger-derive.ts`? Optional so a spec that never runs a thread lane needs none.
+   */
+  openAsksOnLane?: (name: string, lane: string) => boolean;
   leftOpen?: (
     name: string,
     run: string,
@@ -896,7 +901,16 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       `failed` reaches the asker and closes the lane), and frees what the run
       claimed. A paused agent is the person's to resume.
     */
-    if (outcome !== 'asking' && !asking && current.status !== 'paused') {
+    /*
+      Lane-wide (HIVE-408): a queued post re-wakes a thread lane as a second run, which asked
+      nothing while the first run's question is still open. That lane is waiting, not abandoned.
+    */
+    if (
+      outcome !== 'asking' &&
+      !asking &&
+      current.status !== 'paused' &&
+      deps.openAsksOnLane?.(name, info.lane) !== true
+    ) {
       const left = deps.leftOpen?.(name, info.run, info.lane);
 
       if (left?.ask !== undefined) {

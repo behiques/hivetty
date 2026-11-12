@@ -78,6 +78,8 @@ describe('createRunTracker', () => {
   let handoff: string | undefined;
   /** What a closing run leaves open on its lane (HIVE-354). Set per test. */
   let left: { ask: { id: string; ref?: string } | undefined; claims: string[] };
+  /** Does any run of the closing lane hold an open ask (HIVE-408)? Set per test. */
+  let askingOnLane: boolean;
   /** The prompt hash a session-starting command carries. Set per test. */
   let promptHash: string | undefined;
   let commandCalls: number;
@@ -114,6 +116,7 @@ describe('createRunTracker', () => {
     lastTurn = false;
     handoff = undefined;
     left = { ask: undefined, claims: [] };
+    askingOnLane = false;
     promptHash = undefined;
     commandCalls = 0;
     clock = 1_000;
@@ -161,6 +164,7 @@ describe('createRunTracker', () => {
       hasOpenAsk: () => openAskAnywhere,
       handoffFor: () => handoff,
       leftOpen: () => left,
+      openAsksOnLane: () => askingOnLane,
       newUuid: () => 'uuid-minted',
       pushStatus: (name) => statuses.push(name),
       pushLines: (name, pushed) =>
@@ -2525,6 +2529,18 @@ describe('createRunTracker', () => {
 
   describe('a thread lane that ends without answering its ask (HIVE-354)', () => {
     const abandoned = () => ledger.filter((item) => item.from === OVERMIND && item.kind !== 'event');
+
+    it('leaves the job alone when an earlier run of the lane is still asking (HIVE-408)', () => {
+      left = { ask: { id: 'k1', ref: 'a93' }, claims: ['HIVE-268'] };
+      askingOnLane = true; // run-1 asked; run-2, from a queued post, asked nothing
+
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:k1' });
+      childInstances[0]?.emitStdout(resultLine());
+      childInstances[0]?.emitClose(0);
+
+      expect(abandoned()).toEqual([]);
+      expect(state.read('a').runs.at(-1)?.outcome).toBe('done');
+    });
 
     it('fails the ask to the asker, naming the run, then releases what the run claimed', () => {
       left = { ask: { id: 'k1', ref: 'a148' }, claims: ['HIVE-342'] };
