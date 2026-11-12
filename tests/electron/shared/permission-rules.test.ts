@@ -1092,12 +1092,18 @@ describe('the merge grant and a quoted subject (HIVE-409)', () => {
     ['a carriage return outside the quotes', 'gh pr merge 1 --subject "x"\r--repo behiques/hivetty ; id'],
     ['a substitution in the subject', 'gh pr merge 1 --subject "$(id)" --repo behiques/hivetty'],
     ['a backtick in the subject', 'gh pr merge 1 --subject "`id`" --repo behiques/hivetty'],
-    ['an escaped quote that would end the span', 'gh pr merge 1 --subject "a\\"; rm x; echo \\"" --repo behiques/hivetty'],
     ['a single-quoted span hiding a double quote', `gh pr merge 1 --subject 'a"' ; rm -rf ~ ; echo '"b' --repo behiques/hivetty`],
     ['an unclosed quote', 'gh pr merge 1 --subject "a ; rm x --repo behiques/hivetty'],
-    ['a newline inside the quotes', 'gh pr merge 1 --subject "a\nb" --repo behiques/hivetty'],
   ])('refuses %s', (_name, command) => {
     expect(matches(RULE, 'Bash', { command })).toBe(false);
+  });
+
+  // The shell reads each as one subject word and runs nothing in it; the tokeniser agrees (#281).
+  it.each([
+    ['an escaped quote inside the span', 'gh pr merge 1 --subject "a\\"; rm x; echo \\"" --repo behiques/hivetty'],
+    ['a newline inside the quotes', 'gh pr merge 1 --subject "a\nb" --repo behiques/hivetty'],
+  ])('allows %s', (_name, command) => {
+    expect(matches(RULE, 'Bash', { command })).toBe(true);
   });
 
   it('a non-merge rule still sees quoted control characters', () => {

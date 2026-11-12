@@ -683,6 +683,21 @@ export function matches(
     return false;
   }
 
+  /*
+    The auto-merge rule is read as gh reads the merge, never as a glob: the glob let a URL selector pick
+    its own repository past the pinned `--repo` (`gh pr merge https://github.com/x/y/pull/5 --repo ok/z`).
+    One plain merge into the consenting repository, nothing else on the line; `decide` covers a merge
+    chained beside other commands (`autoMergeCovers`).
+  */
+  const autoMerge = toolName === 'Bash' ? AUTO_MERGE_RULE.exec(rule) : null;
+  if (autoMerge !== null) {
+    const command = str(input, 'command') ?? '';
+    const segments = shellSegments(command);
+    return (
+      segments?.length === 1 && !hidesMerge(command, segments) && plainMergeRepo(segments[0]!) === autoMerge[1]
+    );
+  }
+
   // No rule but the literal may allow one: see DEFAULT_BRANCH_PUSH.
   if (isDefaultBranchPush(toolName, input)) return false;
 

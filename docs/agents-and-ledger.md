@@ -1898,9 +1898,13 @@ a command that runs text it is handed (`bash -c`, `eval`, `ssh`, `python -c`, `s
 one. A grep pattern, a commit message, an `echo` or a heredoc body that only *mentions* `gh pr merge` is
 not a merge, and bare `Bash` runs it. A line the tokeniser cannot parse falls back to the text match.
 
-`decide` then lets the auto-merge rule cover the whole line however the shipper spells it: every
-`gh pr merge` in it must name the consenting repository as its last `--repo`, `-R`, `--repo=` or
-`-R<slug>`, with no word the shell still fills in. Anything chained beside it needs all of Bash. So a
+The auto-merge rule is never matched as a glob. Each merge is read the way gh reads it: `gh` is the
+command itself, the one selector is a PR number (a URL picks its own repository), every option is one
+`gh pr merge` knows, and a value-taking option consumes its value, so a `--repo` written inside `--body`
+is body text. The last `--repo` or `-R` must be the consenting repository, with no word the shell still
+fills in. `decide` lets the rule cover a whole line: every merge in it qualifies, and anything chained
+beside it needs all of Bash. A merge a shell reads from a heredoc, a pipe or a variable is never
+covered. So a
 subject quoting `&` or `;`, a merge chained to `gh pr view`, and `-R` all merge unattended on an
 auto-merge project. A merge through `gh api`, through a runner, or into another repository still raises
 the card, which offers `once` and *merge unattended for this project*.
