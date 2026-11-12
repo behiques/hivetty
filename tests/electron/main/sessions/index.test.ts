@@ -4848,6 +4848,40 @@ describe('licence lapse (HIVE-267)', () => {
     expect(() => gated.open(OPEN)).not.toThrow();
     expect(spawned).toHaveLength(1);
   });
+
+  const TERMINAL = { entityId: 'term-1', projectId: 'nova-web', cols: 80, rows: 24 };
+  const COMMAND = {
+    entityId: 'hive.clone',
+    cwd: '/Users/me/Projects',
+    file: 'git',
+    args: ['clone', '--progress', '--', 'https://x/y.git', 'y'],
+    cols: 80,
+    rows: 24,
+  };
+
+  it('refuses a new terminal while the licence is lapsed', () => {
+    lapsed = true;
+
+    expect(() => gated.openTerminal(TERMINAL)).toThrow(/licence has lapsed/);
+    expect(spawned).toHaveLength(0);
+  });
+
+  it('still reattaches a live terminal while lapsed', () => {
+    gated.openTerminal(TERMINAL);
+    lapsed = true;
+
+    expect(() => gated.openTerminal(TERMINAL)).not.toThrow();
+    expect(spawned).toHaveLength(1);
+  });
+
+  it('refuses a command while the licence is lapsed, and never calls its onExit', () => {
+    lapsed = true;
+    const onExit = vi.fn();
+
+    expect(() => gated.openCommand({ ...COMMAND, onExit })).toThrow(/licence has lapsed/);
+    expect(spawned).toHaveLength(0);
+    expect(onExit).not.toHaveBeenCalled();
+  });
 });
 
 describe('CLI plan lock (HIVE-332)', () => {

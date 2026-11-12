@@ -2989,6 +2989,7 @@ export function createSessions(options: SessionsOptions): Sessions {
   return {
     adapterOf,
     openCommand(request) {
+      refuseWhileLapsed();
       /**
        * Registered *before* the spawn, because a failure to start is reported
        * asynchronously and could otherwise land before there was anything to
@@ -3014,6 +3015,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     openTerminal(request) {
       // Attach, never respawn — the same invariant `open` keeps.
       if (registry.sessionFor(request.entityId) !== undefined) return;
+      refuseWhileLapsed();
 
       const snapshot = config();
       const project = requireMappedProject(snapshot, request.projectId);
