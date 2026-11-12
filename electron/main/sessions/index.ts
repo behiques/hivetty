@@ -1558,7 +1558,7 @@ export function createSessions(options: SessionsOptions): Sessions {
           setTimeout(
             () => {
               idleTimers.delete(entityId);
-              if (lastStatus.get(entityId) === 'idle') onIdle?.(entityId);
+              if (registry.sessionFor(entityId) !== undefined && lastStatus.get(entityId) === 'idle') onIdle?.(entityId);
             },
             Math.max(0, BG_SHELL_HOLD_MS - (Date.now() - (idleAt.get(entityId) ?? Date.now()))),
           ),
@@ -3320,6 +3320,10 @@ export function createSessions(options: SessionsOptions): Sessions {
         after the processes are gone (HIVE-93).
       */
       for (const entityId of [...finishing.keys()]) forgetFinish(entityId);
+      // The bg-shell hold's re-signal is the other (HIVE-408).
+      for (const timer of idleTimers.values()) clearTimeout(timer);
+      idleTimers.clear();
+      idleAt.clear();
       registry.clear();
       restarting.clear();
       exitWaiters.clear();
