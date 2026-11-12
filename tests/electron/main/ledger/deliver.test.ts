@@ -498,6 +498,28 @@ describe('createDeliver', () => {
       expect(write).toHaveBeenCalledTimes(1);
     });
 
+    it('re-arms when the clock lags the timer, rather than dropping the retry', () => {
+      let skew = 0;
+      deliver = createDeliver({
+        ledger,
+        isLive: (id) => live.has(id),
+        isIdle: (id) => idle.has(id),
+        write: (id, data) => write(id, data),
+        adapterOf: () => adapter,
+        now: () => Date.now() - skew,
+        setTimeoutFn: setTimeout,
+      });
+      deliver.onInput('sess-a');
+      ask('sess-a');
+      // From here the wall clock reads a millisecond behind the timer that fires.
+      skew = 1;
+
+      vi.advanceTimersByTime(TYPING_HOLD_MS);
+      expect(write).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
     it('holds only the session that was typed into', () => {
       live.add('sess-b');
       idle.add('sess-b');

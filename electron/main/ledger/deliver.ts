@@ -291,6 +291,24 @@ export function createDeliver({
   }
 
   /**
+   * Retry a session's backlog when its typing hold lapses (HIVE-408). Re-armed for what is left
+   * when the clock says the hold has not lapsed yet, so a timer firing a tick early is not a
+   * nudge left waiting for the next idle.
+   */
+  function armRetry(entityId: string, delay: number): void {
+    clearTimeout(retries.get(entityId));
+    retries.set(
+      entityId,
+      setTimeoutFn(() => {
+        retries.delete(entityId);
+        const left = TYPING_HOLD_MS - (now() - (typedAt.get(entityId) ?? -Infinity));
+        if (left > 0) armRetry(entityId, left);
+        else flush(entityId);
+      }, delay),
+    );
+  }
+
+  /**
    * The owed entries one line can carry (HIVE-408): the longest run from the
    * front whose tokens may share a line, or the first entry alone when even it
    * may not. The rest has no receipt and goes on the next idle, in order.
@@ -402,14 +420,7 @@ export function createDeliver({
 
     onInput(entityId) {
       typedAt.set(entityId, now());
-      clearTimeout(retries.get(entityId));
-      retries.set(
-        entityId,
-        setTimeoutFn(() => {
-          retries.delete(entityId);
-          flush(entityId);
-        }, TYPING_HOLD_MS),
-      );
+      armRetry(entityId, TYPING_HOLD_MS);
     },
 
     onSurfaceGone(surfaceId) {
