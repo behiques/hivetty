@@ -1181,6 +1181,8 @@ export interface LaneState {
   promptHash?: string;
   /** When a thread lane's ask closed. Pruned a day later (HIVE-188). */
   closedAt?: number;
+  /** The conversation's last cumulative `total_cost_usd` (HIVE-408): what the next resumed run is charged above. */
+  costBasis?: { uuid: string; usd: number };
 }
 
 /** What the form offers to fix an unavailable CLI with (HIVE-396). A fence failure has none. */
@@ -1395,6 +1397,20 @@ export function runReservation(
   if (limits.budgetUsd !== undefined) return limits.budgetUsd;
   if (limits.dailyUsd === undefined || parallel <= 1) return 0;
   return limits.dailyUsd / parallel;
+}
+
+/**
+ * What one run cost (HIVE-408). Claude reports `total_cost_usd` cumulatively over `--resume`, so a
+ * run that resumed the conversation `basis` names is charged only what it added. A figure below the
+ * basis means the CLI restarted its count, and is the run's own.
+ */
+export function runCost(
+  reported: number,
+  conversation: string | undefined,
+  basis: { uuid: string; usd: number } | undefined,
+): number {
+  if (conversation === undefined || basis?.uuid !== conversation || reported < basis.usd) return reported;
+  return reported - basis.usd;
 }
 
 /** What a run spent against `limits.dailyTokens` (HIVE-398): new input and output, never the cache read back. */
