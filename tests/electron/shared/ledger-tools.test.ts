@@ -18,6 +18,7 @@ import {
   JIRA_GET_TOOL,
   JIRA_TRANSITION_TOOL,
   JIRA_USERS_TOOL,
+  PR_MERGE_TOOL,
   PR_TOOL,
   PROJECT_AUTO_MERGE_TOOL,
   PROJECTS_TOOL,
@@ -420,5 +421,19 @@ describe('SESSION_DONE_TOOL (HIVE-368)', () => {
   it('is served, just ahead of approve', () => {
     const names = HIVE_TOOLS.map((tool) => tool.name);
     expect(names.slice(-2)).toEqual(['session_done', 'approve']);
+  });
+});
+
+describe('pr_merge (HIVE-409)', () => {
+  const input = { repo: 'a/b', number: 1, sha: 'a'.repeat(40) };
+
+  it('is served, needs consent, and no standing grant covers it', () => {
+    expect(HIVE_TOOL_NAMES).toContain(PR_MERGE_TOOL.name);
+    expect(HIVE_CONSENT_TOOLS).toContain('mcp__hive__pr_merge');
+    expect(HIVE_STANDING_GRANTS.some((rule) => matches(rule, 'mcp__hive__pr_merge', input))).toBe(false);
+  });
+
+  it('requires the repository, the number and the head it merges', () => {
+    expect(PR_MERGE_TOOL.inputSchema.required).toEqual(['repo', 'number', 'sha']);
   });
 });
