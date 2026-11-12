@@ -561,13 +561,6 @@ describe('presentation', () => {
     });
   });
 
-  /**
-   * The other half of the same finding: every non-`ask` kind's toast-click
-   * behaviour must stay byte-identical. `session` is the kind the existing
-   * suite already exercises above; this pins it beside the `ask` exception so
-   * a future edit cannot narrow the dismiss branch to `ask` and accidentally
-   * widen "no dismiss" to everything else.
-   */
   describe('remind (HIVE-409)', () => {
     const raiseCard = () =>
       hub.raise({ id: 'a1', kind: 'agent.permission', title: 'Allow Bash?', action: { type: 'ask', thread: 'a1' } });
@@ -603,6 +596,13 @@ describe('presentation', () => {
     });
   });
 
+  /**
+   * The other half of the same finding: every non-`ask` kind's toast-click
+   * behaviour must stay byte-identical. `session` is the kind the existing
+   * suite already exercises above; this pins it beside the `ask` exception so
+   * a future edit cannot narrow the dismiss branch to `ask` and accidentally
+   * widen "no dismiss" to everything else.
+   */
   it('a session toast still dismisses on click, unlike an ask', () => {
     raise({ id: 'sess-row', action: { type: 'session', entityId: 'term-1' } });
 

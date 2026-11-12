@@ -500,6 +500,31 @@ export function createNotificationHub(
     announce();
   };
 
+  /** {@link NotificationHub.remind} (HIVE-409). */
+  const remind = (id: string): boolean => {
+    try {
+      const entry = buffer.find((notification) => notification.id === id);
+      if (entry === undefined || entry.action.type !== 'ask') return false;
+      const spec = NOTIFICATION_KIND_SPECS[entry.kind];
+      if (spec === undefined) return false;
+      if (effective(prefs()[entry.kind] ?? spec.defaultDelivery, inherits.get(entry.id)) !== 'both') return false;
+      const action = entry.action;
+      present({
+        id: entry.id,
+        kind: entry.kind,
+        title: toastTitle(entry),
+        body: entry.body,
+        action,
+        // An ask's toast only activates: the row is the control (see `raise`).
+        onClick: () => activate(action),
+      });
+      return true;
+    } catch (cause) {
+      console.error('[hive] reminder failed:', cause);
+      return false;
+    }
+  };
+
   /**
    * Un-read a row and show it now — the foreground gate's other half (HIVE-81).
    *
@@ -558,30 +583,6 @@ export function createNotificationHub(
    * nothing remembered, and `HiveNotification` stays the shape the renderer
    * hydrates from.
    */
-  const remind = (id: string): boolean => {
-    try {
-      const entry = buffer.find((notification) => notification.id === id);
-      if (entry === undefined || entry.action.type !== 'ask') return false;
-      const spec = NOTIFICATION_KIND_SPECS[entry.kind];
-      if (spec === undefined) return false;
-      if (effective(prefs()[entry.kind] ?? spec.defaultDelivery, inherits.get(entry.id)) !== 'both') return false;
-      const action = entry.action;
-      present({
-        id: entry.id,
-        kind: entry.kind,
-        title: toastTitle(entry),
-        body: entry.body,
-        action,
-        // An ask's toast only activates: the row is the control (see `raise`).
-        onClick: () => activate(action),
-      });
-      return true;
-    } catch (cause) {
-      console.error('[hive] reminder failed:', cause);
-      return false;
-    }
-  };
-
   const promote = (id: string): boolean => {
     try {
       const entry = buffer.find((notification) => notification.id === id);
