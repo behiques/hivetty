@@ -27,6 +27,7 @@ import {
 } from '@shared/ledger-derive';
 import { SLACK_COMMAND_KIND, SLACK_SERVER_KEY, SLACK_TRIGGER } from '@shared/slack-contract';
 
+import { isPermissionAsk } from './permissions';
 import type { RunStart } from './runs';
 import {
   decide,
@@ -820,6 +821,10 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       if (schedule.wake.quiet !== undefined && inQuiet(minuteOfDay(now), schedule.wake.quiet)) continue;
 
       const holding = laneClaims(name, entries);
+      const cardOnLane = (agentName: string, key: string): boolean =>
+        openAsks(entries, now).some(
+          (ask) => isPermissionAsk(ask) && ask.from === agentName && laneOfRun(agentName, ask.meta?.['run'], entries) === key,
+        );
 
       for (const [key, lane] of Object.entries(agent.lanes ?? {})) {
         if (!key.startsWith('repo:')) continue;
@@ -844,6 +849,11 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
 
         deps.state.patchLane(name, key, { nextRunAt: next });
         if (deps.lapsed?.() === true) continue;
+        /*
+          Its one PR waits on the person's card (HIVE-408): the answer wakes the lane, and an interval
+          wake would find nothing to do. A lane holding another PR keeps ticking for that one.
+        */
+        if (holding.get(key) === 1 && cardOnLane(name, key)) continue;
         deps.run(name, INTERVAL_TRIGGER, undefined, { lane: key });
       }
     }

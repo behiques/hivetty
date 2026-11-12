@@ -210,12 +210,12 @@ export function laneFor(
 }
 
 /**
- * Which of an agent's lanes hold work (HIVE-186): an open claim whose claim
- * entry was written by a run of that lane. The shipper claims
- * `<owner>/<repo>#<N>` at intake and releases it at `closed`, so its repo
- * lanes hold work exactly while they hold PRs.
+ * Which of an agent's lanes hold work (HIVE-186), and how much (HIVE-408): each
+ * lane with the count of open claims whose claim entry a run of that lane
+ * wrote. The shipper claims `<owner>/<repo>#<N>` at intake and releases it at
+ * `closed`, so its repo lanes hold work exactly while they hold PRs.
  */
-export function laneClaims(agent: string, entries: readonly LedgerEntry[]): Set<string> {
+export function laneClaims(agent: string, entries: readonly LedgerEntry[]): Map<string, number> {
   const held = new Map<string, LedgerEntry>();
   for (const item of entries) {
     const task = taskOf(item);
@@ -223,9 +223,11 @@ export function laneClaims(agent: string, entries: readonly LedgerEntry[]): Set<
     if (item.kind === 'claim') held.set(task, item);
     else if (item.kind === 'release') held.delete(task);
   }
-  const lanes = new Set<string>();
+  const lanes = new Map<string, number>();
   for (const claim of held.values()) {
-    if (claim.from === agent) lanes.add(laneOfRun(agent, claim.meta?.['run'], entries));
+    if (claim.from !== agent) continue;
+    const lane = laneOfRun(agent, claim.meta?.['run'], entries);
+    lanes.set(lane, (lanes.get(lane) ?? 0) + 1);
   }
   return lanes;
 }

@@ -1032,11 +1032,6 @@ describe('createScheduler', () => {
       scheduler.start();
     });
 
-    /*
-      Arm, do not fire. A definition saved in Settings is a schedule starting
-      now, not a wake owed since the epoch — and `nextRunAt` is absent for
-      exactly as long as an agent has never been scheduled.
-    */
     it('starts a wake queued under a spent day on the first tick of the next (HIVE-408)', () => {
       const DAY = 24 * 60 * 60 * 1000;
       state.patch(AGENT, {
@@ -1052,6 +1047,11 @@ describe('createScheduler', () => {
       expect(state.read(AGENT).pendingWake ?? []).toEqual([]);
     });
 
+    /*
+      Arm, do not fire. A definition saved in Settings is a schedule starting
+      now, not a wake owed since the epoch — and `nextRunAt` is absent for
+      exactly as long as an agent has never been scheduled.
+    */
     it('seeds a next run rather than firing the instant an agent is created', () => {
       schedules.set(AGENT, { wake: every5m });
 
@@ -2519,6 +2519,43 @@ describe('createScheduler', () => {
       expect(woke.some((w) => w.lane === undefined)).toBe(false);
       expect(woke).toContainEqual({ name: AGENT, trigger: 'interval', lane: 'repo:a/x' });
       expect(state.read(AGENT).nextRunAt).toBeUndefined();
+    });
+
+    it('does not tick a lane whose one claim waits on its own permission card (HIVE-408)', () => {
+      holding();
+      entries.push(entry({ id: 'p1', from: AGENT, to: 'overmind', kind: 'ask', body: 'merge a/x#1?', meta: { run: 'r1', kind: 'permission' } }));
+
+      tick();
+      clock = 600_000;
+      tick();
+
+      expect(woke.some((w) => w.lane === 'repo:a/x')).toBe(false);
+      expect(state.lane(AGENT, 'repo:a/x').nextRunAt).toBe(1_200_000);
+    });
+
+    it('still ticks a lane holding a second claim beside the card (HIVE-408)', () => {
+      holding();
+      entries.push(
+        entry({ id: 'c2', from: AGENT, to: undefined, kind: 'claim', body: 'claimed a/x#2', meta: { task: 'a/x#2', run: 'r1' } }),
+        entry({ id: 'p1', from: AGENT, to: 'overmind', kind: 'ask', body: 'merge a/x#1?', meta: { run: 'r1', kind: 'permission' } }),
+      );
+
+      tick();
+      clock = 600_000;
+      tick();
+
+      expect(woke).toContainEqual({ name: AGENT, trigger: 'interval', lane: 'repo:a/x' });
+    });
+
+    it('still ticks a lane whose one claim waits on a plain question, not a card (HIVE-408)', () => {
+      holding();
+      entries.push(entry({ id: 'q1', from: AGENT, to: 'sess-1', kind: 'ask', body: 'which branch?', meta: { run: 'r1' } }));
+
+      tick();
+      clock = 600_000;
+      tick();
+
+      expect(woke).toContainEqual({ name: AGENT, trigger: 'interval', lane: 'repo:a/x' });
     });
 
     it('does not tick a lane that is running', () => {

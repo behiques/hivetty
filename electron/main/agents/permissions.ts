@@ -60,7 +60,7 @@ const record = (value: unknown): Record<string, unknown> | undefined =>
     ? (value as Record<string, unknown>)
     : undefined;
 
-const isPermissionAsk = (entry: LedgerEntry): boolean =>
+export const isPermissionAsk = (entry: LedgerEntry): boolean =>
   entry.kind === 'ask' && entry.meta?.['kind'] === 'permission';
 
 export interface PermissionDeps {
