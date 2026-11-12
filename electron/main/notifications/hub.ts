@@ -232,6 +232,13 @@ export interface NotificationHub {
    */
   promote(id: string): boolean;
   /**
+   * Present an open ask's toast again (HIVE-409): the reminder for a permission card nobody answered.
+   * Leaves the row, its read state and `seen` as they are. A click activates, as `raise`'s ask toast
+   * does. `false` when the row is gone, is not an ask, its kind is not delivered as `both`, or
+   * presenting threw.
+   */
+  remind(id: string): boolean;
+  /**
    * Drop one notification from the buffer for good (HIVE-93).
    *
    * `list()` is what a mounting renderer hydrates from, so this is what makes a
@@ -551,6 +558,30 @@ export function createNotificationHub(
    * nothing remembered, and `HiveNotification` stays the shape the renderer
    * hydrates from.
    */
+  const remind = (id: string): boolean => {
+    try {
+      const entry = buffer.find((notification) => notification.id === id);
+      if (entry === undefined || entry.action.type !== 'ask') return false;
+      const spec = NOTIFICATION_KIND_SPECS[entry.kind];
+      if (spec === undefined) return false;
+      if (effective(prefs()[entry.kind] ?? spec.defaultDelivery, inherits.get(entry.id)) !== 'both') return false;
+      const action = entry.action;
+      present({
+        id: entry.id,
+        kind: entry.kind,
+        title: toastTitle(entry),
+        body: entry.body,
+        action,
+        // An ask's toast only activates: the row is the control (see `raise`).
+        onClick: () => activate(action),
+      });
+      return true;
+    } catch (cause) {
+      console.error('[hive] reminder failed:', cause);
+      return false;
+    }
+  };
+
   const promote = (id: string): boolean => {
     try {
       const entry = buffer.find((notification) => notification.id === id);
@@ -944,6 +975,8 @@ export function createNotificationHub(
     markRead,
 
     promote,
+
+    remind,
 
     dismiss,
 
