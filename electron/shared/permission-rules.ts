@@ -199,6 +199,24 @@ const specifierTextFor = (
  */
 const SHELL_CONTROL = /[;&|<>`\n]|\$\(/;
 
+/** Any quoting but plain double quotes, or a line break: with one present, double-quote spans are not paired. */
+const OTHER_QUOTING = /['\\$`\r\n]/;
+const DOUBLE_QUOTED = /"[^"]*"/g;
+
+/**
+ * The text `SHELL_CONTROL` is tested against (HIVE-409). For the merge grant only, double-quoted spans
+ * are blanked first: `--subject "Account & devices"` holds no control the shell would act on, and 13 of
+ * 120 merged titles raised a card on an auto-merge project for that `&`. It is safe only while plain
+ * double quotes are the command's only quoting: with no `'`, `\`, `$`, backtick or line break anywhere,
+ * the shell pairs double quotes left to right exactly as this regex does, and expands nothing inside
+ * them. Any other quoting and the whole text is tested, as before. An unclosed `"` is never blanked, so
+ * whatever follows it is still tested.
+ */
+const controlText = (rule: string, command: string): string =>
+  rule.startsWith('Bash(gh pr merge ') && !OTHER_QUOTING.test(command)
+    ? command.replace(DOUBLE_QUOTED, '""')
+    : command;
+
 /**
  * Whether a candidate path walks upwards.
  *
@@ -463,7 +481,7 @@ export function matches(
   // run or read — not the rule, because a rule the user typed by hand is
   // allowed to be as wide as they meant it to be. It is the call that must
   // not sneak past the rule's own caption.
-  if (toolName === 'Bash' && SHELL_CONTROL.test(text)) return false;
+  if (toolName === 'Bash' && SHELL_CONTROL.test(controlText(rule, text))) return false;
   if (PATH_TOOLS[toolName] !== undefined && walksUp(text)) return false;
 
   return globToRegExp(pattern).test(text);
