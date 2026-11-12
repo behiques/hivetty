@@ -112,6 +112,14 @@ describe('launchHeadless', () => {
     expect(narrowed[0]).toBe('Read');
   });
 
+  it('a wide rule never puts pr_merge on the CLI allow list (HIVE-409)', () => {
+    for (const grants of [['mcp__hive__*'], ['*'], ['mcp__hive'], ['mcp__hive__pr_merge'], ['mcp__hive__pr_merge(behiques/hivetty#*)']]) {
+      const granted = flag(launchHeadless(spec({ grants })).args, '--allowedTools')!.split(',');
+      expect(granted, grants[0]).not.toContain('mcp__hive__pr_merge');
+      expect(granted.some((rule) => rule.includes('pr_merge') || rule === '*' || rule.startsWith('mcp__hive__*') || rule === 'mcp__hive')).toBe(false);
+    }
+  });
+
   it('keeps every Bash rule out of --allowedTools, so the fence decides each command', () => {
     const granted = flag(
       launchHeadless(spec({ grants: ['Read', 'Bash', 'Bash(gh pr view *)'] })).args,

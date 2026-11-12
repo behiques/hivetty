@@ -409,8 +409,22 @@ export function mergeAsk(open: readonly OpenAsk[], slug: string, n: number): Ope
 
 /** The PR a permission ask's merge names, from `meta.tool` and `meta.input` (HIVE-409). */
 export function mergeTarget(meta: Record<string, unknown> | undefined): { repo: string; number: number } | undefined {
+  const input = meta?.['input'];
+  /*
+    The MCP merge names its PR in its own fields (HIVE-409). The literal is `PR_MERGE_TOOL_NAME` in
+    `permission-rules.ts`, which imports this file and so cannot be imported back. The repo is shaped as
+    the fence's specifier shapes it, since it reaches a card's caption.
+  */
+  if (meta?.['tool'] === 'mcp__hive__pr_merge') {
+    const fields = typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
+    const repo = fields['repo'];
+    const number = fields['number'];
+    return typeof repo === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) &&
+      typeof number === 'number' && Number.isSafeInteger(number) && number > 0
+      ? { repo, number }
+      : undefined;
+  }
   if (meta?.['tool'] !== 'Bash') return undefined;
-  const input = meta['input'];
   const command = typeof input === 'object' && input !== null ? (input as Record<string, unknown>)['command'] : undefined;
   if (typeof command !== 'string') return undefined;
   const number = MERGE_COMMAND.exec(command)?.[1];

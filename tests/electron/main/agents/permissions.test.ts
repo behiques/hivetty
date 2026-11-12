@@ -485,6 +485,19 @@ describe('onAnswer', () => {
       expect(p.grantsFor('shipper')).toEqual([`literal:Bash:${MERGE.command}`]);
     });
 
+    it('on a pr_merge card switches the project its input names, and grants that PR once', async () => {
+      const input = { repo: 'behiques/hivetty', number: 229, sha: 'a'.repeat(40) };
+      const card = { ...ask('a1', 'shipper', [], input), body: 'Allow mcp__hive__pr_merge?' };
+      card.meta = { ...card.meta, tool: 'mcp__hive__pr_merge' };
+      const mergeUnattended = vi.fn(async (_repo: string) => ({ ok: true as const, project: 'p1' }));
+      const d = deps([card, answer('n1', 'a1', 'allow-project')], { mergeUnattended });
+      const p = createPermissions(d);
+      await p.onAnswer(answer('n1', 'a1', 'allow-project') as never);
+      expect(mergeUnattended).toHaveBeenCalledWith('behiques/hivetty');
+      expect(d.write).not.toHaveBeenCalled();
+      expect(p.grantsFor('shipper')).toEqual(['literal:mcp__hive__pr_merge:behiques/hivetty#229']);
+    });
+
     it('with no matching project records why and grants nothing', async () => {
       const mergeUnattended = vi.fn(async (_repo: string) => ({ ok: false as const, reason: 'no project has behiques/hivetty' }));
       const entries: unknown[] = [mergeCard(), answer('n1', 'a1', 'allow-project')];

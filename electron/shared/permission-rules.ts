@@ -115,6 +115,22 @@ const hostOf = (url: string): string | undefined => {
 export const ONCE_ONLY_TOOLS: ReadonlySet<string> = new Set(['mcp__hive__project_auto_merge']);
 
 /**
+ * The MCP merge (HIVE-409): consent by the auto-merge rule (`mcp__hive__pr_merge(<owner>/<name>#*)`)
+ * or a card, never a standing rule. Its specifier is `<owner>/<name>#<number>`.
+ */
+export const PR_MERGE_TOOL_NAME = 'mcp__hive__pr_merge';
+
+/**
+ * Tools a CLI must never allow on its own, so every call reaches the fence (HIVE-409): the once-only
+ * tools, and the MCP merge, which the fence allows by the auto-merge rule alone. Not folded into
+ * {@link ONCE_ONLY_TOOLS}: that set refuses every rule but a literal, and the auto-merge rule must work.
+ */
+export const FENCE_ONLY_TOOLS: ReadonlySet<string> = new Set([...ONCE_ONLY_TOOLS, PR_MERGE_TOOL_NAME]);
+
+/** `owner/name` with nothing the glob or the `#` separator reads; the merge specifier's repository. */
+const MERGE_REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+
+/**
  * Whether a `tools:` rule names `toolName` outright: the name itself, its MCP
  * server (`mcp__hive`), or any bare glob that covers it, `*` included. A
  * specifier or a literal never does.
@@ -154,6 +170,14 @@ const specifierTextFor = (
       return `projects=${projects.join(',')};on=${String(on)}`;
     }
     return undefined;
+  }
+  if (toolName === PR_MERGE_TOOL_NAME) {
+    // HIVE-409: one PR, as `<owner>/<name>#<number>`; anything else composes nothing and matches nothing.
+    const repo = str(input, 'repo');
+    const number = input['number'];
+    return repo !== undefined && MERGE_REPO.test(repo) && typeof number === 'number' && Number.isSafeInteger(number) && number > 0
+      ? `${repo}#${String(number)}`
+      : undefined;
   }
   if (toolName === 'Bash') return str(input, 'command');
   if (toolName === 'WebFetch') {
@@ -328,6 +352,7 @@ const PR_MERGE =
   /\bgh\b[\s\S]*?(\bpr(?:\s|\\\r?\n)+merge\b|\/pulls\/[^\s/]+\/merge\b|\brepos\/[^\s/]+\/[^\s/]+\/merges\b|\bmergePullRequest\b|\benablePullRequestAutoMerge\b|\benqueuePullRequest\b|\baddPullRequestToMergeQueue\b)/;
 
 export const isPrMerge = (toolName: string, input: Record<string, unknown>): boolean => {
+  if (toolName === PR_MERGE_TOOL_NAME) return true;
   const command = str(input, 'command') ?? '';
   return toolName === 'Bash' && PR_MERGE.test(command) && !readsOnly(command);
 };
@@ -451,8 +476,10 @@ export function matches(
   // Only the literal above may allow a once-only tool: see ONCE_ONLY_TOOLS.
   if (ONCE_ONLY_TOOLS.has(toolName)) return false;
 
-  // Only a rule that names the merge may allow one: see PR_MERGE.
-  if (isPrMerge(toolName, input) && !rule.startsWith('Bash(gh pr merge ')) return false;
+  // Only a rule that names the merge may allow one, each on its own path: see PR_MERGE and PR_MERGE_TOOL_NAME.
+  if (isPrMerge(toolName, input) && !rule.startsWith(toolName === 'Bash' ? 'Bash(gh pr merge ' : `${PR_MERGE_TOOL_NAME}(`)) {
+    return false;
+  }
 
   // No rule but the literal may allow one: see DEFAULT_BRANCH_PUSH.
   if (isDefaultBranchPush(toolName, input)) return false;
@@ -722,7 +749,7 @@ const hasSpecifier = (toolName: string): boolean =>
   toolName === 'Bash' ||
   toolName === 'WebFetch' ||
   PATH_TOOLS[toolName] !== undefined ||
-  ONCE_ONLY_TOOLS.has(toolName);
+  FENCE_ONLY_TOOLS.has(toolName);
 
 /**
  * The rule that grants **this one call and nothing else** (HIVE-119).
