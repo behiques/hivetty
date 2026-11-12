@@ -387,7 +387,10 @@ const RUNS_TEXT = new Set([
 ]);
 
 /** Shells and shell runners that run what they read on stdin: a heredoc, a here-string, a pipe. */
-const READS_STDIN = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'ssh', 'su', 'sudo', 'doas', 'source', 'script']);
+const READS_STDIN = new Set([
+  'bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'ash', 'csh', 'tcsh', 'pwsh', 'powershell', 'busybox', 'parallel',
+  'ssh', 'su', 'sudo', 'doas', 'source', 'script',
+]);
 
 const baseName = (word: string): string => word.slice(word.lastIndexOf('/') + 1);
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
