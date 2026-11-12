@@ -876,6 +876,28 @@ describe('a push to the default branch: refused to every wide rule (HIVE-395)', 
     'git push origin \\\nHEAD:main',
     'git \\\n  push origin x:main',
     'git push origin main\\\n  --force',
+    // HIVE-407: the shapes that slipped past the text match.
+    'git push origin HEAD:heads/main',
+    'git push origin +refs/heads/*:refs/heads/*',
+    'git push origin main>out.txt',
+    'git push origin main`x`',
+    'git push -o "ci;skip" origin main',
+    'git push --branches origin',
+    'git push origin x:"main"',
+    '/usr/bin/git push origin main',
+    'GIT_TRACE=1 git push origin main',
+    'git -c push.default=current push origin main',
+    // A destination the shell fills in could be main: it asks.
+    'git push origin "$BRANCH"',
+    'git push -u origin "$(git branch --show-current)"',
+    'git push -u origin $(git branch --show-current)',
+    'git push origin {main,dev}',
+    // Unparseable: fails closed.
+    'git push origin "main',
+    // The old text match is half of the union, so a commented-out `main` still asks.
+    'git push origin feat/x # main',
+    // A wrapper the tokeniser cannot see into is still caught by the text match.
+    'bash -c "git push origin main"',
   ];
 
   it('is granted by no wide rule: bare Bash, the blanket, a git glob or the push glob', () => {
@@ -906,6 +928,11 @@ describe('a push to the default branch: refused to every wide rule (HIVE-395)', 
       'git push',
       'git push origin \\\n  feat/main',
       'git push -u origin \\\n  feat/x',
+  
+      'git push -u origin feat/x',
+      'git push origin HEAD',
+      'git push origin feat/x 2>&1',
+      'git push -o ci.skip origin feat/x',
     ]) {
       expect(matches('Bash', 'Bash', { command }), command).toBe(true);
     }
@@ -913,5 +940,46 @@ describe('a push to the default branch: refused to every wide rule (HIVE-395)', 
 
   it('offers only once on the card', () => {
     expect(rungsFor('Bash', { command: pushes[0] }).map((rung) => rung.id)).toEqual(['allow-once']);
+  });
+});
+
+/**
+ * The evasion checklist (HIVE-407): every fence that matches a command is tested against each of these
+ * categories. A new fence copies the categories, not the rows.
+ */
+describe('the fence evasion checklist (HIVE-407)', () => {
+  const checklist: { category: string; command: string }[] = [
+    { category: 'line continuation', command: 'git push origin \\\n  main' },
+    { category: 'line continuation', command: 'gh pr \\\n  merge 1' },
+    { category: 'quoting', command: "git push origin 'main'" },
+    { category: 'quoting', command: 'git push -o "ci;skip" origin main' },
+    { category: 'quoting', command: 'git push -o "a&b" origin main' },
+    { category: 'redirect touching the token', command: 'git push origin main>out.txt' },
+    { category: 'redirect touching the token', command: 'git push origin main 2>&1' },
+    { category: 'operator touching the token', command: 'git push origin main`x`' },
+    { category: 'operator touching the token', command: 'git push origin main;echo done' },
+    { category: 'operator touching the token', command: 'git push origin main&&echo done' },
+    { category: 'refspec spelling', command: 'git push origin main' },
+    { category: 'refspec spelling', command: 'git push origin heads/main' },
+    { category: 'refspec spelling', command: 'git push origin refs/heads/main' },
+    { category: 'refspec spelling', command: 'git push origin HEAD:main' },
+    { category: 'refspec spelling', command: 'git push origin HEAD:heads/main' },
+    { category: 'refspec spelling', command: 'git push origin +main' },
+    { category: 'refspec spelling', command: 'git push origin :main' },
+    { category: 'refspec spelling', command: 'git push origin +refs/heads/*:refs/heads/*' },
+    { category: 'refspec spelling', command: 'git push --all origin' },
+    { category: 'refspec spelling', command: 'git push --mirror origin' },
+    { category: 'API spelling of the merge', command: 'gh pr merge 1 --squash' },
+    { category: 'API spelling of the merge', command: 'gh api -X PUT repos/a/b/pulls/1/merge' },
+    { category: 'API spelling of the merge', command: 'gh api -X POST repos/a/b/merges -f base=main -f head=x' },
+    { category: 'API spelling of the merge', command: "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'" },
+    { category: 'API spelling of the merge', command: "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {}) { clientMutationId } }'" },
+    { category: 'API spelling of the merge', command: "gh api graphql -f query='mutation { enqueuePullRequest(input: {}) { clientMutationId } }'" },
+    { category: 'API spelling of the merge', command: "gh api graphql -f query='mutation { addPullRequestToMergeQueue(input: {}) { clientMutationId } }'" },
+  ];
+
+  it.each(checklist)('$category: $command asks under bare Bash and offers only once', ({ command }) => {
+    expect(decide('Bash', { command }, ['Bash'])).toEqual({ behavior: 'ask' });
+    expect(rungsFor('Bash', { command }).map((rung) => rung.id)).toEqual(['allow-once']);
   });
 });
