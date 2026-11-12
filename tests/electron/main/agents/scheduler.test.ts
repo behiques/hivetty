@@ -47,7 +47,7 @@ describe('createScheduler', () => {
    * `working` and `paused` and reports the rest, so a fake that could not say
    * which it was could not drive that difference.
    */
-  let refuse: 'working' | 'paused' | 'saturated' | 'invalid' | 'cli' | false;
+  let refuse: 'working' | 'paused' | 'saturated' | 'invalid' | 'cli' | 'budget' | false;
   /** The `reason` a refusal carries, as `RunTracker` gives one for `invalid`. */
   let refuseReason: string | undefined;
   /** The CLI a `cli` refusal names (HIVE-399). */
@@ -733,6 +733,67 @@ describe('createScheduler', () => {
     // And nothing is queued either — a queue nothing will deliver would only
     // fire on the day its author ticks the box.
     expect(state.read(AGENT).pendingWake ?? []).toEqual([]);
+  });
+
+  describe('a refused wake tells the asker (HIVE-408)', () => {
+    const asked = entry({ id: 'a26', ref: 'a26', from: 'builder', to: AGENT, kind: 'ask', body: 'ship #226' });
+    const notes = () => appended.filter((a) => a.meta?.['refused'] !== undefined);
+
+    it('posts one note on the ask\'s thread, to the asker, and keeps the ask open', () => {
+      refuse = 'budget';
+      entries = [asked];
+      scheduler.start();
+      scheduler.onEntry(asked);
+      tick();
+      tick();
+
+      expect(notes()).toEqual([
+        {
+          from: 'overmind',
+          to: 'builder',
+          kind: 'post',
+          thread: 'a26',
+          body: `${AGENT} is out of budget until midnight; a26 is queued`,
+          meta: { refused: 'budget', agent: AGENT },
+        },
+      ]);
+      expect(state.read(AGENT).refused).toMatchObject({ reason: 'budget' });
+      expect(state.read(AGENT).pendingWake).toEqual([expect.objectContaining({ id: 'a26' })]);
+    });
+
+    it('does not repeat a note the log already holds', () => {
+      refuse = 'budget';
+      entries = [
+        asked,
+        entry({ id: 'n1', from: 'overmind', to: 'builder', kind: 'post', thread: 'a26', body: 'x', meta: { refused: 'budget', agent: AGENT } }),
+      ];
+      scheduler.start();
+      scheduler.onEntry(asked);
+      expect(notes()).toEqual([]);
+    });
+
+    it('says nothing for a wait (working, paused) or for a post', () => {
+      refuse = 'working';
+      scheduler.start();
+      scheduler.onEntry(asked);
+      refuse = 'budget';
+      scheduler.onEntry(entry({ id: 'p9', from: 'builder', to: AGENT, kind: 'post', body: 'fyi' }));
+      expect(notes()).toEqual([]);
+    });
+
+    it('names the cause for cli and invalid, and clears the lane record when a run starts', () => {
+      refuse = 'cli';
+      refuseReason = 'claude is not signed in';
+      entries = [asked];
+      scheduler.start();
+      scheduler.onEntry(asked);
+      expect(notes().find((a) => a.meta?.['refused'] === 'cli')?.body).toBe(
+        `${AGENT} cannot wake: claude is not signed in; a26 is queued`,
+      );
+      refuse = false;
+      tick();
+      expect(state.read(AGENT).refused).toBeUndefined();
+    });
   });
 
   describe('a refused wake', () => {

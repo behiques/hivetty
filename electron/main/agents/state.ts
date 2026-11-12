@@ -175,6 +175,7 @@ const LANE_KEYS = [
   'nextRunAt',
   'promptHash',
   'costBasis',
+  'refused',
 ] as const satisfies readonly (keyof LaneState & keyof AgentRunState)[];
 
 function standingOf(agent: AgentRunState): LaneState {

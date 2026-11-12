@@ -1183,6 +1183,8 @@ export interface LaneState {
   closedAt?: number;
   /** The conversation's last cumulative `total_cost_usd` (HIVE-408): what the next resumed run is charged above. */
   costBasis?: { uuid: string; usd: number };
+  /** Why the last wake of this lane was refused, until one starts (HIVE-408). For a panel to show. */
+  refused?: { reason: string; at: number };
 }
 
 /** What the form offers to fix an unavailable CLI with (HIVE-396). A fence failure has none. */
@@ -1209,6 +1211,8 @@ export interface AgentRunState {
   promptHash?: string;
   /** The standing lane's {@link LaneState.costBasis} (HIVE-408). */
   costBasis?: { uuid: string; usd: number };
+  /** The standing lane's {@link LaneState.refused} (HIVE-408). */
+  refused?: { reason: string; at: number };
   status: AgentStatus;
   lastRunAt?: number;
   /** Stored and pushed here; computed by HIVE-121's scheduler. */
