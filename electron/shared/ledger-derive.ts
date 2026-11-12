@@ -401,16 +401,43 @@ export function mergeAsk(open: readonly OpenAsk[], slug: string, n: number): Ope
   const wanted = slug.toLowerCase();
   if (wanted === '') return undefined;
   return open.find((ask) => {
-    if (ask.from !== 'shipper') return false;
-    const meta = ask.meta ?? {};
-    if (meta['kind'] !== 'permission' || meta['tool'] !== 'Bash') return false;
-    const input = meta['input'];
-    const command = typeof input === 'object' && input !== null ? (input as Record<string, unknown>)['command'] : undefined;
-    if (typeof command !== 'string') return false;
-    const number = MERGE_COMMAND.exec(command)?.[1];
-    const repo = REPO_FLAG.exec(command)?.[1];
-    return number !== undefined && Number(number) === n && repo?.toLowerCase() === wanted;
+    if (ask.from !== 'shipper' || ask.meta?.['kind'] !== 'permission') return false;
+    const target = mergeTarget(ask.meta);
+    return target !== undefined && target.number === n && target.repo.toLowerCase() === wanted;
   });
+}
+
+/** The PR a permission ask's merge names, from `meta.tool` and `meta.input` (HIVE-409). */
+export function mergeTarget(meta: Record<string, unknown> | undefined): { repo: string; number: number } | undefined {
+  if (meta?.['tool'] !== 'Bash') return undefined;
+  const input = meta['input'];
+  const command = typeof input === 'object' && input !== null ? (input as Record<string, unknown>)['command'] : undefined;
+  if (typeof command !== 'string') return undefined;
+  const number = MERGE_COMMAND.exec(command)?.[1];
+  const repo = REPO_FLAG.exec(command)?.[1];
+  return number === undefined || repo === undefined ? undefined : { repo, number: Number(number) };
+}
+
+/** The party whose ask opened job thread `job` (HIVE-409). */
+export function askerOf(entries: readonly LedgerEntry[], job: string): string | undefined {
+  return entries.find((item) => item.id === job && item.kind === 'ask')?.from;
+}
+
+/**
+ * The newest ask to `agent` naming a PR in `slug` (HIVE-409): who a repo lane works for. `slug` is the
+ * lane's `<owner>/<name>`; a repo lane holds one repository, so any PR in it is "on the lane".
+ */
+export function repoAskerOf(entries: readonly LedgerEntry[], agent: string, slug: string): LedgerEntry | undefined {
+  const wanted = slug.toLowerCase();
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const item = entries[i] as LedgerEntry;
+    if (item.kind !== 'ask' || item.to !== agent) continue;
+    const repo = item.meta?.['repo'];
+    if (typeof repo === 'string' && repo.toLowerCase() === wanted && wholeNumberOf(item.meta?.['pr']) !== undefined) {
+      return item;
+    }
+  }
+  return undefined;
 }
 
 /** Whether the shipper's merge waits on your card (HIVE-215, rule 2). */

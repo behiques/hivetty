@@ -8,6 +8,7 @@ import {
 } from '../../../electron/shared/ledger-contract';
 import {
   agentSiteFor,
+  askerOf,
   asksMeAbout,
   INBOUND_NAME_MAX,
   INBOUND_TEXT_MAX,
@@ -25,10 +26,12 @@ import {
   openAsksOnLane,
   matches,
   mergeAsk,
+  mergeTarget,
   mergeWaiting,
   nextRef,
   openAsks,
   prEvents,
+  repoAskerOf,
   prOpener,
   resolveRef,
   reviewUrls,
@@ -1140,5 +1143,47 @@ describe('openAsksOnLane (HIVE-408)', () => {
       entry({ id: 'q2', from: 'fixer', to: 'sess-a', kind: 'ask', body: 'x', meta: { run: 'r1' } }),
     ];
     expect(openAsksOnLane(log, 'builder', 'thread:k1', NOW)).toBe(false);
+  });
+});
+
+describe('askerOf (HIVE-409)', () => {
+  it('names the party whose ask opened the job', () => {
+    const log = [entry({ id: 'j1', kind: 'ask', from: 'sess-1', to: 'builder', body: 'build' })];
+    expect(askerOf(log, 'j1')).toBe('sess-1');
+  });
+  it('is undefined for an id that is not an ask', () => {
+    expect(askerOf([entry({ id: 'p1', kind: 'post', from: 'x', body: 'b' })], 'p1')).toBeUndefined();
+  });
+});
+
+describe('repoAskerOf (HIVE-409)', () => {
+  const ship = (id: string, from: string, ts: number, repo = 'behiques/hivetty') =>
+    entry({ id, ts, kind: 'ask', from, to: 'shipper', body: 'ship', meta: { pr: 7, repo } });
+  it('picks the newest ask to the agent naming a PR in the slug', () => {
+    const log = [ship('a1', 'sess-1', 1), ship('a2', 'sess-2', 2), ship('a3', 'sess-3', 3, 'other/repo')];
+    expect(repoAskerOf(log, 'shipper', 'Behiques/HiveTTY')?.id).toBe('a2');
+  });
+  it('ignores an ask with no whole-number pr, or one to another agent', () => {
+    const log = [
+      entry({ id: 'a1', kind: 'ask', from: 's', to: 'shipper', body: 'b', meta: { repo: 'behiques/hivetty' } }),
+      entry({ id: 'a2', kind: 'ask', from: 's', to: 'fixer', body: 'b', meta: { pr: 7, repo: 'behiques/hivetty' } }),
+    ];
+    expect(repoAskerOf(log, 'shipper', 'behiques/hivetty')).toBeUndefined();
+  });
+});
+
+describe('mergeTarget (HIVE-409)', () => {
+  it('reads the PR from a Bash merge command', () => {
+    expect(mergeTarget({ tool: 'Bash', input: { command: 'gh pr merge 229 --squash --repo behiques/hivetty' } })).toEqual({
+      repo: 'behiques/hivetty',
+      number: 229,
+    });
+  });
+  it('is undefined without --repo, without a command, or for another tool', () => {
+    expect(mergeTarget({ tool: 'Bash', input: { command: 'gh pr merge 229' } })).toBeUndefined();
+    expect(mergeTarget({ tool: 'Bash', input: {} })).toBeUndefined();
+    expect(mergeTarget({ tool: 'Bash' })).toBeUndefined();
+    expect(mergeTarget({ tool: 'Read', input: { command: 'gh pr merge 1 --repo a/b' } })).toBeUndefined();
+    expect(mergeTarget(undefined)).toBeUndefined();
   });
 });
