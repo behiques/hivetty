@@ -268,7 +268,10 @@ export interface SessionsOptions {
    * plugin. `cliHome('<id>-session')` in production, beside the headless home and never in it.
    */
   harnessStateDir?: (harness: HarnessId) => string;
-  /** HIVE-267: while true, a spawn or a restart is refused. Injected; `sessions/` never imports `licence/`. */
+  /**
+   * HIVE-267, HIVE-407: while true, a spawn, a restart, a new terminal or a command is refused; a live
+   * session or terminal still reattaches. Injected; `sessions/` never imports `licence/`.
+   */
   lapsed?: () => boolean;
   /**
    * HIVE-332: why this CLI may not start, or `null` when the plan includes it. Injected; `sessions/` never imports
@@ -2989,6 +2992,7 @@ export function createSessions(options: SessionsOptions): Sessions {
   return {
     adapterOf,
     openCommand(request) {
+      refuseWhileLapsed();
       /**
        * Registered *before* the spawn, because a failure to start is reported
        * asynchronously and could otherwise land before there was anything to
@@ -3014,6 +3018,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     openTerminal(request) {
       // Attach, never respawn — the same invariant `open` keeps.
       if (registry.sessionFor(request.entityId) !== undefined) return;
+      refuseWhileLapsed();
 
       const snapshot = config();
       const project = requireMappedProject(snapshot, request.projectId);

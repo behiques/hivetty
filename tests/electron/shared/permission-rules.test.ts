@@ -876,6 +876,37 @@ describe('a push to the default branch: refused to every wide rule (HIVE-395)', 
     'git push origin \\\nHEAD:main',
     'git \\\n  push origin x:main',
     'git push origin main\\\n  --force',
+    // HIVE-407: the shapes that slipped past the text match.
+    'git push origin HEAD:heads/main',
+    'git push origin +refs/heads/*:refs/heads/*',
+    'git push origin main>out.txt',
+    'git push origin main`x`',
+    'git push -o "ci;skip" origin main',
+    'git push --branches origin',
+    'git push origin x:"main"',
+    '/usr/bin/git push origin main',
+    'GIT_TRACE=1 git push origin main',
+    'git -c push.default=current push origin main',
+    // A destination the shell fills in could be main: it asks.
+    'git push origin "$BRANCH"',
+    'git push -u origin "$(git branch --show-current)"',
+    'git push -u origin $(git branch --show-current)',
+    'git push origin {main,dev}',
+    // Unparseable: fails closed.
+    'git push origin "main',
+    // The old text match is half of the union, so a commented-out `main` still asks.
+    'git push origin feat/x # main',
+    // A wrapper the tokeniser cannot see into is still caught by the text match.
+    'bash -c "git push origin main"',
+    // A wrapper's argument is read as a command too, so the new shapes ask behind it.
+    "bash -c 'git push origin main>out.txt'",
+    "sh -c 'git push origin HEAD:heads/main'",
+    'eval "git push -o \'ci;skip\' origin main"',
+    "ssh host 'git push origin +refs/heads/*:refs/heads/*'",
+    // git named through the shell: the command word is dynamic.
+    'G=git; $G push origin main',
+    '$(which git) push origin HEAD:heads/main',
+    'git --attr-source HEAD push origin main>out.txt',
   ];
 
   it('is granted by no wide rule: bare Bash, the blanket, a git glob or the push glob', () => {
@@ -906,6 +937,14 @@ describe('a push to the default branch: refused to every wide rule (HIVE-395)', 
       'git push',
       'git push origin \\\n  feat/main',
       'git push -u origin \\\n  feat/x',
+      'git push -u origin feat/x',
+      'git push origin HEAD',
+      'git push origin feat/x 2>&1',
+      'git push -o ci.skip origin feat/x',
+      // A heredoc body or a quoted message that mentions a push is prose, not a push.
+      "git commit -F - <<'EOF'\nHIVE-407: the push fence reads each refspec\nEOF",
+      "gh pr comment 5 --repo a/b --body-file - <<'EOF'\nFixed in the next push\nEOF",
+      'gh pr create --title x --body "it\'s ready to push"',
     ]) {
       expect(matches('Bash', 'Bash', { command }), command).toBe(true);
     }
@@ -913,5 +952,78 @@ describe('a push to the default branch: refused to every wide rule (HIVE-395)', 
 
   it('offers only once on the card', () => {
     expect(rungsFor('Bash', { command: pushes[0] }).map((rung) => rung.id)).toEqual(['allow-once']);
+  });
+});
+
+/**
+ * The evasion checklist (HIVE-407): every fence that matches a command is tested against each of these
+ * categories. A new fence copies the categories, not the rows.
+ */
+describe('the fence evasion checklist (HIVE-407)', () => {
+  const checklist: { category: string; command: string }[] = [
+    { category: 'line continuation', command: 'git push origin \\\n  main' },
+    { category: 'line continuation', command: 'gh pr \\\n  merge 1' },
+    { category: 'quoting', command: "git push origin 'main'" },
+    { category: 'quoting', command: 'git push -o "ci;skip" origin main' },
+    { category: 'quoting', command: 'git push -o "a&b" origin main' },
+    { category: 'redirect touching the token', command: 'git push origin main>out.txt' },
+    { category: 'redirect touching the token', command: 'git push origin main 2>&1' },
+    { category: 'operator touching the token', command: 'git push origin main`x`' },
+    { category: 'operator touching the token', command: 'git push origin main;echo done' },
+    { category: 'operator touching the token', command: 'git push origin main&&echo done' },
+    { category: 'refspec spelling', command: 'git push origin main' },
+    { category: 'refspec spelling', command: 'git push origin heads/main' },
+    { category: 'refspec spelling', command: 'git push origin refs/heads/main' },
+    { category: 'refspec spelling', command: 'git push origin HEAD:main' },
+    { category: 'refspec spelling', command: 'git push origin HEAD:heads/main' },
+    { category: 'refspec spelling', command: 'git push origin +main' },
+    { category: 'refspec spelling', command: 'git push origin :main' },
+    { category: 'refspec spelling', command: 'git push origin +refs/heads/*:refs/heads/*' },
+    { category: 'refspec spelling', command: 'git push --all origin' },
+    { category: 'refspec spelling', command: 'git push --mirror origin' },
+    { category: 'API spelling of the merge', command: 'gh pr merge 1 --squash' },
+    { category: 'API spelling of the merge', command: 'gh api -X PUT repos/a/b/pulls/1/merge' },
+    { category: 'API spelling of the merge', command: 'gh api -X POST repos/a/b/merges -f base=main -f head=x' },
+    { category: 'API spelling of the merge', command: "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'" },
+    { category: 'API spelling of the merge', command: "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {}) { clientMutationId } }'" },
+    { category: 'API spelling of the merge', command: "gh api graphql -f query='mutation { enqueuePullRequest(input: {}) { clientMutationId } }'" },
+    { category: 'API spelling of the merge', command: "gh api graphql -f query='mutation { addPullRequestToMergeQueue(input: {}) { clientMutationId } }'" },
+  ];
+
+  it.each(checklist)('$category: $command asks under bare Bash and offers only once', ({ command }) => {
+    expect(decide('Bash', { command }, ['Bash'])).toEqual({ behavior: 'ask' });
+    expect(rungsFor('Bash', { command }).map((rung) => rung.id)).toEqual(['allow-once']);
+  });
+});
+
+describe('a read-only command that only mentions a fenced act (HIVE-407)', () => {
+  it('runs under bare Bash: grep or cat alone, as one command', () => {
+    for (const command of [
+      "grep -n 'git push origin main' electron/shared/permission-rules.ts",
+      "grep -rn 'gh pr merge' skills/",
+      'cat notes/git-push-origin-main.txt "gh pr merge 1"',
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'allow' });
+    }
+  });
+
+  it('still asks once anything else runs: an operator, a substitution, a heredoc, or another first word', () => {
+    for (const command of [
+      'grep x f; git push origin main',
+      'grep x f && gh pr merge 1',
+      'cat <(git push origin main)',
+      'cat $(git push origin main)',
+      'cat <<EOF\ngit push origin main\nEOF',
+      "rg --pre 'git push origin main' x",
+      "sed -n 'e git push origin main' f",
+      'echo git push origin main',
+      // An expansion bash evaluates as arithmetic runs a substitution the tokeniser saw as escaped text.
+      'cat ${x:=b[\\$\\(git push origin main\\)]} ${a[x]}',
+      'grep ${x:=b[\\$\\(gh pr merge 1\\)]} ${a[x]}',
+      // A write into a file something else runs later is not a read.
+      "grep -h 'git push origin main' notes.md >> .git/hooks/post-commit",
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
+    }
   });
 });
