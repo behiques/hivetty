@@ -578,6 +578,9 @@ const LOGIN_SHELL_ARGS = ['-l'];
  */
 const RESTART_EXIT_TIMEOUT_MS = 10_000;
 
+/** How long a background shell may hold a nudge at an idle prompt (HIVE-408). A dev server never ends. */
+export const BG_SHELL_HOLD_MS = 60_000;
+
 /**
  * What each CLI is called in a refusal (HIVE-279). Main's own copy: `src/lib/harness/cli-names.ts`
  * is the renderer's, and main may not import it.
@@ -916,6 +919,13 @@ export function createSessions(options: SessionsOptions): Sessions {
    * `idle` would let a nudge be written into a prompt that is mid-turn.
    */
   const lastStatus = new Map<string, ObservedStatus>();
+
+  /** When each session last became idle, and the timer that re-signals it past the hold (HIVE-408). */
+  const idleAt = new Map<string, number>();
+  const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const quietFor = (entityId: string): boolean =>
+    statusTracker.held(entityId).bgShells === 0 ||
+    Date.now() - (idleAt.get(entityId) ?? Infinity) >= BG_SHELL_HOLD_MS;
 
   /** One OSC-0 reader per session — a partial sequence is per-stream state. */
   const titles = new Map<string, TitleReader>();
@@ -1529,9 +1539,30 @@ export function createSessions(options: SessionsOptions): Sessions {
      * turn that ended while a backgrounded shell is still running *does* report
      * `idle`, with `detail: 'script'`, so the status alone would say yes to a
      * session that is still working.
+     *
+     * The background-shell half holds for a minute, not for ever (HIVE-408):
+     * a dev server never ends, and a nudge held behind it never arrived. Past
+     * the minute a timer re-signals idle; `deliver` still re-checks the draft
+     * guard, and any new status cancels the timer.
      */
-    if (status === 'idle' && statusTracker.held(entityId).bgShells === 0) {
-      onIdle?.(entityId);
+    clearTimeout(idleTimers.get(entityId));
+    idleTimers.delete(entityId);
+    if (status !== 'idle') idleAt.delete(entityId);
+    else if (!idleAt.has(entityId)) idleAt.set(entityId, Date.now());
+
+    if (status === 'idle') {
+      if (statusTracker.held(entityId).bgShells === 0) onIdle?.(entityId);
+      else
+        idleTimers.set(
+          entityId,
+          setTimeout(
+            () => {
+              idleTimers.delete(entityId);
+              if (registry.sessionFor(entityId) !== undefined && lastStatus.get(entityId) === 'idle') onIdle?.(entityId);
+            },
+            Math.max(0, BG_SHELL_HOLD_MS - (Date.now() - (idleAt.get(entityId) ?? Date.now()))),
+          ),
+        );
     }
 
     send(CH.sessionStatus, {
@@ -2050,6 +2081,9 @@ export function createSessions(options: SessionsOptions): Sessions {
       `terminated` status published moments later put it straight back.
     */
     lastStatus.delete(entityId);
+    idleAt.delete(entityId);
+    clearTimeout(idleTimers.get(entityId));
+    idleTimers.delete(entityId);
     /*
       The plan belongs to the conversation this process was running (HIVE-179).
       Dropped on every ending, not only `/done`'s: a kill, a plain `/exit` or
@@ -3250,7 +3284,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     isIdle: (entityId) =>
       registry.sessionFor(entityId) !== undefined &&
       lastStatus.get(entityId) === 'idle' &&
-      statusTracker.held(entityId).bgShells === 0,
+      quietFor(entityId),
     observedCwd: (entityId) => lastCwd.get(entityId),
     /* `?? Promise.resolve()` rather than `await undefined` at the call site, so
        the contract is a promise in every case and a caller cannot forget. */
@@ -3286,6 +3320,10 @@ export function createSessions(options: SessionsOptions): Sessions {
         after the processes are gone (HIVE-93).
       */
       for (const entityId of [...finishing.keys()]) forgetFinish(entityId);
+      // The bg-shell hold's re-signal is the other (HIVE-408).
+      for (const timer of idleTimers.values()) clearTimeout(timer);
+      idleTimers.clear();
+      idleAt.clear();
       registry.clear();
       restarting.clear();
       exitWaiters.clear();

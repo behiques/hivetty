@@ -197,25 +197,32 @@ silent.
 ## Delivery
 
 The ledger records; it does not tell anyone. `electron/main/ledger/deliver.ts`
-is the first rule on top of it: an `ask` or an `answer` addressed to
-a **live session** is announced in that session's terminal as one line, through
+is the first rule on top of it: an `ask`, `answer`, `post`, `failed` or `done`
+addressed to a **live session** is announced in that session's terminal as one line, through
 the same `sessions.write` primitive `send` uses. The trailing `\r` submits it,
 which is the intent — the nudge becomes a turn the agent takes.
 
-**The line is a marker, not the entry.** `ledgerMarker` in
-`electron/shared/ledger-contract.ts` names one entry and nothing else: `📒 a12`
-for an ask, by its ref, the handle the woken session answers with; `📒 <id>`
-for an answer, which has no ref. The entry itself reaches the model as
-hook-carried context. The marker is a prompt, so it arrives at the hook
-receiver on `UserPromptSubmit` like every prompt does; the receiver recognises
-it (`parseLedgerMarker`), resolves it among the entries addressed to that
-session, and answers `200` with `hookSpecificOutput.additionalContext` carrying
+**The line is a marker, not the entry.** `ledgerMarkers` in
+`electron/shared/ledger-contract.ts` names entries and nothing else: `a12`
+for an ask, by its ref, the handle the woken session answers with; the id
+for anything else, which has no ref. One line names the whole backlog, in
+ledger order, space-separated: `📒 a12 20261110-100818-0001` (HIVE-408). The
+entries themselves reach the model as hook-carried context. The marker is a
+prompt, so it arrives at the hook receiver on `UserPromptSubmit` like every
+prompt does; the receiver recognises it (`parseLedgerMarkers`), resolves each
+token among the entries addressed to that session, and answers `200` with
+`hookSpecificOutput.additionalContext` carrying, per entry and in order,
 what `electron/main/ledger/context.ts` renders: that the line was the app's
 doing and not the user's words, who posted, the ref, the body verbatim, every
 meta key as one JSON line, the asker's own `intent` on an answer, and what is
 owed back. Claude Code puts that text in the model's context beside the prompt
-(measured; `hook-contract.ts` records the matrix). A marker that
-resolves to nothing, or to an entry addressed elsewhere, or to a kind no nudge
+(measured; `hook-contract.ts` records the matrix). Once the context is in the
+reply, the receiver's `onMarkerServed` appends one `nudge served (<id>)` event
+per entry, `meta.served` naming it: the `delivered` receipt says the pty took
+the bytes, `served` says the model took the context. A line naming several
+tokens must name refs or ids only, so `📒 a7 and also do this` stays a person
+writing; an entry whose hand-edited id is not id-shaped goes out on a line of
+its own. A marker that resolves to nothing, or to an entry addressed elsewhere, or to a kind no nudge
 carries, is answered `204` like any other prompt. A marker prompt also takes no
 ticket intent and no session name, and does not spend the first-prompt mark.
 An answer's ask is read for its ref and the asker's `intent` only when the
@@ -252,7 +259,10 @@ caller arriving between events. Both halves are load-bearing. A session showing
 a permission prompt derives `waiting`, not `idle`, so it is excluded — that is
 the whole of "never write mid-turn". And a turn that ended while a backgrounded
 shell is still running *does* derive `idle`, with `detail: 'script'`, so the
-status alone would say yes to a session that is still working.
+status alone would say yes to a session that is still working. That half holds
+for a minute, not for ever (`BG_SHELL_HOLD_MS`, HIVE-408): a dev server never
+ends, so a session idle for a minute behind a background shell is idle, a timer
+re-signals `onIdle`, and any new status cancels it.
 
 And **only into an empty input box**. Idleness is about the agent;
 a user who typed half a sentence and stopped has an idle agent and a full
@@ -268,7 +278,10 @@ screen, so a draft left in a hidden tab is not protected — the surface is
 the only thing that can see the box, and only while it is on screen. The
 transition to `empty` is the third flush trigger beside idle and ready.
 Refusing is free — a held nudge writes no receipt — and that is why the
-default is to refuse. A visible session whose frame never reads as Claude's
+default is to refuse. The report trails the keystroke by a frame, so main
+also holds a session for two seconds after a person's keystroke reaches its
+pty through `pty:write` (`TYPING_HOLD_MS`, HIVE-408), and retries the backlog
+when the hold lapses; a draft reported by then still refuses it. A visible session whose frame never reads as Claude's
 empty input — an unrecognised frame, a non-Claude `claudeCommand` — is held
 for as long as it stays on screen; that is the intended safe failure, and it
 is silent.
@@ -279,7 +292,10 @@ reading of" into a query against the log rather than a queue in memory. That
 choice pays for itself three times: a restart cannot drop a pending nudge;
 `publishReady` is deliberately not idempotent — `/clear` fires a second one —
 and the duplicate costs a read rather than a second line in the terminal; and
-the log answers who was told what, and when.
+the log answers who was told what, and when. **The backlog goes out in
+ledger order, on one line** (HIVE-408): a new entry flushes everything owed
+before it, and one `\r` submits the lot, so nothing is typed behind it. Each
+entry still gets its own receipt.
 
 The receipt is written **after** the write and only if the write landed, which
 is why `DeliverOptions.write` returns a boolean rather than `void`. The session
@@ -288,10 +304,16 @@ constructed after the ledger — and a receipt for a nudge that never reached a
 terminal would suppress the retry forever, leaving a question nobody was asked
 and a log claiming they were.
 
-`onEntry` ignores every kind but `ask`, `answer` and `post`. **That is a loop
-guard, not a filter**: deliver subscribes to `ledger.onChange` and also appends
-to the same log, so without the gate each receipt would re-enter it and it
-would feed itself. Receipts are `event`s, so they never pass it.
+`onEntry` ignores every kind but `ask`, `answer`, `post`, `failed` and `done`.
+**That is a loop guard, not a filter**: deliver subscribes to `ledger.onChange`
+and also appends to the same log, so without the gate each receipt would
+re-enter it and it would feed itself. Receipts and `nudge served` confirmations
+are `event`s, so they never pass it. `failed` and `done` close a thread the
+session asked: a builder run that died, a job reported finished (HIVE-408).
+
+An `answer` whose whole body is `accepted` is not delivered: the shipper's
+intake receipt says nothing the session must act on. It matches the body
+until `ledger_accept` (HIVE-410) gives it a key of its own.
 
 A `post` addressed to a session is delivered like an answer, as a one-way
 notice: the shipper's "PR #N merged" reaches the terminal without opening a
@@ -329,6 +351,10 @@ itself with no memory of the turn. `AGENT_PREAMBLE` interpolates the same
 `ASK_INTENT_GUIDANCE` constant the schema uses, and a test holds them
 together. A headless agent re-reads its ask on wake; a terminal session reads
 the intent in the context the answer's marker carries, whole.
+
+`ledger_read { thread }` takes a short ref as well as a canonical id
+(HIVE-408), the way `ledger_answer` already did; an unknown or ambiguous ref
+reads as nothing, as before.
 
 ### An ask to a session that is gone (HIVE-167)
 
@@ -413,10 +439,11 @@ The default makes the wrong call recoverable; it does not make it right.
 is also the one that does *not* raise an inbox card at a person who never asked
 (`notify.ts` maps every agent `done`/`failed` to `agent.done`/`agent.failed`,
 `to` or no `to`). The split is `overmind` against everyone else, **not** person
-against agent: a `sess-` party is a live terminal, and `deliver.ts`'s
-`DELIVERABLE` is `['ask', 'answer']`, so a `done` addressed to a session reaches
-no terminal, no card and no wake. `AGENT_PREAMBLE` and the tool descriptions say
-so in the same words.
+against agent: a `sess-` party is a live terminal. `deliver.ts` has carried
+`failed` and `done` to a session since HIVE-408, but only one addressed `to` it;
+an agent's `done` names nobody and lands as a card, and neither closes the
+ask, so the asker still waits until it expires. `AGENT_PREAMBLE` and the tool
+descriptions say `ledger_answer` for the same reason.
 
 **`wake.on: [ledger]` is a gate, and it is checked first.** Settings promises
 that unticking it means "a question addressed to it waits unread until then", so

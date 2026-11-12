@@ -12,7 +12,7 @@ import { hookSettings } from '../../electron/main/harness/claude-code/settings';
 import type { HookTransport } from '../../electron/main/harness/port';
 import { readTranscript as readScreen } from '../../electron/main/integrations/slack/tty';
 import { createLedger } from '../../electron/main/ledger';
-import { ledgerMarker } from '../../electron/shared/ledger-contract';
+import { ledgerMarkers } from '../../electron/shared/ledger-contract';
 
 /**
  * A marker landing in a real session carries its entry whole (HIVE-138).
@@ -68,6 +68,8 @@ interface Finding {
   version: string;
   transport: HookTransport;
   ref: string;
+  refs: number;
+  secondWordInContext?: boolean;
   arrivals: Arrival[];
   contextLines: number;
   wordInContext: boolean;
@@ -132,7 +134,15 @@ describe.skipIf(!enabled)('a marker carries its entry as context, against a real
     await receiver?.stop();
   });
 
-  it.each<HookTransport>(['http', 'command'])('over %s: the woken session reads the whole ask, and an unresolved marker draws nothing', { timeout: (BUDGET_S + 30) * 1000 }, async (transport) => {
+  /*
+    The two-ref row (HIVE-408) is the coalesced flush: one marker line naming two asks, both
+    served in one reply, in order. Run over http only; the transport is not what it measures.
+  */
+  it.each<[HookTransport, 1 | 2]>([
+    ['http', 1],
+    ['command', 1],
+    ['http', 2],
+  ])('over %s with %i ref(s): the woken session reads every ask whole, and an unresolved marker draws nothing', { timeout: (BUDGET_S + 30) * 1000 }, async (transport, refs) => {
     const version = execFileSync('claude', ['--version'], { encoding: 'utf8' }).trim();
     const nonce = randomBytes(3).toString('hex');
     const word = `ZEBRA_${nonce}`;
@@ -188,7 +198,21 @@ describe.skipIf(!enabled)('a marker carries its entry as context, against a real
     });
     expect(asked.ok).toBe(true);
     const ref = asked.ok ? (asked.ref ?? asked.id) : '';
-    const marker = ledgerMarker({ id: asked.ok ? asked.id : '', kind: 'ask', ref });
+    const named = [{ id: asked.ok ? asked.id : '', kind: 'ask' as const, ref }];
+
+    // The second ask of the two-ref row, with a code of its own (HIVE-408).
+    const secondWord = `GIRAFFE_${nonce}`;
+    if (refs === 2) {
+      const second = ledger.append({
+        from: 'overmind',
+        to: SESSION,
+        kind: 'ask',
+        body: `A second note on the same roll call: please also include the code ${secondWord} in that one line.`,
+      });
+      expect(second.ok).toBe(true);
+      named.push({ id: second.ok ? second.id : '', kind: 'ask', ref: second.ok ? (second.ref ?? second.id) : '' });
+    }
+    const marker = ledgerMarkers(named);
 
     // The settings file the app writes, identity baked, the real timeout.
     const settingsPath = join(dir, 'settings.json');
@@ -281,6 +305,7 @@ describe.skipIf(!enabled)('a marker carries its entry as context, against a real
         ? readFileSync(transcriptPath, 'utf8').split('\n').filter((line) => line !== '')
         : [];
     const analysis = analyse(lines, word, intent);
+    const secondWordInContext = refs === 2 ? analyse(lines, secondWord, intent).wordInContext : undefined;
     const screen = existsSync(dump) ? readScreen(readFileSync(dump, 'utf8')) : '';
     const screenLines = [
       ...new Set(
@@ -296,6 +321,8 @@ describe.skipIf(!enabled)('a marker carries its entry as context, against a real
       version,
       transport,
       ref,
+      refs,
+      ...(secondWordInContext === undefined ? {} : { secondWordInContext }),
       arrivals,
       ...analysis,
       screenLines,
@@ -322,6 +349,11 @@ describe.skipIf(!enabled)('a marker carries its entry as context, against a real
     expect(analysis.contextLines).toBe(1);
     // And the model acted on the part of the body that never touched the pty.
     expect(analysis.assistantText).toContain(word);
+    if (refs === 2) {
+      // Both asks rode the one reply, and the model read both (HIVE-408).
+      expect(secondWordInContext).toBe(true);
+      expect(analysis.assistantText).toContain(secondWord);
+    }
     // A 2xx and a 204 draw nothing: no hook line on screen, for either prompt.
     expect(screenLines.join('\n')).not.toMatch(/hook error|timed out/u);
   });

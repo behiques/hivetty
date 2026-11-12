@@ -28,6 +28,7 @@ import { sessionAdapter } from '../../../../electron/main/harness/registry';
 import type { RunAsync } from '../../../../electron/main/integrations/github/run';
 import type { PtyHostSupervisor } from '../../../../electron/main/pty-host/supervisor';
 import {
+  BG_SHELL_HOLD_MS,
   createSessions,
   type Sessions,
 } from '../../../../electron/main/sessions';
@@ -2967,6 +2968,78 @@ describe('the idle signal', () => {
     h.hook({ entityId: 'hero-refresh', signal: { kind: 'turn-end' }, backgroundShells: ['shell-1'] });
 
     expect(h.sessions.isIdle('hero-refresh')).toBe(false);
+  });
+
+  it('signals idle a minute after a turn ends under a background shell (HIVE-408)', () => {
+    vi.useFakeTimers();
+    try {
+      const onIdle = vi.fn();
+      const h = harness(onIdle);
+      h.sessions.open(OPEN);
+
+      h.hook({ entityId: 'hero-refresh', signal: { kind: 'turn-end' }, backgroundShells: ['shell-1'] });
+      expect(onIdle).not.toHaveBeenCalled();
+      expect(h.sessions.isIdle('hero-refresh')).toBe(false);
+
+      vi.advanceTimersByTime(BG_SHELL_HOLD_MS);
+      expect(onIdle).toHaveBeenCalledWith('hero-refresh');
+      expect(h.sessions.isIdle('hero-refresh')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not signal idle a moment before the minute is up (HIVE-408)', () => {
+    vi.useFakeTimers();
+    try {
+      const onIdle = vi.fn();
+      const h = harness(onIdle);
+      h.sessions.open(OPEN);
+
+      h.hook({ entityId: 'hero-refresh', signal: { kind: 'turn-end' }, backgroundShells: ['shell-1'] });
+      vi.advanceTimersByTime(BG_SHELL_HOLD_MS - 1);
+
+      expect(onIdle).not.toHaveBeenCalled();
+      expect(h.sessions.isIdle('hero-refresh')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves no hold timer running past dispose (HIVE-408)', () => {
+    vi.useFakeTimers();
+    try {
+      const onIdle = vi.fn();
+      const h = harness(onIdle);
+      h.sessions.open(OPEN);
+
+      h.hook({ entityId: 'hero-refresh', signal: { kind: 'turn-end' }, backgroundShells: ['shell-1'] });
+      h.sessions.dispose();
+      vi.advanceTimersByTime(BG_SHELL_HOLD_MS);
+
+      expect(onIdle).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops the minute when a new turn starts first (HIVE-408)', () => {
+    vi.useFakeTimers();
+    try {
+      const onIdle = vi.fn();
+      const h = harness(onIdle);
+      h.sessions.open(OPEN);
+
+      h.hook({ entityId: 'hero-refresh', signal: { kind: 'turn-end' }, backgroundShells: ['shell-1'] });
+      vi.advanceTimersByTime(30_000);
+      h.hook({ entityId: 'hero-refresh', signal: { kind: 'prompt' } });
+      vi.advanceTimersByTime(60_000);
+
+      expect(onIdle).not.toHaveBeenCalled();
+      expect(h.sessions.isIdle('hero-refresh')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

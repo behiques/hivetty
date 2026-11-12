@@ -1,5 +1,5 @@
 import type { PromptInput } from '../../shared/ipc-contract';
-import { OVERMIND, type LedgerEntry, type LedgerKind } from '../../shared/ledger-contract';
+import { markerListable, OVERMIND, type LedgerEntry, type LedgerKind } from '../../shared/ledger-contract';
 import { afterTarget, isHeld, releasesAfter } from '../../shared/ledger-derive';
 import type { HarnessAdapter } from '../harness/port';
 import type { SurfaceId } from '../ipc/surfaces';
@@ -10,8 +10,8 @@ import type { Ledger } from './index';
  * Delivery: what happens to a ledger entry after it is written (HIVE-113).
  *
  * The ledger itself has no opinion about who should be told what — it records.
- * This module is the first rule on top of it: an `ask`, an `answer` or a `post`
- * addressed to a live session is announced in that session's terminal as one marker
+ * This module is the first rule on top of it: an `ask`, an `answer`, a `post`,
+ * a `failed` or a `done` addressed to a live session is announced in that session's terminal as one marker
  * line, at a moment when the terminal is actually at an empty prompt.
  *
  * The line is a marker, not the entry (HIVE-138), and its bytes are the
@@ -49,8 +49,22 @@ import type { Ledger } from './index';
  * Broadcast posts stay silent, because `onEntry` returns on a missing `to` and
  * `undelivered` re-checks `entry.to === entityId`. Receipts are `event`, so
  * adding `post` leaves the guard whole.
+ *
+ * `failed` and `done` close a thread the session asked (HIVE-408): a builder
+ * run that died, a job reported finished. Receipts stay `event`, so the guard
+ * still holds.
  */
-const DELIVERABLE: readonly LedgerKind[] = ['ask', 'answer', 'post'];
+const DELIVERABLE: readonly LedgerKind[] = ['ask', 'answer', 'post', 'failed', 'done'];
+
+/**
+ * The shipper's intake receipt says nothing the session must act on (HIVE-408).
+ * shortcut: matches the body; key on `meta.accepted` once HIVE-410 lands `ledger_accept`.
+ */
+const isAcceptance = (entry: LedgerEntry): boolean =>
+  entry.kind === 'answer' && entry.body.trim().toLowerCase() === 'accepted';
+
+/** How long after a person's keystroke a session is not typed into (HIVE-408): the renderer's draft report trails the echo by a frame. */
+export const TYPING_HOLD_MS = 2_000;
 
 interface DeliverOptions {
   ledger: Pick<Ledger, 'read' | 'append'>;
@@ -71,6 +85,10 @@ interface DeliverOptions {
    * *when*, the adapter decides *what*.
    */
   adapterOf: (entityId: string) => Pick<HarnessAdapter, 'capabilities' | 'promptMarker'> | undefined;
+  /** The clock the typing hold reads (HIVE-408). Defaults to `Date.now`. */
+  now?: () => number;
+  /** The timer the typing hold retries on (HIVE-408). Defaults to `setTimeout`. */
+  setTimeoutFn?: typeof setTimeout;
 }
 
 export interface Deliver {
@@ -91,9 +109,28 @@ export interface Deliver {
    * Its record goes with it, and every other surface's stays (HIVE-145).
    */
   onSurfaceGone(surfaceId: SurfaceId): void;
+  /**
+   * A person's keystroke reached this session's pty (HIVE-408). Nothing is
+   * typed into it for {@link TYPING_HOLD_MS}, and the backlog is retried when
+   * the hold lapses: the renderer's `draft` report trails the keystroke by a
+   * frame, and an entry landing in that frame got past {@link clear}.
+   */
+  onInput(entityId: string): void;
 }
 
-export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: DeliverOptions): Deliver {
+export function createDeliver({
+  ledger,
+  isLive,
+  isIdle,
+  write,
+  adapterOf,
+  now = Date.now,
+  setTimeoutFn = setTimeout,
+}: DeliverOptions): Deliver {
+  /** When a person last typed into each session, and the retry armed behind it (HIVE-408). */
+  const typedAt = new Map<string, number>();
+  const retries = new Map<string, ReturnType<typeof setTimeout>>();
+
   /**
    * What each surface's input box holds, and for which session (HIVE-135).
    *
@@ -124,6 +161,9 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
    * transition retries it. Writing into a draft never is.
    */
   function clear(entityId: string): boolean {
+    // A keystroke inside the hold refuses too (HIVE-408): its draft report may not have arrived yet.
+    const typed = typedAt.get(entityId);
+    if (typed !== undefined && now() - typed < TYPING_HOLD_MS) return false;
     /*
       **Any** surface holding a draft refuses the write, not "the" surface
       (HIVE-145). Refusing is always safe — a held nudge writes no receipt and
@@ -181,9 +221,22 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
       if (typeof id === 'string') delivered.add(id);
     }
 
+    /*
+      Where in this log the newest entry this session was told sits. Delivery
+      keeps ledger order, so a `failed` or `done` behind it went unreceipted
+      because the build that wrote the receipt did not deliver those kinds
+      (before HIVE-408), not because it is owed: backfilling them would put every
+      stale one on one line at the first idle after the upgrade.
+    */
+    let toldUpTo = -1;
+    entries.forEach((entry, index) => {
+      if (delivered.has(entry.id)) toldUpTo = index;
+    });
+
     const owed = entries.filter(
-      (entry) =>
+      (entry, index) =>
         DELIVERABLE.includes(entry.kind) &&
+        ((entry.kind !== 'failed' && entry.kind !== 'done') || index > toldUpTo) &&
         /*
           `read({ to })` matches entries addressed to this party *or* broadcast.
           Only the addressed half is deliverable, so the recipient is re-checked
@@ -191,6 +244,7 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
         */
         entry.to === entityId &&
         (entry.kind !== 'ask' || open.has(entry.id)) &&
+        !isAcceptance(entry) &&
         !delivered.has(entry.id),
     );
 
@@ -205,66 +259,93 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
     return owed.filter((entry) => !isHeld(entry, log));
   }
 
-  /** Write one nudge, and record it only if it landed. Reports whether it did. */
-  function deliverOne(entityId: string, entry: LedgerEntry): boolean {
-    const handle = handleFor(entry);
+  /** Write one nudge line naming `entries`, and receipt each only if it landed. */
+  function deliverAll(entityId: string, entries: readonly LedgerEntry[]): void {
     /*
       Not delivering is the same answer as a write that did not land: no receipt, so the next idle
       or ready transition asks again. A `none` harness reads the ledger through its tools.
     */
     const adapter = adapterOf(entityId);
-    if (adapter?.capabilities.contextDelivery !== 'prompt-marker') return false;
-    if (!write(entityId, adapter.promptMarker(entry))) return false;
+    if (adapter?.capabilities.contextDelivery !== 'prompt-marker') return;
+    if (!write(entityId, adapter.promptMarker(entries))) return;
 
-    /*
-      `from: OVERMIND` is asserted rather than derived. The party set is
-      `overmind | session | agent` and there is no identity for "the app
-      itself" — main is the coordinator's body, so the coordinator is who this
-      is from. Addressed `to` the session so `visibleTo` lets that session read
-      its own receipts, and so a broadcast is never created by accident.
-    */
-    const recorded = ledger.append({
-      from: OVERMIND,
-      to: entityId,
-      kind: 'event',
-      body: `nudge written (${handle})`,
-      meta: { delivered: entry.id },
-    });
+    for (const entry of entries) {
+      const handle = handleFor(entry);
+      /*
+        `from: OVERMIND` is asserted rather than derived. The party set is
+        `overmind | session | agent` and there is no identity for "the app
+        itself" — main is the coordinator's body, so the coordinator is who this
+        is from. Addressed `to` the session so `visibleTo` lets that session read
+        its own receipts, and so a broadcast is never created by accident.
+      */
+      const recorded = ledger.append({
+        from: OVERMIND,
+        to: entityId,
+        kind: 'event',
+        body: `nudge written (${handle})`,
+        meta: { delivered: entry.id },
+      });
 
-    /*
-      A refused receipt is reported, not swallowed. `Ledger.append` returns a
-      refusal as a value (ENOSPC, a `~/.hivetty` moved out from under the app), and
-      without a receipt this exact nudge is rewritten on every subsequent idle —
-      forever, into a real terminal. Saying so once is what makes that
-      diagnosable; the alternative is a session that mysteriously repeats a
-      question it already asked.
-    */
-    if (!recorded.ok) {
-      console.warn(
-        `[ledger] nudge ${handle} was written to ${entityId} but its receipt was refused ` +
-          `(${recorded.status}: ${recorded.reason}) — it may be delivered again`,
-      );
+      /*
+        A refused receipt is reported, not swallowed. `Ledger.append` returns a
+        refusal as a value (ENOSPC, a `~/.hivetty` moved out from under the app), and
+        without a receipt this exact nudge is rewritten on every subsequent idle —
+        forever, into a real terminal. Saying so once is what makes that
+        diagnosable; the alternative is a session that mysteriously repeats a
+        question it already asked.
+      */
+      if (!recorded.ok) {
+        console.warn(
+          `[ledger] nudge ${handle} was written to ${entityId} but its receipt was refused ` +
+            `(${recorded.status}: ${recorded.reason}) — it may be delivered again`,
+        );
+      }
     }
-
-    return true;
   }
 
   /**
-   * Write everything this session is owed, one nudge per idle window.
+   * Retry a session's backlog when its typing hold lapses (HIVE-408). Re-armed for what is left
+   * when the clock says the hold has not lapsed yet, so a timer firing a tick early is not a
+   * nudge left waiting for the next idle.
+   */
+  function armRetry(entityId: string, delay: number): void {
+    clearTimeout(retries.get(entityId));
+    retries.set(
+      entityId,
+      setTimeoutFn(() => {
+        retries.delete(entityId);
+        const left = TYPING_HOLD_MS - (now() - (typedAt.get(entityId) ?? -Infinity));
+        if (left > 0) armRetry(entityId, left);
+        else flush(entityId);
+      }, delay),
+    );
+  }
+
+  /**
+   * The owed entries one line can carry (HIVE-408): the longest run from the
+   * front whose tokens may share a line, or the first entry alone when even it
+   * may not. The rest has no receipt and goes on the next idle, in order.
+   */
+  function batch(owed: readonly LedgerEntry[]): readonly LedgerEntry[] {
+    const stop = owed.findIndex((entry) => !markerListable(entry));
+    if (stop === -1) return owed;
+    return owed.slice(0, Math.max(stop, 1));
+  }
+
+  /**
+   * Write everything this session is owed, on one line (HIVE-408).
    *
-   * **The preconditions are checked once, before the loop, and the loop stops
-   * at the first delivery.** Each nudge ends in `\r`, which submits it — so
-   * the instant one lands the session is mid-turn, and writing the rest of
-   * the backlog behind it would break the single invariant this module
-   * exists to hold. The remainder is not lost: it has no receipt, so the
-   * next idle transition picks up exactly where this one stopped.
+   * **The preconditions are checked once, and one line is written.** The line
+   * ends in a single `\r`, which submits it, so the instant it lands the
+   * session is mid-turn: one submit carries the whole backlog, and nothing is
+   * typed behind it, which is the single invariant this module exists to hold.
+   * An entry left off the line (see {@link batch}) has no receipt, so the next
+   * idle transition picks it up.
    */
   function flush(entityId: string): void {
     if (!isLive(entityId) || !isIdle(entityId) || !clear(entityId)) return;
-
-    for (const entry of undelivered(entityId)) {
-      if (deliverOne(entityId, entry)) return;
-    }
+    const owed = undelivered(entityId);
+    if (owed.length > 0) deliverAll(entityId, batch(owed));
   }
 
   /**
@@ -291,9 +372,9 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
     onEntry(entry) {
       /*
         A `closed` entry may release held asks (retro C). Their sessions flush
-        first, and a session flushed here has already taken the first thing it
-        was owed, this entry included, so the path below must not write into
-        it a second time in the same tick.
+        first, and a session flushed here has already taken its backlog on one
+        line (HIVE-408), this entry included, so the path below must not write
+        into it a second time in the same tick.
       */
       const flushed = releaseHeld(entry);
 
@@ -304,17 +385,16 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
       if (to === undefined) return;
       // The overmind's copy is an inbox card (HIVE-118), not a terminal line.
       if (to === OVERMIND) return;
-      // An agent is woken by the scheduler (HIVE-120), not written to — it has
-      // no terminal to nudge. An unknown party has nowhere to write to either.
-      // A live session mid-turn is caught here too, and flushed by `onIdle`.
-      // A focused session whose box holds a draft is held here too, and
-      // flushed by onPrompt when the box clears (HIVE-135).
       if (flushed.has(to)) return;
-      if (!isLive(to) || !isIdle(to) || !clear(to)) return;
-      // A held ask waits for its PR's `closed` entry (retro C).
-      if (afterTarget(entry) !== undefined && isHeld(entry, ledger.read({}).entries)) return;
-
-      deliverOne(to, entry);
+      /*
+        The backlog goes first, in ledger order (HIVE-408): `flush` reads every
+        owed entry, this one included. It also holds every gate this path used
+        to check itself: an agent or unknown party is not live (the scheduler
+        wakes agents, HIVE-120), a session mid-turn is not idle and is flushed by
+        `onIdle`, a draft is not clear and is flushed by `onPrompt` (HIVE-135),
+        and `undelivered` drops a held ask until its PR's `closed` (retro C).
+      */
+      flush(to);
     },
 
     onIdle(entityId) {
@@ -349,6 +429,11 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
       */
       const unchanged = before?.entityId === entityId && before.input === 'empty';
       if (input === 'empty' && !unchanged) flush(entityId);
+    },
+
+    onInput(entityId) {
+      typedAt.set(entityId, now());
+      armRetry(entityId, TYPING_HOLD_MS);
     },
 
     onSurfaceGone(surfaceId) {

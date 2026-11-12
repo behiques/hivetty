@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import type { HarnessAdapter } from '../../../../electron/main/harness/port';
-import { createDeliver, type Deliver } from '../../../../electron/main/ledger/deliver';
+import { createDeliver, TYPING_HOLD_MS, type Deliver } from '../../../../electron/main/ledger/deliver';
 import { createLedger, type Ledger } from '../../../../electron/main/ledger/index';
 import { OVERMIND } from '../../../../electron/shared/ledger-contract';
 
@@ -150,10 +150,11 @@ describe('createDeliver', () => {
       held('sess-a', 'a/b#3');
       closed(3, 'a/b', 'sess-a');
 
-      // The first owed entry goes in; the next waits for the next idle.
+      // One line carries both, in ledger order (HIVE-408, Task 6); the next idle owes nothing.
       expect(write).toHaveBeenCalledTimes(1);
+      expect(lastWrite().split(' ')).toHaveLength(3);
       deliver.onIdle('sess-a');
-      expect(write).toHaveBeenCalledTimes(2);
+      expect(write).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -220,10 +221,82 @@ describe('createDeliver', () => {
     expect(write).not.toHaveBeenCalled();
   });
 
-  it('ignores kinds that are not ask, answer or post', () => {
-    ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'done', body: 'finished' });
+  it('ignores kinds that are not ask, answer, post, failed or done', () => {
+    ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'event', body: 'something happened' });
+    ledger.append({ from: 'sess-b', to: 'sess-a', kind: 'handoff', body: 'notes' });
 
     expect(write).not.toHaveBeenCalled();
+  });
+
+  it('does not nudge for an answer that only says accepted (HIVE-408)', () => {
+    const asked = ledger.append({ from: 'sess-a', to: 'shipper', kind: 'ask', body: 'ship #226' });
+    write.mockClear();
+
+    ledger.append({ from: 'shipper', to: 'sess-a', kind: 'answer', thread: asked.ok ? asked.id : '', body: ' Accepted ' });
+    deliver.onIdle('sess-a');
+
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('delivers the backlog before a newer entry (HIVE-408)', () => {
+    idle.delete('sess-a');
+    const first = ask('sess-a', 'older');
+    idle.add('sess-a');
+    write.mockClear();
+
+    const second = ask('sess-a', 'newer');
+
+    const line = lastWrite();
+    const firstRef = first.ok ? (first.ref ?? '') : '';
+    const secondRef = second.ok ? (second.ref ?? '') : '';
+    expect(line.indexOf(firstRef)).toBeGreaterThanOrEqual(0);
+    expect(line.indexOf(firstRef)).toBeLessThan(line.indexOf(secondRef) === -1 ? Infinity : line.indexOf(secondRef));
+  });
+
+  it('delivers failed and done addressed to a session (HIVE-408)', () => {
+    const asked = ledger.append({ from: 'sess-a', to: 'builder', kind: 'ask', body: 'build it' });
+    const thread = asked.ok ? asked.id : '';
+    write.mockClear();
+
+    ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'failed', thread, body: 'builder run ended without answering' });
+    expect(write).toHaveBeenCalledTimes(1);
+
+    idle.add('sess-a');
+    ledger.append({ from: 'builder', to: 'sess-a', kind: 'done', thread, body: 'built' });
+    expect(write).toHaveBeenCalledTimes(2);
+  });
+
+  /*
+    Before HIVE-408 a failed or done was never nudged, so a session's log holds
+    them unreceipted behind things it *was* told. Those are not owed after the
+    upgrade: nudging them would put every stale one on a single line at the
+    first idle. Delivery keeps ledger order, so a failed or done older than
+    something this session has a receipt for can only be one of those.
+  */
+  it('does not backfill a failed or done that predates something the session was told (HIVE-408)', () => {
+    live.delete('sess-a');
+    const stale = Array.from({ length: 5 }, (_, i) =>
+      ledger.append({ from: 'builder', to: 'sess-a', kind: i % 2 === 0 ? 'done' : 'failed', body: `old ${String(i)}` }),
+    );
+    const told = ledger.append({ from: 'shipper', to: 'sess-a', kind: 'post', body: 'PR merged' });
+    // The receipt the pre-HIVE-408 build wrote for the post it did deliver.
+    ledger.append({
+      from: OVERMIND,
+      to: 'sess-a',
+      kind: 'event',
+      body: 'nudge written',
+      meta: { delivered: told.ok ? told.id : '' },
+    });
+    expect(stale.every((r) => r.ok)).toBe(true);
+
+    live.add('sess-a');
+    deliver.onReady('sess-a');
+    expect(write).not.toHaveBeenCalled();
+
+    // A failed arriving after the upgrade is still delivered.
+    const fresh = ledger.append({ from: 'builder', to: 'sess-a', kind: 'failed', body: 'run died' });
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(lastWrite()).toBe(`📒 ${fresh.ok ? fresh.id : ''}\r`);
   });
 
   /**
@@ -336,26 +409,56 @@ describe('createDeliver', () => {
   });
 
   /**
-   * One nudge per idle window. The first write ends in `\r`, which starts a
-   * turn — so writing the rest of the backlog behind it would be writing
-   * mid-turn, the one thing this module must never do.
+   * One line per idle window. The line ends in `\r`, which starts a turn, so
+   * nothing may be written behind it; what was owed rides on that one line.
    */
-  it('writes one nudge per idle window, not the whole backlog', () => {
+  it('writes every owed entry on one line, with a receipt each (HIVE-408)', () => {
+    /*
+      Was "one nudge per idle window": each line ended in `\r`, so a second
+      line behind the first would land mid-turn. One line naming the whole
+      backlog ends in one `\r`, so one submit carries it all and the invariant
+      (nothing typed mid-turn) still holds (HIVE-408, Task 6).
+    */
     idle.delete('sess-a');
-    const first = ask('sess-a', 'first question');
-    const second = ask('sess-a', 'second question');
-    expect(write).not.toHaveBeenCalled();
-
+    const a = ask('sess-a', 'one');
+    const b = ask('sess-a', 'two');
     idle.add('sess-a');
+    write.mockClear();
+
     deliver.onIdle('sess-a');
 
     expect(write).toHaveBeenCalledTimes(1);
-    expect(lastWrite()).toBe(`📒 ${first.ok ? first.ref : ''}\r`);
+    expect(lastWrite()).toBe(`📒 ${a.ok ? a.ref : ''} ${b.ok ? b.ref : ''}\r`);
+    expect(receipts().map((r) => r.meta?.delivered)).toEqual([a.ok ? a.id : '', b.ok ? b.id : '']);
 
-    // The remainder was not lost — it has no receipt, so the next idle takes it.
+    // Nothing is left over for the next idle.
     deliver.onIdle('sess-a');
-    expect(write).toHaveBeenCalledTimes(2);
-    expect(lastWrite()).toBe(`📒 ${second.ok ? second.ref : ''}\r`);
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends an entry whose token cannot share a line on a line of its own (HIVE-408)', () => {
+    idle.delete('sess-a');
+    const a = ask('sess-a', 'one');
+    // What `markerListable` refuses, as a hand-edited ledger file would carry it.
+    const odd = { id: 'hand-edited', ts: AT, from: OVERMIND, to: 'sess-a', kind: 'post' as const, body: 'note' };
+    const b = ask('sess-a', 'two');
+    idle.add('sess-a');
+    const real = ledger.read;
+    ledger.read = (query) => {
+      const snapshot = real(query);
+      if (query.to !== 'sess-a') return snapshot;
+      const entries = [...snapshot.entries];
+      entries.splice(entries.findIndex((e) => a.ok && e.id === a.id) + 1, 0, odd);
+      return { ...snapshot, entries };
+    };
+    write.mockClear();
+
+    deliver.onIdle('sess-a');
+    expect(lastWrite()).toBe(`📒 ${a.ok ? a.ref : ''}\r`);
+    deliver.onIdle('sess-a');
+    expect(lastWrite()).toBe('📒 hand-edited\r');
+    deliver.onIdle('sess-a');
+    expect(lastWrite()).toBe(`📒 ${b.ok ? b.ref : ''}\r`);
   });
 
   /**
@@ -372,6 +475,94 @@ describe('createDeliver', () => {
    */
   const A = 'surface-a';
   const B = 'surface-b';
+
+  /**
+   * The incident behind HIVE-408's draft race ("your screen shot 📒 …"): the
+   * person's keystroke reached the pty, the renderer's `draft` report trails it
+   * by a frame, and an entry landed in between. `clear()` saw no draft yet.
+   */
+  describe('a person typing (HIVE-408)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(AT);
+      deliver = createDeliver({
+        ledger,
+        isLive: (id) => live.has(id),
+        isIdle: (id) => idle.has(id),
+        write: (id, data) => write(id, data),
+        adapterOf: () => adapter,
+        now: () => Date.now(),
+        setTimeoutFn: setTimeout,
+      });
+      // `ledger.onChange` reaches whichever `deliver` this suite holds: this one, from here on.
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('holds a nudge that arrives within two seconds of a keystroke, then delivers it', () => {
+      deliver.onInput('sess-a'); // the keystroke reached the pty; the draft report is a frame behind
+      const asked = ask('sess-a');
+
+      expect(write).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(TYPING_HOLD_MS);
+      expect(lastWrite()).toBe(`📒 ${asked.ok ? asked.ref : ''}\r`);
+    });
+
+    it('does not deliver at the retry if the box now holds a draft', () => {
+      deliver.onInput('sess-a');
+      ask('sess-a');
+      deliver.onPrompt('surface-a', 'sess-a', 'draft');
+
+      vi.advanceTimersByTime(TYPING_HOLD_MS);
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('restarts the hold on every keystroke', () => {
+      deliver.onInput('sess-a');
+      ask('sess-a');
+      vi.advanceTimersByTime(TYPING_HOLD_MS - 1);
+      deliver.onInput('sess-a');
+      vi.advanceTimersByTime(TYPING_HOLD_MS - 1);
+
+      expect(write).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-arms when the clock lags the timer, rather than dropping the retry', () => {
+      let skew = 0;
+      deliver = createDeliver({
+        ledger,
+        isLive: (id) => live.has(id),
+        isIdle: (id) => idle.has(id),
+        write: (id, data) => write(id, data),
+        adapterOf: () => adapter,
+        now: () => Date.now() - skew,
+        setTimeoutFn: setTimeout,
+      });
+      deliver.onInput('sess-a');
+      ask('sess-a');
+      // From here the wall clock reads a millisecond behind the timer that fires.
+      skew = 1;
+
+      vi.advanceTimersByTime(TYPING_HOLD_MS);
+      expect(write).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds only the session that was typed into', () => {
+      live.add('sess-b');
+      idle.add('sess-b');
+      deliver.onInput('sess-a');
+      ask('sess-b');
+
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(write.mock.calls[0][0]).toBe('sess-b');
+    });
+  });
 
   describe('the focused session', () => {
     it('holds a nudge while the focused session reports a draft', () => {

@@ -35,6 +35,17 @@ describe('createLedger', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('reads a thread by its short ref (HIVE-408)', () => {
+    const asked = ledger.append({ from: 'sess-a', to: 'builder', kind: 'ask', body: 'build it' });
+    const ref = asked.ok ? (asked.ref ?? '') : '';
+    ledger.append({ from: 'builder', to: 'sess-a', kind: 'answer', thread: asked.ok ? asked.id : '', body: 'built' });
+
+    expect(ledger.read({ thread: ref }).entries.map((e) => e.body)).toEqual(['build it', 'built']);
+    expect(ledger.read({ thread: ref.toUpperCase() }).entries).toHaveLength(2);
+    // An unknown ref reads as it always did: nothing.
+    expect(ledger.read({ thread: 'a999' }).entries).toEqual([]);
+  });
+
   it('refuses a ref two writers both minted, and still takes the full id (HIVE-227)', () => {
     const ask = (id: string, to: string): string =>
       JSON.stringify({ id, ts: AT - 1000, from: 'builder', to, kind: 'ask', ref: 'a5', body: 'which?' });

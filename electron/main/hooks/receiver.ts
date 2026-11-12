@@ -61,7 +61,7 @@ import {
 import {
   LEDGER_POST_PATH,
   LEDGER_READ_PATH,
-  parseLedgerMarker,
+  parseLedgerMarkers,
   type LedgerPostRequest,
   type LedgerReadQuery,
   type LedgerResult,
@@ -233,6 +233,13 @@ export interface ReceiverOptions {
    * discipline `onLedgerPost` follows and for the same reason.
    */
   onLedgerRead: (caller: string, query: LedgerReadQuery) => LedgerSnapshot;
+  /**
+   * A marker prompt was answered with the context of these entries, in order (HIVE-408).
+   *
+   * The model has them now, not only the pty the bytes: the confirmation HIVE-410's
+   * `delivered` state reads. Not called for a marker that resolved nothing.
+   */
+  onMarkerServed?: (caller: string, ids: readonly string[]) => void;
   /**
    * A party asked to append to the ledger (HIVE-111).
    *
@@ -555,6 +562,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     onDone,
     onReady,
     onLedgerRead,
+    onMarkerServed,
     onLedgerPost,
     onAgentsList,
     onProjectsList = () => ({ projects: [] }),
@@ -814,20 +822,25 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    * not its own. An ask is also checked for openness, so a marker re-typed
    * after the ask closed does not tell the model to answer it.
    */
-  function markerContext(caller: string, token: string): string | undefined {
+  function markerContext(caller: string, token: string): { id: string; text: string } | undefined {
     const snapshot = onLedgerRead(caller, { to: caller });
     const mine = snapshot.entries.filter(
       (entry) =>
         entry.to === caller &&
-        (entry.kind === 'ask' || entry.kind === 'answer' || entry.kind === 'post'),
+        (entry.kind === 'ask' ||
+          entry.kind === 'answer' ||
+          entry.kind === 'post' ||
+          // `failed` and `done` close a thread the caller asked (HIVE-408); their ask is looked up below.
+          entry.kind === 'failed' ||
+          entry.kind === 'done'),
     );
     const resolved = resolveRef(mine, token);
     if (resolved.kind !== 'found') return undefined;
     const entry = mine.find((candidate) => candidate.id === resolved.id);
     if (entry === undefined) return undefined;
-    if (entry.kind === 'post') return entryContext(entry);
+    if (entry.kind === 'post') return { id: entry.id, text: entryContext(entry) };
     if (entry.kind === 'ask') {
-      return entryContext(entry, { open: snapshot.openAsks.some((ask) => ask.id === entry.id) });
+      return { id: entry.id, text: entryContext(entry, { open: snapshot.openAsks.some((ask) => ask.id === entry.id) }) };
     }
     const ask =
       entry.thread === undefined
@@ -835,7 +848,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
         : onLedgerRead(caller, { thread: entry.thread }).entries.find(
             (candidate) => candidate.kind === 'ask' && visibleTo(caller, candidate),
           );
-    return entryContext(entry, { ask });
+    return { id: entry.id, text: entryContext(entry, { ask }) };
   }
 
   /**
@@ -1672,10 +1685,15 @@ export function createReceiver(options: ReceiverOptions): Receiver {
            * prompt still names the session. It does count as the session working,
            * which is what the turn it starts is.
            */
-          const marker = effect.text === undefined ? undefined : parseLedgerMarker(effect.text);
-          if (marker !== undefined) {
-            const context = markerContext(entityId, marker);
-            if (context !== undefined) reply = { status: 200, json: adapter.contextReply(context) };
+          const markers = effect.text === undefined ? undefined : parseLedgerMarkers(effect.text);
+          if (markers !== undefined) {
+            // Every token the line names, in its order (HIVE-408); one that resolves nothing is skipped.
+            const served = markers.flatMap((token) => markerContext(entityId, token) ?? []);
+            if (served.length > 0) {
+              reply = { status: 200, json: adapter.contextReply(served.map((s) => s.text).join('\n\n')) };
+              // The model has the context now, not only the pty the bytes (HIVE-408): what HIVE-410's `delivered` reads.
+              onMarkerServed?.(entityId, served.map((s) => s.id));
+            }
             break;
           }
           if (effect.text !== undefined) {

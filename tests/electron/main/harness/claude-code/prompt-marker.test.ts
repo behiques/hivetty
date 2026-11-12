@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { claudeCodeAdapter } from '../../../../../electron/main/harness/claude-code';
 import { promptMarker } from '../../../../../electron/main/harness/claude-code/prompt-marker';
-import { ledgerMarker, type LedgerEntry } from '../../../../../electron/shared/ledger-contract';
+import { ledgerMarkers, type LedgerEntry } from '../../../../../electron/shared/ledger-contract';
 
 const entry: LedgerEntry = {
   id: '20261021-120000-0001',
@@ -17,8 +17,14 @@ const entry: LedgerEntry = {
 
 describe('promptMarker (HIVE-240)', () => {
   it('types the ledger marker and the carriage return that submits it', () => {
-    expect(promptMarker(entry)).toBe(`${ledgerMarker(entry)}\r`);
-    expect(promptMarker(entry)).not.toContain('which branch?');
+    expect(promptMarker([entry])).toBe(`${ledgerMarkers([entry])}\r`);
+    expect(promptMarker([entry])).not.toContain('which branch?');
+  });
+
+  it('names every entry on one line, in order, with one carriage return (HIVE-408)', () => {
+    const a = { ...entry, ref: 'a12' };
+    const b = { ...entry, id: '20261021-120000-0002', ref: 'a13' };
+    expect(promptMarker([a, b])).toBe('📒 a12 a13\r');
   });
 
   it('is what Claude Code declares, as a prompt-marker harness', () => {

@@ -90,7 +90,10 @@ export function createLedger(options: LedgerOptions): Ledger {
   const ledger: Ledger = {
     read(query) {
       const all = store.all();
-      const filtered = all.filter((entry) => matches(entry, query));
+      // A short ref names its thread here too, as `append` already accepts one (HIVE-408).
+      const resolved = query.thread === undefined ? undefined : resolveRef(all, query.thread);
+      const scoped = resolved?.kind === 'found' ? { ...query, thread: resolved.id } : query;
+      const filtered = all.filter((entry) => matches(entry, scoped));
 
       /*
         Derived from the *whole* log, not from the filtered slice. A query for
@@ -98,7 +101,7 @@ export function createLedger(options: LedgerOptions): Ledger {
         asks — the filter is about what to show, not about what is true.
       */
       return {
-        entries: keepNewest(filtered, query.limit),
+        entries: keepNewest(filtered, scoped.limit),
         openAsks: openAsks(all, now()),
         claims: claims(all),
         closedAsks: [...closedAskThreads(all)],

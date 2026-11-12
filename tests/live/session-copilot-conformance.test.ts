@@ -1001,7 +1001,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       const { log } = await run('marker', id, {
         spec: { pluginDir: rendered, hiveServer: hive() },
         // The bytes deliver.ts writes, without the CR the driver adds itself.
-        prompts: [copilotAdapter.promptMarker(ask).replace(/\r$/, '')],
+        prompts: [copilotAdapter.promptMarker([ask]).replace(/\r$/, '')],
         answer: '\r',
       });
       finding('marker', { log });
