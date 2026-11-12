@@ -1380,3 +1380,21 @@ describe('PR #281 self-review round 2: the auto-merge grant covers the merge and
     expect(decide('Bash', { command }, GRANTS)).toEqual({ behavior: 'allow' });
   });
 });
+
+describe('PR #281 self-review round 3: a merge behind arithmetic is not hidden', () => {
+  const GRANTS = ['Bash', 'Bash(gh pr merge * --repo behiques/hivetty)'];
+
+  it('asks for a merge on the lines after `$((1<<2))` or `((x = 1<<2))`', () => {
+    for (const command of [
+      'gh pr merge 1 --repo behiques/hivetty; echo $((1<<2))\ngh pr merge 2 --repo victim/other\n2',
+      '((x = 1<<2))\ngh pr merge 2 --repo victim/other\n2',
+    ]) {
+      expect(decide('Bash', { command }, GRANTS), command).toEqual({ behavior: 'ask' });
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
+    }
+  });
+
+  it('a here-string is not a heredoc: the merge after it is seen', () => {
+    expect(decide('Bash', { command: 'cat <<< x\ngh pr merge 2 --repo victim/other\nx' }, GRANTS)).toEqual({ behavior: 'ask' });
+  });
+});

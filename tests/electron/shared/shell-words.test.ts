@@ -48,6 +48,10 @@ describe('shellSegments (HIVE-407)', () => {
     expect(shellSegments(command)).toEqual(words);
   });
 
+  it('reads `((` inside double quotes as text, not arithmetic', () => {
+    expect(shellSegments('git commit -m "fix ((x))"')).toEqual([['git', 'commit', '-m', 'fix ((x))']]);
+  });
+
   it.each([
     ['an unterminated double quote', 'git push origin "main'],
     ['an unterminated single quote', "git push origin 'main"],
@@ -66,6 +70,9 @@ describe('shellSegments (HIVE-407)', () => {
     ['ANSI-C quoting', "echo $'it\\'s' && git push origin main>/dev/null # '"],
     ['a redirect with no target before an operator', 'echo >; git push origin main'],
     ['a redirect with no target at the end', 'git push origin main >'],
+    // Arithmetic reads `<<` as a shift, not a heredoc; following it is too far (#281 round 3).
+    ['an arithmetic expansion', 'echo $((1<<2))\ngh pr merge 2\n2'],
+    ['an arithmetic command', '((x = 1<<2))\ngh pr merge 2\n2'],
   ])('cannot parse %s', (_name, command) => {
     expect(shellSegments(command)).toBeUndefined();
   });

@@ -8,7 +8,7 @@
  * are dropped. Returns `undefined` when the command cannot be parsed; a caller fails closed on that.
  * A heredoc body is data and is skipped to its delimiter line; an unquoted-delimiter body holding a
  * substitution, ANSI-C quoting (`$'…'`) and a redirection with no target cannot be parsed.
- * shortcut: a POSIX subset (no `case`, no arithmetic); good enough to find a command's words for a
+ * shortcut: a POSIX subset (no `case`, no arithmetic: `$((` and `((` are refused); good enough to find a command's words for a
  * fence, never to run one. Grow it here, behind its table, if a fence needs more.
  */
 type Frame = { words: string[]; word: string | undefined; quoted: boolean; dropNext: boolean; opener: string };
@@ -97,6 +97,9 @@ export function shellSegments(command: string): string[][] | undefined {
       word = (word ?? '') + next;
       continue;
     }
+    // Arithmetic (`$((…))`, `((…))`) reads `<<` as a shift; read here it opens a heredoc that hides the
+    // lines after it (#281 round 3). Outside the subset, so the command cannot be parsed.
+    if (next === '(' && ((c === '$' && command[i + 2] === '(') || (c === '(' && !inDouble))) return undefined;
     if (c === '$' && next === '(') {
       i++;
       open('$(');
