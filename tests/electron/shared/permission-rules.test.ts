@@ -1427,3 +1427,34 @@ describe('PR #281 self-review round 5: `${…}` cannot hide a merge', () => {
     expect(decide('Bash', { command: 'echo ${x:-a b<<2}\ngit push origin main\n2}' }, ['Bash'])).toEqual({ behavior: 'ask' });
   });
 });
+
+describe('PR #281 self-review round 5, second run', () => {
+  const GRANTS = ['Bash', 'Bash(gh pr merge * --repo behiques/hivetty)'];
+
+  it('asks for a merge hidden after an array subscript or a continued heredoc delimiter', () => {
+    for (const command of [
+      'a[1<<2]=x\ngh pr merge 6 --repo victim/other\n2]=x',
+      'cat <<EOF\nEO\\\nF\ngh pr merge 6 --repo victim/other\nEOF',
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
+    }
+  });
+
+  it('asks for a merge run by csh, pwsh, tmux or npx', () => {
+    for (const command of [
+      "tcsh -c 'gh pr merge 1'",
+      "pwsh -Command 'gh pr merge 1'",
+      "tmux new -d 'gh pr merge 1'",
+      "npx -c 'gh pr merge 1'",
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
+    }
+  });
+
+  it('asks when an option-like word holds a wildcard, and still allows `?` in a subject', () => {
+    expect(decide('Bash', { command: 'gh pr merge 5 --repo behiques/hivetty -R*/x' }, GRANTS)).toEqual({ behavior: 'ask' });
+    expect(decide('Bash', { command: 'gh pr merge 5 --subject "Why not?" --repo behiques/hivetty' }, GRANTS)).toEqual({
+      behavior: 'allow',
+    });
+  });
+});

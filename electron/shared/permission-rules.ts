@@ -383,7 +383,7 @@ const RUNS_TEXT = new Set([
   'bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'eval', 'source', '.', 'ssh', 'su', 'sudo', 'doas', 'env',
   'xargs', 'nohup', 'time', 'timeout', 'nice', 'watch', 'exec', 'command', 'script', 'parallel', 'flock',
   'sed', 'gsed', 'awk', 'gawk', 'mawk', 'nawk', 'perl', 'ruby', 'node', 'deno', 'bun', 'php', 'lua',
-  'osascript', 'expect', 'tclsh', 'make',
+  'osascript', 'expect', 'tclsh', 'make', 'csh', 'tcsh', 'pwsh', 'powershell', 'tmux', 'screen', 'npx', 'busybox',
 ]);
 
 /** Shells and shell runners that run what they read on stdin: a heredoc, a here-string, a pipe. */
@@ -489,7 +489,8 @@ const plainMergeRepo = (words: readonly string[]): string | undefined => {
   const head = words[0];
   if (head === undefined || !(head === 'gh' || head.endsWith('/gh'))) return undefined;
   // A word the shell still changes: a substitution, or brace expansion, which can add a `--repo` (#281 R2).
-  if (words.some((word) => /[$`]/.test(word) || BRACE_EXPANSION.test(word))) return undefined;
+  // A wildcard in an option-like word can expand to a file named like an option (`-R*/x` → `-Revil/x`).
+  if (words.some((word) => /[$`]/.test(word) || BRACE_EXPANSION.test(word) || /^-.*[*?[]/.test(word))) return undefined;
   const expected = ['pr', 'merge'];
   let repo: string | undefined;
   let selector: string | undefined;

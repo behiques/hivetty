@@ -94,6 +94,8 @@ describe('shellSegments (HIVE-407)', () => {
     ['a heredoc inside a substitution', 'echo $(echo a b<<D)\ngh pr merge 6\nD'],
     ['a heredoc inside a quoted substitution', 'echo "$(echo a <<D)"\ngh pr merge 6\nD'],
     ['a heredoc inside a subshell', '(cat <<D)\ngh pr merge 6\nD'],
+    ['a `<<` inside an array subscript', 'a[1<<2]=x\ngh pr merge 6\n2]=x'],
+    ['an unquoted heredoc whose body continues a line', 'cat <<EOF\nEO\\\nF\ngh pr merge 6\nEOF'],
   ])('cannot parse %s', (_name, command) => {
     expect(shellSegments(command)).toBeUndefined();
   });

@@ -31,6 +31,9 @@ const skipHeredocs = (command: string, start: number, heredocs: Heredoc[]): numb
       const newline = command.indexOf('\n', pos);
       const lineEnd = newline === -1 ? command.length : newline;
       const line = command.slice(pos, lineEnd);
+      // An unquoted delimiter's body joins a backslash-newline before bash compares lines, so `EO\` + `F`
+      // ends it where this reader would not (#281 round 5): refused.
+      if (!heredoc.literal && line.endsWith('\\')) return undefined;
       if ((heredoc.stripTabs ? line.replace(/^\t+/, '') : line) === heredoc.delimiter) {
         if (!heredoc.literal && /\$\(|`/.test(command.slice(bodyStart, pos))) return undefined;
         pos = lineEnd + 1;
@@ -157,12 +160,13 @@ export function shellSegments(command: string): string[][] | undefined {
     }
     if (c === '<' && next === '<' && command[i + 2] !== '<') {
       // A heredoc: its body starts after this line and is skipped there, never read as commands.
-      // Not inside a word that began an expansion (`${x:1<<2}`, `$X<<EOF`): there `<<` may be a shift or
+      // Not inside a word that began an expansion or a subscript (`${x:1<<2}`, `$X<<EOF`, `a[1<<2]=x`): there `<<` may be a shift or
       // text, and reading it as a heredoc hides the lines after it (#281 round 4). Refused, so callers
       // fall back to their text match.
       // Nor inside a substitution, a subshell or an array's words (`x=( 1<<D )`): bash ends that heredoc
       // with the frame, or reads `<<` there as a word, never taking the next lines (#281 round 5).
-      if (word?.includes('$') === true || stack.length > 0) return undefined;
+      if (word !== undefined && /[$[{]/.test(word)) return undefined;
+      if (stack.length > 0) return undefined;
       const match = HEREDOC.exec(command.slice(i));
       if (match === null) return undefined;
       if (word !== undefined && /^\d+$/.test(word)) word = undefined;
