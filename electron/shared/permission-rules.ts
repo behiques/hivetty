@@ -139,11 +139,21 @@ const specifierTextFor = (
 ): string | undefined => {
   if (ONCE_ONLY_TOOLS.has(toolName)) {
     // Fixed order, so one project and switch always read as the same text.
-    const project = str(input, 'project');
     const on = input['on'];
-    return project === undefined || typeof on !== 'boolean'
-      ? undefined
-      : `project=${project};on=${String(on)}`;
+    if (typeof on !== 'boolean') return undefined;
+    const project = str(input, 'project');
+    const projects = input['projects'];
+    if (project !== undefined && projects === undefined) return `project=${project};on=${String(on)}`;
+    // HIVE-409: a list names every project, in order. `[^,;]` keeps one list from reading as another.
+    if (
+      project === undefined &&
+      Array.isArray(projects) &&
+      projects.length > 0 &&
+      projects.every((entry) => typeof entry === 'string' && /^[^,;]+$/.test(entry))
+    ) {
+      return `projects=${projects.join(',')};on=${String(on)}`;
+    }
+    return undefined;
   }
   if (toolName === 'Bash') return str(input, 'command');
   if (toolName === 'WebFetch') {

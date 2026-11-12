@@ -802,6 +802,21 @@ describe('decide (HIVE-339)', () => {
     expect(decide('weird name', {}, ['weird name'])).toEqual({ behavior: 'allow' });
   });
 
+  it('a project list composes one literal naming every project (HIVE-409)', () => {
+    const tool = 'mcp__hive__project_auto_merge';
+    expect(oneShotRuleFor(tool, { projects: ['a', 'b'], on: true })).toBe(`literal:${tool}:projects=a,b;on=true`);
+    expect(oneShotRuleFor(tool, { project: 'a', on: false })).toBe(`literal:${tool}:project=a;on=false`);
+    expect(summarise(tool, { projects: ['a', 'b'], on: true })).toBe('projects=a,b;on=true');
+    // One list must never read as another, and both or neither specify nothing.
+    expect(oneShotRuleFor(tool, { projects: ['a,b'], on: true })).toBeUndefined();
+    expect(oneShotRuleFor(tool, { projects: ['a;on=false'], on: true })).toBeUndefined();
+    expect(oneShotRuleFor(tool, { project: 'a', projects: ['b'], on: true })).toBeUndefined();
+    expect(oneShotRuleFor(tool, { projects: [], on: true })).toBeUndefined();
+    const listed = { projects: ['a', 'b'], on: true };
+    expect(decide(tool, listed, [oneShotRuleFor(tool, listed)!])).toEqual({ behavior: 'allow' });
+    expect(decide(tool, { projects: ['a', 'b', 'c'], on: true }, [oneShotRuleFor(tool, listed)!])).toEqual({ behavior: 'ask' });
+  });
+
   it('asks for a once-only tool under every standing rule, and allows only its one-shot', () => {
     const tool = 'mcp__hive__project_auto_merge';
     const input = { project: 'hive', on: true };
