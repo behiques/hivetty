@@ -5701,6 +5701,8 @@ export function registerIpcHandlers(
     const request = parseWriteRequest(payload);
     // The person at a terminal or the console (HIVE-280): it may answer a CLI's own prompt.
     sessions?.write(request.sessionId, request.data, 'user');
+    // The draft report trails the keystroke by a frame (HIVE-408): hold nudges for a moment.
+    deliver.onInput(request.sessionId);
   });
 
   on(CH.ptyResize, (_event, payload) => {

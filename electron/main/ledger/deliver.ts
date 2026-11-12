@@ -63,6 +63,9 @@ const DELIVERABLE: readonly LedgerKind[] = ['ask', 'answer', 'post', 'failed', '
 const isAcceptance = (entry: LedgerEntry): boolean =>
   entry.kind === 'answer' && entry.body.trim().toLowerCase() === 'accepted';
 
+/** How long after a person's keystroke a session is not typed into (HIVE-408): the renderer's draft report trails the echo by a frame. */
+export const TYPING_HOLD_MS = 2_000;
+
 interface DeliverOptions {
   ledger: Pick<Ledger, 'read' | 'append'>;
   isLive: (entityId: string) => boolean;
@@ -82,6 +85,10 @@ interface DeliverOptions {
    * *when*, the adapter decides *what*.
    */
   adapterOf: (entityId: string) => Pick<HarnessAdapter, 'capabilities' | 'promptMarker'> | undefined;
+  /** The clock the typing hold reads (HIVE-408). Defaults to `Date.now`. */
+  now?: () => number;
+  /** The timer the typing hold retries on (HIVE-408). Defaults to `setTimeout`. */
+  setTimeoutFn?: typeof setTimeout;
 }
 
 export interface Deliver {
@@ -102,9 +109,28 @@ export interface Deliver {
    * Its record goes with it, and every other surface's stays (HIVE-145).
    */
   onSurfaceGone(surfaceId: SurfaceId): void;
+  /**
+   * A person's keystroke reached this session's pty (HIVE-408). Nothing is
+   * typed into it for {@link TYPING_HOLD_MS}, and the backlog is retried when
+   * the hold lapses: the renderer's `draft` report trails the keystroke by a
+   * frame, and an entry landing in that frame got past {@link clear}.
+   */
+  onInput(entityId: string): void;
 }
 
-export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: DeliverOptions): Deliver {
+export function createDeliver({
+  ledger,
+  isLive,
+  isIdle,
+  write,
+  adapterOf,
+  now = Date.now,
+  setTimeoutFn = setTimeout,
+}: DeliverOptions): Deliver {
+  /** When a person last typed into each session, and the retry armed behind it (HIVE-408). */
+  const typedAt = new Map<string, number>();
+  const retries = new Map<string, ReturnType<typeof setTimeout>>();
+
   /**
    * What each surface's input box holds, and for which session (HIVE-135).
    *
@@ -135,6 +161,9 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
    * transition retries it. Writing into a draft never is.
    */
   function clear(entityId: string): boolean {
+    // A keystroke inside the hold refuses too (HIVE-408): its draft report may not have arrived yet.
+    const typed = typedAt.get(entityId);
+    if (typed !== undefined && now() - typed < TYPING_HOLD_MS) return false;
     /*
       **Any** surface holding a draft refuses the write, not "the" surface
       (HIVE-145). Refusing is always safe — a held nudge writes no receipt and
@@ -369,6 +398,18 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
       */
       const unchanged = before?.entityId === entityId && before.input === 'empty';
       if (input === 'empty' && !unchanged) flush(entityId);
+    },
+
+    onInput(entityId) {
+      typedAt.set(entityId, now());
+      clearTimeout(retries.get(entityId));
+      retries.set(
+        entityId,
+        setTimeoutFn(() => {
+          retries.delete(entityId);
+          flush(entityId);
+        }, TYPING_HOLD_MS),
+      );
     },
 
     onSurfaceGone(surfaceId) {

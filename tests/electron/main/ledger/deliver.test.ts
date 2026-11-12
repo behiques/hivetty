@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import type { HarnessAdapter } from '../../../../electron/main/harness/port';
-import { createDeliver, type Deliver } from '../../../../electron/main/ledger/deliver';
+import { createDeliver, TYPING_HOLD_MS, type Deliver } from '../../../../electron/main/ledger/deliver';
 import { createLedger, type Ledger } from '../../../../electron/main/ledger/index';
 import { OVERMIND } from '../../../../electron/shared/ledger-contract';
 
@@ -442,6 +442,72 @@ describe('createDeliver', () => {
    */
   const A = 'surface-a';
   const B = 'surface-b';
+
+  /**
+   * The incident behind HIVE-408's draft race ("your screen shot 📒 …"): the
+   * person's keystroke reached the pty, the renderer's `draft` report trails it
+   * by a frame, and an entry landed in between. `clear()` saw no draft yet.
+   */
+  describe('a person typing (HIVE-408)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(AT);
+      deliver = createDeliver({
+        ledger,
+        isLive: (id) => live.has(id),
+        isIdle: (id) => idle.has(id),
+        write: (id, data) => write(id, data),
+        adapterOf: () => adapter,
+        now: () => Date.now(),
+        setTimeoutFn: setTimeout,
+      });
+      // `ledger.onChange` reaches whichever `deliver` this suite holds: this one, from here on.
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('holds a nudge that arrives within two seconds of a keystroke, then delivers it', () => {
+      deliver.onInput('sess-a'); // the keystroke reached the pty; the draft report is a frame behind
+      const asked = ask('sess-a');
+
+      expect(write).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(TYPING_HOLD_MS);
+      expect(lastWrite()).toBe(`📒 ${asked.ok ? asked.ref : ''}\r`);
+    });
+
+    it('does not deliver at the retry if the box now holds a draft', () => {
+      deliver.onInput('sess-a');
+      ask('sess-a');
+      deliver.onPrompt('surface-a', 'sess-a', 'draft');
+
+      vi.advanceTimersByTime(TYPING_HOLD_MS);
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('restarts the hold on every keystroke', () => {
+      deliver.onInput('sess-a');
+      ask('sess-a');
+      vi.advanceTimersByTime(TYPING_HOLD_MS - 1);
+      deliver.onInput('sess-a');
+      vi.advanceTimersByTime(TYPING_HOLD_MS - 1);
+
+      expect(write).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds only the session that was typed into', () => {
+      live.add('sess-b');
+      idle.add('sess-b');
+      deliver.onInput('sess-a');
+      ask('sess-b');
+
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(write.mock.calls[0][0]).toBe('sess-b');
+    });
+  });
 
   describe('the focused session', () => {
     it('holds a nudge while the focused session reports a draft', () => {
