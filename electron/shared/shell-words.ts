@@ -80,7 +80,7 @@ export function shellSegments(command: string): string[][] | undefined {
     inDouble = frame.quoted;
     dropNext = frame.dropNext;
     // A substitution's value is not known here; a plain subshell is just a nested command.
-    word = frame.opener === '(' || frame.opener === '=(' ? frame.word : (frame.word ?? '') + '$';
+    word = frame.opener === '(' ? frame.word : (frame.word ?? '') + '$';
   };
 
   for (let i = 0; i < command.length; i++) {
@@ -119,6 +119,9 @@ export function shellSegments(command: string): string[][] | undefined {
     }
     // ANSI-C quoting has its own escapes (`$'it\'s'`): too far to follow.
     if (c === '$' && next === "'") return undefined;
+    // An unquoted `${…}` is one word to bash across spaces, and `<<` inside it is text; split here, a later
+    // `<<` would open a heredoc that hides lines (#281 round 5). Inside double quotes it is already text.
+    if (c === '$' && next === '{') return undefined;
     if (c === '"') {
       inDouble = true;
       word ??= '';
@@ -143,10 +146,8 @@ export function shellSegments(command: string): string[][] | undefined {
       continue;
     }
     if (c === '(') {
-      // `x=( … )` is an array's words, where bash reads `<<` as text, not a heredoc (#281 round 4).
-      const array = word?.endsWith('=') === true;
       endSegment();
-      open(array ? '=(' : '(');
+      open('(');
       continue;
     }
     if (c === ')') {
@@ -157,9 +158,11 @@ export function shellSegments(command: string): string[][] | undefined {
     if (c === '<' && next === '<' && command[i + 2] !== '<') {
       // A heredoc: its body starts after this line and is skipped there, never read as commands.
       // Not inside a word that began an expansion (`${x:1<<2}`, `$X<<EOF`): there `<<` may be a shift or
-      // text, and reading it as a heredoc hides the lines after it (#281 round 4); nor inside an array's
-      // words. Refused, so callers fall back to their text match.
-      if (word?.includes('$') === true || stack.some((frame) => frame.opener === '=(')) return undefined;
+      // text, and reading it as a heredoc hides the lines after it (#281 round 4). Refused, so callers
+      // fall back to their text match.
+      // Nor inside a substitution, a subshell or an array's words (`x=( 1<<D )`): bash ends that heredoc
+      // with the frame, or reads `<<` there as a word, never taking the next lines (#281 round 5).
+      if (word?.includes('$') === true || stack.length > 0) return undefined;
       const match = HEREDOC.exec(command.slice(i));
       if (match === null) return undefined;
       if (word !== undefined && /^\d+$/.test(word)) word = undefined;

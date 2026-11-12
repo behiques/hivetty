@@ -53,6 +53,10 @@ describe('shellSegments (HIVE-407)', () => {
     expect(shellSegments('echo "a << b"')).toEqual([['echo', 'a << b']]);
   });
 
+  it('still reads a parameter expansion inside double quotes', () => {
+    expect(shellSegments('cd "${W}/x" && echo "${x:-a b<<2}"')).toEqual([['cd', '${W}/x'], ['echo', '${x:-a b<<2}']]);
+  });
+
   it('reads `((` inside double quotes as text, not arithmetic', () => {
     expect(shellSegments('git commit -m "fix ((x))"')).toEqual([['git', 'commit', '-m', 'fix ((x))']]);
   });
@@ -84,6 +88,12 @@ describe('shellSegments (HIVE-407)', () => {
     ['a `<<` inside a parameter expansion', 'echo ${x:1<<2}\ngh pr merge 2\n2}'],
     ['a `<<` straight after an expansion', 'echo $X<<EOF\ngh pr merge 2\nEOF'],
     ['a `<<` inside an array assignment', 'x=( 1<<D )\ngh pr merge 2\nD'],
+    // #281 round 5: bash keeps `${…}` one word across spaces; the tokeniser does not model it.
+    ['an unquoted parameter expansion with a space', 'echo ${x:-a b<<2}\ngh pr merge 6\n2}'],
+    ['any unquoted parameter expansion', 'cd ${W}/x'],
+    ['a heredoc inside a substitution', 'echo $(echo a b<<D)\ngh pr merge 6\nD'],
+    ['a heredoc inside a quoted substitution', 'echo "$(echo a <<D)"\ngh pr merge 6\nD'],
+    ['a heredoc inside a subshell', '(cat <<D)\ngh pr merge 6\nD'],
   ])('cannot parse %s', (_name, command) => {
     expect(shellSegments(command)).toBeUndefined();
   });

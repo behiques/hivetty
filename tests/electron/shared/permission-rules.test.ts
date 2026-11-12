@@ -1413,3 +1413,17 @@ describe('PR #281 self-review round 4: no expansion can hide a merge behind `<<`
     });
   });
 });
+
+describe('PR #281 self-review round 5: `${…}` cannot hide a merge', () => {
+  const GRANTS = ['Bash', 'Bash(gh pr merge * --repo behiques/hivetty)'];
+  const hidden = 'echo ${x:-a b<<2}\ngh pr merge 6 --repo victim/other\n2}';
+
+  it('asks with bare Bash and on an auto-merge project', () => {
+    expect(decide('Bash', { command: hidden }, ['Bash'])).toEqual({ behavior: 'ask' });
+    expect(decide('Bash', { command: `gh pr merge 5 --repo behiques/hivetty\n${hidden}` }, GRANTS)).toEqual({ behavior: 'ask' });
+  });
+
+  it('a push hidden the same way still asks', () => {
+    expect(decide('Bash', { command: 'echo ${x:-a b<<2}\ngit push origin main\n2}' }, ['Bash'])).toEqual({ behavior: 'ask' });
+  });
+});
