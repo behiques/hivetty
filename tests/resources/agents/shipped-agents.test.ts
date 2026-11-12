@@ -273,4 +273,10 @@ describe('the shipper merge gate', () => {
   it('merge-pr says the thread count can be ninety seconds old and what a HOLD on it does', () => {
     expect(read('skills', 'merge-pr', 'SKILL.md')).toMatch(/ninety\s+seconds/);
   });
+
+  // A merge with anything chained after `--repo <slug>` misses the auto-merge grant and raises a card (PR #273).
+  it('merge-pr and the shipper run the merge as a call of its own, with nothing chained to it', () => {
+    expect(read('skills', 'merge-pr', 'SKILL.md')).toMatch(/its own Bash call[^.]*nothing\s+before\s+or\s+after\s+it/);
+    expect(read('agents', 'shipper', 'AGENT.md')).toMatch(/its own Bash call[^.]*nothing\s+before\s+or\s+after\s+it/);
+  });
 });
