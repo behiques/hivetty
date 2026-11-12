@@ -210,6 +210,12 @@ const parentOf = (path: string, blocks: Set<string>): string | null => {
 };
 
 /**
+ * Parts only the app writes on the person's behalf and no shipped file carries (HIVE-409): kept
+ * through a merge, never listed as a customisation and never given a base key.
+ */
+export const USER_ONLY_PARTS: ReadonlySet<string> = new Set(['grants']);
+
+/**
  * Merge the shipped file into the user's, part by part.
  *
  * | Part | Base | Result |
@@ -227,12 +233,6 @@ const parentOf = (path: string, blocks: Set<string>): string | null => {
  *
  * `current` and `shipped` must both parse; the caller checks.
  */
-/**
- * Parts only the app writes on the person's behalf and no shipped file carries (HIVE-409): kept
- * through a merge, never listed as a customisation and never given a base key.
- */
-export const USER_ONLY_PARTS: ReadonlySet<string> = new Set(['grants']);
-
 export function mergeParts(
   current: string,
   shipped: string,
