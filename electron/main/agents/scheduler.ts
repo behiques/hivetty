@@ -651,6 +651,16 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       if (agent.status !== 'sleeping' && agent.status !== 'failed') continue;
 
       const schedule = listed.get(name);
+
+      /*
+        A repo agent's standing lane only routes (HIVE-408): its work is on its repo lanes, which keep
+        their own clock below. Ledger wakes still reach it.
+      */
+      if (deps.laneOf?.(name) === 'repo') {
+        arm(name, agent.nextRunAt, undefined);
+        continue;
+      }
+
       const next =
         schedule === undefined ? undefined : nextRunFrom(schedule.wake, now);
 

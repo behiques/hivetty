@@ -2509,6 +2509,18 @@ describe('createScheduler', () => {
       expect(state.lane(AGENT, 'repo:b/y').nextRunAt).toBeUndefined();
     });
 
+    it('gives a repo agent no standing interval wake, and still ticks its claimed lane (HIVE-408)', () => {
+      holding();
+
+      tick();
+      clock = 600_000;
+      tick();
+
+      expect(woke.some((w) => w.lane === undefined)).toBe(false);
+      expect(woke).toContainEqual({ name: AGENT, trigger: 'interval', lane: 'repo:a/x' });
+      expect(state.read(AGENT).nextRunAt).toBeUndefined();
+    });
+
     it('does not tick a lane that is running', () => {
       holding();
 
