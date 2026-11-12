@@ -266,6 +266,39 @@ describe('createDeliver', () => {
     expect(write).toHaveBeenCalledTimes(2);
   });
 
+  /*
+    Before HIVE-408 a failed or done was never nudged, so a session's log holds
+    them unreceipted behind things it *was* told. Those are not owed after the
+    upgrade: nudging them would put every stale one on a single line at the
+    first idle. Delivery keeps ledger order, so a failed or done older than
+    something this session has a receipt for can only be one of those.
+  */
+  it('does not backfill a failed or done that predates something the session was told (HIVE-408)', () => {
+    live.delete('sess-a');
+    const stale = Array.from({ length: 5 }, (_, i) =>
+      ledger.append({ from: 'builder', to: 'sess-a', kind: i % 2 === 0 ? 'done' : 'failed', body: `old ${String(i)}` }),
+    );
+    const told = ledger.append({ from: 'shipper', to: 'sess-a', kind: 'post', body: 'PR merged' });
+    // The receipt the pre-HIVE-408 build wrote for the post it did deliver.
+    ledger.append({
+      from: OVERMIND,
+      to: 'sess-a',
+      kind: 'event',
+      body: 'nudge written',
+      meta: { delivered: told.ok ? told.id : '' },
+    });
+    expect(stale.every((r) => r.ok)).toBe(true);
+
+    live.add('sess-a');
+    deliver.onReady('sess-a');
+    expect(write).not.toHaveBeenCalled();
+
+    // A failed arriving after the upgrade is still delivered.
+    const fresh = ledger.append({ from: 'builder', to: 'sess-a', kind: 'failed', body: 'run died' });
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(lastWrite()).toBe(`📒 ${fresh.ok ? fresh.id : ''}\r`);
+  });
+
   /**
    * A post addressed to a session is a one-way notice (the shipper's "PR
    * merged"): it reaches the terminal the way an ask does, and is receipted

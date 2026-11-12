@@ -221,9 +221,22 @@ export function createDeliver({
       if (typeof id === 'string') delivered.add(id);
     }
 
+    /*
+      Where in this log the newest entry this session was told sits. Delivery
+      keeps ledger order, so a `failed` or `done` behind it went unreceipted
+      because the build that wrote the receipt did not deliver those kinds
+      (before HIVE-408), not because it is owed: backfilling them would put every
+      stale one on one line at the first idle after the upgrade.
+    */
+    let toldUpTo = -1;
+    entries.forEach((entry, index) => {
+      if (delivered.has(entry.id)) toldUpTo = index;
+    });
+
     const owed = entries.filter(
-      (entry) =>
+      (entry, index) =>
         DELIVERABLE.includes(entry.kind) &&
+        ((entry.kind !== 'failed' && entry.kind !== 'done') || index > toldUpTo) &&
         /*
           `read({ to })` matches entries addressed to this party *or* broadcast.
           Only the addressed half is deliverable, so the recipient is re-checked
