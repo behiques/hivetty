@@ -11,7 +11,7 @@ copilot:
 wake:
   on: [ledger]
 skills: [review-pr-findings, tdd, debug, verify, worktree]
-tools: [Read, Edit, Write, Grep, Glob, Bash, Agent, Skill, TodoWrite, ToolSearch, ReportFindings]
+tools: [Read, Edit, Write, Grep, Glob, Bash, Agent, SendMessage, Skill, TodoWrite, ToolSearch, ReportFindings]
 autonomy: act
 lane: thread
 limits:

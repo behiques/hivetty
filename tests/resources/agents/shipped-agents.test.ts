@@ -125,8 +125,8 @@ describe('shipped agents', () => {
 
 /**
  * HIVE-174. A transition writes to the person's Jira, so it is not in the
- * standing grants; the two agents that move tickets name it, and nobody
- * shipped comments.
+ * standing grants; the two agents that move tickets name it. The builder also
+ * comments (HIVE-409 follow-up: it runs spec-deviation, card a100 of the audit).
  */
 describe('the Jira writes are consented, not standing', () => {
   const toolsOf = (name: string): readonly string[] => {
@@ -141,16 +141,28 @@ describe('the Jira writes are consented, not standing', () => {
     return result.def.tools;
   };
 
-  it('builder and shipper hold jira_transition; acr and fixer do not; nobody holds jira_comment', () => {
+  it('builder and shipper hold jira_transition; acr and fixer do not; only the builder holds jira_comment', () => {
     for (const name of ['builder', 'shipper']) {
       expect(toolsOf(name).some((rule) => matches(rule, 'mcp__hive__jira_transition', {}))).toBe(true);
     }
     for (const name of ['acr', 'fixer']) {
       expect(toolsOf(name).some((rule) => matches(rule, 'mcp__hive__jira_transition', {}))).toBe(false);
     }
-    for (const name of ['builder', 'shipper', 'acr', 'fixer']) {
+    expect(toolsOf('builder').some((rule) => matches(rule, 'mcp__hive__jira_comment', {}))).toBe(true);
+    for (const name of ['shipper', 'acr', 'fixer']) {
       expect(toolsOf(name).some((rule) => matches(rule, 'mcp__hive__jira_comment', {}))).toBe(false);
     }
+  });
+
+  // HIVE-409 follow-up: each was a permission card in the audit week (a34 SendMessage, a85 Edit), or the
+  // same need in an agent that runs subagents the same way.
+  it.each([
+    ['builder', ['SendMessage', 'Edit', 'Grep', 'Glob', 'Bash']],
+    ['fixer', ['SendMessage']],
+    ['acr', ['SendMessage']],
+    ['shipper', ['Edit', 'Grep', 'Glob', 'Bash']],
+  ] as const)('%s holds the tools its flow reaches for', (name, tools) => {
+    for (const tool of tools) expect(toolsOf(name), `${name} / ${tool}`).toContain(tool);
   });
 
   it.each([

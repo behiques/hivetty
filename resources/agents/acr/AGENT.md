@@ -13,7 +13,7 @@ wake:
 autonomy: act
 lane: thread
 skills: [pr-review]
-tools: [Read, Grep, Glob, Write, TodoWrite, Skill, ReportFindings, Bash, Agent]
+tools: [Read, Grep, Glob, Write, TodoWrite, Skill, ReportFindings, Bash, Agent, SendMessage]
 limits:
   turns: 120
   parallel: 3
