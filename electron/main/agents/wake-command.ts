@@ -219,7 +219,8 @@ type BuildWakeCommand = (
   name: string,
   trigger: string,
   extra?: string,
-  options?: { kind?: RunKind; lane?: string },
+  /** `budgetUsd` lays the day's last room over `budget_usd` for this one wake (HIVE-408). */
+  options?: { kind?: RunKind; lane?: string; budgetUsd?: number },
 ) => WakeInvocation | { problem: string; waitFor?: HarnessId };
 
 const describe = (cause: unknown): string =>
@@ -583,7 +584,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
         adapter,
         defaults: deps.gate?.defaults(adapter.id) ?? {},
         ...(switched ? { switchedFrom: recorded } : {}),
-        def,
+        def: options?.budgetUsd === undefined ? def : { ...def, limits: { ...def.limits, budgetUsd: options.budgetUsd } },
         ...(resuming === undefined ? {} : { sessionUuid: resuming }),
         newUuid: minted,
         trigger,

@@ -89,6 +89,7 @@ describe('createRunTracker', () => {
     extra?: string;
     kind?: string;
     lane?: string;
+    budgetUsd?: number;
   }[];
   /** What `limits.parallel` says for the agent under test (HIVE-128). */
   let parallel: number;
@@ -136,6 +137,7 @@ describe('createRunTracker', () => {
           ...(extra === undefined ? {} : { extra }),
           ...(options?.kind === undefined ? {} : { kind: options.kind }),
           ...(options?.lane === undefined ? {} : { lane: options.lane }),
+          ...(options?.budgetUsd === undefined ? {} : { budgetUsd: options.budgetUsd }),
         });
 
         return {
@@ -2351,12 +2353,28 @@ describe('createRunTracker', () => {
       );
     };
 
-    it('refuses the second of two parallel runs that would overshoot the day, with one card', () => {
+    it('starts a run while any of the day remains, reserving only what is left (HIVE-408)', () => {
+      limits = { budgetUsd: 3, dailyUsd: 5 };
+      spent(4);
+
+      expect(tracker.run('a', 'ledger')).toMatchObject({ started: true });
+      expect(commandArgs.at(-1)).toMatchObject({ budgetUsd: 1 });
+    });
+
+    it('passes no budget override when budget_usd fits (HIVE-408)', () => {
+      limits = { budgetUsd: 1, dailyUsd: 5 };
+      tracker.run('a', 'ledger');
+      expect(commandArgs.at(-1)).not.toHaveProperty('budgetUsd');
+    });
+
+    it('refuses the run that finds the day fully held by live runs, with one card (HIVE-408)', () => {
       parallel = 3;
       limits = { budgetUsd: 3, dailyUsd: 5 };
 
       expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:A' })).toMatchObject({ started: true });
-      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:B' })).toMatchObject({ started: false, refused: 'budget' });
+      // B starts on the $2 that A's $3 leaves, capped at it.
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:B' })).toMatchObject({ started: true });
+      expect(commandArgs.at(-1)).toMatchObject({ budgetUsd: 2 });
       expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:C' })).toMatchObject({ started: false, refused: 'budget' });
 
       const cards = ledger.filter((entry) => entry.meta?.['dailyCap'] !== undefined);
@@ -2372,11 +2390,12 @@ describe('createRunTracker', () => {
       parallel = 3;
       limits = { budgetUsd: 3, dailyUsd: 5 };
       tracker.run('a', 'ledger', undefined, { lane: 'thread:A' });
-      tracker.run('a', 'ledger', undefined, { lane: 'thread:B' }); // refused
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:B' }); // starts on the $2 left (HIVE-408)
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:C' }); // refused
 
       endRun(0, 1); // the first run cost $1 of its $3
 
-      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:C' })).toMatchObject({ started: true });
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:D' })).toMatchObject({ started: true });
     });
 
     it('refuses a ledger wake once the day is spent — it used to run', () => {
@@ -2396,11 +2415,12 @@ describe('createRunTracker', () => {
       parallel = 3;
       limits = { budgetUsd: 3, dailyUsd: 5 };
       tracker.run('a', 'ledger', undefined, { lane: 'thread:A' });
-      tracker.run('a', 'ledger', undefined, { lane: 'thread:B' }); // held back
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:B' }); // starts on the $2 left (HIVE-408)
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:C' }); // held back
 
       endRun(0, 5); // the first run spent the whole day
 
-      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:C' })).toMatchObject({ started: false, refused: 'budget' });
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:D' })).toMatchObject({ started: false, refused: 'budget' });
 
       const cards = ledger.filter((entry) => entry.meta?.['dailyCap'] !== undefined);
       expect(cards.map((card) => card.meta?.['held'] === true)).toEqual([true, false]);
@@ -2412,9 +2432,10 @@ describe('createRunTracker', () => {
       limits = { dailyUsd: 6 };
       spent(3);
 
-      // $3 spent + $2 reserved = $5 fits in $6; another $2 would make $7.
+      // $3 spent + $2 reserved = $5 of $6; the next run holds the last $1, and the one after finds none (HIVE-408).
       expect(tracker.run('a', 'ledger', undefined, { lane: 'repo:a/x' })).toMatchObject({ started: true });
-      expect(tracker.run('a', 'ledger', undefined, { lane: 'repo:b/y' })).toMatchObject({ started: false, refused: 'budget' });
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'repo:b/y' })).toMatchObject({ started: true });
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'repo:c/z' })).toMatchObject({ started: false, refused: 'budget' });
 
       const card = ledger.find((entry) => entry.meta?.['dailyCap'] !== undefined);
       expect(card?.body).toContain('reserving $2.00 per run: daily_usd ÷ parallel, since no budget_usd is set');

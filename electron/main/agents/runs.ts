@@ -152,7 +152,8 @@ export interface RunTrackerDeps {
     name: string,
     trigger: string,
     extra?: string,
-    options?: { kind?: RunKind; lane?: string },
+    /** `budgetUsd` caps the run's `--max-budget-usd` at what is left of the day (HIVE-408). */
+    options?: { kind?: RunKind; lane?: string; budgetUsd?: number },
   ) =>
     | (WakeCommand & {
         sessionUuid: string;
@@ -1132,7 +1133,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         real cost replaces it at close. Before the build, like the other gates.
       */
       const limits = deps.limitsFor?.(name) ?? {};
-      const reservation = runReservation(limits, parallel);
+      let reservation = runReservation(limits, parallel);
 
       if (limits.dailyUsd !== undefined) {
         const now = deps.now();
@@ -1140,10 +1141,12 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         const today = agent.today?.day === dayKey(now) ? agent.today : undefined;
         const reserved = live.reduce((sum, other) => sum + other.reserved, 0);
 
+        const spentSoFar = today?.usd ?? 0;
+        const remaining = limits.dailyUsd - spentSoFar - reserved;
         // A day already spent refuses even a run that reserves nothing.
-        const spentOut = (today?.usd ?? 0) >= limits.dailyUsd;
+        const spentOut = spentSoFar >= limits.dailyUsd;
 
-        if (spentOut || (today?.usd ?? 0) + reserved + reservation > limits.dailyUsd + 1e-9) {
+        if (spentOut || remaining <= 1e-9) {
           const day = dayKey(now);
           const spentText = `$${(today?.usd ?? 0).toFixed(2)}`;
           const dailyText = `$${limits.dailyUsd.toFixed(2)}`;
@@ -1201,6 +1204,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
             reason: `${name} is out of today's budget for now: ${spentText} spent and $${reserved.toFixed(2)} held by live runs, of ${dailyText}.`,
           };
         }
+        // Any room left starts the run, holding no more than that room (HIVE-408).
+        reservation = Math.min(reservation, remaining);
       }
 
       /*
@@ -1235,7 +1240,9 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         }
       }
 
-      const command = deps.command(name, trigger, extra, { kind, ...(onLane ? { lane } : {}) });
+      // A reservation below `budget_usd` is the day's last room, and the CLI's own cap holds the run to it (HIVE-408).
+      const capped = limits.budgetUsd !== undefined && reservation < limits.budgetUsd ? { budgetUsd: reservation } : {};
+      const command = deps.command(name, trigger, extra, { kind, ...(onLane ? { lane } : {}), ...capped });
 
       if ('problem' in command) {
         // HIVE-399: a `wait` agent's CLI is down for now, and the queue keeps the wake until it is back.

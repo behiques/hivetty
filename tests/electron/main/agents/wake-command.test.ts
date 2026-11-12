@@ -198,6 +198,17 @@ describe('createWakeCommand', () => {
     expect(built.cwd).toBe('/home/u/.hive/work/slack-watcher');
   });
 
+  it('lays a reservation over budget_usd on the command line (HIVE-408)', () => {
+    files['/home/u/.hive/agents/slack-watcher/AGENT.md'] = AGENT_MD.replace('  turns: 12', '  turns: 12\n  budget_usd: 3');
+    const full = build()('slack-watcher', 'manual');
+    const capped = build()('slack-watcher', 'manual', undefined, { budgetUsd: 1 });
+
+    if ('problem' in full || 'problem' in capped) throw new Error('expected a command');
+
+    expect(full.args[full.args.indexOf('--max-budget-usd') + 1]).toBe('3');
+    expect(capped.args[capped.args.indexOf('--max-budget-usd') + 1]).toBe('1');
+  });
+
   it('writes the preamble and the body into the generated system prompt', () => {
     build()('slack-watcher', 'manual');
 
