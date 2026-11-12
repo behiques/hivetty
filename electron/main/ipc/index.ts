@@ -3203,6 +3203,29 @@ export function registerIpcHandlers(
     },
     read: (name) => agentRegistry.read(name),
     write: (name, source) => agentRegistry.write(name, source),
+    /*
+      HIVE-409: the merge card's project switch, through the same writer the MCP tool uses.
+      `autoMergeGrants` is built further down; this runs only when an answer arrives.
+    */
+    mergeUnattended: async (repo) => {
+      await autoMergeGrants?.refresh();
+      const project = autoMergeGrants?.projectFor(repo);
+      if (project === undefined) return { ok: false, reason: `no configured project has ${repo}` };
+      try {
+        projectAutoMergeFor(
+          { project, on: true },
+          {
+            config: getConfig,
+            setAutoMerge: setProjectAutoMerge,
+            announce: (snapshot) => send(CH.configChanged, snapshot),
+          },
+        );
+      } catch (cause) {
+        return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) };
+      }
+      console.info(`[projects] permission card set autoMerge on on ${project}`);
+      return { ok: true, project };
+    },
   });
 
   /**

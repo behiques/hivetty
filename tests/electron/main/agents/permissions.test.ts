@@ -471,6 +471,60 @@ describe('onAnswer', () => {
     expect(p.grantsFor('drone')).toEqual([]);
   });
 
+  describe('allow-project (HIVE-409)', () => {
+    const MERGE = { command: 'gh pr merge 229 --squash --repo behiques/hivetty' };
+    const mergeCard = () => ask('a1', 'shipper', [], MERGE);
+
+    it('turns the switch on and grants this merge once', async () => {
+      const mergeUnattended = vi.fn(async (_repo: string) => ({ ok: true as const, project: 'p1' }));
+      const d = deps([mergeCard(), answer('n1', 'a1', 'allow-project')], { mergeUnattended });
+      const p = createPermissions(d);
+      await p.onAnswer(answer('n1', 'a1', 'allow-project') as never);
+      expect(mergeUnattended).toHaveBeenCalledWith('behiques/hivetty');
+      expect(d.write).not.toHaveBeenCalled();
+      expect(p.grantsFor('shipper')).toEqual([`literal:Bash:${MERGE.command}`]);
+    });
+
+    it('with no matching project records why and grants nothing', async () => {
+      const mergeUnattended = vi.fn(async (_repo: string) => ({ ok: false as const, reason: 'no project has behiques/hivetty' }));
+      const entries: unknown[] = [mergeCard(), answer('n1', 'a1', 'allow-project')];
+      const append = vi.fn((r: LedgerPostRequest) => {
+        entries.push({ ...r, id: `x${String(entries.length)}`, ts: 3 });
+      });
+      const d = deps(entries, { mergeUnattended, append });
+      const p = createPermissions(d);
+      await p.onAnswer(answer('n1', 'a1', 'allow-project') as never);
+      expect(append).toHaveBeenCalledWith(expect.objectContaining({ meta: expect.objectContaining({ grantFailed: 'a1' }) }));
+      expect(p.grantsFor('shipper')).toEqual([]);
+    });
+
+    it('without a mergeUnattended dep refuses, failing closed', async () => {
+      const entries: unknown[] = [mergeCard(), answer('n1', 'a1', 'allow-project')];
+      const append = vi.fn((r: LedgerPostRequest) => {
+        entries.push({ ...r, id: `x${String(entries.length)}`, ts: 3 });
+      });
+      const p = createPermissions(deps(entries, { append }));
+      await p.onAnswer(answer('n1', 'a1', 'allow-project') as never);
+      expect(p.grantsFor('shipper')).toEqual([]);
+    });
+
+    it('a forged allow-project is refused by the author check', async () => {
+      const mergeUnattended = vi.fn();
+      const d = deps([mergeCard(), answer('n1', 'a1', 'allow-project', 'shipper')], { mergeUnattended });
+      await createPermissions(d).onAnswer(answer('n1', 'a1', 'allow-project', 'shipper') as never);
+      expect(mergeUnattended).not.toHaveBeenCalled();
+    });
+
+    it('allow-project on a card that is not a merge is refused and grants nothing', async () => {
+      const mergeUnattended = vi.fn();
+      const entries: unknown[] = [ask('a1', 'drone', RUNGS), answer('n1', 'a1', 'allow-project')];
+      const p = createPermissions(deps(entries, { mergeUnattended }));
+      expect(p.grantsFor('drone')).toEqual([]);
+      await p.onAnswer(answer('n1', 'a1', 'allow-project') as never);
+      expect(mergeUnattended).not.toHaveBeenCalled();
+    });
+  });
+
   it('writes nothing for allow-once or deny', async () => {
     for (const body of ['allow-once', 'deny']) {
       const d = deps([ask('a1', 'drone', RUNGS)]);
