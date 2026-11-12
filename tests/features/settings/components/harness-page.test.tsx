@@ -342,6 +342,16 @@ describe('HarnessPage: new sessions (HIVE-376)', () => {
     expect(setCliConfig).toHaveBeenCalledWith({ cli: 'codex', sessionModel: LUNA.slug, sessionEffort: null });
   });
 
+  // Codex's model column carries version pills below its stepper; bottom alignment lifted its track above effort's.
+  it('Codex: the model and effort columns share a top-aligned row, so both tracks sit level', () => {
+    renderPage('codex');
+    const model = group().getByRole('radiogroup', { name: /model/ });
+    let row = group().getByRole('radiogroup', { name: /effort/ }).parentElement!;
+    while (!row.contains(model)) row = row.parentElement!;
+    expect(row).toHaveClass('items-start');
+    expect(row).not.toHaveClass('items-end');
+  });
+
   it('shows the built-in pick with nothing configured, and the configured one when set', () => {
     const first = renderPage('claude-code');
     expect(group().getByRole('radio', { name: new RegExp(BUILT_IN_PICKS['claude-code'].model) })).toBeChecked();

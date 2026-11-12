@@ -222,7 +222,7 @@ function SessionDefaultsGroup({ cli, clis }: { cli: HarnessId; clis: ClisConfig 
       title="New sessions"
       description={`What the picker starts ${CLI_NAMES[cli]} on. A pick you make in the picker wins until the app restarts.`}
     >
-      <div className="flex flex-wrap items-end gap-6">
+      <div className="flex flex-wrap items-start gap-6">
         {cli === 'codex' && codexPick !== undefined ? (
           <CodexModelField models={codexModels} value={codexPick.slug} onChange={pickModel} />
         ) : CLI_VOCAB[cli].models.length > STEPPER_MAX ? (
