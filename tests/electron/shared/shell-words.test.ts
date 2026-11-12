@@ -31,6 +31,16 @@ describe('shellSegments (HIVE-407)', () => {
     ['a redirect target that is a backtick', 'echo x > `git push origin main>/dev/null`', [['git', 'push', 'origin', 'main'], ['echo', 'x']]],
     ['a redirect from a process substitution', 'cat < <(git push origin main>/dev/null)', [['git', 'push', 'origin', 'main'], ['cat']]],
     ['a redirect target with a substitution inside it', 'cat > x$(git push origin main)', [['git', 'push', 'origin', 'main'], ['cat']]],
+    // A heredoc body is data, skipped to its delimiter line; a lone apostrophe in it is just text.
+    ['a heredoc body is skipped', 'cat <<EOF\ngit push origin main\nEOF', [['cat']]],
+    ['an apostrophe in a heredoc body', "cat <<EOF\nit's\nEOF\ngit push origin main>/dev/null # '", [['cat'], ['git', 'push', 'origin', 'main']]],
+    ['a quoted delimiter keeps its body literal', "git commit -F - <<'EOF'\nrun $(x) and `y`\nEOF", [['git', 'commit', '-F', '-']]],
+    ['a double-quoted delimiter', 'cat <<"EOF"\n$(x)\nEOF', [['cat']]],
+    ['an escaped delimiter', 'cat <<\\EOF\n$(x)\nEOF', [['cat']]],
+    ['<<- strips leading tabs from the delimiter line', 'cat <<-EOF\n\tbody\n\tEOF\necho done', [['cat'], ['echo', 'done']]],
+    ['the line after the heredoc operator still parses', "cat <<'EOF' | grep x\nbody\nEOF", [['cat'], ['grep', 'x']]],
+    ['two heredocs on one line', "cat <<'A' <<'B'\none\nA\ntwo\nB\nls", [['cat'], ['ls']]],
+    ['a here-string is not a heredoc', 'cat <<< hi', [['cat']]],
     ['a carriage return is part of a word, as in bash', 'true\r# ; git push origin main>/dev/null', [['true\r#'], ['git', 'push', 'origin', 'main']]],
   ];
 
@@ -47,10 +57,12 @@ describe('shellSegments (HIVE-407)', () => {
     ['a ) with nothing open', 'echo )'],
     ['a ) inside a backtick', 'echo `a)`'],
     ['a backtick nested by escaping', 'echo `a \\`b\\` c`'],
-    // A heredoc body is not shell syntax: a lone apostrophe in it would pair with a quote lines later.
-    ['a heredoc', 'cat <<EOF\ngit push origin main\nEOF'],
-    ['a heredoc whose body holds an apostrophe', "cat <<EOF\nit's\nEOF\ngit push origin main>/dev/null # '"],
-    ['a quoted-delimiter heredoc', "git commit -F - <<'EOF'\nmsg\nEOF"],
+    // An unquoted heredoc body runs its substitutions; following them is too far.
+    ['a substitution in an unquoted heredoc body', 'cat <<EOF\n$(git push origin main)\nEOF'],
+    ['a backtick in an unquoted heredoc body', 'cat <<EOF\n`git push origin main`\nEOF'],
+    ['a heredoc that never ends', 'cat <<EOF\nbody'],
+    ['a heredoc on the last line', 'cat <<EOF'],
+    ['a heredoc with no delimiter', 'cat << ;'],
     ['ANSI-C quoting', "echo $'it\\'s' && git push origin main>/dev/null # '"],
     ['a redirect with no target before an operator', 'echo >; git push origin main'],
     ['a redirect with no target at the end', 'git push origin main >'],

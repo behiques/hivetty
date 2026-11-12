@@ -6,11 +6,41 @@
  * A command substitution, a process substitution and a subshell become commands of their own, and the
  * word a substitution fills in keeps a `$`, so a fence can see it is dynamic. Redirections and comments
  * are dropped. Returns `undefined` when the command cannot be parsed; a caller fails closed on that.
- * A heredoc, ANSI-C quoting (`$'…'`) and a redirection with no target cannot be parsed.
- * shortcut: a POSIX subset (no `case`, no arithmetic, no heredoc); good enough to
- * find a command's words for a fence, never to run one. Grow it here, behind its table, if a fence needs more.
+ * A heredoc body is data and is skipped to its delimiter line; an unquoted-delimiter body holding a
+ * substitution, ANSI-C quoting (`$'…'`) and a redirection with no target cannot be parsed.
+ * shortcut: a POSIX subset (no `case`, no arithmetic); good enough to find a command's words for a
+ * fence, never to run one. Grow it here, behind its table, if a fence needs more.
  */
 type Frame = { words: string[]; word: string | undefined; quoted: boolean; dropNext: boolean; opener: string };
+type Heredoc = { delimiter: string; stripTabs: boolean; literal: boolean };
+
+/** `<<` or `<<-`, then the delimiter word, which may be quoted or escaped. */
+const HEREDOC = /^<<(-?)[ \t]*((?:'[^']*'|"[^"]*"|\\.|[^\s;&|<>()'"\\])+)/;
+
+/**
+ * Skip the bodies of the heredocs opened on the line that ended just before `start`, in order.
+ * Returns the index just past the last delimiter line, or `undefined` when a body never ends or an
+ * unquoted-delimiter body holds a substitution, which the shell would run.
+ */
+const skipHeredocs = (command: string, start: number, heredocs: Heredoc[]): number | undefined => {
+  let pos = start;
+  for (const heredoc of heredocs) {
+    const bodyStart = pos;
+    for (;;) {
+      if (pos > command.length) return undefined;
+      const newline = command.indexOf('\n', pos);
+      const lineEnd = newline === -1 ? command.length : newline;
+      const line = command.slice(pos, lineEnd);
+      if ((heredoc.stripTabs ? line.replace(/^\t+/, '') : line) === heredoc.delimiter) {
+        if (!heredoc.literal && /\$\(|`/.test(command.slice(bodyStart, pos))) return undefined;
+        pos = lineEnd + 1;
+        break;
+      }
+      pos = lineEnd + 1;
+    }
+  }
+  return pos;
+};
 
 export function shellSegments(command: string): string[][] | undefined {
   const segments: string[][] = [];
@@ -20,6 +50,7 @@ export function shellSegments(command: string): string[][] | undefined {
   let inDouble = false;
   let dropNext = false;
   let dangling = false;
+  const heredocs: Heredoc[] = [];
 
   const endWord = (): void => {
     if (word === undefined) return;
@@ -116,8 +147,20 @@ export function shellSegments(command: string): string[][] | undefined {
       close();
       continue;
     }
-    // A heredoc body is not shell syntax, and a lone apostrophe in it would pair with a later quote.
-    if (c === '<' && next === '<' && command[i + 2] !== '<') return undefined;
+    if (c === '<' && next === '<' && command[i + 2] !== '<') {
+      // A heredoc: its body starts after this line and is skipped there, never read as commands.
+      const match = HEREDOC.exec(command.slice(i));
+      if (match === null) return undefined;
+      if (word !== undefined && /^\d+$/.test(word)) word = undefined;
+      endWord();
+      heredocs.push({
+        delimiter: match[2].replace(/'([^']*)'|"([^"]*)"|\\(.)/g, (_all, a, b, e) => a ?? b ?? e),
+        stripTabs: match[1] === '-',
+        literal: /['"\\]/.test(match[2]),
+      });
+      i += match[0].length - 1;
+      continue;
+    }
     if (c === '<' || c === '>' || (c === '&' && next === '>')) {
       // A redirection: drop it, its fd digit, and its target word.
       if (word !== undefined && /^\d+$/.test(word)) word = undefined;
@@ -130,6 +173,12 @@ export function shellSegments(command: string): string[][] | undefined {
     }
     if (c === ';' || c === '&' || c === '|' || c === '\n') {
       endSegment();
+      if (c === '\n' && heredocs.length > 0) {
+        const end = skipHeredocs(command, i + 1, heredocs);
+        if (end === undefined) return undefined;
+        heredocs.length = 0;
+        i = end - 1;
+      }
       continue;
     }
     // A carriage return is a word character to bash, not a separator.
@@ -140,7 +189,7 @@ export function shellSegments(command: string): string[][] | undefined {
     word = (word ?? '') + c;
   }
 
-  if (inDouble || stack.length > 0) return undefined;
+  if (inDouble || stack.length > 0 || heredocs.length > 0) return undefined;
   endSegment();
   return dangling ? undefined : segments;
 }

@@ -302,7 +302,15 @@ const DEFAULT_BRANCH_PUSH =
   /\bgit\b(?:[^;&|\n]|\\\r?\n)*?\bpush\b(?:[^;&|\n]|\\\r?\n)*?(\s--(?:all|mirror)\b|[\s:+'"](?:refs\/heads\/)?(?:main|master)(?=['"\s;&|)]|\\\r?\n|$))/;
 
 /** Git's global options that take the next word as their value (`git -C <dir> push`). */
-const GIT_VALUE_OPTIONS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env']);
+const GIT_VALUE_OPTIONS = new Set([
+  '-C',
+  '-c',
+  '--git-dir',
+  '--work-tree',
+  '--namespace',
+  '--config-env',
+  '--attr-source',
+]);
 /** `git push` options that take the next word as their value. */
 const PUSH_VALUE_OPTIONS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec']);
 /** `git push` options that push every branch, the default one included. */
@@ -334,17 +342,30 @@ const pushesDefaultBranch = (words: string[], git: number): boolean => {
   return false;
 };
 
+/** A word that may name git: `git`, a path to it, or one the shell fills in (`$G`, `$(which git)`). */
+const namesGit = (word: string): boolean => word === 'git' || word.endsWith('/git') || word.includes('$');
+/** A word that reads as a command of its own: a wrapper's argument (`bash -c '…'`, `ssh host '…'`, `eval "…"`). */
+const READS_AS_COMMAND = /[\s;&|<>`]|\$\(/;
+/** How deep a wrapper's argument is read again: `bash -c "sh -c '…'"` is two. */
+const WRAPPER_DEPTH = 3;
+
 /**
  * The union, so the fence only ever widens (HIVE-407): the tokenised refspec check sees through quoting,
- * redirects and operators; the text match above keeps catching wrappers the tokeniser cannot see into
- * (`bash -c "…"`, `ssh host '…'`); and a command the tokeniser cannot parse asks if it mentions a push.
+ * redirects and operators; the text match above keeps catching what the tokeniser cannot follow; a word
+ * that reads as a command (a wrapper's argument) is checked again as one; and a top-level command the
+ * tokeniser cannot parse asks if it mentions a push. A wrapper's unparseable argument is left to the text
+ * match, since a quoted PR body reading "it's ready to push" is prose, not a push.
  */
-const pushesDefault = (command: string): boolean => {
+const pushesDefault = (command: string, depth = 0): boolean => {
   if (DEFAULT_BRANCH_PUSH.test(command)) return true;
   const segments = shellSegments(command);
-  if (segments === undefined) return /\bpush\b/.test(command);
+  if (segments === undefined) return depth === 0 && /\bpush\b/.test(command);
   return segments.some((words) =>
-    words.some((word, i) => (word === 'git' || word.endsWith('/git')) && pushesDefaultBranch(words, i)),
+    words.some(
+      (word, i) =>
+        (namesGit(word) && pushesDefaultBranch(words, i)) ||
+        (depth < WRAPPER_DEPTH && READS_AS_COMMAND.test(word) && pushesDefault(word, depth + 1)),
+    ),
   );
 };
 

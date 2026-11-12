@@ -898,6 +898,15 @@ describe('a push to the default branch: refused to every wide rule (HIVE-395)', 
     'git push origin feat/x # main',
     // A wrapper the tokeniser cannot see into is still caught by the text match.
     'bash -c "git push origin main"',
+    // A wrapper's argument is read as a command too, so the new shapes ask behind it.
+    "bash -c 'git push origin main>out.txt'",
+    "sh -c 'git push origin HEAD:heads/main'",
+    'eval "git push -o \'ci;skip\' origin main"',
+    "ssh host 'git push origin +refs/heads/*:refs/heads/*'",
+    // git named through the shell: the command word is dynamic.
+    'G=git; $G push origin main',
+    '$(which git) push origin HEAD:heads/main',
+    'git --attr-source HEAD push origin main>out.txt',
   ];
 
   it('is granted by no wide rule: bare Bash, the blanket, a git glob or the push glob', () => {
@@ -928,11 +937,14 @@ describe('a push to the default branch: refused to every wide rule (HIVE-395)', 
       'git push',
       'git push origin \\\n  feat/main',
       'git push -u origin \\\n  feat/x',
-  
       'git push -u origin feat/x',
       'git push origin HEAD',
       'git push origin feat/x 2>&1',
       'git push -o ci.skip origin feat/x',
+      // A heredoc body or a quoted message that mentions a push is prose, not a push.
+      "git commit -F - <<'EOF'\nHIVE-407: the push fence reads each refspec\nEOF",
+      "gh pr comment 5 --repo a/b --body-file - <<'EOF'\nFixed in the next push\nEOF",
+      'gh pr create --title x --body "it\'s ready to push"',
     ]) {
       expect(matches('Bash', 'Bash', { command }), command).toBe(true);
     }
