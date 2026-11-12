@@ -184,7 +184,10 @@ PR URL alone. Both stay on one line.
 The SHA is copied from the CLEAR line; carrying it is the check. `--repo` is
 **last** and stays last: the shipper's auto-merge grant pins the slug at the
 end of the line, because `gh` reads the last `--repo` it is given and a grant
-that allowed anything after it would allow another repository. Never
+that allowed anything after it would allow another repository. Run it as
+its own Bash call, with nothing before or after it: no `;`, `&&`, `|` and no
+confirm chained on. The grant matches the whole line, so a chained merge
+misses it and becomes an inbox card even with `autoMerge` on (PR #273). Never
 `--delete-branch`: from inside a worktree it tries to switch the checkout and
 fails half way. Step 4 owns teardown. Then confirm:
 

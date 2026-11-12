@@ -95,7 +95,9 @@ claim, both read through `merge-pr`, and the fixer's `clean` is history that
 never stands in for them. When a row reaches
 `merge`, run `hive:merge-pr` anyway. For a project the person marked "Merge
 PRs unattended" the app grants that one call for that one repository on your
-wake, and it goes through. For every other project the call stops at the
+wake, and it goes through, as long as it is its own Bash call with nothing
+before or after it, spelled as `merge-pr` spells it. Anything chained to it
+misses the grant and raises a card. For every other project the call stops at the
 fence and becomes an inbox card; the person decides on the card, and the
 answer wakes you with a one-shot grant. Do not `ledger_ask` first: the card is
 the ask. Do not reach the merge through `gh api`; that is the line.
