@@ -1085,6 +1085,8 @@ describe('the merge grant and a quoted subject (HIVE-409)', () => {
     ['an unquoted ; after the merge', 'gh pr merge 1 --squash --repo behiques/hivetty ; rm -rf ~'],
     ['&& after the merge', 'gh pr merge 1 --squash --repo behiques/hivetty && gh pr merge 2 --repo behiques/hivetty'],
     ['a quoted span then an unquoted ;', 'gh pr merge 1 --subject "x" ; rm -rf ~ --repo behiques/hivetty'],
+    ['an unquoted ; between two quoted spans', 'gh pr merge 1 --subject "x" ; rm -rf ~ ; echo "y" --repo behiques/hivetty'],
+    ['a carriage return outside the quotes', 'gh pr merge 1 --subject "x"\r--repo behiques/hivetty ; id'],
     ['a substitution in the subject', 'gh pr merge 1 --subject "$(id)" --repo behiques/hivetty'],
     ['a backtick in the subject', 'gh pr merge 1 --subject "`id`" --repo behiques/hivetty'],
     ['an escaped quote that would end the span', 'gh pr merge 1 --subject "a\\"; rm x; echo \\"" --repo behiques/hivetty'],
