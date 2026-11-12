@@ -376,9 +376,8 @@ describe('createDeliver', () => {
   });
 
   /**
-   * One nudge per idle window. The first write ends in `\r`, which starts a
-   * turn — so writing the rest of the backlog behind it would be writing
-   * mid-turn, the one thing this module must never do.
+   * One line per idle window. The line ends in `\r`, which starts a turn, so
+   * nothing may be written behind it; what was owed rides on that one line.
    */
   it('writes every owed entry on one line, with a receipt each (HIVE-408)', () => {
     /*

@@ -312,9 +312,9 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
     onEntry(entry) {
       /*
         A `closed` entry may release held asks (retro C). Their sessions flush
-        first, and a session flushed here has already taken the first thing it
-        was owed, this entry included, so the path below must not write into
-        it a second time in the same tick.
+        first, and a session flushed here has already taken its backlog on one
+        line (HIVE-408), this entry included, so the path below must not write
+        into it a second time in the same tick.
       */
       const flushed = releaseHeld(entry);
 
