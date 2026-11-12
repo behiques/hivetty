@@ -237,6 +237,21 @@ describe('createDeliver', () => {
     expect(write).not.toHaveBeenCalled();
   });
 
+  it('delivers the backlog before a newer entry (HIVE-408)', () => {
+    idle.delete('sess-a');
+    const first = ask('sess-a', 'older');
+    idle.add('sess-a');
+    write.mockClear();
+
+    const second = ask('sess-a', 'newer');
+
+    const line = lastWrite();
+    const firstRef = first.ok ? (first.ref ?? '') : '';
+    const secondRef = second.ok ? (second.ref ?? '') : '';
+    expect(line.indexOf(firstRef)).toBeGreaterThanOrEqual(0);
+    expect(line.indexOf(firstRef)).toBeLessThan(line.indexOf(secondRef) === -1 ? Infinity : line.indexOf(secondRef));
+  });
+
   it('delivers failed and done addressed to a session (HIVE-408)', () => {
     const asked = ledger.append({ from: 'sess-a', to: 'builder', kind: 'ask', body: 'build it' });
     const thread = asked.ok ? asked.id : '';

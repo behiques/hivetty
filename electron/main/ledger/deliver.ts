@@ -316,17 +316,16 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
       if (to === undefined) return;
       // The overmind's copy is an inbox card (HIVE-118), not a terminal line.
       if (to === OVERMIND) return;
-      // An agent is woken by the scheduler (HIVE-120), not written to — it has
-      // no terminal to nudge. An unknown party has nowhere to write to either.
-      // A live session mid-turn is caught here too, and flushed by `onIdle`.
-      // A focused session whose box holds a draft is held here too, and
-      // flushed by onPrompt when the box clears (HIVE-135).
       if (flushed.has(to)) return;
-      if (!isLive(to) || !isIdle(to) || !clear(to)) return;
-      // A held ask waits for its PR's `closed` entry (retro C).
-      if (afterTarget(entry) !== undefined && isHeld(entry, ledger.read({}).entries)) return;
-
-      deliverOne(to, entry);
+      /*
+        The backlog goes first, in ledger order (HIVE-408): `flush` reads every
+        owed entry, this one included. It also holds every gate this path used
+        to check itself: an agent or unknown party is not live (the scheduler
+        wakes agents, HIVE-120), a session mid-turn is not idle and is flushed by
+        `onIdle`, a draft is not clear and is flushed by `onPrompt` (HIVE-135),
+        and `undelivered` drops a held ask until its PR's `closed` (retro C).
+      */
+      flush(to);
     },
 
     onIdle(entityId) {
