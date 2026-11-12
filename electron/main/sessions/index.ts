@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 
 import type { AgentsDirectory } from '@shared/agent-contract';
 import type { ChangedFilesSnapshot } from '@shared/changed-files-contract';
+import { cliTakesEffort } from '@shared/cli-contract';
 import type { ProjectAutoMergeRequest, ProjectsDirectory } from '@shared/config-contract';
 import {
   AUTH_ENV_KEYS,
@@ -80,6 +81,7 @@ import { EXIT_COMMAND } from './exit-command';
 import { createBranchReader, resolveGit, type BranchReaderOptions } from './git';
 import { archiveStaleBriefs } from './goal-briefs';
 import type { SessionHistory } from './history';
+import { livePick } from './live-pick';
 import { meterExportPath, sweepMeterExports } from './meter-exports';
 import { createRecordAborts } from './record-aborts';
 import { createRecordMeters } from './record-meters';
@@ -949,9 +951,29 @@ export function createSessions(options: SessionsOptions): Sessions {
     adapterOf,
   });
 
+  /**
+   * Meters on their way to the renderer. The model and effort in them are what the session runs now, after any
+   * `/model` or `/effort` inside it, so the history keeps them: a resume launches with them, not the spawn's pick.
+   * Recorded only when they differ from what the history holds, since every `record` schedules a whole-file rewrite
+   * and the meters repeat the same pick on every status-line tick.
+   */
+  const sendMetrics = (event: SessionMetricsEvent): void => {
+    const harness = harnesses.harnessOf(event.entityId);
+    const pick = harness === undefined ? {} : livePick(harness, event.metrics);
+    if (history !== undefined && (pick.model !== undefined || pick.effort !== undefined)) {
+      const held = history.all().find((record) => record.id === event.entityId);
+      const changed =
+        (pick.model !== undefined && pick.model !== held?.model) ||
+        (pick.effort !== undefined && pick.effort !== held?.effort);
+      if (changed) history.record(event.entityId, pick);
+    }
+    send(CH.sessionMetrics, event);
+  };
+
   /** Meters for a CLI with no status line, from its own record (HIVE-334). */
   const recordMeters = createRecordMeters({
-    send,
+    send: (channel, payload) =>
+      channel === CH.sessionMetrics ? sendMetrics(payload as SessionMetricsEvent) : send(channel, payload),
     transcriptOf: (entityId) => transcripts.get(entityId),
     adapterOf,
     exportPathOf: (entityId) => {
@@ -1421,11 +1443,7 @@ export function createSessions(options: SessionsOptions): Sessions {
      * one place that would benefit from the comparison already makes it, with
      * the previous value in hand rather than a copy kept here.
      */
-    onMetrics: (entityId, metrics) =>
-      send(CH.sessionMetrics, {
-        entityId,
-        metrics,
-      } satisfies SessionMetricsEvent),
+    onMetrics: (entityId, metrics) => sendMetrics({ entityId, metrics }),
   });
 
   /**
@@ -2386,7 +2404,18 @@ export function createSessions(options: SessionsOptions): Sessions {
   /** Refuse with a message the user can act on, never a generic failure. */
   function spawn(request: OpenRequest): void {
     refuseWhileLapsed();
-    const harness = request.harness ?? 'claude-code';
+    /*
+      A resume comes back on what the session last ran: its saved CLI when the request names none, and the model and
+      effort its meters last reported over the spawn's pick the renderer still holds. Re-checked by `livePick`, because
+      the history is a file on disk and the launchers type these unquoted.
+    */
+    const saved = request.resume === true ? history?.all().find((record) => record.id === request.entityId) : undefined;
+    const harness = request.harness ?? saved?.harness ?? 'claude-code';
+    const live =
+      saved?.harness === harness ? livePick(harness, { model: saved.model, effort: saved.effort }) : {};
+    const model = live.model ?? request.model;
+    const effort =
+      live.model !== undefined && !cliTakesEffort(harness, live.model) ? undefined : (live.effort ?? request.effort);
     refuseLocked(harness);
     const snapshot = config();
 
@@ -2662,8 +2691,8 @@ export function createSessions(options: SessionsOptions): Sessions {
     const plan = adapter.launch({
       // Claude's `claudeCommand`, the others' `clis.<id>.command`, else the bare name (HIVE-376).
       command: cliCommand(harness, snapshot.clis, runtime.claudeCommand),
-      ...(request.model === undefined ? {} : { model: request.model }),
-      ...(request.effort === undefined ? {} : { effort: request.effort }),
+      ...(model === undefined ? {} : { model }),
+      ...(effort === undefined ? {} : { effort }),
       /**
        * **Nothing is named here any more, and that is the feature** (HIVE-108).
        *
@@ -2892,8 +2921,8 @@ export function createSessions(options: SessionsOptions): Sessions {
         */
         sessionUuid,
         ...(request.name === undefined ? {} : { name: request.name }),
-        ...(request.model === undefined ? {} : { model: request.model }),
-        ...(request.effort === undefined ? {} : { effort: request.effort }),
+        ...(model === undefined ? {} : { model }),
+        ...(effort === undefined ? {} : { effort }),
         harness,
       },
       { resume },

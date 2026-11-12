@@ -19,6 +19,7 @@ import type {
 import { resolveClis } from '../../../../electron/shared/cli-contract';
 import type { HarnessId, StatusSignal } from '../../../../electron/shared/harness-contract';
 import { CH } from '../../../../electron/shared/ipc-contract';
+import type { SessionMetrics } from '../../../../electron/shared/metrics-contract';
 import type { SessionRecord } from '../../../../electron/shared/session-history-contract';
 
 import { shellQuote } from '../../../../electron/main/container/shell-quote';
@@ -4033,6 +4034,7 @@ describe('codex sessions (HIVE-279)', () => {
   const codexOpen = { ...OPEN, harness: 'codex' as const, model: 'gpt-6-luna' };
 
   let onEvent: ((event: HookStatusEvent) => void) | undefined;
+  let onMetrics: ((entityId: string, metrics: SessionMetrics) => void) | undefined;
 
   const build = (
     written: Written[],
@@ -4056,8 +4058,12 @@ describe('codex sessions (HIVE-279)', () => {
       hooks: {
         settingsPathFor: () => undefined,
         envFor: () => ({}),
-        start: (opts: { onEvent: (event: HookStatusEvent) => void }) => {
+        start: (opts: {
+          onEvent: (event: HookStatusEvent) => void;
+          onMetrics: (entityId: string, metrics: SessionMetrics) => void;
+        }) => {
           onEvent = opts.onEvent;
+          onMetrics = opts.onMetrics;
           return Promise.resolve();
         },
         stop: () => Promise.resolve(),
@@ -4108,6 +4114,7 @@ describe('codex sessions (HIVE-279)', () => {
     instance?.dispose();
     instance = undefined;
     onEvent = undefined;
+    onMetrics = undefined;
   });
 
   it('types codex, not claude, into the login shell', () => {
@@ -4211,6 +4218,17 @@ describe('codex sessions (HIVE-279)', () => {
       );
     });
 
+    it('records the model and effort the session is running now, for a resume', async () => {
+      const written: Written[] = [];
+      instance = build(written);
+      instance.open(codexOpen);
+      writeFileSync(rollout, turnContext('gpt-6.1-sol', 'medium') + turnContext('gpt-6-astra', 'xhigh'));
+      hook(CODEX_ID);
+      await vi.waitFor(() =>
+        expect(patchesFor(written, 'hero-refresh')).toContainEqual({ model: 'gpt-6-astra', effort: 'xhigh' }),
+      );
+    });
+
     it('reads no record for a claude session’s hooks', async () => {
       instance = build([]);
       instance.open(OPEN);
@@ -4236,6 +4254,93 @@ describe('codex sessions (HIVE-279)', () => {
       // A reader kept from the last generation would start at its old offset and find nothing new.
       await vi.waitFor(() => expect(metrics()).toHaveLength(2));
       expect(metrics().at(-1)).toMatchObject({ metrics: { model: 'gpt-6.1-sol', effort: 'medium' } });
+    });
+  });
+
+  /** A `/model` or `/effort` in the session is what a resume comes back on, not the spawn's pick. */
+  describe('resuming on what the session last ran', () => {
+    const PRIOR = '11111111-1111-4111-8111-111111111111';
+    const endFirstRun = () => {
+      bootTo(mintedFor('hero-refresh'));
+      emitExit({ sessionId: mintedFor('hero-refresh'), exitCode: 0 });
+      vi.advanceTimersByTime(8);
+      vi.mocked(supervisor.write).mockClear();
+    };
+
+    it('relaunches claude on the model and effort its status line last reported', () => {
+      const written: Written[] = [];
+      instance = build(written, { resumable: { 'hero-refresh': PRIOR }, all: 'recorded' });
+      instance.open({ ...OPEN, model: 'opus', effort: 'high' });
+      onMetrics!('hero-refresh', { model: 'Sonnet 5.5', effort: 'low' });
+      expect(patchesFor(written, 'hero-refresh')).toContainEqual({ model: 'sonnet', effort: 'low' });
+      endFirstRun();
+
+      // The renderer still holds the spawn's pick and sends it.
+      instance.open({ ...OPEN, harness: 'claude-code', model: 'opus', effort: 'high', resume: true });
+      bootTo(mintedFor('hero-refresh'));
+
+      expect(typed().some((line) => line.includes(`claude --model sonnet --effort low --resume ${PRIOR}`))).toBe(true);
+      const begun = patchesFor(written, 'hero-refresh').filter((patch) => patch.resume === true);
+      expect(begun.at(-1)).toMatchObject({ model: 'sonnet', effort: 'low' });
+    });
+
+    it('records nothing when the meters repeat the pick the history already holds', () => {
+      const written: Written[] = [];
+      instance = build(written, { all: 'recorded' });
+      instance.open({ ...OPEN, model: 'opus', effort: 'high' });
+      const picks = () => patchesFor(written, 'hero-refresh').filter((patch) => Object.keys(patch).length === 2);
+
+      onMetrics!('hero-refresh', { model: 'Sonnet 5.5', effort: 'low' });
+      onMetrics!('hero-refresh', { model: 'Sonnet 5.5', effort: 'low', contextPct: 40 });
+      onMetrics!('hero-refresh', { model: 'Sonnet 5.5', effort: 'low', fiveHourPct: 12 });
+      expect(picks()).toEqual([{ model: 'sonnet', effort: 'low' }]);
+
+      onMetrics!('hero-refresh', { model: 'Sonnet 5.5', effort: 'max' });
+      expect(picks()).toEqual([
+        { model: 'sonnet', effort: 'low' },
+        { model: 'sonnet', effort: 'max' },
+      ]);
+    });
+
+    it('drops the effort when the live model takes none', () => {
+      instance = build([], { resumable: { 'hero-refresh': PRIOR }, all: 'recorded' });
+      instance.open({ ...OPEN, model: 'opus', effort: 'high' });
+      onMetrics!('hero-refresh', { model: 'Haiku 5.5' });
+      endFirstRun();
+
+      instance.open({ ...OPEN, model: 'opus', effort: 'high', resume: true });
+      bootTo(mintedFor('hero-refresh'));
+
+      expect(typed().some((line) => line.includes(`claude --model haiku --resume ${PRIOR}`))).toBe(true);
+    });
+
+    it('keeps the saved pick when the status line reports something the CLI refuses', () => {
+      instance = build([], { resumable: { 'hero-refresh': PRIOR }, all: 'recorded' });
+      instance.open({ ...OPEN, model: 'opus', effort: 'high' });
+      onMetrics!('hero-refresh', { model: 'Mystery 9', effort: 'xhigh' });
+      endFirstRun();
+
+      instance.open({ ...OPEN, resume: true });
+      bootTo(mintedFor('hero-refresh'));
+
+      expect(typed().some((line) => line.includes(`claude --model opus --effort high --resume ${PRIOR}`))).toBe(true);
+    });
+
+    it('resumes the saved CLI and its live model when the request names neither', () => {
+      const written: Written[] = [];
+      instance = build(written, { resumable: { 'hero-refresh': CODEX_ID }, all: 'recorded' });
+      instance.open(codexOpen);
+      // What the rollout meters record after a `/model` in Codex.
+      written.push({ id: 'hero-refresh', patch: { model: 'gpt-6-astra', effort: 'xhigh' } });
+      endFirstRun();
+
+      instance.open({ ...OPEN, resume: true });
+      bootTo(mintedFor('hero-refresh'));
+
+      expect(
+        typed().some((line) => new RegExp(`(^|; )codex resume ${CODEX_ID} -m gpt-6-astra .*xhigh`).test(line)),
+      ).toBe(true);
+      expect(typed().some((line) => line.includes('claude'))).toBe(false);
     });
   });
 
