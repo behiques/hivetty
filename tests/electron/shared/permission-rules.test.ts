@@ -433,6 +433,27 @@ describe('rungsFor', () => {
   });
 });
 
+describe('the merge ladder (HIVE-409)', () => {
+  it('offers once and the project switch, and no rule', () => {
+    const rungs = rungsFor('Bash', { command: 'gh pr merge 229 --squash --repo behiques/hivetty' });
+    expect(rungs.map((r) => r.id)).toEqual(['allow-once', 'allow-project']);
+    expect(rungs[1]).toEqual({
+      id: 'allow-project',
+      label: 'merge unattended for this project',
+      caption: 'turns on auto-merge for behiques/hivetty and merges this one.',
+    });
+    expect(defaultRungFor(rungs)).toBe('allow-once');
+  });
+
+  it('a merge with no --repo offers once only', () => {
+    expect(rungsFor('Bash', { command: 'gh pr merge 229 --squash' }).map((r) => r.id)).toEqual(['allow-once']);
+  });
+
+  it('a non-merge ladder is unchanged', () => {
+    expect(rungsFor('Bash', { command: 'git status' }).map((r) => r.id)).not.toContain('allow-project');
+  });
+});
+
 describe('defaultRungFor', () => {
   it('prefers the family rung so one click settles the question', () => {
     expect(defaultRungFor(rungsFor('Bash', { command: 'git push' }))).toBe('allow-family');
@@ -848,8 +869,13 @@ describe('a PR merge: the consent checkpoint survives a wide Bash grant', () => 
     }
   });
 
-  it('offers only once on the card, since no standing rung would cover it', () => {
-    expect(rungsFor('Bash', { command: merges[0] }).map((rung) => rung.id)).toEqual(['allow-once']);
+  it('offers no standing rung on the card, since none would cover it', () => {
+    const rungs = rungsFor('Bash', { command: merges[0] });
+    // HIVE-409: the project switch may sit beside `once`; neither writes a rule.
+    expect(rungs[0]?.id).toBe('allow-once');
+    expect(rungs.map((rung) => rung.id)).not.toContain('allow-family');
+    expect(rungs.map((rung) => rung.id)).not.toContain('allow-tool');
+    expect(rungs.every((rung) => rung.rule === undefined)).toBe(true);
   });
 });
 
