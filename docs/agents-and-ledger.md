@@ -2069,6 +2069,44 @@ Its corollary: `defaultRungFor` preselecting the family rung is an ordinary
 product decision again rather than a security one — both the caption and the
 preselection are now main's.
 
+### A card's life (HIVE-409)
+
+**Who hears about it.** When a run stops on a card, `permissions.ts` posts a
+note addressed to the party the run works for, so `deliver.ts` nudges that
+session or the scheduler wakes that agent. On a thread lane, that party is
+whoever sent the ask that opened the job. On a repo lane
+(`repo:<owner>/<name>`), it is whoever sent the newest ask to that agent whose
+`meta.repo` is the slug and whose `meta.pr` is a whole number. A standing lane
+gets no note, and neither does an agent that asked itself. The note on the
+answer goes to the same party.
+
+**Reminders.** `ledger/reminders.ts` shows the oldest open card's toast again
+(`hub.remind`) when the app regains focus, and after every 15 active minutes. A
+minute is active while the Mac has been idle for less than two minutes
+(`powerMonitor.getSystemIdleTime`), so cards don't pile up reminders overnight.
+The stage pill shows `N cards · oldest 47m` beside the count while a card is
+open.
+
+**Moot.** The scheduler's sweep answers a card `moot` in two cases: the job
+thread its run worked for has closed, or its merge command names a PR that has
+since merged. The merge check is throttled to once every five minutes per card,
+and it runs outside the synchronous sweep. A `moot` answer is an ordinary
+answer, so the thread is closed and `Ledger.append` refuses any later grant.
+`onAnswer` grants nothing on it, and the notifier dismisses the card. A PR
+closed without merging is not detected: the PR sweep holds only open and
+recently merged PRs (a `shortcut:` in `scheduler.ts`). A card open for 30
+minutes preselects `once`, the narrowest yes, but a rung the person already
+picked stays picked.
+
+**The merge card's project switch.** A merge that names its repository with
+`--repo` offers a second rung, *merge unattended for this project*. Choosing it
+turns `autoMerge` on for the configured project that holds the repository, and
+grants this one merge once. It writes nothing to `AGENT.md`. If no configured
+project holds the repository, the choice is refused (`grantFailed`) and nothing
+merges. `project_auto_merge` also takes `projects`, a list of 1 to 20 projects
+switched in one call on one card. Nothing in this section allows or denies a
+card because of time: the reminders are the whole escalation.
+
 ### The body is standing work, not a self-description
 
 **The markdown body below the frontmatter is the agent's job, and it is carried
