@@ -6,10 +6,11 @@
  * A command substitution, a process substitution and a subshell become commands of their own, and the
  * word a substitution fills in keeps a `$`, so a fence can see it is dynamic. Redirections and comments
  * are dropped. Returns `undefined` when the command cannot be parsed; a caller fails closed on that.
- * shortcut: a POSIX subset (no `case`, no arithmetic, a heredoc body reads as commands); good enough to
+ * A heredoc, ANSI-C quoting (`$'…'`) and a redirection with no target cannot be parsed.
+ * shortcut: a POSIX subset (no `case`, no arithmetic, no heredoc); good enough to
  * find a command's words for a fence, never to run one. Grow it here, behind its table, if a fence needs more.
  */
-type Frame = { words: string[]; word: string | undefined; quoted: boolean; opener: string };
+type Frame = { words: string[]; word: string | undefined; quoted: boolean; dropNext: boolean; opener: string };
 
 export function shellSegments(command: string): string[][] | undefined {
   const segments: string[][] = [];
@@ -18,6 +19,7 @@ export function shellSegments(command: string): string[][] | undefined {
   let word: string | undefined;
   let inDouble = false;
   let dropNext = false;
+  let dangling = false;
 
   const endWord = (): void => {
     if (word === undefined) return;
@@ -27,20 +29,25 @@ export function shellSegments(command: string): string[][] | undefined {
   };
   const endSegment = (): void => {
     endWord();
+    // A redirection whose target never came: a syntax error to bash, unknown to a fence.
+    if (dropNext) dangling = true;
     if (words.length > 0) segments.push(words);
     words = [];
   };
   const open = (opener: string): void => {
-    stack.push({ words, word, quoted: inDouble, opener });
+    // A redirection pending here targets the whole substitution, never the first word inside it.
+    stack.push({ words, word, quoted: inDouble, dropNext, opener });
     words = [];
     word = undefined;
     inDouble = false;
+    dropNext = false;
   };
   const close = (): void => {
     endSegment();
     const frame = stack.pop()!;
     words = frame.words;
     inDouble = frame.quoted;
+    dropNext = frame.dropNext;
     // A substitution's value is not known here; a plain subshell is just a nested command.
     word = frame.opener === '(' ? frame.word : (frame.word ?? '') + '$';
   };
@@ -74,6 +81,8 @@ export function shellSegments(command: string): string[][] | undefined {
       else word = (word ?? '') + c;
       continue;
     }
+    // ANSI-C quoting has its own escapes (`$'it\'s'`): too far to follow.
+    if (c === '$' && next === "'") return undefined;
     if (c === '"') {
       inDouble = true;
       word ??= '';
@@ -107,6 +116,8 @@ export function shellSegments(command: string): string[][] | undefined {
       close();
       continue;
     }
+    // A heredoc body is not shell syntax, and a lone apostrophe in it would pair with a later quote.
+    if (c === '<' && next === '<' && command[i + 2] !== '<') return undefined;
     if (c === '<' || c === '>' || (c === '&' && next === '>')) {
       // A redirection: drop it, its fd digit, and its target word.
       if (word !== undefined && /^\d+$/.test(word)) word = undefined;
@@ -121,7 +132,8 @@ export function shellSegments(command: string): string[][] | undefined {
       endSegment();
       continue;
     }
-    if (c === ' ' || c === '\t' || c === '\r') {
+    // A carriage return is a word character to bash, not a separator.
+    if (c === ' ' || c === '\t') {
       endWord();
       continue;
     }
@@ -130,5 +142,5 @@ export function shellSegments(command: string): string[][] | undefined {
 
   if (inDouble || stack.length > 0) return undefined;
   endSegment();
-  return segments;
+  return dangling ? undefined : segments;
 }

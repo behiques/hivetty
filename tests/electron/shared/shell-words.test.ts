@@ -25,7 +25,13 @@ describe('shellSegments (HIVE-407)', () => {
     ['the outer command resumes after a substitution', 'git push $(echo origin) main', [['echo', 'origin'], ['git', 'push', '$', 'main']]],
     ['a process substitution is its own command', 'cat <(git push origin main)', [['git', 'push', 'origin', 'main'], ['cat', '$']]],
     ['a subshell is its own commands', '(cd x; git push origin main)', [['cd', 'x'], ['git', 'push', 'origin', 'main']]],
-    ['a heredoc body reads as commands', 'cat <<EOF\ngit push origin main\nEOF', [['cat'], ['git', 'push', 'origin', 'main'], ['EOF']]],
+    // A redirect's target is the substitution as a whole, never the first word inside it.
+    ['a here-string target that is a substitution', 'cat <<< $(git push origin main>/dev/null)', [['git', 'push', 'origin', 'main'], ['cat']]],
+    ['a redirect target that is a quoted substitution', 'cat > "$(git push origin main>/dev/null)"', [['git', 'push', 'origin', 'main'], ['cat']]],
+    ['a redirect target that is a backtick', 'echo x > `git push origin main>/dev/null`', [['git', 'push', 'origin', 'main'], ['echo', 'x']]],
+    ['a redirect from a process substitution', 'cat < <(git push origin main>/dev/null)', [['git', 'push', 'origin', 'main'], ['cat']]],
+    ['a redirect target with a substitution inside it', 'cat > x$(git push origin main)', [['git', 'push', 'origin', 'main'], ['cat']]],
+    ['a carriage return is part of a word, as in bash', 'true\r# ; git push origin main>/dev/null', [['true\r#'], ['git', 'push', 'origin', 'main']]],
   ];
 
   it.each(cases)('%s', (_name, command, words) => {
@@ -41,6 +47,13 @@ describe('shellSegments (HIVE-407)', () => {
     ['a ) with nothing open', 'echo )'],
     ['a ) inside a backtick', 'echo `a)`'],
     ['a backtick nested by escaping', 'echo `a \\`b\\` c`'],
+    // A heredoc body is not shell syntax: a lone apostrophe in it would pair with a quote lines later.
+    ['a heredoc', 'cat <<EOF\ngit push origin main\nEOF'],
+    ['a heredoc whose body holds an apostrophe', "cat <<EOF\nit's\nEOF\ngit push origin main>/dev/null # '"],
+    ['a quoted-delimiter heredoc', "git commit -F - <<'EOF'\nmsg\nEOF"],
+    ['ANSI-C quoting', "echo $'it\\'s' && git push origin main>/dev/null # '"],
+    ['a redirect with no target before an operator', 'echo >; git push origin main'],
+    ['a redirect with no target at the end', 'git push origin main >'],
   ])('cannot parse %s', (_name, command) => {
     expect(shellSegments(command)).toBeUndefined();
   });
