@@ -1,5 +1,7 @@
 import { parseList, patchFrontmatter, readFrontmatter } from '@shared/agent-contract';
 
+import { hashPart } from './merge';
+
 /**
  * Scoped rules a bare tool never covers: `matches` lets only a rule naming the merge allow one, so a bare
  * `Bash` beside `Bash(gh pr merge …)` does not make the scoped one redundant (HIVE-409).
@@ -25,7 +27,20 @@ const UNWRITABLE = /[\n\r[\]#]|^['"\s]|['"\s]$/;
  * Its own file, not `merge.ts`: that one runs under plain Node in `scripts/shipped-history.ts` and takes
  * no path aliases. Pure; returns `current` unchanged when there is nothing to do, or nothing safe to do.
  */
-export function liftGrants(current: string, shipped: string): string {
+/**
+ * How much of `mine` is the shipped list the base recorded (HIVE-418): the longest prefix whose `tools:`
+ * line hashes to the base's `tools` part. A card always appended to the end of the list, so what follows
+ * that prefix is what cards granted. `undefined` when there is no base or no prefix matches.
+ */
+const shippedPrefix = (mine: readonly string[], baseTools: string | undefined): number | undefined => {
+  if (baseTools === undefined) return undefined;
+  for (let k = mine.length; k >= 0; k--) {
+    if (hashPart(`tools: [${mine.slice(0, k).join(', ')}]`) === baseTools) return k;
+  }
+  return undefined;
+};
+
+export function liftGrants(current: string, shipped: string, baseTools?: string): string {
   const mineFields = readFrontmatter(current)?.fields;
   const shipFields = readFrontmatter(shipped)?.fields;
   if (mineFields === undefined || shipFields === undefined || mineFields.has('grants')) return current;
@@ -39,8 +54,19 @@ export function liftGrants(current: string, shipped: string): string {
   if (mine === null || ship === null) return current;
   if (mine.length === ship.length && mine.every((rule, i) => rule === ship[i])) return current;
 
-  const bare = new Set([...ship, ...mine].filter((rule) => !rule.includes('(')));
-  const extra = mine.filter((rule) => {
+  /*
+    HIVE-418. An older shipped list is not a card's grant: without this, the entries a release removed
+    came back as grants on an agent whose body was edited. The whole list matching the base is that
+    list untouched, and `mergeParts` updates it as it updates any part; a shorter match leaves only
+    what followed it to lift. No match (no base, a hand-edited list) lifts everything beyond the
+    shipped list, as before.
+  */
+  const prefix = shippedPrefix(mine, baseTools);
+  if (prefix === mine.length) return current;
+  const granted = prefix === undefined ? mine : mine.slice(prefix);
+
+  const bare = new Set([...ship, ...granted].filter((rule) => !rule.includes('(')));
+  const extra = granted.filter((rule) => {
     if (ship.includes(rule)) return false;
     const open = rule.indexOf('(');
     return open === -1 || NAMES_THE_MERGE.test(rule) || !bare.has(rule.slice(0, open));

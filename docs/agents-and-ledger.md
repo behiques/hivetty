@@ -1574,6 +1574,13 @@ Rules naming the merge always move, since no bare rule allows a merge. What a
 wake allows can only grow; a shipped tool someone removed by hand comes back,
 once. Writing `grants:` is what makes the lift run once.
 
+The lift reads the file's base first (HIVE-418): the manifest's recorded `tools` hash, or the history's
+legacy base. A card always appended to the end of `tools:`, so the longest prefix of the installed list
+that hashes to the base is the older shipped list. If the whole list matches, nothing is lifted and
+`mergeParts` updates `tools:` like any other part. If a shorter prefix matches, only what follows it
+moves to `grants:`. Either way, an entry a release removed never comes back as a grant. With no base,
+or no prefix that matches, the lift works as described above.
+
 The Mechanism column is Claude Code's (the adapter's `headless.ts`); every CLI's is in [harness-architecture.md › Headless runs](harness-architecture.md#headless-runs-phase-2).
 
 `mcp` decides whether a system's tools exist in the process at all, and on whose

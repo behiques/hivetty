@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { parseList, readFrontmatter } from '../../../../electron/shared/agent-contract';
 import { matches } from '../../../../electron/shared/permission-rules';
 import { liftGrants } from '../../../../electron/main/seed/lift-grants';
+import { hashPart } from '../../../../electron/main/seed/merge';
 
 /** What a wake holds after the lift, folded as `definition.ts` folds it: tools: then grants:, once. */
 const held = (text: string): string[] => {
@@ -110,5 +111,42 @@ describe('liftGrants (HIVE-409)', () => {
     const out = liftGrants(agent('tools: [Read, Bash(git *), Edit, WebFetch(domain:x.com)]'), agent('tools: [Read]'));
     expect(out).toContain('tools: [Read]\n');
     expect(out).toContain('grants: [Bash(git *), Edit, WebFetch(domain:x.com)]');
+  });
+});
+
+describe('liftGrants against the base (HIVE-418)', () => {
+  const agent = (lines: string) => `---\nname: shipper\n${lines}\n---\nBody\n`;
+  /** The base's `tools` hash, as the manifest records it for a shipped `tools:` line. */
+  const baseOf = (line: string): string => hashPart(line);
+  const OLD = 'tools: [Read, Write, Skill, Bash, mcp__hive__jira_comment]';
+  const NEW = agent('tools: [Read, Write, Skill, Bash]');
+
+  it('leaves an untouched older shipped list to the merge: nothing lifted', () => {
+    const current = agent(OLD);
+    expect(liftGrants(current, NEW, baseOf(OLD))).toBe(current);
+  });
+
+  it('lifts only what a card appended after the older shipped list', () => {
+    const out = liftGrants(agent('tools: [Read, Write, Skill, Bash, mcp__hive__jira_comment, Edit, WebFetch]'), NEW, baseOf(OLD));
+    expect(out).toContain('tools: [Read, Write, Skill, Bash]\n');
+    expect(out).toContain('grants: [Edit, WebFetch]');
+    expect(held(out)).not.toContain('mcp__hive__jira_comment');
+  });
+
+  it('a card grant the new release ships is not kept as a grant', () => {
+    const out = liftGrants(agent(`${OLD.slice(0, -1)}, Edit]`), agent('tools: [Read, Edit, Write, Skill, Bash]'), baseOf(OLD));
+    expect(out).toContain('tools: [Read, Edit, Write, Skill, Bash]\n');
+    expect(out).toContain('grants: []');
+  });
+
+  it('with no prefix matching the base, lifts as before', () => {
+    const out = liftGrants(agent('tools: [Write, Read, Edit]'), agent('tools: [Read, Write]'), baseOf(OLD));
+    expect(out).toContain('tools: [Read, Write]\n');
+    expect(out).toContain('grants: [Edit]');
+  });
+
+  it('with no base, lifts as before', () => {
+    const out = liftGrants(agent(`${OLD.slice(0, -1)}, Edit]`), NEW, undefined);
+    expect(out).toContain('grants: [mcp__hive__jira_comment, Edit]');
   });
 });

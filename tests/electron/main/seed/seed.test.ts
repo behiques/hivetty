@@ -197,6 +197,44 @@ describe('seedShipped', () => {
     expect(parsed.def.tools).toEqual(['Read', 'Bash', 'Grep', 'Edit']);
   });
 
+  describe('an older shipped tools: is not a card grant (HIVE-418)', () => {
+    const rel = 'agents/shipper/AGENT.md';
+    const v1 = '---\nname: shipper\ntools: [Read, Write, Skill, Bash, mcp__hive__jira_comment]\n---\nPrompt v1.\n';
+    const v2 = '---\nname: shipper\ntools: [Read, Write, Skill, Bash]\n---\nPrompt v2.\n';
+
+    it('an edited body with an untouched older tools: takes the new tools:, the removed entry gone', async () => {
+      await ship(rel, v1);
+      await seed();
+      await writeFile(join(target, rel), v1.replace('Prompt v1.', 'Prompt v1, my notes.'), 'utf8');
+      await ship(rel, v2);
+
+      await seed();
+
+      const text = await onDisk(rel);
+      expect(text).toContain('tools: [Read, Write, Skill, Bash]\n');
+      expect(text).not.toContain('mcp__hive__jira_comment');
+      expect(text).toContain('Prompt v1, my notes.');
+    });
+
+    it('lifts only what a card appended to the older tools:', async () => {
+      await ship(rel, v1);
+      await seed();
+      await writeFile(
+        join(target, rel),
+        v1.replace('mcp__hive__jira_comment]', 'mcp__hive__jira_comment, Edit]').replace('Prompt v1.', 'Prompt v1, my notes.'),
+        'utf8',
+      );
+      await ship(rel, v2);
+
+      await seed();
+
+      const text = await onDisk(rel);
+      expect(text).toContain('tools: [Read, Write, Skill, Bash]\n');
+      expect(text).toContain('grants: [Edit]');
+      expect(text).not.toContain('mcp__hive__jira_comment');
+    });
+  });
+
   it('never leaves an older app a whole-file hash that would overwrite a merged file', async () => {
     const v1 = '---\nname: builder\nmodel: opus\n---\nPrompt v1.\n';
     await ship('agents/builder/AGENT.md', v1);
