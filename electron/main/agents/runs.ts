@@ -3,6 +3,7 @@ import {
   AGENT_STALL_GRACE_MS,
   STANDING_LANE,
   dayKey,
+  runCost,
   runReservation,
   type LiveRunSummary,
   type QueueableRefusal,
@@ -698,6 +699,24 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       ]);
     }
 
+    // The lane before this close: its basis is what a resumed run is charged above (HIVE-408).
+    const laneBefore = deps.state.lane(name, info.lane);
+    /*
+      Upgrade seed: a lane closed before `costBasis` existed recorded cumulative figures, so the
+      last run of the same conversation is the basis. Without it the first close after the upgrade
+      would charge a whole conversation once.
+    */
+    const basis =
+      laneBefore.costBasis ??
+      (() => {
+        const last = [...deps.state.read(name).runs]
+          .reverse()
+          .find((run) => run.sessionUuid === sessionUuid && run.costUsd !== undefined);
+        return last === undefined || sessionUuid === undefined ? undefined : { uuid: sessionUuid, usd: last.costUsd ?? 0 };
+      })();
+    const charged =
+      end?.costUsd === undefined || info.kind !== 'standing' ? end?.costUsd : runCost(end.costUsd, sessionUuid, basis);
+
     deps.state.recordRun(name, {
       run: info.run,
       kind: info.kind,
@@ -705,7 +724,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       startedAt: info.startedAt,
       endedAt,
       outcome,
-      ...(end?.costUsd === undefined ? {} : { costUsd: end.costUsd }),
+      ...(charged === undefined ? {} : { costUsd: charged }),
       ...(end?.turns === undefined ? {} : { turns: end.turns }),
       ...(end?.usage === undefined ? {} : { usage: end.usage }),
       harness: info.harness,
@@ -821,6 +840,9 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         ...(sessionUuid === undefined || info.promptHash === undefined
           ? {}
           : { promptHash: info.promptHash }),
+        ...(sessionUuid === undefined || end?.costUsd === undefined
+          ? {}
+          : { costBasis: { uuid: sessionUuid, usd: end.costUsd } }),
       });
     }
 

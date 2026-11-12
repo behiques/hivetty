@@ -2286,6 +2286,57 @@ describe('createRunTracker', () => {
     expect(childInstances[1]?.killSignals).toEqual(['SIGTERM']);
   });
 
+  describe('what a run is charged (HIVE-408)', () => {
+    const finish = (index: number, cost: number): void => {
+      childInstances[index]?.emitStdout(resultLine({ total_cost_usd: cost, session_id: 'conv-1' }));
+      childInstances[index]?.emitClose(0);
+    };
+
+    it('charges ten resumed runs their real spend, not ten running totals', () => {
+      commandOver = { sessionUuid: 'conv-1' };
+      for (let i = 0; i < 10; i += 1) {
+        tracker.run('a', 'ledger');
+        finish(i, 1 + i * 0.1);
+      }
+      expect(state.read('a').today?.usd).toBeCloseTo(1.9, 10);
+      expect(state.read('a').runs.at(-1)?.costUsd).toBeCloseTo(0.1, 10);
+      expect(state.read('a').costBasis).toEqual({ uuid: 'conv-1', usd: 1.9 });
+    });
+
+    it('charges a new conversation its whole figure', () => {
+      commandOver = { sessionUuid: 'conv-1' };
+      tracker.run('a', 'ledger');
+      finish(0, 2);
+      commandOver = { sessionUuid: 'conv-2' };
+      tracker.run('a', 'ledger');
+      childInstances[1]?.emitStdout(resultLine({ total_cost_usd: 0.25, session_id: 'conv-2' }));
+      childInstances[1]?.emitClose(0);
+      expect(state.read('a').today?.usd).toBeCloseTo(2.25, 10);
+    });
+
+    it('seeds the basis from the last run of the same conversation on upgrade', () => {
+      state.recordRun(
+        'a',
+        { run: 'old', kind: 'standing', trigger: 'ledger', startedAt: 0, endedAt: 1, outcome: 'done', costUsd: 5, sessionUuid: 'conv-1' },
+        1_000,
+      );
+      commandOver = { sessionUuid: 'conv-1' };
+      tracker.run('a', 'ledger');
+      finish(0, 5.2);
+      expect(state.read('a').runs.at(-1)?.costUsd).toBeCloseTo(0.2, 10);
+    });
+
+    it('keeps a thread lane\'s basis on that lane', () => {
+      parallel = 2;
+      commandOver = { sessionUuid: 'conv-t' };
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:k1' });
+      childInstances[0]?.emitStdout(resultLine({ total_cost_usd: 3, session_id: 'conv-t' }));
+      childInstances[0]?.emitClose(0);
+      expect(state.lane('a', 'thread:k1').costBasis).toEqual({ uuid: 'conv-t', usd: 3 });
+      expect(state.read('a').costBasis).toBeUndefined();
+    });
+  });
+
   describe('the daily budget on every wake (HIVE-187)', () => {
     /** Ends run `index` with a done result that cost `cost`. */
     const endRun = (index: number, cost: number): void => {

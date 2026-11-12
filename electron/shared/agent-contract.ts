@@ -1207,6 +1207,8 @@ export interface AgentRunState {
   harness?: HarnessId;
   /** The standing lane's {@link LaneState.promptHash}. */
   promptHash?: string;
+  /** The standing lane's {@link LaneState.costBasis} (HIVE-408). */
+  costBasis?: { uuid: string; usd: number };
   status: AgentStatus;
   lastRunAt?: number;
   /** Stored and pushed here; computed by HIVE-121's scheduler. */
