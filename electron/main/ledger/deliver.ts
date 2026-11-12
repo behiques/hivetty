@@ -10,8 +10,8 @@ import type { Ledger } from './index';
  * Delivery: what happens to a ledger entry after it is written (HIVE-113).
  *
  * The ledger itself has no opinion about who should be told what — it records.
- * This module is the first rule on top of it: an `ask`, an `answer` or a `post`
- * addressed to a live session is announced in that session's terminal as one marker
+ * This module is the first rule on top of it: an `ask`, an `answer`, a `post`,
+ * a `failed` or a `done` addressed to a live session is announced in that session's terminal as one marker
  * line, at a moment when the terminal is actually at an empty prompt.
  *
  * The line is a marker, not the entry (HIVE-138), and its bytes are the
@@ -49,8 +49,12 @@ import type { Ledger } from './index';
  * Broadcast posts stay silent, because `onEntry` returns on a missing `to` and
  * `undelivered` re-checks `entry.to === entityId`. Receipts are `event`, so
  * adding `post` leaves the guard whole.
+ *
+ * `failed` and `done` close a thread the session asked (HIVE-408): a builder
+ * run that died, a job reported finished. Receipts stay `event`, so the guard
+ * still holds.
  */
-const DELIVERABLE: readonly LedgerKind[] = ['ask', 'answer', 'post'];
+const DELIVERABLE: readonly LedgerKind[] = ['ask', 'answer', 'post', 'failed', 'done'];
 
 interface DeliverOptions {
   ledger: Pick<Ledger, 'read' | 'append'>;

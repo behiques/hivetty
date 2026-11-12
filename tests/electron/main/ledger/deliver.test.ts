@@ -220,10 +220,24 @@ describe('createDeliver', () => {
     expect(write).not.toHaveBeenCalled();
   });
 
-  it('ignores kinds that are not ask, answer or post', () => {
-    ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'done', body: 'finished' });
+  it('ignores kinds that are not ask, answer, post, failed or done', () => {
+    ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'event', body: 'something happened' });
+    ledger.append({ from: 'sess-b', to: 'sess-a', kind: 'handoff', body: 'notes' });
 
     expect(write).not.toHaveBeenCalled();
+  });
+
+  it('delivers failed and done addressed to a session (HIVE-408)', () => {
+    const asked = ledger.append({ from: 'sess-a', to: 'builder', kind: 'ask', body: 'build it' });
+    const thread = asked.ok ? asked.id : '';
+    write.mockClear();
+
+    ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'failed', thread, body: 'builder run ended without answering' });
+    expect(write).toHaveBeenCalledTimes(1);
+
+    idle.add('sess-a');
+    ledger.append({ from: 'builder', to: 'sess-a', kind: 'done', thread, body: 'built' });
+    expect(write).toHaveBeenCalledTimes(2);
   });
 
   /**

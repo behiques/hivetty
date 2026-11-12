@@ -819,7 +819,12 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     const mine = snapshot.entries.filter(
       (entry) =>
         entry.to === caller &&
-        (entry.kind === 'ask' || entry.kind === 'answer' || entry.kind === 'post'),
+        (entry.kind === 'ask' ||
+          entry.kind === 'answer' ||
+          entry.kind === 'post' ||
+          // `failed` and `done` close a thread the caller asked (HIVE-408); their ask is looked up below.
+          entry.kind === 'failed' ||
+          entry.kind === 'done'),
     );
     const resolved = resolveRef(mine, token);
     if (resolved.kind !== 'found') return undefined;

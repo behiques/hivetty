@@ -1618,6 +1618,22 @@ describe('hook receiver', () => {
       return json.hookSpecificOutput.additionalContext;
     };
 
+    it('serves the context of a failed entry named by its marker (HIVE-408)', async () => {
+      const asked = ledger.append({ from: 'sess-01', to: 'builder', kind: 'ask', body: 'build it' });
+      const failed = ledger.append({
+        from: 'overmind',
+        to: 'sess-01',
+        kind: 'failed',
+        thread: asked.ok ? asked.id : '',
+        body: 'builder died',
+      });
+
+      const response = await prompt(`📒 ${failed.ok ? failed.id : ''}`);
+
+      expect(response.status).toBe(200);
+      expect(await context(response)).toContain('builder died');
+    });
+
     it("answers 200 with the ask whole when the prompt is that ask's marker", async () => {
       const asked = ledger.append({
         from: 'overmind',
@@ -1720,8 +1736,9 @@ describe('hook receiver', () => {
     });
 
     it('answers 204 for a kind a nudge never carries', async () => {
-      const done = ledger.append({ from: 'overmind', to: 'sess-01', kind: 'done', body: 'finished' });
-      expect((await prompt(`📒 ${done.ok ? done.id : ''}`)).status).toBe(204);
+      // `done` is carried since HIVE-408; a receipt (`event`) never is.
+      const event = ledger.append({ from: 'overmind', to: 'sess-01', kind: 'event', body: 'nudge written (a1)' });
+      expect((await prompt(`📒 ${event.ok ? event.id : ''}`)).status).toBe(204);
     });
 
     it('answers 200 with a post addressed to the session, as a notice', async () => {
