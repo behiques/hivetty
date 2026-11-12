@@ -439,10 +439,11 @@ The default makes the wrong call recoverable; it does not make it right.
 is also the one that does *not* raise an inbox card at a person who never asked
 (`notify.ts` maps every agent `done`/`failed` to `agent.done`/`agent.failed`,
 `to` or no `to`). The split is `overmind` against everyone else, **not** person
-against agent: a `sess-` party is a live terminal, and `deliver.ts`'s
-`DELIVERABLE` is `['ask', 'answer']`, so a `done` addressed to a session reaches
-no terminal, no card and no wake. `AGENT_PREAMBLE` and the tool descriptions say
-so in the same words.
+against agent: a `sess-` party is a live terminal. `deliver.ts` has carried
+`failed` and `done` to a session since HIVE-408, but only one addressed `to` it;
+an agent's `done` names nobody and lands as a card, and neither closes the
+ask, so the asker still waits until it expires. `AGENT_PREAMBLE` and the tool
+descriptions say `ledger_answer` for the same reason.
 
 **`wake.on: [ledger]` is a gate, and it is checked first.** Settings promises
 that unticking it means "a question addressed to it waits unread until then", so

@@ -202,9 +202,9 @@ Meters have two sources, and an adapter has one of them:
 
 - ***When* is shared:** `electron/main/ledger/deliver.ts` decides it: idle, the empty-prompt
   read, the HIVE-135 draft hold, and receipts written only for a write that landed.
-- ***What* is the adapter's:** `promptMarker(entry)`. Claude's is `📒 <ref>\r`, in
-  `claude-code/prompt-marker.ts`.
-- **The other half is the receiver:** `parseLedgerMarker` and `markerContext` stay shared, and the
+- ***What* is the adapter's:** `promptMarker(entries)`. Claude's is `📒 <ref> <id> …\r`, one line
+  naming the backlog in order (HIVE-408), in `claude-code/prompt-marker.ts`.
+- **The other half is the receiver:** `parseLedgerMarkers` and `markerContext` stay shared, and the
   adapter only wraps the reply (`contextReply`).
 - `deliver` reaches the adapter through `Sessions.adapterOf`, which falls back to `sessionAdapter()`
   for an entity no harness drives. An adapter that is absent (the session layer is not up) or
