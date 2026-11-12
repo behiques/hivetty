@@ -173,7 +173,7 @@ the gate verbatim.
 Merge with the tool, never through a shell (HIVE-409):
 
 ```
-mcp__hive__pr_merge { repo: "<owner>/<repo>", number: <N>, sha: "<the SHA the CLEAR line printed>", subject: "<PR title> (#<N>)", body: "<KEY> · https://github.com/<owner>/<repo>/pull/<N>" }
+{{tool:pr_merge}} { repo: "<owner>/<repo>", number: <N>, sha: "<the SHA the CLEAR line printed>", subject: "<PR title> (#<N>)", body: "<KEY> · https://github.com/<owner>/<repo>/pull/<N>" }
 ```
 
 HiveTTY runs `gh pr merge --squash --match-head-commit` itself, with no
@@ -188,7 +188,7 @@ included, and each one becomes a contributor (HIVE-349). No ticket: the body
 is the PR URL alone. The SHA is copied from the CLEAR line; carrying it is
 the check.
 
-If `mcp__hive__pr_merge` is not in your tools (an older HiveTTY), fall back
+If `{{tool:pr_merge}}` is not in your tools (an older HiveTTY), fall back
 to the Bash merge, alone in its own call, `--repo` last:
 
 ```
