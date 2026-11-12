@@ -1,4 +1,6 @@
 import type { ProjectsDirectory } from './config-contract';
+import type { PrMergeRequest } from './github-contract';
+import { parsePrMerge } from './guards';
 import type { AdfBlock, JiraError, JiraMention, JiraToolIssue } from './jira-contract';
 import type { LedgerKind, LedgerReadQuery } from './ledger-contract';
 import { asInbound } from './ledger-derive';
@@ -449,6 +451,23 @@ export function createToolHandlers(
     return ok(`${leads.join('\n')}\n${DONT_ASK_AGAIN}\n${projectsText(directory)}`, { projects: directory.projects });
   };
 
+  /**
+   * One merge (HIVE-409). Parsed here with the receiver's own guard, so a malformed call fails with a
+   * sentence before anything leaves the host; `gh`'s refusal is a failed result carrying its reason.
+   */
+  const prMerge = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    let request: PrMergeRequest;
+    try {
+      request = parsePrMerge(args);
+    } catch (cause) {
+      return failed(`pr_merge: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+
+    const reply = await client.prMerge(request);
+    if (!reply.merged) return failed(`pr_merge: ${request.repo}#${String(request.number)} was not merged. ${reply.reason}`);
+    return ok(`Merged ${request.repo}#${String(request.number)}.\n${reply.output}`.trim(), { merged: true });
+  };
+
   /** One PR record (HIVE-173). A missing record is an answer, not an error. */
   const pr = async (args: Record<string, unknown>): Promise<CallToolResult> => {
     const repo = stringArg(args, 'repo');
@@ -671,6 +690,8 @@ export function createToolHandlers(
             return await projects();
           case 'pr':
             return await pr(args);
+          case 'pr_merge':
+            return await prMerge(args);
           case 'jira_get':
             return await jiraGet(args);
           case 'jira_transition':

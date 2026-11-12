@@ -3,12 +3,15 @@ import { describe, expect, it } from 'vitest';
 import {
   decide,
   defaultRungFor,
+  FENCE_ONLY_TOOLS,
   honestPermissionAsk,
   isToolName,
   matches,
   namesTool,
+  ONCE_ONLY_TOOLS,
   oneShotRuleFor,
   PERMISSION_DENY_MESSAGE,
+  PR_MERGE_TOOL_NAME,
   rungsFor,
   summarise,
 } from '@shared/permission-rules';
@@ -1066,5 +1069,97 @@ describe('a read-only command that only mentions a fenced act (HIVE-407)', () =>
     ]) {
       expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
     }
+  });
+});
+
+describe('the merge grant and a quoted subject (HIVE-409)', () => {
+  const RULE = 'Bash(gh pr merge * --repo behiques/hivetty)';
+  const C229 =
+    'gh pr merge 229 --squash --match-head-commit 0b7097d0 --subject "Account & devices: one sign-in per device (#229)" --repo behiques/hivetty';
+  const C250 =
+    'gh pr merge 250 --squash --subject "Shipper holds all of Bash; the merge stays fenced (#250)" --body "" --repo behiques/hivetty';
+
+  it('grants a merge whose subject quotes & or ;', () => {
+    expect(matches(RULE, 'Bash', { command: C229 })).toBe(true);
+    expect(matches(RULE, 'Bash', { command: C250 })).toBe(true);
+  });
+
+  it.each([
+    ['an unquoted ; after the merge', 'gh pr merge 1 --squash --repo behiques/hivetty ; rm -rf ~'],
+    ['&& after the merge', 'gh pr merge 1 --squash --repo behiques/hivetty && gh pr merge 2 --repo behiques/hivetty'],
+    ['a quoted span then an unquoted ;', 'gh pr merge 1 --subject "x" ; rm -rf ~ --repo behiques/hivetty'],
+    ['an unquoted ; between two quoted spans', 'gh pr merge 1 --subject "x" ; rm -rf ~ ; echo "y" --repo behiques/hivetty'],
+    ['a carriage return outside the quotes', 'gh pr merge 1 --subject "x"\r--repo behiques/hivetty ; id'],
+    ['a substitution in the subject', 'gh pr merge 1 --subject "$(id)" --repo behiques/hivetty'],
+    ['a backtick in the subject', 'gh pr merge 1 --subject "`id`" --repo behiques/hivetty'],
+    ['an escaped quote that would end the span', 'gh pr merge 1 --subject "a\\"; rm x; echo \\"" --repo behiques/hivetty'],
+    ['a single-quoted span hiding a double quote', `gh pr merge 1 --subject 'a"' ; rm -rf ~ ; echo '"b' --repo behiques/hivetty`],
+    ['an unclosed quote', 'gh pr merge 1 --subject "a ; rm x --repo behiques/hivetty'],
+    ['a newline inside the quotes', 'gh pr merge 1 --subject "a\nb" --repo behiques/hivetty'],
+  ])('refuses %s', (_name, command) => {
+    expect(matches(RULE, 'Bash', { command })).toBe(false);
+  });
+
+  it('a non-merge rule still sees quoted control characters', () => {
+    expect(matches('Bash(git commit *)', 'Bash', { command: 'git commit -m "a & b"' })).toBe(false);
+  });
+});
+
+describe('pr_merge on the fence (HIVE-409)', () => {
+  const TOOL = 'mcp__hive__pr_merge';
+  const IN = { repo: 'behiques/hivetty', number: 229, sha: 'a'.repeat(40), subject: 'Account & devices' };
+
+  it('the auto-merge rule allows that repository only', () => {
+    const rule = 'mcp__hive__pr_merge(behiques/hivetty#*)';
+    expect(matches(rule, TOOL, IN)).toBe(true);
+    for (const repo of ['behiques/hivetty-evil', 'victim/other', 'Behiques/Hivetty', 'behiques/hivetty#1', 'behiques/hivetty/x']) {
+      expect(matches(rule, TOOL, { ...IN, repo }), repo).toBe(false);
+    }
+    expect(matches(rule, TOOL, { ...IN, number: 0 })).toBe(false);
+    expect(matches(rule, TOOL, { ...IN, number: '229' })).toBe(false);
+  });
+
+  it('no wide rule allows it, nor the Bash merge rule', () => {
+    for (const rule of ['*', 'mcp__hive', 'mcp__hive__*', 'mcp__*', 'mcp__hive__pr_*', TOOL, 'Bash(gh pr merge * --repo behiques/hivetty)', 'Bash']) {
+      expect(matches(rule, TOOL, IN), rule).toBe(false);
+    }
+  });
+
+  it('the pr_merge rule does not allow a Bash merge', () => {
+    const command = 'gh pr merge 229 --squash --repo behiques/hivetty';
+    expect(matches('mcp__hive__pr_merge(behiques/hivetty#*)', 'Bash', { command })).toBe(false);
+  });
+
+  it('the once literal names one PR', () => {
+    const rule = oneShotRuleFor(TOOL, IN)!;
+    expect(rule).toBe('literal:mcp__hive__pr_merge:behiques/hivetty#229');
+    expect(matches(rule, TOOL, IN)).toBe(true);
+    expect(matches(rule, TOOL, { ...IN, number: 230 })).toBe(false);
+    expect(matches(rule, TOOL, { ...IN, repo: 'behiques/other' })).toBe(false);
+  });
+
+  it('its card offers once and the project switch, and nothing standing', () => {
+    expect(rungsFor(TOOL, IN).map((r) => r.id)).toEqual(['allow-once', 'allow-project']);
+    expect(rungsFor(TOOL, IN).every((r) => r.rule === undefined)).toBe(true);
+    expect(defaultRungFor(rungsFor(TOOL, IN))).toBe('allow-once');
+  });
+
+  it('a malformed input composes nothing, and offers no project switch', () => {
+    for (const bad of [{ ...IN, repo: 'a/b#1' }, { ...IN, repo: 'a/b\nc' }, { ...IN, number: 1.5 }, { sha: IN.sha }]) {
+      expect(oneShotRuleFor(TOOL, bad)).toBeUndefined();
+      expect(rungsFor(TOOL, bad).map((r) => r.id)).toEqual(['allow-once']);
+    }
+  });
+
+  it('is fence-only, apart from the once-only tools', () => {
+    expect(FENCE_ONLY_TOOLS.has(TOOL)).toBe(true);
+    expect(FENCE_ONLY_TOOLS.has('mcp__hive__project_auto_merge')).toBe(true);
+    expect(ONCE_ONLY_TOOLS.has(TOOL)).toBe(false);
+    expect(PR_MERGE_TOOL_NAME).toBe(TOOL);
+  });
+
+  it('decide asks for it under a wide grant, and allows it under the auto-merge rule', () => {
+    expect(decide(TOOL, IN, ['*', 'mcp__hive__*'])).toEqual({ behavior: 'ask' });
+    expect(decide(TOOL, IN, ['mcp__hive__pr_merge(behiques/hivetty#*)'])).toMatchObject({ behavior: 'allow' });
   });
 });

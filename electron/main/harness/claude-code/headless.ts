@@ -1,6 +1,6 @@
 import { AUTH_ENV_KEYS } from '@shared/config-contract';
 import { HIVE_CONSENT_TOOLS } from '@shared/ledger-tools';
-import { namesTool, ONCE_ONLY_TOOLS } from '@shared/permission-rules';
+import { FENCE_ONLY_TOOLS, namesTool } from '@shared/permission-rules';
 
 import type { HeadlessPlan, HeadlessSpec, PermissionFence } from '../port';
 
@@ -57,7 +57,8 @@ const FOREGROUND_ONLY = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' };
  * call once the blanket left the argv.
  */
 function grantableTools(tools: readonly string[]): string[] {
-  const onceOnly = [...ONCE_ONLY_TOOLS];
+  // HIVE-409: the MCP merge too, which the fence allows by the auto-merge rule alone.
+  const fenceOnly = [...FENCE_ONLY_TOOLS];
   return tools.flatMap((rule) => {
     /*
       Every Bash rule stays with the fence. The CLI would run a granted `Bash` without asking, and a PR
@@ -65,8 +66,12 @@ function grantableTools(tools: readonly string[]): string[] {
       say "all Bash but that", so `approve` decides each command against `HIVE_GRANTS`, which keeps it.
     */
     if (rule === 'Bash' || rule.startsWith('Bash(')) return [];
-    return onceOnly.some((tool) => namesTool(rule, tool))
-      ? HIVE_CONSENT_TOOLS.filter((tool) => !ONCE_ONLY_TOOLS.has(tool) && namesTool(rule, tool))
+    // A scoped rule for a fence-only tool (the auto-merge `mcp__hive__pr_merge(owner/name#*)`) stays with
+    // the fence too: the CLI has no specifier grammar for an MCP tool, so it could allow every call.
+    const open = rule.indexOf('(');
+    if (open !== -1 && FENCE_ONLY_TOOLS.has(rule.slice(0, open))) return [];
+    return fenceOnly.some((tool) => namesTool(rule, tool))
+      ? HIVE_CONSENT_TOOLS.filter((tool) => !FENCE_ONLY_TOOLS.has(tool) && namesTool(rule, tool))
       : [rule];
   });
 }

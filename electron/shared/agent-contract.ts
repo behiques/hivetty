@@ -655,6 +655,8 @@ export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'skills', kind: 'list', required: false },
   { path: 'mcp', kind: 'list', required: false },
   { path: 'tools', kind: 'list', required: false },
+  // HIVE-409. Rules a permission card granted; written by `permissions.ts` only, never shipped, never seeded.
+  { path: 'grants', kind: 'list', required: false },
   { path: 'harness', kind: 'list', required: false },
   { path: 'fallback', kind: 'enum', required: false, values: AGENT_FALLBACKS },
   // HIVE-396. Codex's list is the account's, so its model is a shape the parser checks, not an enum.
