@@ -227,6 +227,12 @@ const parentOf = (path: string, blocks: Set<string>): string | null => {
  *
  * `current` and `shipped` must both parse; the caller checks.
  */
+/**
+ * Parts only the app writes on the person's behalf and no shipped file carries (HIVE-409): kept
+ * through a merge, never listed as a customisation and never given a base key.
+ */
+export const USER_ONLY_PARTS: ReadonlySet<string> = new Set(['grants']);
+
 export function mergeParts(
   current: string,
   shipped: string,
@@ -282,10 +288,13 @@ export function mergeParts(
     // Shipped once, untouched since, and the app no longer ships it.
     if (b === hashPart(c)) continue;
 
-    customised.push({ path, yours: valueOf(c), shipped: null });
-    if (b !== undefined) {
-      moved.push(path);
-      keys[path] = b;
+    // HIVE-409: a card's grants are the app's record of the person's consent, not an edit to review.
+    if (!USER_ONLY_PARTS.has(path)) {
+      customised.push({ path, yours: valueOf(c), shipped: null });
+      if (b !== undefined) {
+        moved.push(path);
+        keys[path] = b;
+      }
     }
 
     const parent = parentOf(path, mine.blocks);
