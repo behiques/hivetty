@@ -44,6 +44,7 @@ const ticket: Ticket = {
   priority: null,
   assignee: null,
   url: 'https://jira.example/browse/GRAC-3018',
+  issueType: 'Story',
 };
 
 /** A promise whose resolution the test controls. */
@@ -147,6 +148,7 @@ describe('TicketPage (HIVE-203)', () => {
     render(<TicketPage ticketKey="GRAC-3018" />);
 
     expect(screen.getByRole('link', { name: 'GRAC-3018' })).toHaveAttribute('href', ticket.url);
+    expect(screen.getByRole('img', { name: 'Story' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'In Progress — move GRAC-3018' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Hero refresh' })).toBeInTheDocument();
     expect(screen.getByRole('status', { name: 'Loading description' })).toBeInTheDocument();

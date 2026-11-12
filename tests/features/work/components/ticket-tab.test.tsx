@@ -109,6 +109,7 @@ describe('TicketTab (HIVE-202)', () => {
 
     const sub = screen.getByText('HIVE-193').closest('p');
     expect(sub).toHaveTextContent(/HIVE-193\s*· Bug ·\s*In Progress/);
+    expect(sub).toContainElement(screen.getByRole('img', { name: 'Bug' }));
     expect(screen.getByRole('heading', { name: 'Fix it' })).toBeInTheDocument();
   });
 

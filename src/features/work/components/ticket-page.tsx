@@ -12,6 +12,7 @@ import { TicketPageConversation } from '@features/work/components/ticket-page-co
 import { LinesSkeleton, TicketProblem } from '@features/work/components/ticket-page-parts';
 import { TicketProperties } from '@features/work/components/ticket-properties';
 import { TicketTransitionMenu } from '@features/work/components/ticket-transition-menu';
+import { TicketTypeIcon } from '@features/work/components/ticket-type-icon';
 import { useShownTicket } from '@features/work/shown-ticket';
 import {
   useLoadTicketDetail,
@@ -62,6 +63,7 @@ function Header({ ticketKey, ticket, details }: { ticketKey: string; ticket: Tic
   return (
     <header>
       <div className="flex items-center gap-2.5">
+        <TicketTypeIcon type={ticket?.issueType} size={14} />
         {ticket?.url ? (
           <a
             className="tabular-nums text-control font-bold text-brand hover:underline"

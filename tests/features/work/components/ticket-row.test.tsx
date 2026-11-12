@@ -27,6 +27,18 @@ describe('TicketRow (HIVE-203)', () => {
     expect(screen.getByText('HIVE-1').parentElement).toHaveTextContent('HIVE-1 · no session');
   });
 
+  it('marks the issue type beside the key, and nothing without one', () => {
+    const typed = model();
+    typed.ticket = { ...typed.ticket, issueType: 'Bug' };
+    const { unmount } = render(<TicketRow row={typed} />);
+
+    expect(screen.getByRole('img', { name: 'Bug' }).parentElement).toBe(screen.getByText('HIVE-1').parentElement);
+    unmount();
+
+    render(<TicketRow row={model()} />);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
   it('draws the tone on the dot', () => {
     const { container } = render(<TicketRow row={model({ tone: 'amber' })} />);
 

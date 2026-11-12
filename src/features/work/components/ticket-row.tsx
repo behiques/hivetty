@@ -1,6 +1,7 @@
 import type { TicketRowModel, TicketTone } from '@/lib/ticket-activity';
 import { cn } from '@/lib/utils';
 
+import { TicketTypeIcon } from '@features/work/components/ticket-type-icon';
 import { useOpenWorkTicket, useWorkTicket } from '@stores/ui-store';
 
 /** Amber needs you and glows; green is being worked; ring is quiet. */
@@ -12,7 +13,7 @@ const DOT: Record<TicketTone, string> = {
 
 /**
  * One ticket in the round-two Work panel (HIVE-203): its dot and title, then
- * its key and the one fact that leads. Clicking opens its page on the stage.
+ * its type, key and the one fact that leads. Clicking opens its page on the stage.
  */
 export function TicketRow({ row }: { row: TicketRowModel }) {
   const open = useWorkTicket();
@@ -37,6 +38,7 @@ export function TicketRow({ row }: { row: TicketRowModel }) {
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-ui text-ink">{row.title}</span>
         <span className="truncate text-ui-sm text-muted">
+          <TicketTypeIcon type={row.ticket.issueType} className="mr-1 align-[-1px]" />
           <span className="tabular-nums text-brand">{row.ticket.key}</span> · {row.fact}
         </span>
       </span>

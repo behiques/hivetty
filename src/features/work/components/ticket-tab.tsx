@@ -9,6 +9,7 @@ import { AdfBlocks } from '@features/work/components/adf-blocks';
 import { TicketLinks } from '@features/work/components/ticket-links-section';
 import { TicketNextAction } from '@features/work/components/ticket-next-action';
 import { LinesSkeleton, Section, TicketProblem } from '@features/work/components/ticket-page-parts';
+import { TicketTypeIcon } from '@features/work/components/ticket-type-icon';
 import { CATEGORY_TEXT, commentTime, STATUS_PILL } from '@features/work/ticket-presentation';
 import {
   useLatestComment,
@@ -108,6 +109,7 @@ export function TicketTab({ ticketKey, sessionId }: { ticketKey: string; session
     <div className="flex flex-col gap-4 px-1 pt-1 pb-3">
       <header className="flex flex-col gap-1">
         <p className="flex flex-wrap items-center gap-1.5 text-ui-sm text-muted">
+          <TicketTypeIcon type={ticket?.issueType} />
           <span className="tabular-nums font-bold text-brand">{ticketKey}</span>
           {ticket?.issueType ? <span>{`· ${ticket.issueType} ·`}</span> : <span>·</span>}
           {ticket ? (
