@@ -48,6 +48,19 @@ describe('shellSegments (HIVE-407)', () => {
     expect(shellSegments(command)).toEqual(words);
   });
 
+  it('still reads a heredoc written against its command, and `<<` in quotes as text', () => {
+    expect(shellSegments("cat<<EOF\ngit push origin main\nEOF")).toEqual([['cat']]);
+    expect(shellSegments('echo "a << b"')).toEqual([['echo', 'a << b']]);
+  });
+
+  it('still reads a parameter expansion inside double quotes', () => {
+    expect(shellSegments('cd "${W}/x" && echo "${x:-a b<<2}"')).toEqual([['cd', '${W}/x'], ['echo', '${x:-a b<<2}']]);
+  });
+
+  it('reads `((` inside double quotes as text, not arithmetic', () => {
+    expect(shellSegments('git commit -m "fix ((x))"')).toEqual([['git', 'commit', '-m', 'fix ((x))']]);
+  });
+
   it.each([
     ['an unterminated double quote', 'git push origin "main'],
     ['an unterminated single quote', "git push origin 'main"],
@@ -66,6 +79,23 @@ describe('shellSegments (HIVE-407)', () => {
     ['ANSI-C quoting', "echo $'it\\'s' && git push origin main>/dev/null # '"],
     ['a redirect with no target before an operator', 'echo >; git push origin main'],
     ['a redirect with no target at the end', 'git push origin main >'],
+    // Arithmetic reads `<<` as a shift, not a heredoc; following it is too far (#281 round 3).
+    ['an arithmetic expansion', 'echo $((1<<2))\ngh pr merge 2\n2'],
+    ['an arithmetic command', '((x = 1<<2))\ngh pr merge 2\n2'],
+    // #281 round 4: every expansion that can hold `<<` (a shift, or text) ahead of a line that ends it.
+    ['old-style arithmetic', 'echo $[1<<2]\ngh pr merge 2\n2]'],
+    ['old-style arithmetic in double quotes', 'echo "$[1<<2]"'],
+    ['a `<<` inside a parameter expansion', 'echo ${x:1<<2}\ngh pr merge 2\n2}'],
+    ['a `<<` straight after an expansion', 'echo $X<<EOF\ngh pr merge 2\nEOF'],
+    ['a `<<` inside an array assignment', 'x=( 1<<D )\ngh pr merge 2\nD'],
+    // #281 round 5: bash keeps `${…}` one word across spaces; the tokeniser does not model it.
+    ['an unquoted parameter expansion with a space', 'echo ${x:-a b<<2}\ngh pr merge 6\n2}'],
+    ['any unquoted parameter expansion', 'cd ${W}/x'],
+    ['a heredoc inside a substitution', 'echo $(echo a b<<D)\ngh pr merge 6\nD'],
+    ['a heredoc inside a quoted substitution', 'echo "$(echo a <<D)"\ngh pr merge 6\nD'],
+    ['a heredoc inside a subshell', '(cat <<D)\ngh pr merge 6\nD'],
+    ['a `<<` inside an array subscript', 'a[1<<2]=x\ngh pr merge 6\n2]=x'],
+    ['an unquoted heredoc whose body continues a line', 'cat <<EOF\nEO\\\nF\ngh pr merge 6\nEOF'],
   ])('cannot parse %s', (_name, command) => {
     expect(shellSegments(command)).toBeUndefined();
   });

@@ -11,7 +11,7 @@ copilot:
 wake:
   on: [ledger]
 skills: [worktree, execute, tdd, debug, verify]
-tools: [Read, Edit, Write, Grep, Glob, Bash, Agent, Skill, TodoWrite, ToolSearch, ReportFindings, mcp__hive__jira_transition]
+tools: [Read, Edit, Write, Grep, Glob, Bash, Agent, SendMessage, Skill, TodoWrite, ToolSearch, ReportFindings, mcp__hive__jira_transition, mcp__hive__jira_comment]
 autonomy: act
 lane: thread
 limits:

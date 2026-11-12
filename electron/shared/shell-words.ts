@@ -8,7 +8,7 @@
  * are dropped. Returns `undefined` when the command cannot be parsed; a caller fails closed on that.
  * A heredoc body is data and is skipped to its delimiter line; an unquoted-delimiter body holding a
  * substitution, ANSI-C quoting (`$'…'`) and a redirection with no target cannot be parsed.
- * shortcut: a POSIX subset (no `case`, no arithmetic); good enough to find a command's words for a
+ * shortcut: a POSIX subset (no `case`, no arithmetic: `$((` and `((` are refused); good enough to find a command's words for a
  * fence, never to run one. Grow it here, behind its table, if a fence needs more.
  */
 type Frame = { words: string[]; word: string | undefined; quoted: boolean; dropNext: boolean; opener: string };
@@ -31,6 +31,9 @@ const skipHeredocs = (command: string, start: number, heredocs: Heredoc[]): numb
       const newline = command.indexOf('\n', pos);
       const lineEnd = newline === -1 ? command.length : newline;
       const line = command.slice(pos, lineEnd);
+      // An unquoted delimiter's body joins a backslash-newline before bash compares lines, so `EO\` + `F`
+      // ends it where this reader would not (#281 round 5): refused.
+      if (!heredoc.literal && line.endsWith('\\')) return undefined;
       if ((heredoc.stripTabs ? line.replace(/^\t+/, '') : line) === heredoc.delimiter) {
         if (!heredoc.literal && /\$\(|`/.test(command.slice(bodyStart, pos))) return undefined;
         pos = lineEnd + 1;
@@ -97,6 +100,11 @@ export function shellSegments(command: string): string[][] | undefined {
       word = (word ?? '') + next;
       continue;
     }
+    // Arithmetic (`$((…))`, `((…))`) reads `<<` as a shift; read here it opens a heredoc that hides the
+    // lines after it (#281 round 3). Outside the subset, so the command cannot be parsed.
+    if (next === '(' && ((c === '$' && command[i + 2] === '(') || (c === '(' && !inDouble))) return undefined;
+    // Old-style arithmetic, quoted or not: the same shift, the same hidden lines (#281 round 4).
+    if (c === '$' && next === '[') return undefined;
     if (c === '$' && next === '(') {
       i++;
       open('$(');
@@ -114,6 +122,9 @@ export function shellSegments(command: string): string[][] | undefined {
     }
     // ANSI-C quoting has its own escapes (`$'it\'s'`): too far to follow.
     if (c === '$' && next === "'") return undefined;
+    // An unquoted `${…}` is one word to bash across spaces, and `<<` inside it is text; split here, a later
+    // `<<` would open a heredoc that hides lines (#281 round 5). Inside double quotes it is already text.
+    if (c === '$' && next === '{') return undefined;
     if (c === '"') {
       inDouble = true;
       word ??= '';
@@ -149,6 +160,13 @@ export function shellSegments(command: string): string[][] | undefined {
     }
     if (c === '<' && next === '<' && command[i + 2] !== '<') {
       // A heredoc: its body starts after this line and is skipped there, never read as commands.
+      // Not inside a word that began an expansion or a subscript (`${x:1<<2}`, `$X<<EOF`, `a[1<<2]=x`): there `<<` may be a shift or
+      // text, and reading it as a heredoc hides the lines after it (#281 round 4). Refused, so callers
+      // fall back to their text match.
+      // Nor inside a substitution, a subshell or an array's words (`x=( 1<<D )`): bash ends that heredoc
+      // with the frame, or reads `<<` there as a word, never taking the next lines (#281 round 5).
+      if (word !== undefined && /[$[{]/.test(word)) return undefined;
+      if (stack.length > 0) return undefined;
       const match = HEREDOC.exec(command.slice(i));
       if (match === null) return undefined;
       if (word !== undefined && /^\d+$/.test(word)) word = undefined;

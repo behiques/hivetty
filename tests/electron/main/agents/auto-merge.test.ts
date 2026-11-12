@@ -78,11 +78,12 @@ describe('autoMergeRule', () => {
         command: 'gh pr merge 1 --repo yunidbauza/the-hive --repo victim/secret',
       }),
     ).toBe(false);
+    // Read as gh reads it (#281): an option after the granted slug changes nothing, the last --repo is still it.
     expect(
       matches(rule, 'Bash', {
         command: 'gh pr merge 1 --repo yunidbauza/the-hive --squash',
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       matches(rule, 'Bash', {
         command: 'gh pr merge 1 --repo victim/secret --squash --repo yunidbauza/the-hive',

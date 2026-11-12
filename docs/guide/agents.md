@@ -215,7 +215,10 @@ The shipper agent does not hold `gh pr merge`, so every merge it reaches stops a
 fence and becomes a card. **Settings › Projects › ⋯ › Merge PRs unattended** is the
 consent to skip that card for one project: it writes `autoMerge: true` on the entry, and
 from then on each shipper wake carries a grant for `gh pr merge … --repo <that repository>`
-and nothing else. Other projects' merges still ask. The repository is read from `gh` when
+and nothing else. A merge on that project then runs however it is written, a title holding `&` or
+`;` included. Other projects' merges still ask, and their card can turn the switch on for you. A
+command that only mentions a merge (searching for `gh pr merge`, a commit message about one) is not a
+merge and never asks. The repository is read from `gh` when
 the app starts and when a wake first needs it; a project `gh` cannot place grants nothing,
 and its merge asks as before.
 
