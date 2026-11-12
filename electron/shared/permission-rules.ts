@@ -342,19 +342,143 @@ const readsOnly = (command: string): boolean => {
  *
  * The merge is `ship`'s one consent checkpoint (HIVE-166), and an agent may hold all of Bash, so no wide
  * rule may grant it: only the auto-merge grant (`Bash(gh pr merge * --repo <owner>/<name>)`), a rule the
- * user wrote with the same `gh pr merge ` prefix, or a one-shot literal. Anywhere in the command, not
- * only its head, because a bare `Bash` grant does not run the shell-control guard. A backslash-newline
- * between `pr` and `merge` is a continuation (HIVE-407).
+ * user wrote with the same `gh pr merge ` prefix, or a one-shot literal. {@link runsMerge} decides
+ * from the tokenised command, so a grep pattern or a commit message that only spells it is not a merge;
+ * this text match judges a command the tokeniser cannot parse, and a word a runner (`bash -c`) is handed. A backslash-newline between `pr` and `merge` is a
+ * continuation (HIVE-407).
  * shortcut: it catches the merge a skill spells, not one hidden behind a shell variable or a raw `curl`;
  * upgrade to running agents without a GitHub token able to merge if that ever matters.
  */
 const PR_MERGE =
   /\bgh\b[\s\S]*?(\bpr(?:\s|\\\r?\n)+merge\b|\/pulls\/[^\s/]+\/merge\b|\brepos\/[^\s/]+\/[^\s/]+\/merges\b|\bmergePullRequest\b|\benablePullRequestAutoMerge\b|\benqueuePullRequest\b|\baddPullRequestToMergeQueue\b)/;
 
-export const isPrMerge = (toolName: string, input: Record<string, unknown>): boolean => {
-  if (toolName === PR_MERGE_TOOL_NAME) return true;
-  const command = str(input, 'command') ?? '';
-  return toolName === 'Bash' && PR_MERGE.test(command) && !readsOnly(command);
+/** The merge spellings `gh api` takes, one word at a time: a REST path or a GraphQL mutation. */
+const GH_API_MERGE =
+  /\/pulls\/[^\s/]+\/merge\b|\brepos\/[^\s/]+\/[^\s/]+\/merges\b|\bmergePullRequest\b|\benablePullRequestAutoMerge\b|\benqueuePullRequest\b|\baddPullRequestToMergeQueue\b/;
+/** `gh` options that take the next word as their value. */
+const GH_VALUE_OPTIONS = new Set(['--repo', '-R']);
+
+/** A word that may name gh: `gh`, a path to it, or one the shell fills in (`$GH`, `$(which gh)`). */
+const namesGh = (word: string): boolean => word === 'gh' || word.endsWith('/gh') || word.includes('$');
+
+/** Whether the words from `gh` (at `at`) on merge: `gh [opts] pr [opts] merge`, or a merge through `gh api`. */
+const ghMerges = (words: readonly string[], at: number): boolean => {
+  let i = at + 1;
+  const skipOptions = (): void => {
+    while (i < words.length && words[i]!.startsWith('-')) i += GH_VALUE_OPTIONS.has(words[i]!) ? 2 : 1;
+  };
+  skipOptions();
+  if (words[i] === 'api') return words.slice(i + 1).some((word) => GH_API_MERGE.test(word));
+  if (words[i] !== 'pr') return false;
+  i += 1;
+  skipOptions();
+  return words[i] === 'merge';
+};
+
+/**
+ * Commands that run text they are handed as code: shells, `eval`, remote and prefix runners, and the
+ * interpreters and editors with an execute form (`python -c`, `perl -e`, `sed 'e …'`, `awk 'system()'`).
+ */
+const RUNS_TEXT = new Set([
+  'bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'eval', 'source', '.', 'ssh', 'su', 'sudo', 'doas', 'env',
+  'xargs', 'nohup', 'time', 'timeout', 'nice', 'watch', 'exec', 'command', 'script', 'parallel', 'flock',
+  'sed', 'gsed', 'awk', 'gawk', 'mawk', 'nawk', 'perl', 'ruby', 'node', 'deno', 'bun', 'php', 'lua',
+  'osascript', 'expect', 'tclsh', 'make',
+]);
+
+/** Whether a simple command's own words can run a string it was given as a command. */
+const runsText = (words: readonly string[]): boolean => {
+  const head = words.find((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word));
+  if (head === undefined) return false;
+  if (head.includes('$')) return true;
+  const base = head.slice(head.lastIndexOf('/') + 1);
+  if (RUNS_TEXT.has(base) || /^python[\d.]*$/.test(base)) return true;
+  // `git -c alias.x='!…'` and `--config-env` define a command and run it in the same breath.
+  return base === 'git' && words.some((word) => word === '-c' || word.startsWith('--config-env'));
+};
+
+/** Whether one simple command, as the tokeniser split it, runs a merge. */
+const segmentMerges = (words: readonly string[]): boolean =>
+  words.some(
+    (word, i) =>
+      (namesGh(word) && ghMerges(words, i)) ||
+      // Text the shell still expands (an arithmetic subscript, a substitution) and that spells a merge.
+      (/[$`]/.test(word) && PR_MERGE.test(word)),
+  ) || (runsText(words) && words.some((word) => PR_MERGE.test(word)));
+
+/**
+ * Whether a command **runs** a merge, rather than mentions one (HIVE-409 follow-up). The text match
+ * alone raised a card for a grep pattern, a commit message and a Python heredoc that edits a test,
+ * because each spells `gh pr merge`, eight times in one day for the builder, which never merges.
+ *
+ * Each command the tokeniser finds is judged on its own words, which also catches two spellings the
+ * text match missed, `gh pr --repo a/b merge` and `$GH pr merge`. It counts as a merge when `gh` (or a word the shell fills in) is
+ * followed by `pr merge` or a `gh api` merge, when a still-expanded word spells one, or when a command
+ * that runs text it is handed (`bash -c`, `eval`, `ssh`, `python -c`, `sed`) carries one. A command the
+ * tokeniser cannot parse is a merge if the text says so, as before.
+ * shortcut: a heredoc body is data to the tokeniser, so `python3 - <<EOF` holding a script that shells
+ * out to a merge is not seen, nor is a merge behind a Makefile target or a git alias in a config file.
+ * Those join the `curl` case already named on PR_MERGE: the fence stops the merge a workflow spells,
+ * not a determined one. The Write tool writes such a script unfenced anyway.
+ */
+const runsMerge = (command: string): boolean => {
+  const segments = shellSegments(command);
+  return segments === undefined ? PR_MERGE.test(command) : segments.some(segmentMerges);
+};
+
+export const isPrMerge = (toolName: string, input: Record<string, unknown>): boolean =>
+  toolName === PR_MERGE_TOOL_NAME || (toolName === 'Bash' && runsMerge(str(input, 'command') ?? ''));
+
+/** The rule `auto-merge.ts` grants the shipper for a project with auto-merge on; group 1 is the slug. */
+const AUTO_MERGE_RULE = /^Bash\(gh pr merge \* --repo ([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\)$/;
+
+/** The repository a merge names: the last `--repo`, `-R`, `--repo=` or `-R<slug>`, as gh reads it. */
+const mergeRepo = (words: readonly string[], at: number): string | undefined => {
+  let repo: string | undefined;
+  for (let i = at + 1; i < words.length; i++) {
+    const word = words[i]!;
+    if (GH_VALUE_OPTIONS.has(word)) {
+      repo = words[i + 1];
+      i += 1;
+    } else if (word.startsWith('--repo=')) repo = word.slice('--repo='.length);
+    else if (word.startsWith('-R') && word.length > 2) repo = word.slice(2);
+  }
+  return repo;
+};
+
+/**
+ * Whether the project's auto-merge consent covers this whole command (HIVE-409 follow-up): a project
+ * with auto-merge on merges unattended, however the shipper spells the call. The glob rule alone missed
+ * a subject quoting `&` or `;` (13 of 120 titles), a merge chained to `gh pr view`, and `-R` or
+ * `--repo=`, each a card on a project that had said yes.
+ *
+ * Read off the tokeniser, so quoting is gone before anything is compared. Every `gh pr merge` in the
+ * command must name, as its last repository, one an auto-merge rule names, with no word the shell
+ * still fills in. Any other command beside it needs all of Bash (`Bash` or `*`), which the shipper
+ * holds. A merge through `gh api`, through a runner (`bash -c`), or behind a dynamic word is left to
+ * the card: the switch consents to the merge `merge-pr` spells, not to every spelling of one.
+ */
+const autoMergeCovers = (command: string, grants: readonly string[]): boolean => {
+  const slugs = new Set(grants.flatMap((rule) => AUTO_MERGE_RULE.exec(rule)?.[1] ?? []));
+  if (slugs.size === 0) return false;
+  const segments = shellSegments(command);
+  if (segments === undefined) return false;
+  const allBash = grants.includes('Bash') || grants.includes('*');
+  let merges = 0;
+  for (const words of segments) {
+    const gh = words.findIndex((word, i) => namesGh(word) && ghMerges(words, i));
+    if (gh === -1) {
+      if (!allBash || segmentMerges(words)) return false;
+      continue;
+    }
+    if (!(words[gh] === 'gh' || words[gh]!.endsWith('/gh')) || words.some((word) => /[$`]/.test(word))) return false;
+    let sub = gh + 1;
+    while (sub < words.length && words[sub]!.startsWith('-')) sub += GH_VALUE_OPTIONS.has(words[sub]!) ? 2 : 1;
+    const repo = mergeRepo(words, gh);
+    if (words[sub] !== 'pr' || repo === undefined || !slugs.has(repo)) return false;
+    merges += 1;
+  }
+  return merges > 0;
 };
 
 /**
@@ -525,6 +649,7 @@ export function decide(
   grants: readonly string[],
 ): FenceVerdict {
   if (grants.some((rule) => matches(rule, tool, input))) return { behavior: 'allow' };
+  if (tool === 'Bash' && autoMergeCovers(str(input, 'command') ?? '', grants)) return { behavior: 'allow' };
 
   /*
     Never ask what cannot be described. `Ledger.append` downgrades a permission ask whose `tool`

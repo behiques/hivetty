@@ -1163,3 +1163,91 @@ describe('pr_merge on the fence (HIVE-409)', () => {
     expect(decide(TOOL, IN, ['mcp__hive__pr_merge(behiques/hivetty#*)'])).toMatchObject({ behavior: 'allow' });
   });
 });
+
+describe('a merge is what a command runs, not what it mentions (HIVE-409 follow-up)', () => {
+  it('runs under bare Bash when the text only mentions a merge: the builder cards of 12 Nov', () => {
+    for (const command of [
+      'W=/x; grep -rn "gh pr merge" $W/resources/agents/ | head; git -C $W log --oneline -S"Bash(gh pr merge" -- resources/agents | head',
+      "cd /x && python3 - <<'EOF'\ns = 'gh pr merge 1 --repo a/b'\nEOF",
+      'git commit -q -m "fix: a continued gh pr merge is still a merge" && git log --oneline -1',
+      "cat >> progress.md <<'EOF'\nBash(gh pr merge …) is kept\nEOF",
+      'echo "then gh pr merge 1"',
+      'gh pr view 1 --repo a/b --json body --jq ".body" | grep "gh pr merge"',
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'allow' });
+    }
+  });
+
+  it('still asks for a merge a command runs, however it is wrapped', () => {
+    for (const command of [
+      'bash -c "gh pr merge 1 --repo a/b"',
+      "eval 'gh pr merge 1'",
+      'ssh host "gh pr merge 1"',
+      "python3 -c \"import os; os.system('gh pr merge 1')\"",
+      "sed -n 'e gh pr merge 1' f",
+      'sudo gh pr merge 1',
+      'X=1 gh pr merge 1',
+      'env -S "gh pr merge 1"',
+      'echo $(gh pr merge 1)',
+      'cat <(gh pr merge 1)',
+      '$(which gh) pr merge 1',
+      '/opt/homebrew/bin/gh pr merge 1',
+      'gh -R a/b pr merge 1',
+      'gh pr --repo a/b merge 1',
+      'git -c alias.m="!gh pr merge 1" m',
+      'xargs -I{} sh -c "gh pr merge {}"',
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
+    }
+  });
+});
+
+describe('auto-merge consent covers the merge however the shipper spells it (HIVE-409 follow-up)', () => {
+  const GRANTS = ['Bash', 'Bash(gh pr merge * --repo behiques/hivetty)'];
+  const C229 =
+    'gh pr merge 229 --squash --match-head-commit 0b7097d0 --subject "Account & devices: one sign-in per device (#229)" --repo behiques/hivetty';
+  const C250 =
+    'gh pr merge 250 --squash --subject "Shipper holds all of Bash; the merge stays fenced (#250)" --body "" --repo behiques/hivetty';
+
+  it('allows a quoted & or ;, a chained read, and every spelling of --repo', () => {
+    for (const command of [
+      C229,
+      C250,
+      'gh pr merge 273 --squash --repo behiques/hivetty; gh pr view 273 --repo behiques/hivetty',
+      'cd /x && gh pr merge 1 --squash --repo behiques/hivetty && echo done',
+      'gh pr merge 1 --squash --repo=behiques/hivetty',
+      'gh pr merge 1 --squash -R behiques/hivetty',
+      'gh -R behiques/hivetty pr merge 1 --squash',
+    ]) {
+      expect(decide('Bash', { command }, GRANTS), command).toEqual({ behavior: 'allow' });
+    }
+  });
+
+  it('asks when the merge leaves the consenting repository or cannot be read', () => {
+    for (const command of [
+      'gh pr merge 1 --repo victim/other',
+      'gh pr merge 1 --repo behiques/hivetty --repo victim/other',
+      'gh pr merge 1 --repo Behiques/HiveTTY',
+      'gh pr merge 1 --squash',
+      'gh pr merge 1 --subject "$(id)" --repo behiques/hivetty',
+      '$GH pr merge 1 --repo behiques/hivetty',
+      'gh api -X PUT repos/behiques/hivetty/pulls/1/merge --repo behiques/hivetty',
+      'bash -c "gh pr merge 1 --repo behiques/hivetty"',
+      'gh pr merge 1 --repo behiques/hivetty; gh pr merge 2 --repo victim/other',
+      'gh pr merge 1 --repo behiques/hivetty; bash -c "gh pr merge 2 --repo victim/other"',
+    ]) {
+      expect(decide('Bash', { command }, GRANTS), command).toEqual({ behavior: 'ask' });
+    }
+  });
+
+  it('needs all of Bash for anything chained beside the merge', () => {
+    const scoped = ['Bash(gh pr view *)', 'Bash(gh pr merge * --repo behiques/hivetty)'];
+    expect(decide('Bash', { command: 'gh pr merge 1 --repo behiques/hivetty; rm -rf ~' }, scoped)).toEqual({ behavior: 'ask' });
+    expect(decide('Bash', { command: C229 }, scoped)).toEqual({ behavior: 'allow' });
+  });
+
+  it('with auto-merge off the same merge raises the card, with the project switch beside once', () => {
+    expect(decide('Bash', { command: C229 }, ['Bash'])).toEqual({ behavior: 'ask' });
+    expect(rungsFor('Bash', { command: C229 }).map((rung) => rung.id)).toEqual(['allow-once', 'allow-project']);
+  });
+});

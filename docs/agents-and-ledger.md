@@ -1891,6 +1891,20 @@ repository. The Bash merge stays as the fallback for an older HiveTTY. It still
 matches only as its own call with `--repo` last, and a quoted subject does not
 void the grant.
 
+**What counts as a merge, and what the grant covers (HIVE-409 follow-up).** `isPrMerge` reads the
+command through `shellSegments`, not as text. A command runs a merge when `gh` (or a word the shell
+fills in) is followed by `pr merge` or a `gh api` merge, when a still-expanded word spells one, or when
+a command that runs text it is handed (`bash -c`, `eval`, `ssh`, `python -c`, `sed`, `git -c`) carries
+one. A grep pattern, a commit message, an `echo` or a heredoc body that only *mentions* `gh pr merge` is
+not a merge, and bare `Bash` runs it. A line the tokeniser cannot parse falls back to the text match.
+
+`decide` then lets the auto-merge rule cover the whole line however the shipper spells it: every
+`gh pr merge` in it must name the consenting repository as its last `--repo`, `-R`, `--repo=` or
+`-R<slug>`, with no word the shell still fills in. Anything chained beside it needs all of Bash. So a
+subject quoting `&` or `;`, a merge chained to `gh pr view`, and `-R` all merge unattended on an
+auto-merge project. A merge through `gh api`, through a runner, or into another repository still raises
+the card, which offers `once` and *merge unattended for this project*.
+
 ### The fence, measured
 
 On Claude Code (the adapter's `headless.ts`; every CLI's is in [harness-architecture.md › Headless runs](harness-architecture.md#headless-runs-phase-2)). The measurements below are Claude Code's, and stay as measured.
