@@ -80,6 +80,8 @@ describe('createRunTracker', () => {
   let left: { ask: { id: string; ref?: string } | undefined; claims: string[] };
   /** Does any run of the closing lane hold an open ask (HIVE-408)? Set per test. */
   let askingOnLane: boolean;
+  /** What `onLive` reported, in order (HIVE-408). */
+  let awake: boolean[];
   /** The prompt hash a session-starting command carries. Set per test. */
   let promptHash: string | undefined;
   let commandCalls: number;
@@ -117,6 +119,7 @@ describe('createRunTracker', () => {
     handoff = undefined;
     left = { ask: undefined, claims: [] };
     askingOnLane = false;
+    awake = [];
     promptHash = undefined;
     commandCalls = 0;
     clock = 1_000;
@@ -165,6 +168,7 @@ describe('createRunTracker', () => {
       handoffFor: () => handoff,
       leftOpen: () => left,
       openAsksOnLane: (name, lane) => askingOnLane && name === 'a' && lane === 'thread:k1',
+      onLive: (live) => awake.push(live),
       newUuid: () => 'uuid-minted',
       pushStatus: (name) => statuses.push(name),
       pushLines: (name, pushed) =>
@@ -2290,6 +2294,21 @@ describe('createRunTracker', () => {
     expect(tracker.kill('a', 'run-9')).toBe(false);
     expect(childInstances[0]?.killSignals).toEqual([]);
     expect(childInstances[1]?.killSignals).toEqual(['SIGTERM']);
+  });
+
+  it('reports the first live run and the last one ending, once each (HIVE-408)', () => {
+    parallel = 2;
+    tracker.run('a', 'ledger', undefined, { lane: 'thread:A' });
+    tracker.run('b', 'ledger');
+    expect(awake).toEqual([true]);
+
+    childInstances[0]?.emitStdout(resultLine());
+    childInstances[0]?.emitClose(0);
+    expect(awake).toEqual([true]);
+
+    childInstances[1]?.emitStdout(resultLine());
+    childInstances[1]?.emitClose(0);
+    expect(awake).toEqual([true, false]);
   });
 
   describe('what a run is charged (HIVE-408)', () => {

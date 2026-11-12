@@ -198,6 +198,8 @@ export interface RunTrackerDeps {
    * `ledger-derive.ts`? Optional so a spec that never runs a thread lane needs none.
    */
   openAsksOnLane?: (name: string, lane: string) => boolean;
+  /** Called with `true` when the first run goes live and `false` when the last one ends (HIVE-408). */
+  onLive?: (live: boolean) => void;
   /**
    * The lane ask a closing run leaves open and the claims it wrote
    * (HIVE-354), from `leftOpen` in `ledger-derive.ts`. Optional so a spec that
@@ -520,11 +522,17 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
   const liveOf = (name: string): LiveRun[] => running.get(name) ?? [];
 
-  const forget = (name: string, live: LiveRun): void => {
-    const rest = liveOf(name).filter((other) => other !== live);
+  /** Tell the host when the first run starts and the last one ends (HIVE-408): it holds the Mac awake between. */
+  const setRunning = (name: string, runs: LiveRun[]): void => {
+    const before = running.size > 0;
+    if (runs.length === 0) running.delete(name);
+    else running.set(name, runs);
+    const after = running.size > 0;
+    if (before !== after) deps.onLive?.(after);
+  };
 
-    if (rest.length === 0) running.delete(name);
-    else running.set(name, rest);
+  const forget = (name: string, live: LiveRun): void => {
+    setRunning(name, liveOf(name).filter((other) => other !== live));
   };
 
   const describe = (live: LiveRun): LiveRunSummary => ({
@@ -1472,7 +1480,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
       // Re-read rather than reusing the snapshot the gates were decided from:
       // `deps.command` runs arbitrary composition code in between.
-      running.set(name, [...liveOf(name), started]);
+      setRunning(name, [...liveOf(name), started]);
       /*
         The skip count is cleared here — at the one door every *standing*
         trigger passes through — rather than in the scheduler's tick (HIVE-121).

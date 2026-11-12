@@ -10,6 +10,7 @@ import {
   app,
   dialog,
   ipcMain,
+  powerSaveBlocker,
   safeStorage,
   shell,
   type IpcMainEvent,
@@ -2942,7 +2943,18 @@ export function registerIpcHandlers(
     } satisfies AgentStatusPush);
   };
 
+  /** The blocker held while any agent run is live (HIVE-408). Server mode's own is separate. */
+  let runBlocker: number | null = null;
+
   runs = createRunTracker({
+    onLive: (live) => {
+      // shortcut: one blocker for every agent run, not per run; enough while runs are the only reason.
+      if (live && runBlocker === null) runBlocker = powerSaveBlocker.start('prevent-app-suspension');
+      else if (!live && runBlocker !== null) {
+        powerSaveBlocker.stop(runBlocker);
+        runBlocker = null;
+      }
+    },
     /*
       `spawn` is injected rather than imported by `runs.ts`, which is what lets
       that module's tests drive a recording fake without a real process. The
