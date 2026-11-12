@@ -9093,6 +9093,18 @@ export const useSummons = (onStage: string | null): Summons => {
   return useMemo(() => summonsOf(notifs, closedAsks, onStage), [notifs, closedAsks, onStage]);
 };
 
+/** Open permission cards in the Summons queue, and the oldest one's time (HIVE-409): the pill's card segment. */
+export const usePermissionCards = (onStage: string | null): { count: number; oldestTs: number | null } => {
+  const { asks } = useSummons(onStage);
+  return useMemo(() => {
+    const cards = asks.filter((notif) => notif.kind === 'agent.permission');
+    return {
+      count: cards.length,
+      oldestTs: cards.length === 0 ? null : Math.min(...cards.map((notif) => notif.createdAt)),
+    };
+  }, [asks]);
+};
+
 /**
  * The Echo rows: news, newest first (HIVE-231). They never count as needing
  * you, but every row in the Inbox must be reachable, so the pill shows them

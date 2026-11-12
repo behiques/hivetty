@@ -232,7 +232,9 @@ export function createLedgerNotifier(
     }
 
     if (entry.kind === 'answer' && entry.thread !== undefined) {
-      deps.markRead(entry.thread);
+      // A card the app closed as moot (HIVE-409) is gone, not merely read: nobody is left to answer.
+      if (entry.from === OVERMIND && entry.meta?.['moot'] !== undefined) deps.dismiss(entry.thread);
+      else deps.markRead(entry.thread);
       return;
     }
 

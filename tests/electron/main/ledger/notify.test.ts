@@ -136,6 +136,20 @@ describe('createLedgerNotifier', () => {
     expect(markRead).toHaveBeenCalledWith('a41');
   });
 
+  it('an overmind moot answer dismisses the card (HIVE-409)', () => {
+    const { dismiss, markRead, onEntry } = harness();
+    onEntry(entry({ id: 'n1', from: OVERMIND, to: 'shipper', kind: 'answer', thread: 'a1', body: 'moot', meta: { moot: 'job closed' } }));
+    expect(dismiss).toHaveBeenCalledWith('a1');
+    expect(markRead).not.toHaveBeenCalled();
+  });
+
+  it('a moot answer from anyone else only marks read (HIVE-409)', () => {
+    const { dismiss, markRead, onEntry } = harness();
+    onEntry(entry({ id: 'n2', from: 'shipper', to: OVERMIND, kind: 'answer', thread: 'a2', body: 'moot', meta: { moot: 'x' } }));
+    expect(dismiss).not.toHaveBeenCalled();
+    expect(markRead).toHaveBeenCalledWith('a2');
+  });
+
   it('dismisses the answered card when the asker reports done', () => {
     const { dismiss, raise, onEntry } = harness();
     onEntry(entry({ id: 'x3', kind: 'done', thread: 'a41', body: 'Sent.' }));

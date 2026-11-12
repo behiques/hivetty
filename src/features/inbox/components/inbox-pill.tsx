@@ -1,9 +1,10 @@
-import { Bell } from '@phosphor-icons/react';
+import { Bell, LockSimple } from '@phosphor-icons/react';
 
 import { cn } from '@/lib/utils';
 
 import { useReducedMotion } from '@hooks/use-reduced-motion';
-import { useEchoes, useSummons } from '@stores/hive-store';
+import { useAge } from '@hooks/use-relative-time';
+import { useEchoes, usePermissionCards, useSummons } from '@stores/hive-store';
 import { NEWS_SECTION, useArrivalPulse, useInboxActions, useInboxDrawer, useSettingsOpen, useStackUp } from '@stores/ui-store';
 
 interface InboxPillProps {
@@ -15,6 +16,35 @@ interface InboxPillProps {
 const Divider = ({ amber }: { amber: boolean }) => (
   <span aria-hidden className={cn('my-1.5 w-px', amber ? 'bg-amber-edge' : 'bg-border')} />
 );
+
+interface CardSegmentProps {
+  count: number;
+  oldestTs: number;
+  expanded: boolean;
+  onClick: () => void;
+}
+
+/**
+ * The open permission cards and the oldest one's age (HIVE-409). A child of
+ * its own, so the ticking age only mounts while a card waits.
+ */
+function CardSegment({ count, oldestTs, expanded, onClick }: CardSegmentProps) {
+  const age = useAge(oldestTs);
+  const cards = count === 1 ? 'card' : 'cards';
+  return (
+    <button
+      type="button"
+      aria-label={`${String(count)} permission ${cards}, oldest waiting ${age}`}
+      aria-expanded={expanded}
+      onClick={onClick}
+      className="flex items-center gap-[7px] py-1.5 pr-3 pl-2.5 hover:bg-hover aria-expanded:bg-amber-soft aria-expanded:text-ink"
+    >
+      <LockSimple size={14} className="text-amber-text" aria-hidden />
+      <b className="tabular-nums font-semibold text-amber-text">{count}</b>
+      <span>{`${cards} · oldest ${age}`}</span>
+    </button>
+  );
+}
 
 /**
  * What needs you, as a count in the stage's corner (HIVE-198). Nothing
@@ -36,6 +66,7 @@ const Divider = ({ amber }: { amber: boolean }) => (
  */
 export function InboxPill({ onStage }: InboxPillProps) {
   const { asks, sessions } = useSummons(onStage);
+  const permissionCards = usePermissionCards(onStage);
   const echoes = useEchoes();
   const pulse = useArrivalPulse();
   const { open } = useInboxDrawer();
@@ -75,6 +106,18 @@ export function InboxPill({ onStage }: InboxPillProps) {
           <b className="tabular-nums font-semibold text-amber-text">{count > 99 ? '99+' : count}</b>
           <span>{`${needs} you`}</span>
         </button>
+      ) : null}
+      {/* A permission card is one of `asks`, so this only ever shows beside the amber count. */}
+      {permissionCards.oldestTs !== null ? (
+        <>
+          <Divider amber />
+          <CardSegment
+            count={permissionCards.count}
+            oldestTs={permissionCards.oldestTs}
+            expanded={stackUp && !settings}
+            onClick={toggleStack}
+          />
+        </>
       ) : null}
       {amber && news > 0 ? <Divider amber /> : null}
       {news > 0 ? (

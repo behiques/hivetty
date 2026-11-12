@@ -351,11 +351,18 @@ describe('the Jira tools (HIVE-174)', () => {
 describe('PROJECT_AUTO_MERGE_TOOL', () => {
   const qualified = `mcp__hive__${PROJECT_AUTO_MERGE_TOOL.name}`;
 
-  it('is named project_auto_merge and requires both the project and the switch', () => {
+  it('is named project_auto_merge and takes one project or a list, and the switch', () => {
     expect(PROJECT_AUTO_MERGE_TOOL.name).toBe('project_auto_merge');
     expect(LEDGER_TOOL_NAMES).not.toContain(PROJECT_AUTO_MERGE_TOOL.name);
-    expect(PROJECT_AUTO_MERGE_TOOL.inputSchema.required).toEqual(['project', 'on']);
+    expect(PROJECT_AUTO_MERGE_TOOL.inputSchema.required).toEqual(['on']);
     expect(PROJECT_AUTO_MERGE_TOOL.inputSchema.properties?.['project']).toMatchObject({ type: 'string' });
+    // HIVE-409: several in one call, one consent card for all of them.
+    expect(PROJECT_AUTO_MERGE_TOOL.inputSchema.properties?.['projects']).toMatchObject({
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 1,
+      maxItems: 20,
+    });
     expect(PROJECT_AUTO_MERGE_TOOL.inputSchema.properties?.['on']).toMatchObject({ type: 'boolean' });
   });
 

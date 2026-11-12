@@ -87,12 +87,63 @@ describe('createToolHandlers — listing', () => {
   it('refuses project_auto_merge without a project or a boolean on, calling nothing', async () => {
     const untouched = stub();
     const handlers = createToolHandlers(untouched);
-    for (const args of [{ on: true }, { project: 'hive' }, { project: 'hive', on: 'yes' }, { project: '', on: false }]) {
+    const refused = [
+      { on: true },
+      { project: 'hive' },
+      { project: 'hive', on: 'yes' },
+      { project: '', on: false },
+      // HIVE-409: both, an empty list, a non-string entry, more than twenty.
+      { project: 'a', projects: ['b'], on: true },
+      { projects: [], on: true },
+      { projects: ['a', 3], on: true },
+      { projects: ['a', ''], on: true },
+      { projects: 'a', on: true },
+      { projects: Array.from({ length: 21 }, (_, i) => `p${String(i)}`), on: true },
+    ];
+    for (const args of refused) {
       const result = await handlers.callTool('project_auto_merge', args);
-      expect(result.isError).toBe(true);
-      expect(textOf(result)).toMatch(/project_auto_merge needs project .* and on/);
+      expect(result.isError, JSON.stringify(args)).toBe(true);
+      expect(textOf(result)).toMatch(/project_auto_merge needs on .* and either project .* or projects/);
     }
     expect(untouched.projectAutoMerge).not.toHaveBeenCalled();
+  });
+
+  it('project_auto_merge applies a list in one call and says a saved yes is ignored (HIVE-409)', async () => {
+    const directory = {
+      projects: [
+        { id: 'hivetty', key: 'hive', name: 'HiveTTY', path: '/r/h', status: 'ok' as const, origin: 'local' as const, autoMerge: true },
+        { id: 'cloud', key: 'cloud', name: 'Cloud', path: '/r/c', status: 'ok' as const, origin: 'local' as const, autoMerge: true },
+      ],
+    };
+    const projectAutoMerge = vi.fn(async (_request: { project: string; on: boolean }) => directory);
+    const result = await createToolHandlers(stub({ projectAutoMerge })).callTool('project_auto_merge', {
+      projects: ['hive', 'cloud'],
+      on: true,
+    });
+
+    expect(projectAutoMerge).toHaveBeenNthCalledWith(1, { project: 'hive', on: true });
+    expect(projectAutoMerge).toHaveBeenNthCalledWith(2, { project: 'cloud', on: true });
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toContain('Auto-merge is on for hivetty');
+    expect(textOf(result)).toContain('Auto-merge is on for cloud');
+    expect(textOf(result)).toContain("A saved 'don't ask again' never covers this tool: every call asks, by design.");
+  });
+
+  it('project_auto_merge reports a refused entry in a list and still applies the rest (HIVE-409)', async () => {
+    const directory = { projects: [] };
+    const projectAutoMerge = vi.fn(async (request: { project: string; on: boolean }) => {
+      if (request.project === 'nope') throw new ReceiverError(409, 'no project "nope" is configured; nothing was changed');
+      return directory;
+    });
+    const result = await createToolHandlers(stub({ projectAutoMerge })).callTool('project_auto_merge', {
+      projects: ['nope', 'hive'],
+      on: false,
+    });
+
+    expect(projectAutoMerge).toHaveBeenCalledTimes(2);
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toContain('project_auto_merge nope: no project "nope" is configured');
+    expect(textOf(result)).toContain('Auto-merge is off for hive');
   });
 
   it('turns a project_auto_merge refusal into a tool error carrying the reason', async () => {

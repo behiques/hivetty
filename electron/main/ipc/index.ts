@@ -10,6 +10,7 @@ import {
   app,
   dialog,
   ipcMain,
+  powerMonitor,
   powerSaveBlocker,
   safeStorage,
   shell,
@@ -213,7 +214,7 @@ import {
   laneWorkdir,
   agentsRoot,
 } from '../agents/paths';
-import { createPermissions, type Permissions } from '../agents/permissions';
+import { createPermissions, isPermissionAsk, type Permissions } from '../agents/permissions';
 import { createAgentRunFiles } from '../agents/run-files';
 import {
   createRunTracker,
@@ -299,6 +300,7 @@ import { createSlackTokens } from '../integrations/slack/tokens';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
+import { createPermissionReminder } from '../ledger/reminders';
 import { ACCOUNT_CALLS, hostLicence, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
 import { cliEntitled } from '../licence/entitled';
 import { createSuspender, installSuspender, isLapsed, releaseNow, runContainer } from '../licence/suspend';
@@ -1374,6 +1376,9 @@ const scheduleForegroundChange = (): void => {
 /** Undo {@link watchWindowFocus}, or a no-op before it has run. */
 let unwatchWindowFocus: (() => void) | null = null;
 
+/** Disarm the permission reminder and its focus listener (HIVE-409), or null before it is armed. */
+let stopPermissionReminder: (() => void) | null = null;
+
 /**
  * Wire the app-level focus events. Idempotent: a second call replaces the
  * first rather than doubling the listeners.
@@ -1913,6 +1918,28 @@ export function registerIpcHandlers(
   // report because a hidden window has stopped running. See
   // `scheduleForegroundChange`.
   watchWindowFocus();
+
+  /*
+    HIVE-409: the reminder for an unanswered permission card, on focus and every
+    fifteen active minutes. `ledger` is declared further down; the reminder reads it
+    only from its timer and its focus handler, after this whole body has executed.
+    Replaced, not doubled, if this function runs again, as `watchWindowFocus` is.
+  */
+  stopPermissionReminder?.();
+  const permissionReminder = createPermissionReminder({
+    openCards: () =>
+      ledger.read({}).openAsks.filter((ask) => ask.to === OVERMIND && isPermissionAsk(ask)),
+    remind: (id) => hub.remind(id),
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
+  });
+  const remindOnFocus = (): void => permissionReminder.onFocus();
+  permissionReminder.start();
+  app.on('browser-window-focus', remindOnFocus);
+  stopPermissionReminder = () => {
+    app.removeListener('browser-window-focus', remindOnFocus);
+    permissionReminder.stop();
+    stopPermissionReminder = null;
+  };
 
   /**
    * Two property reads and no subprocess, which is the entire point.
@@ -3093,6 +3120,16 @@ export function registerIpcHandlers(
     // The watcher's cache, filled in the same pass as `agentSchedules` (HIVE-128).
     parallelFor: (name) => agentParallel.get(name) ?? AGENT_LIMIT_DEFAULTS.parallel,
     laneOf: (name) => agentLanes.get(name),
+    /*
+      HIVE-409: a merge card is moot once its PR merged. `github` is declared further down this
+      function; this runs only from the sweep's interval, after the whole body has executed, as
+      `onPrLookup` argues. The same login-env await, so a boot-window lookup does not read launchd's PATH.
+    */
+    prMerged: async (repo, number) => {
+      await loginEnvStatus();
+      const reply = await answerPrLookup(github, { repo, number });
+      return reply.pr === null ? undefined : reply.pr.state === 'merged';
+    },
     // A pruned lane's directory goes with its record (HIVE-188).
     removeLaneDir: (name, lane) => {
       try {
@@ -3166,6 +3203,29 @@ export function registerIpcHandlers(
     },
     read: (name) => agentRegistry.read(name),
     write: (name, source) => agentRegistry.write(name, source),
+    /*
+      HIVE-409: the merge card's project switch, through the same writer the MCP tool uses.
+      `autoMergeGrants` is built further down; this runs only when an answer arrives.
+    */
+    mergeUnattended: async (repo) => {
+      await autoMergeGrants?.refresh();
+      const project = autoMergeGrants?.projectFor(repo);
+      if (project === undefined) return { ok: false, reason: `no configured project has ${repo}` };
+      try {
+        projectAutoMergeFor(
+          { project, on: true },
+          {
+            config: getConfig,
+            setAutoMerge: setProjectAutoMerge,
+            announce: (snapshot) => send(CH.configChanged, snapshot),
+          },
+        );
+      } catch (cause) {
+        return { ok: false, reason: cause instanceof Error ? cause.message : String(cause) };
+      }
+      console.info(`[projects] permission card set autoMerge on on ${project}`);
+      return { ok: true, project };
+    },
   });
 
   /**
@@ -3571,6 +3631,7 @@ export function registerIpcHandlers(
     */
     slackBridge?.stop();
     scheduler?.stop();
+    stopPermissionReminder?.();
     runs?.closeAll('app-closed');
     agentState?.flush();
     /**
@@ -5975,6 +6036,7 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
   foreground.clear();
   foregroundListeners.clear();
   unwatchWindowFocus?.();
+  stopPermissionReminder?.();
   if (foregroundTick !== null) {
     clearTimeout(foregroundTick);
     foregroundTick = null;

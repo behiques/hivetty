@@ -433,6 +433,27 @@ describe('rungsFor', () => {
   });
 });
 
+describe('the merge ladder (HIVE-409)', () => {
+  it('offers once and the project switch, and no rule', () => {
+    const rungs = rungsFor('Bash', { command: 'gh pr merge 229 --squash --repo behiques/hivetty' });
+    expect(rungs.map((r) => r.id)).toEqual(['allow-once', 'allow-project']);
+    expect(rungs[1]).toEqual({
+      id: 'allow-project',
+      label: 'merge unattended for this project',
+      caption: 'turns on auto-merge for behiques/hivetty and merges this one.',
+    });
+    expect(defaultRungFor(rungs)).toBe('allow-once');
+  });
+
+  it('a merge with no --repo offers once only', () => {
+    expect(rungsFor('Bash', { command: 'gh pr merge 229 --squash' }).map((r) => r.id)).toEqual(['allow-once']);
+  });
+
+  it('a non-merge ladder is unchanged', () => {
+    expect(rungsFor('Bash', { command: 'git status' }).map((r) => r.id)).not.toContain('allow-project');
+  });
+});
+
 describe('defaultRungFor', () => {
   it('prefers the family rung so one click settles the question', () => {
     expect(defaultRungFor(rungsFor('Bash', { command: 'git push' }))).toBe('allow-family');
@@ -781,6 +802,21 @@ describe('decide (HIVE-339)', () => {
     expect(decide('weird name', {}, ['weird name'])).toEqual({ behavior: 'allow' });
   });
 
+  it('a project list composes one literal naming every project (HIVE-409)', () => {
+    const tool = 'mcp__hive__project_auto_merge';
+    expect(oneShotRuleFor(tool, { projects: ['a', 'b'], on: true })).toBe(`literal:${tool}:projects=a,b;on=true`);
+    expect(oneShotRuleFor(tool, { project: 'a', on: false })).toBe(`literal:${tool}:project=a;on=false`);
+    expect(summarise(tool, { projects: ['a', 'b'], on: true })).toBe('projects=a,b;on=true');
+    // One list must never read as another, and both or neither specify nothing.
+    expect(oneShotRuleFor(tool, { projects: ['a,b'], on: true })).toBeUndefined();
+    expect(oneShotRuleFor(tool, { projects: ['a;on=false'], on: true })).toBeUndefined();
+    expect(oneShotRuleFor(tool, { project: 'a', projects: ['b'], on: true })).toBeUndefined();
+    expect(oneShotRuleFor(tool, { projects: [], on: true })).toBeUndefined();
+    const listed = { projects: ['a', 'b'], on: true };
+    expect(decide(tool, listed, [oneShotRuleFor(tool, listed)!])).toEqual({ behavior: 'allow' });
+    expect(decide(tool, { projects: ['a', 'b', 'c'], on: true }, [oneShotRuleFor(tool, listed)!])).toEqual({ behavior: 'ask' });
+  });
+
   it('asks for a once-only tool under every standing rule, and allows only its one-shot', () => {
     const tool = 'mcp__hive__project_auto_merge';
     const input = { project: 'hive', on: true };
@@ -848,8 +884,13 @@ describe('a PR merge: the consent checkpoint survives a wide Bash grant', () => 
     }
   });
 
-  it('offers only once on the card, since no standing rung would cover it', () => {
-    expect(rungsFor('Bash', { command: merges[0] }).map((rung) => rung.id)).toEqual(['allow-once']);
+  it('offers no standing rung on the card, since none would cover it', () => {
+    const rungs = rungsFor('Bash', { command: merges[0] });
+    // HIVE-409: the project switch may sit beside `once`; neither writes a rule.
+    expect(rungs[0]?.id).toBe('allow-once');
+    expect(rungs.map((rung) => rung.id)).not.toContain('allow-family');
+    expect(rungs.map((rung) => rung.id)).not.toContain('allow-tool');
+    expect(rungs.every((rung) => rung.rule === undefined)).toBe(true);
   });
 });
 

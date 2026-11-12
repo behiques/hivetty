@@ -561,6 +561,41 @@ describe('presentation', () => {
     });
   });
 
+  describe('remind (HIVE-409)', () => {
+    const raiseCard = () =>
+      hub.raise({ id: 'a1', kind: 'agent.permission', title: 'Allow Bash?', action: { type: 'ask', thread: 'a1' } });
+
+    it('re-presents an ask row that is still there', () => {
+      raiseCard();
+      present.mockClear();
+
+      expect(hub.remind('a1')).toBe(true);
+      expect(present).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1', title: expect.stringContaining('Allow Bash?') }));
+    });
+
+    it('does nothing for a dismissed row, an unknown id, or a non-ask row', () => {
+      raiseCard();
+      hub.dismiss('a1');
+      raise({ id: 's1', action: { type: 'session', entityId: 'term-1' } });
+      present.mockClear();
+
+      expect(hub.remind('a1')).toBe(false);
+      expect(hub.remind('nope')).toBe(false);
+      expect(hub.remind('s1')).toBe(false);
+      expect(present).not.toHaveBeenCalled();
+    });
+
+    it('a reminder click only activates; the row stays', () => {
+      raiseCard();
+      hub.remind('a1');
+
+      present.mock.calls.at(-1)![0].onClick();
+
+      expect(hub.list().some((n) => n.id === 'a1')).toBe(true);
+      expect(activate).toHaveBeenCalledWith({ type: 'ask', thread: 'a1' });
+    });
+  });
+
   /**
    * The other half of the same finding: every non-`ask` kind's toast-click
    * behaviour must stay byte-identical. `session` is the kind the existing

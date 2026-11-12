@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -267,6 +267,63 @@ describe('AskCard', () => {
     expect(screen.getByRole('radio', { name: 'npm *' }).getAttribute('aria-checked')).toBe(
       'true',
     );
+  });
+
+  /** HIVE-409: a card this old preselects `once`, the narrowest yes. It never answers itself (D7). */
+  describe('a stale permission card', () => {
+    const T0 = 1_800_000_000_000;
+    const stale = (ts: number) => ({
+      ...ask,
+      ts,
+      body: 'Allow Bash?\nnpm test',
+      meta: {
+        kind: 'permission',
+        tool: 'Bash',
+        input: { command: 'npm test' },
+        rungs: [
+          { id: 'allow-once', label: 'once', caption: 'runs this once. asks again next time.' },
+          { id: 'allow-family', label: 'npm *', caption: 'never asks again for npm commands.', rule: 'Bash(npm *)' },
+        ],
+        options: ['allow-once', 'allow-family', 'deny'],
+        default: 'allow-family',
+      },
+    });
+    const checked = (name: string) => screen.getByRole('radio', { name }).getAttribute('aria-checked');
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: false });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('keeps the default under thirty minutes, and preselects once at thirty', () => {
+      vi.setSystemTime(T0 + 29 * 60_000);
+      seedLedger([stale(T0)]);
+      render(<AskCard notif={{ ...notif, kind: 'agent.permission', createdAt: T0 }} thread="a41" />);
+      expect(checked('npm *')).toBe('true');
+
+      act(() => {
+        vi.setSystemTime(T0 + 30 * 60_000);
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(checked('once')).toBe('true');
+    });
+
+    it('never replaces a rung the person already picked', () => {
+      vi.setSystemTime(T0 + 29 * 60_000);
+      seedLedger([stale(T0)]);
+      render(<AskCard notif={{ ...notif, kind: 'agent.permission', createdAt: T0 }} thread="a41" />);
+      act(() => {
+        screen.getByRole('radio', { name: 'npm *' }).click();
+      });
+
+      act(() => {
+        vi.setSystemTime(T0 + 31 * 60_000);
+        vi.advanceTimersByTime(120_000);
+      });
+      expect(checked('npm *')).toBe('true');
+    });
   });
 
   /** A normal ask must not be affected by the permission-controls branch above it. */

@@ -51,6 +51,12 @@ const stringArg = (args: Record<string, unknown>, key: string): string | undefin
   return typeof value === 'string' && value !== '' ? value : undefined;
 };
 
+/** The most projects one `project_auto_merge` call may switch (HIVE-409); the schema's `maxItems`. */
+const AUTO_MERGE_MAX_PROJECTS = 20;
+
+/** Said on every switch (HIVE-409), so nobody reads the card it raised as a bug. */
+const DONT_ASK_AGAIN = "A saved 'don't ask again' never covers this tool: every call asks, by design.";
+
 const metaArg = (args: Record<string, unknown>): Record<string, unknown> | undefined => {
   const value = args['meta'];
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -388,34 +394,59 @@ export function createToolHandlers(
   };
 
   /**
-   * The auto-merge switch (retro B): one project by id or key, one boolean.
-   * The answer leads with what changed, then the directory as `projects`
-   * reads it after the write. A refusal is the receiver's reason, named.
+   * The auto-merge switch (retro B): one project by id or key, or a list of
+   * them (HIVE-409), and one boolean. The receiver takes one project per call,
+   * so a list is applied in turn. The answer leads with one line per project,
+   * then why a saved yes never covers this tool, then the directory as
+   * `projects` reads it after the last write. A single project's refusal is the
+   * receiver's reason, named; in a list, it is that project's line.
    */
   const projectAutoMerge = async (args: Record<string, unknown>): Promise<CallToolResult> => {
-    const project = stringArg(args, 'project');
+    const one = args['project'];
+    const many = args['projects'];
     const on = args['on'];
-    if (project === undefined || typeof on !== 'boolean') {
-      return failed('project_auto_merge needs project (a project id or key) and on (true or false)');
+    const list =
+      many === undefined
+        ? typeof one === 'string' && one !== ''
+          ? [one]
+          : undefined
+        : one === undefined &&
+            Array.isArray(many) &&
+            many.length > 0 &&
+            many.length <= AUTO_MERGE_MAX_PROJECTS &&
+            many.every((entry): entry is string => typeof entry === 'string' && entry !== '')
+          ? many
+          : undefined;
+    if (list === undefined || typeof on !== 'boolean') {
+      return failed(
+        `project_auto_merge needs on (true or false) and either project (one id or key) or projects (1 to ${String(AUTO_MERGE_MAX_PROJECTS)} of them)`,
+      );
     }
 
-    let directory: ProjectsDirectory;
-    try {
-      directory = await client.projectAutoMerge({ project, on });
-    } catch (cause) {
-      if (cause instanceof ReceiverError) return failed(`project_auto_merge: ${cause.message}`);
-      throw cause;
+    let directory: ProjectsDirectory | undefined;
+    const leads: string[] = [];
+    for (const project of list) {
+      try {
+        directory = await client.projectAutoMerge({ project, on });
+      } catch (cause) {
+        if (!(cause instanceof ReceiverError)) throw cause;
+        if (list.length === 1) return failed(`project_auto_merge: ${cause.message}`);
+        leads.push(`project_auto_merge ${project}: ${cause.message}`);
+        continue;
+      }
+      const flipped =
+        directory.projects.find((entry) => entry.id === project) ??
+        directory.projects.find((entry) => entry.key === project);
+      const name = flipped?.id ?? project;
+      leads.push(
+        on
+          ? `Auto-merge is on for ${name}: the shipper merges its pull requests without a person's approval.`
+          : `Auto-merge is off for ${name}: its pull requests wait for a person's approval again.`,
+      );
     }
+    if (directory === undefined) return failed(leads.join('\n'));
 
-    const flipped =
-      directory.projects.find((entry) => entry.id === project) ??
-      directory.projects.find((entry) => entry.key === project);
-    const name = flipped?.id ?? project;
-    const lead = on
-      ? `Auto-merge is on for ${name}: the shipper merges its pull requests without a person's approval.`
-      : `Auto-merge is off for ${name}: its pull requests wait for a person's approval again.`;
-
-    return ok(`${lead}\n${projectsText(directory)}`, { projects: directory.projects });
+    return ok(`${leads.join('\n')}\n${DONT_ASK_AGAIN}\n${projectsText(directory)}`, { projects: directory.projects });
   };
 
   /** One PR record (HIVE-173). A missing record is an answer, not an error. */

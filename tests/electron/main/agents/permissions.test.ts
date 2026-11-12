@@ -462,6 +462,69 @@ describe('onAnswer', () => {
     expect(d.write.mock.calls[0]![1]).toMatch(/tools:.*\bBash\b/);
   });
 
+  it('a moot answer grants nothing and refuses nothing (HIVE-409)', async () => {
+    const d = deps([ask('a1', 'drone', RUNGS), answer('n1', 'a1', 'moot')]);
+    const p = createPermissions(d);
+    await p.onAnswer(answer('n1', 'a1', 'moot') as never);
+    expect(d.append).not.toHaveBeenCalledWith(expect.objectContaining({ meta: expect.objectContaining({ grantFailed: 'a1' }) }));
+    expect(d.write).not.toHaveBeenCalled();
+    expect(p.grantsFor('drone')).toEqual([]);
+  });
+
+  describe('allow-project (HIVE-409)', () => {
+    const MERGE = { command: 'gh pr merge 229 --squash --repo behiques/hivetty' };
+    const mergeCard = () => ask('a1', 'shipper', [], MERGE);
+
+    it('turns the switch on and grants this merge once', async () => {
+      const mergeUnattended = vi.fn(async (_repo: string) => ({ ok: true as const, project: 'p1' }));
+      const d = deps([mergeCard(), answer('n1', 'a1', 'allow-project')], { mergeUnattended });
+      const p = createPermissions(d);
+      await p.onAnswer(answer('n1', 'a1', 'allow-project') as never);
+      expect(mergeUnattended).toHaveBeenCalledWith('behiques/hivetty');
+      expect(d.write).not.toHaveBeenCalled();
+      expect(p.grantsFor('shipper')).toEqual([`literal:Bash:${MERGE.command}`]);
+    });
+
+    it('with no matching project records why and grants nothing', async () => {
+      const mergeUnattended = vi.fn(async (_repo: string) => ({ ok: false as const, reason: 'no project has behiques/hivetty' }));
+      const entries: unknown[] = [mergeCard(), answer('n1', 'a1', 'allow-project')];
+      const append = vi.fn((r: LedgerPostRequest) => {
+        entries.push({ ...r, id: `x${String(entries.length)}`, ts: 3 });
+      });
+      const d = deps(entries, { mergeUnattended, append });
+      const p = createPermissions(d);
+      await p.onAnswer(answer('n1', 'a1', 'allow-project') as never);
+      expect(append).toHaveBeenCalledWith(expect.objectContaining({ meta: expect.objectContaining({ grantFailed: 'a1' }) }));
+      expect(p.grantsFor('shipper')).toEqual([]);
+    });
+
+    it('without a mergeUnattended dep refuses, failing closed', async () => {
+      const entries: unknown[] = [mergeCard(), answer('n1', 'a1', 'allow-project')];
+      const append = vi.fn((r: LedgerPostRequest) => {
+        entries.push({ ...r, id: `x${String(entries.length)}`, ts: 3 });
+      });
+      const p = createPermissions(deps(entries, { append }));
+      await p.onAnswer(answer('n1', 'a1', 'allow-project') as never);
+      expect(p.grantsFor('shipper')).toEqual([]);
+    });
+
+    it('a forged allow-project is refused by the author check', async () => {
+      const mergeUnattended = vi.fn();
+      const d = deps([mergeCard(), answer('n1', 'a1', 'allow-project', 'shipper')], { mergeUnattended });
+      await createPermissions(d).onAnswer(answer('n1', 'a1', 'allow-project', 'shipper') as never);
+      expect(mergeUnattended).not.toHaveBeenCalled();
+    });
+
+    it('allow-project on a card that is not a merge is refused and grants nothing', async () => {
+      const mergeUnattended = vi.fn();
+      const entries: unknown[] = [ask('a1', 'drone', RUNGS), answer('n1', 'a1', 'allow-project')];
+      const p = createPermissions(deps(entries, { mergeUnattended }));
+      expect(p.grantsFor('drone')).toEqual([]);
+      await p.onAnswer(answer('n1', 'a1', 'allow-project') as never);
+      expect(mergeUnattended).not.toHaveBeenCalled();
+    });
+  });
+
   it('writes nothing for allow-once or deny', async () => {
     for (const body of ['allow-once', 'deny']) {
       const d = deps([ask('a1', 'drone', RUNGS)]);
@@ -633,7 +696,7 @@ describe('a permission wait is visible on the job thread', () => {
     ...ask(id, 'drone', RUNGS), ref: 'a226', meta: { ...ask(id, 'drone', RUNGS).meta, run },
   });
 
-  it('posts the wait on the job thread, addressed to nobody so it wakes nobody', () => {
+  it('posts the wait on the job thread, addressed to the asker (HIVE-409)', () => {
     const card = cardOn('p1', 'rA');
     const d = deps([job, begun('rA', 'thread:J'), card]);
 
@@ -641,9 +704,31 @@ describe('a permission wait is visible on the job thread', () => {
 
     expect(d.append).toHaveBeenCalledTimes(1);
     const note = d.append.mock.calls[0]![0];
-    expect(note).toMatchObject({ from: 'overmind', kind: 'post', thread: 'J', meta: { permission: 'p1' } });
-    expect(note.to).toBeUndefined();
+    expect(note).toEqual(expect.objectContaining({ from: 'overmind', to: 'sess-1', kind: 'post', thread: 'J', meta: { permission: 'p1' } }));
     expect(note.body.split('\n')[0]).toBe('drone is waiting on permission card a226: Allow Bash?');
+  });
+
+  it('a repo-lane card posts to the sender of the newest ask on that repository (HIVE-409)', () => {
+    const intake = { id: 's1', ts: 0, from: 'sess-4', to: 'drone', kind: 'ask' as const, body: 'ship', meta: { pr: 252, repo: 'behiques/hivetty' } };
+    const card = cardOn('p2', 'rB');
+    const d = deps([intake, begun('rB', 'repo:Behiques/HiveTTY'), card]);
+
+    createPermissions(d).onAsk(card);
+
+    expect(d.append).toHaveBeenCalledWith(expect.objectContaining({ kind: 'post', to: 'sess-4', thread: 's1', meta: { permission: 'p2' } }));
+  });
+
+  it('posts nothing on a repo lane with no ask, or to the card raiser itself (HIVE-409)', () => {
+    const self = { id: 'J2', ts: 0, from: 'drone', to: 'drone', kind: 'ask' as const, body: 'x' };
+    const repoCard = cardOn('p3', 'rC');
+    const selfCard = cardOn('p4', 'rD');
+    const d = deps([begun('rC', 'repo:a/b'), repoCard, self, begun('rD', 'thread:J2'), selfCard]);
+    const permissions = createPermissions(d);
+
+    permissions.onAsk(repoCard);
+    permissions.onAsk(selfCard);
+
+    expect(d.append).not.toHaveBeenCalled();
   });
 
   it('posts nothing for a run on the standing lane, or for an ordinary ask', () => {
@@ -664,7 +749,7 @@ describe('a permission wait is visible on the job thread', () => {
     await createPermissions(d).onAnswer(answer('n1', 'p1', 'deny'));
 
     expect(d.append).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'post', thread: 'J', body: 'permission card a226 answered: deny' }),
+      expect.objectContaining({ kind: 'post', to: 'sess-1', thread: 'J', body: 'permission card a226 answered: deny' }),
     );
   });
 });

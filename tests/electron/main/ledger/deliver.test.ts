@@ -318,6 +318,21 @@ describe('createDeliver', () => {
     expect(write).toHaveBeenCalledTimes(1);
   });
 
+  /** HIVE-409: a permission card's note to the job's asker is an overmind post with a `to`. */
+  it("writes a marker for the overmind's permission note addressed to the session", () => {
+    const job = ledger.append({ from: 'sess-a', to: 'builder', kind: 'ask', body: 'build it' });
+    write.mockClear();
+    const thread = job.ok ? job.id : 'j1';
+    const result = ledger.append({
+      from: 'overmind', to: 'sess-a', kind: 'post', thread,
+      body: 'shipper is waiting on permission card a12', meta: { permission: 'a12' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write.mock.calls[0]?.[0]).toBe('sess-a');
+  });
+
   it('writes nothing for a broadcast post', () => {
     ledger.append({ from: 'shipper', kind: 'post', body: 'PR #9 merged' });
 

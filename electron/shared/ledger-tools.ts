@@ -473,14 +473,21 @@ export const JIRA_USERS_TOOL: McpToolDefinition = {
 export const PROJECT_AUTO_MERGE_TOOL: McpToolDefinition = {
   name: 'project_auto_merge',
   description:
-    'Turn auto-merge on or off for one project configured in HiveTTY, named by its id or its key. On grants unattended merging: the shipper merges that project\'s pull requests without a person\'s approval. Off puts the person\'s approval back in front of every merge. Answers with the projects directory, as `projects` does. This tool needs the person\'s consent on a card every time it is called, and no `tools:` entry grants it: ask the person before you call it.',
+    'Turn auto-merge on or off for projects configured in HiveTTY, named by id or key: `project` for one, `projects` for several in one call (one consent card for all of them). On grants unattended merging: the shipper merges those projects\' pull requests without a person\'s approval. Off puts the person\'s approval back in front of every merge. Answers with the projects directory, as `projects` does. This tool needs the person\'s consent on a card every time it is called, and no `tools:` entry grants it: ask the person before you call it.',
   inputSchema: {
     type: 'object',
     properties: {
-      project: { type: 'string', description: 'The project id or key, as `projects` lists it.' },
+      project: { type: 'string', description: 'One project id or key, as `projects` lists it.' },
+      projects: {
+        type: 'array',
+        items: { type: 'string' },
+        minItems: 1,
+        maxItems: 20,
+        description: 'Several project ids or keys. Use this or `project`, not both.',
+      },
       on: { type: 'boolean', description: 'true to merge without approval, false to require it again.' },
     },
-    required: ['project', 'on'],
+    required: ['on'],
   },
 };
 

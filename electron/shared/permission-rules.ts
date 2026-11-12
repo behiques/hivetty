@@ -21,6 +21,7 @@
  * Nothing may ever write a `rule` that came off an ask.
  */
 
+import { mergeTarget } from './ledger-derive';
 import { shellSegments } from './shell-words';
 
 export type PermissionDecision =
@@ -33,7 +34,10 @@ export type FenceVerdict =
   | { behavior: 'ask' }
   | { behavior: 'deny'; message: string };
 
-export type RungId = 'allow-once' | 'allow-family' | 'allow-tool';
+export type RungId = 'allow-once' | 'allow-family' | 'allow-tool' | 'allow-project';
+
+/** The merge card's project switch (HIVE-409): turn on auto-merge for the repo, and merge this one. */
+export const ALLOW_PROJECT = 'allow-project';
 
 export interface Rung {
   id: RungId;
@@ -135,11 +139,21 @@ const specifierTextFor = (
 ): string | undefined => {
   if (ONCE_ONLY_TOOLS.has(toolName)) {
     // Fixed order, so one project and switch always read as the same text.
-    const project = str(input, 'project');
     const on = input['on'];
-    return project === undefined || typeof on !== 'boolean'
-      ? undefined
-      : `project=${project};on=${String(on)}`;
+    if (typeof on !== 'boolean') return undefined;
+    const project = str(input, 'project');
+    const projects = input['projects'];
+    if (project !== undefined && projects === undefined) return `project=${project};on=${String(on)}`;
+    // HIVE-409: a list names every project, in order. `[^,;]` keeps one list from reading as another.
+    if (
+      project === undefined &&
+      Array.isArray(projects) &&
+      projects.length > 0 &&
+      projects.every((entry) => typeof entry === 'string' && /^[^,;]+$/.test(entry))
+    ) {
+      return `projects=${projects.join(',')};on=${String(on)}`;
+    }
+    return undefined;
   }
   if (toolName === 'Bash') return str(input, 'command');
   if (toolName === 'WebFetch') {
@@ -637,10 +651,24 @@ export function rungsFor(
     },
   ];
 
-  // No standing rung grants a merge or a default-branch push (`matches`), so the card offers none.
-  if (ONCE_ONLY_TOOLS.has(toolName) || isPrMerge(toolName, input) || isDefaultBranchPush(toolName, input)) {
+  if (isPrMerge(toolName, input)) {
+    /*
+      HIVE-409: the card teaches the project switch. No rule: allow-project writes nothing to AGENT.md.
+      `target.repo` is model-written text shown in a caption; `--repo`'s `\S+` keeps it to one line,
+      and `permissions.ts` resolves it to a configured project before anything is switched.
+    */
+    const target = mergeTarget({ tool: toolName, input });
+    if (target !== undefined) {
+      rungs.push({
+        id: ALLOW_PROJECT,
+        label: 'merge unattended for this project',
+        caption: `turns on auto-merge for ${target.repo} and merges this one.`,
+      });
+    }
     return rungs;
   }
+  // No standing rung grants a once-only tool or a default-branch push (`matches`), so the card offers none.
+  if (ONCE_ONLY_TOOLS.has(toolName) || isDefaultBranchPush(toolName, input)) return rungs;
 
   /*
     Both rules below embed `toolName`, so both are gated on `isToolName`

@@ -1,12 +1,17 @@
-import { STANDING_LANE, parseList, readFrontmatter, threadLane } from '@shared/agent-contract';
+import { STANDING_LANE, parseList, readFrontmatter, repoLane, threadLane } from '@shared/agent-contract';
 import type { AgentWriteResult } from '@shared/agent-contract';
 import { OVERMIND } from '@shared/ledger-contract';
 import type { LedgerEntry, LedgerPostRequest } from '@shared/ledger-contract';
-import { CLOSING_KINDS, laneOfRun } from '@shared/ledger-derive';
-import { isToolName, oneShotRuleFor, rungsFor } from '@shared/permission-rules';
+import { CLOSING_KINDS, askerOf, laneOfRun, mergeTarget, repoAskerOf } from '@shared/ledger-derive';
+import { ALLOW_PROJECT, isToolName, oneShotRuleFor, rungsFor } from '@shared/permission-rules';
 
 import { patchFrontmatter } from './patch';
 import { isClosedLane } from './scheduler-rules';
+
+const REPO_PREFIX = repoLane('');
+
+/** The overmind's answer that closes a card nothing is waiting on any more (HIVE-409). */
+export const MOOT = 'moot';
 
 /**
  * Answers become grants (HIVE-119).
@@ -76,6 +81,11 @@ export interface PermissionDeps {
   append: (request: LedgerPostRequest) => void;
   read: (name: string) => Promise<string | null>;
   write: (name: string, source: string) => Promise<AgentWriteResult>;
+  /**
+   * Turn on `autoMerge` for the project holding `repo` (HIVE-409): main's config writer through
+   * `projectAutoMergeFor`. Absent in a harness without config, where allow-project fails closed.
+   */
+  mergeUnattended?: (repo: string) => Promise<{ ok: true; project: string } | { ok: false; reason: string }>;
 }
 
 export interface Permissions {
@@ -166,22 +176,31 @@ export function createPermissions(deps: PermissionDeps): Permissions {
   };
 
   /**
-   * The job thread the run behind `ask` works for, if it is on a thread lane.
+   * Where a card's note goes (HIVE-409): the thread and party the asking run works for. A thread lane's
+   * job is the ask that opened it; a repo lane's is the newest ask to the agent on that repository
+   * (`repoAskerOf`). Addressed, so `deliver.ts` nudges a session and the scheduler wakes an agent: the
+   * old unaddressed note reached nobody. Never the card's own raiser, so an agent asking itself cannot loop.
    */
-  const jobOf = (ask: LedgerEntry): string | undefined => {
-    const lane = laneOfRun(ask.from, ask.meta?.['run'], deps.entries());
-    const prefix = threadLane('');
-    return lane.startsWith(prefix) ? lane.slice(prefix.length) : undefined;
+  const noteFor = (ask: LedgerEntry): { thread: string; to: string } | undefined => {
+    const log = deps.entries();
+    const lane = laneOfRun(ask.from, ask.meta?.['run'], log);
+    const threadPrefix = threadLane('');
+    let target: { thread: string; to: string | undefined } | undefined;
+    if (lane.startsWith(threadPrefix)) {
+      const job = lane.slice(threadPrefix.length);
+      target = { thread: job, to: askerOf(log, job) };
+    } else if (lane.startsWith(REPO_PREFIX)) {
+      const root = repoAskerOf(log, ask.from, lane.slice(REPO_PREFIX.length));
+      target = root === undefined ? undefined : { thread: root.id, to: root.from };
+    }
+    if (target?.to === undefined || target.to === ask.from) return undefined;
+    return { thread: target.thread, to: target.to };
   };
 
-  /**
-   * A note on the job thread. No `to`: an unaddressed entry wakes nobody
-   * (`scheduler.onEntry`) and nudges nobody, it is only there to be read.
-   */
   const noteOnJob = (ask: LedgerEntry, body: string): void => {
-    const job = jobOf(ask);
-    if (job === undefined) return;
-    deps.append({ from: OVERMIND, kind: 'post', thread: job, body, meta: { permission: ask.id } });
+    const target = noteFor(ask);
+    if (target === undefined) return;
+    deps.append({ from: OVERMIND, to: target.to, kind: 'post', thread: target.thread, body, meta: { permission: ask.id } });
   };
 
   const isOpen = (askId: string): boolean =>
@@ -262,7 +281,13 @@ export function createPermissions(deps: PermissionDeps): Permissions {
           continue;
         }
 
-        if (answer.body !== 'allow-once') continue;
+        /*
+          `allow-project` (HIVE-409) also grants the card's own merge once. A switch that failed is
+          refused by `onAnswer` before this wake is scheduled, and `consumed` already skipped it; a
+          card with no merge to name never offered the rung, so it grants nothing either.
+        */
+        if (answer.body !== 'allow-once' && answer.body !== ALLOW_PROJECT) continue;
+        if (answer.body === ALLOW_PROJECT && mergeTarget(ask.meta) === undefined) continue;
 
         /*
           `meta.tool` is model-supplied and this road used to take it
@@ -359,7 +384,8 @@ export function createPermissions(deps: PermissionDeps): Permissions {
         the `answer` entry itself is already the ledger's record of the
         refusal, so there is nothing further to append here.
       */
-      if (entry.body === 'deny') return;
+      // A moot card (HIVE-409) is closed by the app's sweep: nothing is waiting, so nothing is granted.
+      if (entry.body === 'deny' || entry.body === MOOT) return;
 
       /*
         The ladder is recomputed, never read off the ask. `meta.rungs` is
@@ -403,6 +429,17 @@ export function createPermissions(deps: PermissionDeps): Permissions {
           nobody ever answered. Nothing widens, but the refusal is recorded.
         */
         refuse(ask, name, `no such option "${entry.body}"`);
+        return;
+      }
+
+      if (rung.id === ALLOW_PROJECT) {
+        const target = mergeTarget(ask.meta);
+        const result =
+          target === undefined || deps.mergeUnattended === undefined
+            ? { ok: false as const, reason: 'no repository to switch' }
+            : await deps.mergeUnattended(target.repo);
+        if (!result.ok) refuse(ask, name, result.reason);
+        // The one-shot merge is `grantsFor`'s, at the wake this answer triggers; a refusal above consumes it.
         return;
       }
 
