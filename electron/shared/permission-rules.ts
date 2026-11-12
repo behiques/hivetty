@@ -262,16 +262,20 @@ const LITERAL_PREFIX = 'literal:';
 
 /** First words that read and never run anything; `rg` (`--pre`) and `sed` (`e`) can run a program, so they are absent. */
 const READ_ONLY_TOOLS = new Set(['grep', 'cat']);
+/** Raw text that voids the read-only exemption, whatever the tokeniser made of it; see {@link readsOnly}. */
+const UNSAFE_FOR_EXEMPTION = /[$`>]|<</;
 
 /**
  * A lone `grep` or `cat` that only *mentions* a merge or a push (HIVE-407): reviewing the fence's own
  * code raised a card for it seven times in one audit week. One command and nothing else, since an
- * operator, a substitution or a process substitution each parse as a second command. A heredoc is
- * excluded outright: the tokeniser skips its body as data, and the exemption is not meant to cover one.
+ * operator, a substitution or a process substitution each parse as a second command. The raw text must
+ * also hold no `$` or backtick (bash runs a substitution hidden in an arithmetic subscript, which the
+ * tokeniser reads as escaped text), no `>` (a write into a hook or rc file is not a read), and no `<<`
+ * (the tokeniser skips a heredoc body as data, and the exemption is not meant to cover one).
  */
 const readsOnly = (command: string): boolean => {
   const segments = shellSegments(command);
-  return segments?.length === 1 && READ_ONLY_TOOLS.has(segments[0][0]) && !command.includes('<<');
+  return segments?.length === 1 && READ_ONLY_TOOLS.has(segments[0][0]) && !UNSAFE_FOR_EXEMPTION.test(command);
 };
 
 /**

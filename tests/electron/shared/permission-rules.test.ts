@@ -1017,6 +1017,11 @@ describe('a read-only command that only mentions a fenced act (HIVE-407)', () =>
       "rg --pre 'git push origin main' x",
       "sed -n 'e git push origin main' f",
       'echo git push origin main',
+      // An expansion bash evaluates as arithmetic runs a substitution the tokeniser saw as escaped text.
+      'cat ${x:=b[\\$\\(git push origin main\\)]} ${a[x]}',
+      'grep ${x:=b[\\$\\(gh pr merge 1\\)]} ${a[x]}',
+      // A write into a file something else runs later is not a read.
+      "grep -h 'git push origin main' notes.md >> .git/hooks/post-commit",
     ]) {
       expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
     }
