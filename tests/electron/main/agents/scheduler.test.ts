@@ -1037,6 +1037,21 @@ describe('createScheduler', () => {
       now, not a wake owed since the epoch — and `nextRunAt` is absent for
       exactly as long as an agent has never been scheduled.
     */
+    it('starts a wake queued under a spent day on the first tick of the next (HIVE-408)', () => {
+      const DAY = 24 * 60 * 60 * 1000;
+      state.patch(AGENT, {
+        today: { day: dayKey(clock), runs: 3, usd: 40, capped: true },
+        pendingWake: [{ kind: 'ask', id: 'a26', from: 'builder' }],
+      });
+      tick();
+      expect(woke).toEqual([]);
+
+      clock = NOON + DAY;
+      tick();
+      expect(woke).toEqual([expect.objectContaining({ name: AGENT, trigger: 'ledger' })]);
+      expect(state.read(AGENT).pendingWake ?? []).toEqual([]);
+    });
+
     it('seeds a next run rather than firing the instant an agent is created', () => {
       schedules.set(AGENT, { wake: every5m });
 
