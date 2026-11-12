@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InboxPill } from '@features/inbox/components/inbox-pill';
 import { useReducedMotion } from '@hooks/use-reduced-motion';
@@ -94,6 +94,42 @@ describe('InboxPill (HIVE-198)', () => {
     useUiStore.getState().pushArrival('a1', true);
     rerender(<InboxPill onStage="lead" />);
     expect(screen.getByRole('button', { name: /^Inbox/ }).parentElement?.className).not.toContain('animate-ccpulse');
+  });
+});
+
+describe('InboxPill, permission cards (HIVE-409)', () => {
+  const card = (id: string, createdAt: number) =>
+    notif({ id, kind: 'agent.permission', createdAt, action: { type: 'ask', thread: id } });
+  const T0 = 1_800_000_000_000;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    vi.setSystemTime(T0 + 47 * 60_000);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows the open cards and the oldest age while a permission card waits', async () => {
+    useHiveStore.getState().hydrateNotifs([card('a1', T0), card('a2', T0 + 15 * 60_000)]);
+    render(<InboxPill onStage={null} />);
+    const segment = screen.getByRole('button', { name: '2 permission cards, oldest waiting 47m' });
+    expect(segment).toHaveTextContent('2cards · oldest 47m');
+    vi.useRealTimers();
+    await userEvent.click(segment);
+    expect(useUiStore.getState().stackUp).toBe(true);
+  });
+
+  it('is singular for one card', () => {
+    useHiveStore.getState().hydrateNotifs([card('a1', T0)]);
+    render(<InboxPill onStage={null} />);
+    expect(screen.getByRole('button', { name: '1 permission card, oldest waiting 47m' })).toHaveTextContent('1card · oldest 47m');
+  });
+
+  it('has no card segment without a permission card', () => {
+    useHiveStore.getState().hydrateNotifs([ask('a3')]);
+    render(<InboxPill onStage={null} />);
+    expect(screen.queryByRole('button', { name: /permission card/ })).toBeNull();
   });
 });
 

@@ -78,6 +78,7 @@ import {
   useTicketSessions,
   useUnreadCount,
   useEchoes,
+  usePermissionCards,
   useSummons,
   useSummonsCount,
   useYoursAgain,
@@ -924,6 +925,19 @@ describe('hive-store selectors', () => {
 
     beforeEach(() => {
       act(() => useHiveStore.setState({ notifs: [], ledger: [], closedAsks: new Set() }));
+    });
+
+    it('usePermissionCards counts open permission rows and names the oldest (HIVE-409)', () => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([
+          { ...ask('a1', 'agent.permission'), createdAt: 50 },
+          { ...ask('a2', 'agent.permission'), createdAt: 20 },
+          { ...ask('a3'), createdAt: 10 },
+        ]);
+      });
+      expect(renderHook(() => usePermissionCards(null)).result.current).toEqual({ count: 2, oldestTs: 20 });
+      act(() => useHiveStore.setState({ notifs: [] }));
+      expect(renderHook(() => usePermissionCards(null)).result.current).toEqual({ count: 0, oldestTs: null });
     });
 
     it('splits asks from sessions waiting on you, newest first, and ignores news', () => {
