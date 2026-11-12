@@ -480,10 +480,16 @@ const MERGE_VALUES = new Set([
  * its own repository, F3), every option is one `gh pr merge` knows, and a repository is named. The last
  * `--repo` wins, as in gh.
  */
+/** `{a,b}` or `{1..3}`: bash expands it into several words, which the tokeniser keeps as one. */
+const BRACE_EXPANSION = /\{[^{}]*(?:,|\.\.)[^{}]*\}/;
+/** A redirection: the tokeniser drops it, so the raw text is the only place it shows. */
+const REDIRECT = /[<>]/;
+
 const plainMergeRepo = (words: readonly string[]): string | undefined => {
   const head = words[0];
   if (head === undefined || !(head === 'gh' || head.endsWith('/gh'))) return undefined;
-  if (words.some((word) => /[$`]/.test(word))) return undefined;
+  // A word the shell still changes: a substitution, or brace expansion, which can add a `--repo` (#281 R2).
+  if (words.some((word) => /[$`]/.test(word) || BRACE_EXPANSION.test(word))) return undefined;
   const expected = ['pr', 'merge'];
   let repo: string | undefined;
   let selector: string | undefined;
@@ -547,6 +553,11 @@ const autoMergeCovers = (command: string, grants: readonly string[]): boolean =>
   const allBash = grants.includes('Bash') || grants.includes('*');
   let merges = 0;
   if (hidesMerge(command, segments)) return false;
+  /*
+    What rides beside the merge is held to every gate bare `Bash` is (#281 R2): a default-branch push
+    asks, as it did before this read existed. A redirection writes a file, so it needs all of Bash too.
+  */
+  if (isDefaultBranchPush('Bash', { command }) || (!allBash && REDIRECT.test(command))) return false;
   for (const words of segments) {
     if (!words.some((word, i) => namesGh(word) && ghMerges(words, i))) {
       if (!allBash || segmentMerges(words)) return false;
@@ -694,7 +705,10 @@ export function matches(
     const command = str(input, 'command') ?? '';
     const segments = shellSegments(command);
     return (
-      segments?.length === 1 && !hidesMerge(command, segments) && plainMergeRepo(segments[0]!) === autoMerge[1]
+      segments?.length === 1 &&
+      !REDIRECT.test(command) &&
+      !hidesMerge(command, segments) &&
+      plainMergeRepo(segments[0]!) === autoMerge[1]
     );
   }
 

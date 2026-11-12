@@ -1343,3 +1343,40 @@ describe('PR #281 self-review findings: the fence reads a merge as gh does', () 
     }
   });
 });
+
+describe('PR #281 self-review round 2: the auto-merge grant covers the merge and nothing more', () => {
+  const GRANTS = ['Bash', 'Bash(gh pr merge * --repo behiques/hivetty)'];
+  const RULE = 'Bash(gh pr merge * --repo behiques/hivetty)';
+
+  it('never lets a default-branch push ride beside an auto-merged merge (R2 block)', () => {
+    for (const command of [
+      'gh pr merge 5 --repo behiques/hivetty && git push origin main',
+      'gh pr merge 5 --repo behiques/hivetty; git -C /x push origin HEAD:main',
+      'git push --all origin; gh pr merge 5 --repo behiques/hivetty',
+    ]) {
+      expect(decide('Bash', { command }, GRANTS), command).toEqual({ behavior: 'ask' });
+    }
+    // A push to a feature branch beside the merge is ordinary Bash.
+    expect(decide('Bash', { command: 'gh pr merge 5 --repo behiques/hivetty && git push origin feat/x' }, GRANTS)).toEqual({
+      behavior: 'allow',
+    });
+  });
+
+  it('asks when brace expansion could add a --repo the tokeniser cannot see', () => {
+    for (const command of [
+      'gh pr merge 5 --subject {x,--repo,victim/other} --repo behiques/hivetty',
+      'gh pr merge 5 --repo behiques/hivetty --body {a,--repo,victim/other}',
+      'gh pr merge 5 --repo behiques/hivetty --subject x{1..3}',
+    ]) {
+      expect(decide('Bash', { command }, GRANTS), command).toEqual({ behavior: 'ask' });
+      expect(matches(RULE, 'Bash', { command }), command).toBe(false);
+    }
+  });
+
+  it('a redirect beside the merge needs all of Bash, never the merge rule alone', () => {
+    const command = 'gh pr merge 5 --repo behiques/hivetty > ~/.zshrc';
+    expect(matches(RULE, 'Bash', { command })).toBe(false);
+    expect(decide('Bash', { command }, [RULE])).toEqual({ behavior: 'ask' });
+    expect(decide('Bash', { command }, GRANTS)).toEqual({ behavior: 'allow' });
+  });
+});
