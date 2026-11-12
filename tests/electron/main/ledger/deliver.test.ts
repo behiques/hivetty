@@ -227,6 +227,16 @@ describe('createDeliver', () => {
     expect(write).not.toHaveBeenCalled();
   });
 
+  it('does not nudge for an answer that only says accepted (HIVE-408)', () => {
+    const asked = ledger.append({ from: 'sess-a', to: 'shipper', kind: 'ask', body: 'ship #226' });
+    write.mockClear();
+
+    ledger.append({ from: 'shipper', to: 'sess-a', kind: 'answer', thread: asked.ok ? asked.id : '', body: ' Accepted ' });
+    deliver.onIdle('sess-a');
+
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it('delivers failed and done addressed to a session (HIVE-408)', () => {
     const asked = ledger.append({ from: 'sess-a', to: 'builder', kind: 'ask', body: 'build it' });
     const thread = asked.ok ? asked.id : '';

@@ -56,6 +56,13 @@ import type { Ledger } from './index';
  */
 const DELIVERABLE: readonly LedgerKind[] = ['ask', 'answer', 'post', 'failed', 'done'];
 
+/**
+ * The shipper's intake receipt says nothing the session must act on (HIVE-408).
+ * shortcut: matches the body; key on `meta.accepted` once HIVE-410 lands `ledger_accept`.
+ */
+const isAcceptance = (entry: LedgerEntry): boolean =>
+  entry.kind === 'answer' && entry.body.trim().toLowerCase() === 'accepted';
+
 interface DeliverOptions {
   ledger: Pick<Ledger, 'read' | 'append'>;
   isLive: (entityId: string) => boolean;
@@ -195,6 +202,7 @@ export function createDeliver({ ledger, isLive, isIdle, write, adapterOf }: Deli
         */
         entry.to === entityId &&
         (entry.kind !== 'ask' || open.has(entry.id)) &&
+        !isAcceptance(entry) &&
         !delivered.has(entry.id),
     );
 
