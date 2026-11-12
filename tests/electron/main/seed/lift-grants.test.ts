@@ -1,7 +1,16 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 
+import { parseList, readFrontmatter } from '../../../../electron/shared/agent-contract';
+import { matches } from '../../../../electron/shared/permission-rules';
 import { liftGrants } from '../../../../electron/main/seed/lift-grants';
+
+/** What a wake holds after the lift, folded as `definition.ts` folds it: tools: then grants:, once. */
+const held = (text: string): string[] => {
+  const fields = readFrontmatter(text)?.fields;
+  const list = (key: string) => parseList(fields?.get(key)?.value ?? '[]') ?? [];
+  return [...new Set([...list('tools'), ...list('grants')])];
+};
 
 describe('liftGrants (HIVE-409)', () => {
   const agent = (lines: string) => `---\nname: shipper\n${lines}\n---\nBody\n`;
@@ -66,6 +75,24 @@ describe('liftGrants (HIVE-409)', () => {
     const before = agent('tools: [Read, Bash(git *), Edit, WebFetch(domain:x.com)]');
     const out = liftGrants(before, agent('tools: [Read, Grep]'));
     for (const rule of ['Read', 'Bash(git *)', 'Edit', 'WebFetch(domain:x.com)']) expect(out).toContain(rule);
+  });
+
+  it.each([
+    ['a merge', 'Bash', { command: 'gh pr merge 1 --squash --repo behiques/hivetty' }],
+    ['a git call', 'Bash', { command: 'git -C /w fetch origin' }],
+    ['a read', 'Read', { file_path: '/w/a.ts' }],
+  ])('every call the old tools: allowed is still allowed after the lift: %s', (_name, tool, input) => {
+    const before = agent('tools: [Read, Bash, Bash(gh pr merge * --repo behiques/hivetty), Bash(git -C * fetch *)]');
+    const out = liftGrants(before, agent('tools: [Read, Bash]'));
+    const allowed = (rules: string[]) => rules.some((rule) => matches(rule, tool, input));
+    expect(allowed(held(before))).toBe(true);
+    expect(allowed(held(out))).toBe(true);
+  });
+
+  it('keeps a merge rule a bare Bash sits beside, since no bare rule allows a merge', () => {
+    const out = liftGrants(agent('tools: [Read, Bash, Bash(gh pr merge *)]'), agent('tools: [Read, Bash]'));
+    expect(out).toContain('tools: [Read, Bash]\n');
+    expect(out).toContain('grants: [Bash(gh pr merge *)]');
   });
 
   it('a lift keeps every rule it moves, in order', () => {

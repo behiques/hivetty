@@ -1,5 +1,11 @@
 import { parseList, patchFrontmatter, readFrontmatter } from '@shared/agent-contract';
 
+/**
+ * Scoped rules a bare tool never covers: `matches` lets only a rule naming the merge allow one, so a bare
+ * `Bash` beside `Bash(gh pr merge …)` does not make the scoped one redundant (HIVE-409).
+ */
+const NAMES_THE_MERGE = /^(?:Bash\(gh pr merge |mcp__hive__pr_merge\()/;
+
 /** What `permissions.ts` refuses to write into a list: a forged line, a list closed early, a quote the reread strips. */
 const UNWRITABLE = /[\n\r[\]#]|^['"\s]|['"\s]$/;
 
@@ -10,7 +16,7 @@ const UNWRITABLE = /[\n\r[\]#]|^['"\s]|['"\s]$/;
  * shipped change to it was held back. The shipper still carried nineteen scoped Bash rules PR #250 had
  * removed. The ledger only keeps two days, so which entries a card wrote cannot be read back. This keeps
  * every entry beyond the shipped list as a grant and hands `tools:` back to the seed. A scoped `X(…)` is
- * dropped when a bare `X` is held anyway. A `tools:` missing a shipped entry was narrowed on purpose and
+ * dropped when a bare `X` is held anyway, unless it names the merge, which no bare rule allows. A `tools:` missing a shipped entry was narrowed on purpose and
  * stays as it is. Either way `grants:` is written, which is what makes this run once.
  *
  * Its own file, not `merge.ts`: that one runs under plain Node in `scripts/shipped-history.ts` and takes
@@ -36,7 +42,7 @@ export function liftGrants(current: string, shipped: string): string {
   const extra = mine.filter((rule) => {
     if (ship.includes(rule)) return false;
     const open = rule.indexOf('(');
-    return open === -1 || !bare.has(rule.slice(0, open));
+    return open === -1 || NAMES_THE_MERGE.test(rule) || !bare.has(rule.slice(0, open));
   });
 
   // The same shape check the card's write makes; a file that fails it keeps its tools: and is tried again next seed.
