@@ -9,19 +9,13 @@ description: >-
 
 # Ship
 
-The old `ship` was one long session tail that slept twenty minutes at a time.
-This one is a **state machine the shipper agent advances on every wake**. The
-waits between stages are the agent asleep; the wake-ups are the ledger and a
-ten-minute clock. Nothing here sleeps inside a turn.
-
-The mechanics live elsewhere and are not repeated: findings triage in
-`review-pr-findings` (run by `fixer`), the whole-branch review in `pr-review`
-(run by the reviewer agent, `acr`, both shipped by HIVE-168), the merge in
-`merge-pr`. This skill sequences them.
+A state machine the shipper advances one wake at a time; the ledger and a
+ten-minute clock wake it. Nothing sleeps inside a turn except merge-pr's
+bounded `UNKNOWN` re-read. Claim, answer, release, denial and expiry follow
+the run contract. It sequences `pr-review` (`acr`), `review-pr-findings`
+(`fixer`) and `merge-pr`.
 
 ## Intake
-
-A session or the builder posts:
 
 ```
 ledger_ask
@@ -32,195 +26,134 @@ ledger_ask
     worktree: /abs/path/or/none        (an agent worktree merge-pr may remove)
     ticket: HIVE-123 | none
     key-confirmed: yes | no            (yes only when the key came from work-on's arguments)
+    closes-ticket: yes | no            (no on every PR of a split but the last)
     reply-to: <$HIVE_SESSION_ID, sess-…> | overmind
   meta: { pr: 214, repo: "behiques/hivetty", ticket: "HIVE-123", stage: "intake",
           key: "ship:behiques/hivetty#214" }
 ```
 
-`reply-to` is a party name: the asker's `$HIVE_SESSION_ID`, never a Claude
-session UUID. A write to a name no party answers to is refused `unknown
-party`; on that refusal the row's `replyTo` becomes the intake ask's `from`
-and the write is sent again.
+An intake without the `closes-ticket` line reads `yes`. A write to `reply-to`
+refused `unknown party` goes to the ask's `from`, which becomes `replyTo`.
 
-`key` is `ship:<owner>/<repo>#<N>`. While a ship ask for that PR is open, a
-second one writes nothing and comes back naming the first (HIVE-410): if the
-first was yours, wait for its answer; if it was someone else's, the PR is
-already in hand and the answer is theirs, so do not wait.
-
-The shipper takes the ask with `ledger_accept <the ask's id>` at once. Nobody is
-woken, the asker is free, and the ask stays open in the shipper's name until the
-row leaves `prs.json`. It adds the row in its working directory, with the ask's
-id and who asked:
+Intake order: `ledger_claim <owner>/<repo>#<N>`, then `ledger_accept <ask id>`,
+then write the row, before any other row's work:
 
 ```json
 { "pr": 214, "repo": "behiques/hivetty", "path": "/abs/path", "worktree": null,
-  "ticket": "HIVE-123", "keyConfirmed": true, "replyTo": "sess-…",
+  "ticket": "HIVE-123", "keyConfirmed": true, "closesTicket": true, "replyTo": "sess-…",
   "ask": "20261113-101500-0001", "asker": "builder",
   "stage": "intake", "waitingOn": null, "since": null, "rounds": 0 }
 ```
 
-`since` is the timestamp findings are gathered from. It starts `null`, which
-means the whole PR: a reviewer may comment on the draft before intake. It
-moves only when the fixer answers `clean`, and only to the `gathered` time
-that answer carries, never to now: a review posted while the fixer worked is
-newer than its gather and older than its answer, and `since = now` dropped it
-unread. `rounds` counts those answers. Neither is written once.
-
-`ask` is the intake ask and `asker` its `from`. **Every way a row leaves answers
-that ask** (HIVE-410): `ledger_answer <ask>` saying what happened, so no ask is
-left accepted with nobody on it. A row with no `ask` was taken before the field
-existed and skips the answer. An answer refused `thread is not open` means the
-ask expired after seven days: carry on with the notice.
+`since` is where findings are gathered from: `null` (the whole PR), then each
+`clean` answer's `gathered` time, never now. Every way a row leaves answers its
+`ask`.
 
 ## Lanes
 
-The shipper lanes by repository (`lane: repo`, up to three at once). Every
-`meta.repo` of the same `owner/name` reaches one conversation, and each
-conversation has its own working directory. Two repositories ship at once;
-two PRs on one repository queue, which is what keeps their syncs and merges in
-one checkout from colliding.
+One conversation and directory per repository. Its `prs.json` holds only that
+repository's rows; a missing `prs.json` is no rows; it is written with the
+first row (`test -f` before reading). Lane facts live in `lane.json` beside it.
+The standing lane never advances a row: it hands a PR to its repo lane with a
+self-addressed `ledger_ask to: shipper` carrying `meta.repo`, no `key`.
 
-- **Intake needs `meta.repo` as `owner/name`.** Without it the app answers the
-  ask with the reason and nothing wakes.
-- **`prs.json` is this lane's.** It lives in the lane's working directory and
-  only ever holds this repository's PRs. "One ask per wake" is per lane.
-- **The standing lane never takes a PR, syncs, merges or advances a row.** It
-  wakes for what reaches no repo lane: the overmind's question about a PR the
-  app could not match to a claim, and your ten-minute clock. For the first,
-  answer with the open claims (`ledger_read`, `claims`) and ask which
-  repository, or, when the ask names one, hand it over with a self-addressed
-  `ledger_ask to: shipper` carrying `meta.repo` and the original words and no `key`, and
-  answer the original ask "handed to <owner>/<repo>". If the standing
-  directory's `prs.json` still holds rows from before lanes, hand each one over
-  the same way, with its row in the body, then remove it and write the file.
-
-## The target triple, carried as literals
-
-Every `gh` command carries `--repo <owner>/<repo>`; every `git` command carries
-`-C <path>`. A bare `gh pr` is a bug: the agent's cwd is its own work dir, and
-`#214` exists in every repository. A `cd &&` prefix is not the equivalent.
-Re-read the head SHA in the call that uses it; a push moves it.
+Every `gh` command carries `--repo <owner>/<repo>`, every `git` command `-C
+<path>`.
 
 ## Stages
 
-Rows go in this lane's `prs.json` order. Do the stage's work; when the stage
-changes, write `prs.json`, post one `ledger_post` with
-`meta: { pr, repo, stage }`, and **fall through into the new stage in the same
-wake**: `intake` → `self-review`, `fix-self` → `ready` → `ci`, `findings` →
-`approval` → `merge` → `closed` never cost a wake between them. A row stops
-only at a stage that waits on someone else. CI pending, or an ask already
-out and unanswered (`waitingOn` names `acr`, `fixer` or `reply-to`), stops
-that row and the next row starts. An ask the row sends this wake, the merge
-fence's card included, ends the whole wake, and the rows after it advance on
-the next tick. Write `prs.json` whenever a row changes, its stage,
-`waitingOn`, `since` or `rounds`, answers moving `since` included: that is
-what lets a wake end at any call without losing any of them. `waitingOn` is
-set only by the ask that names it, and the same write that records an answer
-or a stage change sets it back to null: a stale `acr` or `fixer` would read as
-an ask still out and stop the row at `ready` or `ci`. A `sync` already run on
-a row this wake is not repeated.
+On a stage change: write `prs.json`, one `ledger_post` with `meta: { pr,
+repo, stage }`, and fall through in the same wake. A row stops only where it waits: CI pending, or `waitingOn` naming
+`acr`, `fixer` or `reply-to`. A row that stops this wake gets one `ledger_post`
+naming the stage and what it waits on. The write that records an answer
+clears `waitingOn`. Write `prs.json` whenever a field
+changes, and before any `ledger_ask`, which ends the wake. One merge per wake
+does not end the wake while a row sits at `intake`: run that row to its acr
+ask.
 
-**Before any row's stage work**, except at `merge` and `closed`,
-`gh pr view <N> --repo <owner>/<repo> --json state`. Those two stages handle a
-merged PR themselves: `merge-pr` recovers one (teardown, Jira Done) and
-`closed` sends the notice. At any earlier stage, `MERGED` → stage `merge`, so
-`merge-pr` does that recovery. `CLOSED` without a merge →
-`ledger_release <owner>/<repo>#<N>`, remove the row, write `prs.json`,
-`ledger_answer <ask>` "PR #N was closed without merging", then, only when
-`reply-to` is not `asker`, one `ledger_post to: <reply-to>` saying so, and no
-further work for that row.
+Before stage work, except at `merge` and `closed`, read `gh pr view <N> --repo
+<owner>/<repo> --json state`: `MERGED` → `merge`; `CLOSED` → release, remove
+the row, answer its `ask`.
 
-**A `ledger_ask` ends the wake.** That is the tool's contract, not a choice
-here. So a row whose stage posts an ask is the last row this wake touches;
-write `prs.json` before the ask, and the rows after it advance on the next
-tick, ten minutes on. One ask per wake is the throughput, and it is enough.
+An overmind `meta.kind: auto-merge` post re-runs `approval` for rows on its
+`meta.path`; a row at `merge` without consent goes back to `approval`.
 
-**A post from the overmind with `meta.kind: auto-merge` means a project's
-consent changed.** The app writes one whenever a project's `autoMerge` flips,
-through Settings or a hand edit and reload. Re-run `approval` in this wake for
-every row whose `path` is that post's `meta.path`. With `autoMerge: false`, a
-row about to merge no longer has consent: it goes back to `approval` and waits.
-
-**The pending-fix check: nothing merges while a fix is in flight.** At
-`findings`, `approval` and `merge`, before anything else, `ledger_read
-{ limit: 0 }` (no entries, so no cursor moves; the `claims` map comes back
-whole). `claims["<owner>/<repo>#<N> findings"]` held by anyone is the fixer
-mid-round: dispatched by this row, or by a session this row never heard from.
-Either way a change is on its way to this PR, so the row stops here, with no
-ask and no stage change, and the next tick checks again. A follow-up PR for a
-finding the fixer had already accepted is this check skipped. The fixer
-releases the claim on `clean` and `blocked-on`; on `blocked` it keeps it, and
-that row is already stuck.
+**Pending-fix check**, first at `findings`, `approval` and `merge`:
+`ledger_read { limit: 0 }`; `claims["<owner>/<repo>#<N> findings"]` held by
+anyone stops the row, with no ask.
 
 | Stage | This wake | Advance when |
 | --- | --- | --- |
-| `intake` | `gh pr view <N> --repo <owner>/<repo> --json state,isDraft,headRefName`; force draft (`gh pr ready <N> --repo <owner>/<repo> --undo`) so nothing runs CI before the review; `ledger_claim <owner>/<repo>#<N>` | done → `self-review` |
-| `self-review` | `{{tool:agents}}` lists `acr`: write `prs.json` with `waitingOn: acr`, then `ledger_ask to: acr` with the job in acr's own words, the PR link and the flag: `https://github.com/<owner>/<repo>/pull/<N> --self`, and `meta.intent: "self review for <owner>/<repo>#<N>"`; the wake ends there. No `acr`: `ledger_ask to: <reply-to>` with `meta: { pr: <N>, repo: "<owner>/<repo>" }` and options `[reviewed elsewhere, skip the self review]`; the review is acr's, and the shipper does not run it itself | the review's findings are in hand → `fix-self` when there are any, else `ready` |
-| `fix-self` | `{{tool:agents}}` lists `fixer`: write `waitingOn: fixer`, then `ledger_ask to: fixer` with the PR triple (`<owner>/<repo>#<N>`, the checkout `path`), the row's `reply-to`, and the findings verbatim. No fixer: `ledger_ask to: <reply-to>` with `meta: { pr: <N>, repo: "<owner>/<repo>" }`, the findings and options `[fixed, park them]`. Either ask ends the wake | fixer answers `clean` → `since = <its gathered time>`, `rounds += 1`, then `ready`; the person says fixed → `rounds += 1`, `since` stays, then `ready`; `blocked` → a stuck row, stay |
-| `ready` | `gh pr ready <N> --repo <owner>/<repo>`; Jira → In Review **only if `keyConfirmed`** and the ticket is not already In Review or later: `{{tool:jira_get}} { key }` for the status, then `{{tool:jira_transition}} { key, status: "In Review" }` (without HiveTTY's tools: `jira-writer get_transitions <KEY>` for the id, then `jira-writer transition_issue <KEY> <id>`) | done → `ci` |
-| `ci` | `gh pr checks <N> --repo <owner>/<repo>`: exit 8 is pending, zero checks is not green until `gh workflow list --repo <owner>/<repo> --json name,path,state` and `gh workflow view <path> --repo <owner>/<repo> --yaml` show no workflow triggering on `pull_request` | green → `findings`; red → `ledger_ask to: fixer` with the triple, `reply-to` and the failing checks (ends the wake), stay |
-| `findings` | The pending-fix check; then `{{tool:pr}} { repo: "<owner>/<repo>", number: <N> }` for its checks and its `findings`, the unresolved review threads: a count above zero is a finding for the fixer, who reads the threads. A count is never the whole gather. **The gather** is one call, `gh pr view <N> --repo <owner>/<repo> --json reviews,comments,latestReviews,statusCheckRollup`, everything newer than `since` (`submittedAt` on a review, `createdAt` on a comment; all of it when `since` is null): every review with a body in **any** state, `APPROVED` and `COMMENTED` included; every review with **no** body and a state of `COMMENTED` or `CHANGES_REQUESTED`, which is inline comments, handed over as "inline review <id> by <author>" for the fixer to read on its threads (the thread count can be ninety seconds stale, this reading is not); a bodyless `APPROVED` carries nothing and is left out, and so is a bodyless review whose author posted a `<!-- hive-fixer` comment on this PR, since those are the fixer's own inline replies; every PR-level comment; red checks. Leave out the fixer's own comments (they open with `<!-- hive-fixer`; a review or comment whose `id` a marker names is already answered) and a body that only says LGTM or summarises the reviewer's own inline comments. An approval that asks for a change is a finding. Any → `ledger_ask to: fixer` with the triple, `reply-to` and the findings verbatim, each with its author and `id` (ends the wake); none → advance | fixer answers `clean` (`since = <its gathered time>`, `rounds += 1`) and nothing newer → `approval` |
-| `sync` (inside `approval` and `merge`) | The **workspace** is the row's `worktree` when it has one, else `<path>`. Read the head ref (`gh pr view <N> --repo <owner>/<repo> --json headRefName --jq .headRefName`, written as a literal), then `git -C <workspace> branch --show-current` and `git -C <workspace> status --porcelain`. On the head ref with an empty status: sync there. Otherwise, when the workspace is `<path>`, it is the person's own checkout and a merge there lands in their work, so take a worktree of your own instead of stopping: `git -C <path> worktree list --porcelain`, and a later block whose `branch` is `refs/heads/<headRef>` is a tree already on it; none, then `git -C <path> fetch origin` and `git -C <path> worktree add <your working directory>/pr<N> <headRef>` (git makes the local branch from `origin/<headRef>` when there is none). Write that path as the row's `worktree`, write `prs.json`, and it is the workspace from here on, for `merge-pr` too. A refused `worktree add` (the person's checkout holds the branch with uncommitted files), or a row `worktree` that is dirty or off the branch, is a stuck row. Then `git -C <workspace> fetch origin` and `git -C <workspace> merge --ff-only origin/<headRef>`, one command per call, never `&&`: the fixer pushed from a tree of its own. A refused fast-forward is a stuck row. Then behind base → `git -C <workspace> merge origin/<base>` and one push | |
-| `approval` | The pending-fix check; then `sync`; then `findings`' gather again (the same `gh pr view` call and `{{tool:pr}}`), since `since`: a review can land while the row waits here, and an approval can carry its requests in its body. Anything → stage `findings`, write `prs.json`, and fall through (the one stage before this one a row goes back to). Nothing → `gh pr view <N> --repo <owner>/<repo> --json reviewDecision,reviewRequests,latestReviews`. Three readings; check (c) first, since it holds even where (a) or (b) would pass. **(a)** `reviewDecision` is `APPROVED`, or `{{tool:projects}}` shows the project whose `path` is this PR's checkout has `autoMerge: true` (the same consent that grants the merge call) → `merge`. **(b)** `reviewDecision` is empty (no branch rule requires a review) and `reviewRequests` is empty: no review is coming → `merge`. With `autoMerge` off, `merge-pr`'s merge (`{{tool:pr_merge}}`, or its Bash fallback) stops at the permission fence and becomes the person's inbox card, which is the ask. **(c)** `REVIEW_REQUIRED` or `CHANGES_REQUESTED`, any `latestReviews` entry with `state: CHANGES_REQUESTED`, or a review is requested: on the first wake at this stage only (`waitingOn` is not yet `reply-to`), write `waitingOn: "reply-to"` and `prs.json`, then `ledger_ask to: <reply-to>` "PR #N waits on a review" with `meta: { pr: <N>, repo: "<owner>/<repo>" }` (ends the wake). Options `[merge now, wait for review, hand back]` when the review is only requested; `[wait for review, hand back]` when `reviewDecision` is `REVIEW_REQUIRED` or `CHANGES_REQUESTED`, because `merge-pr`'s gate holds on those and a `merge now` would loop. `merge now` → `merge`; `wait for review` → stay, no further asks; `hand back` → `ledger_release`, `ledger_answer <ask>` "handed back", remove the row, write `prs.json`, and stop without merging. Never the stages before it, save `findings` from the re-gather | `APPROVED`, auto-merge, no review coming, or `merge now` → `merge` |
-| `merge` | The pending-fix check; then `sync`; then `findings`' gather once more, in this wake, whatever `approval` read before: a row can sit here across wakes, and a review that lands in between is what a follow-up PR is made of. Anything → stage `findings`, write `prs.json`, fall through. Nothing → `{{skill:merge-pr}} <owner>/<repo>#<N> <worktree-or-path> [KEY only if keyConfirmed]` in the same wake, with no ask or wait between | merge-pr reports `merged` on the same target → `closed`; a HOLD for unresolved threads → `findings` |
-| `closed` | `ledger_release <owner>/<repo>#<N>`; remove the row and write `prs.json`; then `ledger_answer <ask>` "PR #N merged" with `meta: { pr, repo, stage: "closed" }`: it closes the intake ask and tells whoever asked. Then, only when `reply-to` is not `asker`: for a session, `ledger_post to: <reply-to>` "PR #N merged" with the same `meta` (a directed post reaches the terminal without opening a thread; the session closes itself when its own work is done); for the overmind, `ledger_done` with the same `meta`. Each of these entries releases any ask held with `meta.after` on this PR, so none may drop the `meta` | done |
+| `intake` | Claim, accept, row; `gh pr view <N> --repo <owner>/<repo> --json state,isDraft,headRefName`; force draft with `gh pr ready <N> --repo <owner>/<repo> --undo` | → `self-review` |
+| `self-review` | `{{tool:agents}}` lists `acr`: `waitingOn: acr`, then `ledger_ask to: acr` "https://github.com/<owner>/<repo>/pull/<N> --self". No `acr`: ask `reply-to`, options `[reviewed elsewhere, skip the self review]` | findings → `fix-self`; none → `ready` |
+| `fix-self` | `fixer` listed: `waitingOn: fixer`, `ledger_ask to: fixer` with `<owner>/<repo>#<N>`, `path`, `reply-to` and the findings verbatim. No fixer: ask `reply-to`, options `[fixed, park them]` | the fixer's answer (below); fixed → `ready` |
+| `ready` | `gh pr ready <N> --repo <owner>/<repo>`; only if `keyConfirmed` and the ticket is before In Review: `{{tool:jira_transition}} { key, status: "In Review" }` (or the `jira-tracker` skill) | → `ci` |
+| `ci` | see below | green → `findings`; red → `ledger_ask to: fixer` with the failing checks |
+| `findings` | Pending-fix check; `{{tool:pr}} { repo: "<owner>/<repo>", number: <N> }`: unresolved threads are a finding. The gather, `gh pr view <N> --repo <owner>/<repo> --json reviews,comments,latestReviews,statusCheckRollup`, newer than `since`: every review with a body, any state; a bodyless `COMMENTED` or `CHANGES_REQUESTED` review as "inline review <id> by <author>"; a bodyless `APPROVED` carries nothing and is left out, as is a bodyless review whose author posted a `<!-- hive-fixer` comment on this PR; every PR-level comment; red checks. Leave out `<!-- hive-fixer` comments, ids they name, LGTM-only bodies. An approval asking for a change is a finding. Any → `ledger_ask to: fixer`, each with author and `id` | `clean`, nothing newer → `approval` |
+| `approval` | see below | → `merge` |
+| `merge` | Pending-fix check; sync; the gather again. Anything → `findings`. Nothing → `{{skill:merge-pr}} <owner>/<repo>#<N> <worktree-or-path> [KEY only if keyConfirmed] [closes-ticket: no when closesTicket is false]` | `merged` → `closed`; a thread HOLD → `findings` |
+| `closed` | `ledger_release <owner>/<repo>#<N>`; remove the row; `ledger_answer <ask>` "PR #N merged", `meta: { pr, repo, stage: "closed" }`; also `ledger_post to: <reply-to>` (`ledger_done` for overmind) when it is not the asker | done |
 
-The merge call itself is the checkpoint. The merge (`{{tool:pr_merge}}`,
-or the Bash fallback) is granted to the shipper only for a project with
-`autoMerge: true`; for every other project
-the same call stops at the app's permission fence and becomes an inbox card,
-the run ends `asking`, and the answer resumes it. Reading (b) of `approval` is
-the path that reaches the fence: no review is coming, so the shipper runs
-`merge-pr` and the fence asks the person. It never asks first: **the card is
-the ask.**
+### The fixer's answer
 
-## A row that waits
+`meta: { result: "clean" | "blocked" | "blocked-on", rounds, gathered, head, pr, repo }`.
+Read `meta.result`, never the body. `clean` → `since = gathered`, `rounds += 1`,
+next stage. `blocked-on` → the fixer ask again, with `meta.after` the PR it
+names. `blocked`, or any other shape → a stuck row.
 
-A row at a stage that waits on a person has exactly one open ask to its
-`reply-to`, sent on the first wake at this stage. Later wakes do not post
-"still waiting". `approval` reading (c) is gated that way; `self-review` with
-no `acr` and `fix-self` with no fixer are not yet, and still ask every wake.
+### ci
 
-A row stuck on anything else (CI red with no fixer, a refused sync, a fixer's
-`blocked`) asks its `reply-to` once, on the wake it gets stuck: write
-`waitingOn: "reply-to"` and `prs.json`, then `ledger_ask` with `meta: { pr: <N>, repo: "<owner>/<repo>" }`, what is stuck
-and what you read, options `[keep waiting, hand back, abandon]`. `keep waiting`
-→ stay, no further asks; `hand back` or `abandon` → `ledger_release`,
-`ledger_answer <ask>` with which, remove the row, write `prs.json`. Never a `ledger_post` in its place, and never a
-question as the turn's closing text: a post to the overmind raises no card, and
-nothing you write as text reaches anyone, so either one is a PR nobody hears
-about.
+1. Lane fact `prCi`, decided at the lane's first `ci` stage: no checks on the
+   PR and `gh workflow list --repo <owner>/<repo>` shows no workflow triggered
+   on `pull_request` → `false`, else `true`.
+2. While `false` and `gh pr diff <N> --repo <owner>/<repo> --name-only` lists
+   nothing under `.github/workflows/`, skip `gh pr checks`: green.
+3. Otherwise `gh pr checks <N> --repo <owner>/<repo>`; exit 8 is pending.
 
-**Every ask to `reply-to` names its PR**: `meta: { pr: <N>, repo: "<owner>/<repo>" }`,
-`pr` a number. The Hatchery reads it to show the PR as waiting on the person
-(SUMMONS); an ask without it leaves the PR reading by its stage, as if nobody
-had been asked.
+### sync (inside approval and merge)
 
-Never broadcast a wait: a `ledger_post` to `*` reaches no terminal.
+1. `gh api repos/<owner>/<repo>/compare/<base>...<headRef> --jq .behind_by`
+   is `0`: no workspace, no sync, next stage.
+2. The workspace is the row's `worktree`, else `<path>`. On the head ref with
+   an empty `git -C <workspace> status --porcelain`: sync there.
+3. Otherwise, at `<path>` (the person's checkout): the `git -C <path>
+   worktree list --porcelain` tree on `refs/heads/<headRef>`, or a new `git -C
+   <path> worktree add <your working directory>/pr<N> <headRef>`, becomes the
+   row's `worktree`. A refused add, or a dirty or off-branch `worktree`, is stuck.
+4. `git -C <workspace> fetch origin`, then `git -C <workspace> merge --ff-only
+   origin/<headRef>`, one call each; refused is a stuck row.
+5. `git -C <workspace> merge origin/<base>` and one push; conflicts as merge-pr 2.6.
+
+### approval
+
+1. Pending-fix check; sync; the gather again. Anything → `findings`.
+2. `gh pr view <N> --repo <owner>/<repo> --json reviewDecision,reviewRequests,latestReviews`,
+   reading (c) first:
+   - (a) `APPROVED`, or `{{tool:projects}}` shows this checkout's project with
+     `autoMerge: true` → `merge`.
+   - (b) `reviewDecision` and `reviewRequests` both empty → `merge`. Without
+     `autoMerge` the merge stops at the permission fence, and the app posts the
+     permission card's note to the asker.
+   - (c) `REVIEW_REQUIRED`, `CHANGES_REQUESTED`, or a requested review: once,
+     `waitingOn: "reply-to"`, ask "PR #N waits on a review", options `[merge
+     now, wait for review, hand back]`, no `merge now` when the decision blocks.
+     `wait for review` → stay, no further asks.
+
+Jira Done is merge-pr's, only when `keyConfirmed` and `closesTicket`;
+`closes-ticket: no` stops at In Review.
+
+## A stuck row
+
+Asks `reply-to` once: `waitingOn: "reply-to"`, then `ledger_ask` with what is
+stuck, options `[keep waiting, hand back, abandon]`. A hand back or abandon
+releases, answers the `ask`, removes the row. Stuck: CI red with no
+fixer, a refused sync, a fixer's `blocked`, an acr answer with `verdict:
+"failed"` or `"empty"`, a fixer answer whose `meta.result` is none of the
+three, a permission card still open when next woken.
+
+Every ask to `reply-to` carries `meta: { pr: <N>, repo: "<owner>/<repo>" }`;
+never a post in its place.
 
 ## In a terminal
 
-`{{skill:ship}}` in a session prints the intake shape above and stops. The tail belongs
-to the shipper: a session that wants a PR shipped posts the ask (work-on and
-goal-on do this themselves) and gets on with something else.
-
-## Red flags
-
-- Marking the PR ready before the self review's findings are fixed. The review belongs on
-  the draft.
-- Sleeping inside a turn to wait for CI or a reviewer. End the turn; the clock
-  wakes you.
-- Transitioning a ticket, or handing `merge-pr` a key, on a branch name. Only
-  `keyConfirmed`.
-- Asking "merge?" when no review is possible. Reading (b) goes to
-  `merge-pr`; the fence asks.
-- A wait posted to `*`: it reaches nobody.
-- Reaching the merge through `gh api` when the merge is not granted.
-- Reading an approval's state and not its body. "Approved, with two fixes"
-  merged without the fixes once; the re-gather at `approval` is what stops it.
-- Merging while `<owner>/<repo>#<N> findings` is claimed. The fixer is
-  landing a change; merging now makes it a follow-up PR.
-- Moving `since` to now. It moves to the fixer's `gathered` time, or a review
-  posted during the round is never read.
-- Treating an old reading as the merge gate. `merge-pr` takes the one that
-  counts, in the call before it merges.
+`{{skill:ship}}` prints the intake shape above and stops.

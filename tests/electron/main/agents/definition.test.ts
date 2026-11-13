@@ -8,6 +8,8 @@ import {
   parseAgent,
   readFrontmatter,
 } from '../../../../electron/main/agents/definition';
+import { AGENT_PREAMBLE } from '../../../../electron/main/agents/preamble';
+import { systemPromptFor } from '../../../../electron/main/agents/waker';
 import { parseList } from '../../../../electron/shared/agent-contract';
 
 /**
@@ -949,6 +951,20 @@ describe('codex: and copilot: blocks (HIVE-396)', () => {
       expect(def.copilot).toEqual({
         model: builds ? 'claude-opus-5.5' : 'claude-sonnet-5.5',
       });
+    }
+  });
+
+  it('renders the run contract exactly once in every shipped agent prompt (HIVE-413)', () => {
+    const root = join(process.cwd(), 'resources/agents');
+    const folders = readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+
+    for (const folder of folders) {
+      const source = readFileSync(join(root, folder.name, 'AGENT.md'), 'utf8');
+      const declared = parseList(readFrontmatter(source)?.fields.get('skills')?.value ?? '[]') ?? [];
+      const def = definition(source, { folder: folder.name, skillNames: declared, hiveSkillNames: [] });
+
+      const prompt = systemPromptFor(AGENT_PREAMBLE, def);
+      expect(prompt.match(/\*\*Run contract\*\*/g), folder.name).toHaveLength(1);
     }
   });
 });

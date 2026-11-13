@@ -288,7 +288,7 @@ function laneSentence(agent: string, mode: AgentLane, lane: string | undefined):
  */
 const AUTONOMY_CLAUSE: Record<Autonomy, string> = {
   ask: '**Check before you act on anything consequential.** Post a `ledger_ask` describing what you propose to do, then end your turn and wait for the answer. This is not a reason to skip your instructions or to ask permission to follow them: carrying out the work you were given is what you are awake for, and the routine steps it already covers need no asking. Ask about a *decision* their author would want a say in — something outward, irreversible, or not covered by what you were told.',
-  act: '**Proceed without asking, and report afterwards.** Your instructions are your authority: carry them out and say what you did with `ledger_done`. Ask only when you are genuinely blocked, not to confirm what you were already told to do.',
+  act: '**Proceed without asking, and report afterwards.** Your instructions are your authority: carry them out and report by closing the ask that brought the work (run contract 6); `ledger_done` only for work nobody asked for. Ask only when you are genuinely blocked, not to confirm what you were already told to do.',
 };
 
 export function systemPromptFor(

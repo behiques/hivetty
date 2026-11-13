@@ -28,6 +28,7 @@ import {
   openAsksOnLane,
   owedBy,
   unfinishedRuns,
+  whyNotOpen,
   matches,
   mergeAsk,
   mergeTarget,
@@ -1475,5 +1476,32 @@ describe('shipAsked (HIVE-411)', () => {
     const answered: LedgerEntry = { id: '20261113-100001-0009', ts: 150, from: 'shipper', to: 'sess-a', kind: 'answer', thread: ask.id, body: 'merged' };
     expect(shipAsked([ask, answered], 'acme/server', 313, 200)).toBe(false);
     expect(shipAsked([{ ...ask, to: 'fixer' }], 'acme/server', 313, 200)).toBe(false);
+  });
+});
+
+describe('whyNotOpen', () => {
+  const at = (h: number, m: number) => new Date(2026, 10, 13, h, m).getTime();
+  const ask = { id: 'A1', ts: at(9, 0), from: 'builder', to: 'shipper', kind: 'ask', ref: 'a1', body: 'ship' } as const;
+
+  it('names the closer, the time and the asker', () => {
+    const answer = { id: 'B1', ts: at(9, 30), from: 'overmind', kind: 'answer', thread: 'A1', body: 'no' } as const;
+    expect(whyNotOpen([ask, answer], 'A1', 'a1', at(10, 0))).toBe(
+      'thread is not open: a1, closed by overmind at 09:30: post to builder on this thread instead',
+    );
+  });
+
+  it('says when an ask expired', () => {
+    const late = ask.ts + LEDGER_ASK_TTL_MS + 1;
+    expect(whyNotOpen([ask], 'A1', 'a1', late)).toMatch(
+      /^thread is not open: a1, expired at \d\d:\d\d: post to builder on this thread instead$/,
+    );
+  });
+
+  it('keeps the bare reason for an ask that is still open', () => {
+    expect(whyNotOpen([ask], 'A1', 'a1', at(10, 0))).toBe('thread is not open: a1');
+  });
+
+  it('keeps the bare reason for a thread that names no ask', () => {
+    expect(whyNotOpen([], 'X9', 'x9', at(10, 0))).toBe('thread is not open: x9');
   });
 });
