@@ -8,7 +8,7 @@ import {
 } from '@shared/agent-contract';
 import { cliTakesEffort, type CliAgents } from '@shared/cli-contract';
 import { DEFAULT_ENV_ARG, isSessionEnvDenied } from '@shared/config-contract';
-import type { HarnessId } from '@shared/harness-contract';
+import { CAPABILITIES, type HarnessId } from '@shared/harness-contract';
 import { HOOK_ENV_GRANTS, HOOK_ENV_RECEIVER_URL } from '@shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '@shared/ledger-tools';
 import { fillIncludes } from '@shared/skill-fragments';
@@ -184,6 +184,8 @@ export function wakePrompt(
     agent?: string;
     /** The woken entries (HIVE-412): the sender's words, so they come last and nothing of ours follows. */
     delivered?: string;
+    /** The definition's skills, spelled for the CLI, on a wake that starts a conversation (HIVE-412). */
+    skills?: readonly string[];
   },
 ): string {
   /*
@@ -202,7 +204,12 @@ export function wakePrompt(
     extra === undefined || extra === ''
       ? `You woke because: ${trigger}.`
       : `You woke because: ${trigger} — ${extra}.`;
-  const after = rotation?.delivered === undefined ? '' : `\n\n${rotation.delivered}`;
+  // App-owned first, the sender's words last (HIVE-412): nothing of ours follows the block.
+  const fresh =
+    rotation?.skills === undefined || rotation.skills.length === 0
+      ? ''
+      : `\n\nThis is a fresh conversation. Before anything else, invoke the skills your definition names: ${rotation.skills.join(', ')}.`;
+  const after = `${fresh}${rotation?.delivered === undefined ? '' : `\n\n${rotation.delivered}`}`;
 
   /*
     The reason comes first here too (HIVE-126).
@@ -329,6 +336,13 @@ export const fencedRules = (
   standing: readonly string[] = [],
 ): string[] => [...HIVE_STANDING_GRANTS, ...standing, ...def.tools, ...grants];
 
+/**
+ * A definition's skill as this CLI invokes it (HIVE-412): a bare name is a hive skill, a `plugin:skill` is kept.
+ * shortcut: a bare name for a personal skill outside hive gets the hive spelling; split on the skill's source if one is ever named.
+ */
+const skillRef = (name: string, cli: HarnessId): string =>
+  name.includes(':') ? name : `${CAPABILITIES[cli].skills.refPrefix}${name}`;
+
 export function wakeCommand(input: WakeInput): WakeCommand {
   const { def, paths, env } = input;
 
@@ -413,6 +427,10 @@ export function wakeCommand(input: WakeInput): WakeCommand {
       ...(input.kind === 'task' ? { task: true as const } : {}),
       ...(input.lane === undefined ? {} : { lane: input.lane }),
       ...(input.def.lane === undefined ? {} : { laneMode: input.def.lane, agent: input.def.name }),
+      // The branch that spells no `--resume`: a first wake, a rotation, a lost session, a changed CLI, a task run.
+      ...(input.sessionUuid === undefined && def.skills.length > 0
+        ? { skills: def.skills.map((name) => skillRef(name, adapter.id)) }
+        : {}),
       ...(input.delivered === undefined ? {} : { delivered: input.delivered }),
     })}`,
     subscriptionAuth: env.subscriptionAuth,

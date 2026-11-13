@@ -1093,3 +1093,44 @@ describe('a wake that needs no ledger_read (HIVE-412)', () => {
     expect(prompt).not.toContain('what you watch');
   });
 });
+
+describe('skills on a fresh conversation (HIVE-412)', () => {
+  const SHIP = def({ skills: ['ship', 'merge-pr'] });
+
+  it('names the skills as Claude invokes them when the wake starts a conversation', () => {
+    expect(build({ def: SHIP }).args.at(-1)).toContain(
+      'This is a fresh conversation. Before anything else, invoke the skills your definition names: hive:ship, hive:merge-pr.',
+    );
+  });
+
+  it('says nothing about skills on a resumed wake, or when the definition names none', () => {
+    expect(build({ def: SHIP, sessionUuid: 'aaaa-bbbb' }).args.at(-1)).not.toContain('invoke the skills');
+    expect(build().args.at(-1)).not.toContain('invoke the skills');
+  });
+
+  it('spells them the way Codex and Copilot invoke a hive skill', () => {
+    expect(build({ def: SHIP, adapter: codexAdapter }).args.join('\n')).toContain(
+      'invoke the skills your definition names: $hive-ship, $hive-merge-pr.',
+    );
+    expect(build({ def: SHIP, adapter: copilotAdapter }).args.join('\n')).toContain(
+      'invoke the skills your definition names: /hive:hive-ship, /hive:hive-merge-pr.',
+    );
+  });
+
+  it('keeps a plugin skill as written', () => {
+    expect(build({ def: def({ skills: ['jira-writer:jira-writer'] }) }).args.at(-1)).toContain(
+      'invoke the skills your definition names: jira-writer:jira-writer.',
+    );
+  });
+
+  it('gives a task run the line too, since it is always fresh', () => {
+    expect(build({ def: SHIP, kind: 'task' }).args.at(-1)).toContain('hive:ship, hive:merge-pr');
+  });
+
+  it('puts the line above the delivered entries', () => {
+    const prompt = build({ def: SHIP, delivered: 'BLOCK' }).args.at(-1) ?? '';
+
+    expect(prompt.indexOf('invoke the skills')).toBeGreaterThan(-1);
+    expect(prompt.indexOf('invoke the skills')).toBeLessThan(prompt.indexOf('BLOCK'));
+  });
+});
