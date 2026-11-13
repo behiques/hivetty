@@ -1395,6 +1395,41 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   };
 
   /**
+   * Route every re-wake the overmind posted that no run was started for (HIVE-410): the app was
+   * closing when the run ended, so nothing was listening, or the wake was refused and its queue
+   * lost. Read off the log, as `releaseHeld` is, so a restart cannot spend the one re-wake an
+   * owed ask gets on nobody. Once a run lists the post in `meta.wakes` it is delivered; while it
+   * stands in a queue, the flush owns it.
+   */
+  const routeRewakes = (entries: readonly LedgerEntry[]): void => {
+    const woken = new Set<string>();
+    for (const item of entries) {
+      const wakes = item.meta?.['wakes'];
+      if (!Array.isArray(wakes)) continue;
+      for (const id of wakes as readonly unknown[]) if (typeof id === 'string') woken.add(id);
+    }
+
+    const owed = new Set(
+      openAsks(entries, deps.now())
+        .filter((ask) => ask.state === 'open' || ask.state === 'delivered')
+        .map((ask) => ask.id),
+    );
+
+    for (const item of entries) {
+      const to = item.to;
+      // Only main's own marker counts, for `expiredAsks`' reason.
+      if (item.from !== OVERMIND || typeof item.meta?.['rewoke'] !== 'string' || to === undefined) continue;
+      if (item.thread === undefined || !owed.has(item.thread) || woken.has(item.id)) continue;
+      if (!deps.isAgent(to) || !deps.wakesOnLedger(to)) continue;
+
+      const lanes = [STANDING_LANE, ...Object.keys(deps.state.read(to).lanes ?? {})];
+      if (lanes.some((lane) => queueOf(to, lane).some((queued) => queued.id === item.id))) continue;
+
+      deliver(to, item, entries);
+    }
+  };
+
+  /**
    * The ask that opened a thread lane has closed: the lane is done (HIVE-186).
    * Its record stays, with `closedAt`, so a later entry in the thread goes to
    * standing and the lane is pruned a day later (HIVE-188). A lane that never
@@ -1615,6 +1650,8 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
 
       // A held ask whose PR closed while the app was down (retro C).
       releaseHeld(deps.ledger.read().entries);
+      // A re-wake written while the app was closing, or lost with a queue (HIVE-410).
+      routeRewakes(deps.ledger.read().entries);
 
       /*
         One tick now, so a restart does not wait a full period to notice an

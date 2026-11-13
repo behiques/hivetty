@@ -2958,5 +2958,50 @@ describe('createScheduler', () => {
       expect(state.lane(AGENT, 'repo:a/x').nextRunAt).toBeGreaterThan(clock);
     });
   });
-});
 
+  describe('a re-wake no run was started for (HIVE-410)', () => {
+    const ask = entry({ id: 'k1', from: 'sess-1', kind: 'ask', body: 'Ship PR #1' });
+    const rewake = entry({
+      id: 'w1', from: 'overmind', kind: 'post', thread: 'k1',
+      body: 'You owe an answer to k1', meta: { rewoke: 'k1' },
+    });
+
+    it('is routed at start', () => {
+      entries = [ask, rewake];
+
+      scheduler.start();
+
+      expect(wakeIds).toEqual([['w1']]);
+    });
+
+    it('is left alone once a run was started for it', () => {
+      entries = [
+        ask,
+        rewake,
+        entry({ id: 's2', from: AGENT, to: undefined, kind: 'event', body: 'run.started — ledger', meta: { run: 'r2', wakes: ['w1'] } }),
+      ];
+
+      scheduler.start();
+
+      expect(wakeIds).toEqual([]);
+    });
+
+    it('is left alone once its ask closed', () => {
+      entries = [ask, rewake, entry({ id: 'n1', from: AGENT, to: 'sess-1', kind: 'answer', thread: 'k1', body: 'merged' })];
+
+      scheduler.start();
+
+      expect(wakeIds).toEqual([]);
+    });
+
+    it('is left to the flush while it stands in a queue', () => {
+      entries = [ask, rewake];
+      state.patch(AGENT, { pendingWake: [{ kind: 'post', id: 'w1', from: 'overmind' }] });
+      refuse = 'working';
+
+      scheduler.start();
+
+      expect(state.read(AGENT).pendingWake).toEqual([{ kind: 'post', id: 'w1', from: 'overmind' }]);
+    });
+  });
+});
