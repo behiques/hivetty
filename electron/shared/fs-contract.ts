@@ -302,8 +302,13 @@ export const MAX_FILE_BYTES = 1_000_000;
  * The largest image the stage will preview, in bytes. Higher than the text cap
  * because a retina screenshot is routinely past 1 MB, and an image is shown,
  * not parsed into an editor.
+ *
+ * 6 MB, not more: the preview crosses a server-mode socket as a base64 `data:`
+ * URL (4/3 the bytes), and a remote client refuses any frame over
+ * `POST_ATTACH_FRAME_MAX_BYTES` (8 MiB) by dropping its connection. 6 MB encodes
+ * to 8,000,000 characters, leaving room for the frame's envelope.
  */
-export const MAX_IMAGE_BYTES = 20_000_000;
+export const MAX_IMAGE_BYTES = 6_000_000;
 
 /**
  * Raster extensions the stage previews as images, with their MIME types. SVG is
