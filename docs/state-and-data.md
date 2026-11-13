@@ -220,8 +220,9 @@ order, each realpath with when its text was first read, recorded by main when
 the read is accepted and cleared on `/clear`. A path reaches it from a hook or,
 for a plan a build ask names, from the ledger, and then only once main has read
 it as a `.hive/plans/*.md` strictly under the session's cwd (`Plans.note`). A
-file only that link has read is kept `noted: true` until the session's own read
-clears it, and a link's later re-read never moves its time (HIVE-420). A
+file only that link has read is kept `noted: true` until the session's own write
+(a hook-driven read) clears it; a link's later re-read, a turn-end re-read and a
+restore never clear it or move its time (HIVE-420). A
 row written before HIVE-359 kept one `planFile`, which loads as a one-file list.
 When a restored row is resumed, main re-reads those files in order through
 `Plans.restore`, the last one on screen. Each is confined to the cwd the row
