@@ -2748,8 +2748,9 @@ workspace and ticket key written out as literals in every command; `ship`,
 - **Unknown names.** `{{include:nope}}` is left as written, and the Settings
   portability check (`portabilityIssues`) reports it: "No fragment is called
   `nope`."
-- **Changing one.** A fragment edit changes every agent prompt that includes
-  it, so the prompt hash rotates those agents' lanes, as any body edit does.
+- **Changing one.** A fragment edit changes every skill and agent prompt that
+  includes it; for the agents (today the builder and the fixer) the prompt hash
+  rotates their lanes, as any body edit does.
   `tests/electron/main/skills/shipped-text.test.ts` pins which shipped files
   include which fragment and that none restates it.
 
