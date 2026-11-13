@@ -241,7 +241,8 @@ export function createLedgerStore(options: LedgerStoreOptions): LedgerStore {
       };
 
       mkdirSync(dir, { recursive: true });
-      appendFileSync(fileFor(ms), `${JSON.stringify(stored)}\n`, 'utf8');
+      // The mode applies when the day-file is created: correspondence is its owner's only (HIVE-410).
+      appendFileSync(fileFor(ms), `${JSON.stringify(stored)}\n`, { encoding: 'utf8', mode: 0o600 });
       entries.push(stored);
 
       for (const listener of listeners) listener(stored);

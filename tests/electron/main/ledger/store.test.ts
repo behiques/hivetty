@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -323,5 +323,11 @@ describe('ledger store', () => {
 
     // Eight days back is past the window: the older claim is not read at all.
     expect(reopened.all().map((item) => item.id)).toEqual(['20260825-090000-0001', '20260825-090000-0002']);
+  });
+
+  it('creates a day-file only its owner can read (HIVE-410)', () => {
+    store.append({ from: 'sess-a', kind: 'post', body: 'hello' });
+
+    expect(statSync(join(dir, '2026-08-28.jsonl')).mode & 0o777).toBe(0o600);
   });
 });
