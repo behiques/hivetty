@@ -1,4 +1,4 @@
-import type { LedgerEntry } from '@shared/ledger-contract';
+import { OVERMIND, type LedgerEntry } from '@shared/ledger-contract';
 
 /**
  * The ledger entries a wake is for, in the wake prompt itself (HIVE-412), so a run can act with no
@@ -26,8 +26,14 @@ function header(entry: LedgerEntry, byId: ById): string {
   return `--- ${entry.kind}${ref} from ${entry.from}${threadRef === undefined ? '' : ` (thread ${threadRef})`} ---`;
 }
 
-function entryText(entry: LedgerEntry, byId: ById): string {
+function entryText(entry: LedgerEntry, byId: ById, agent: string): string {
   const lines = [header(entry, byId)];
+  // The intent the agent wrote on its own ask, so the answer's wake needs no read to know why it asked.
+  const asked = entry.kind === 'answer' && entry.thread !== undefined ? byId.get(entry.thread) : undefined;
+  const intent = asked !== undefined && asked.from === agent ? asked.meta?.['intent'] : undefined;
+  if (asked !== undefined && typeof intent === 'string' && intent.trim() !== '') {
+    lines.push(`your ask ${asked.ref ?? asked.id} said: ${intent}`);
+  }
   if (entry.meta !== undefined && Object.keys(entry.meta).length > 0) {
     lines.push(`meta: ${clip(JSON.stringify(entry.meta), META_MAX)}`);
   }
@@ -35,6 +41,14 @@ function entryText(entry: LedgerEntry, byId: ById): string {
   const body = entry.body.replace(/^---/gm, '  ---');
   lines.push(body.length <= BODY_MAX ? body : `${body.slice(0, BODY_MAX)}\n${pointer(entry)}`);
   return lines.join('\n');
+}
+
+/** A re-wake is the ask still owed (HIVE-410's post); only the overmind's marker counts, as in `routeRewakes`. */
+function render(entry: LedgerEntry, byId: ById, agent: string): string {
+  const rewoke = entry.from === OVERMIND ? entry.meta?.['rewoke'] : undefined;
+  const owed = typeof rewoke === 'string' ? byId.get(rewoke) : undefined;
+  if (owed === undefined) return entryText(entry, byId, agent);
+  return `You still owe an answer to ask ${owed.ref ?? owed.id}:\n${entryText(owed, byId, agent)}`;
 }
 
 export function wakeEntries(ids: readonly string[], entries: readonly LedgerEntry[], agent: string): string | undefined {
@@ -45,13 +59,12 @@ export function wakeEntries(ids: readonly string[], entries: readonly LedgerEntr
   for (const id of ids) {
     const entry = byId.get(id);
     if (entry === undefined) continue;
-    const text = entryText(entry, byId);
+    const text = render(entry, byId, agent);
     // Past the cap, a header and the pointer: the run still knows the entry exists and where to read it.
     const part = used + 2 + text.length <= BLOCK_MAX ? text : `${header(entry, byId)}\n${pointer(entry)}`;
     parts.push(part);
     used += 2 + part.length;
   }
 
-  void agent;
   return parts.length === 1 ? undefined : parts.join('\n\n');
 }

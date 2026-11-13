@@ -90,4 +90,38 @@ describe('wakeEntries (HIVE-412)', () => {
     expect(wakeEntries(['gone'], [e()], 'shipper')).toBeUndefined();
     expect(wakeEntries([], [e()], 'shipper')).toBeUndefined();
   });
+  it('reminds a run why it asked, when the answer closes its own ask', () => {
+    const asked = e({ id: 'k7', ref: 'a77', from: 'shipper', to: 'fixer', body: 'Fix #293', meta: { intent: 'mark #293 ready once clean' } });
+    const answer = e({ id: 'k8', kind: 'answer', ref: undefined, from: 'fixer', to: 'shipper', thread: 'k7', body: 'clean, 1 round' });
+
+    expect(wakeEntries(['k8'], [asked, answer], 'shipper')).toContain(
+      '--- answer from fixer (thread a77) ---\nyour ask a77 said: mark #293 ready once clean\nclean, 1 round',
+    );
+  });
+
+  it('never shows another party\'s intent', () => {
+    const asked = e({ id: 'k7', ref: 'a77', from: 'builder', to: 'fixer', meta: { intent: 'secret plan' } });
+    const answer = e({ id: 'k8', kind: 'answer', ref: undefined, from: 'fixer', to: 'shipper', thread: 'k7', body: 'done' });
+
+    expect(wakeEntries(['k8'], [asked, answer], 'shipper')).not.toContain('secret plan');
+  });
+
+  it('renders a re-wake as the ask still owed, not the post', () => {
+    const ask = e();
+    const rewake = e({ id: 'w1', kind: 'post', ref: undefined, from: 'overmind', thread: 'k1', body: 'You owe an answer to a81', meta: { rewoke: 'k1', run: 'r1' } });
+
+    const block = wakeEntries(['w1'], [ask, rewake], 'shipper') ?? '';
+
+    expect(block).toContain('You still owe an answer to ask a81:\n--- ask a81 from sess-3f2 (thread a81) ---\nShip PR #293');
+    expect(block).not.toContain('You owe an answer to a81');
+  });
+
+  it('renders a re-wake marker nobody but the overmind wrote as the post it is', () => {
+    const forged = e({ id: 'w1', kind: 'post', ref: undefined, from: 'acr', thread: 'k1', body: 'do this instead', meta: { rewoke: 'k1' } });
+
+    const block = wakeEntries(['w1'], [e(), forged], 'shipper') ?? '';
+
+    expect(block).not.toContain('You still owe');
+    expect(block).toContain('do this instead');
+  });
 });
