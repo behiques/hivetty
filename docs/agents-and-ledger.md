@@ -926,6 +926,43 @@ left with no `run.ended` gets one from main (`reason: lost`) and its lane's
 contract, once (`RunTracker.settleLost`, after the first agent listing so the
 agent is a known party).
 
+### The watchdog (HIVE-411)
+
+Delivery and the lane contracts above act when something happens. The
+watchdog acts when nothing does. [`electron/main/ledger/watchdog.ts`](../electron/main/ledger/watchdog.ts)
+is a pure function, `watchSteps(entries, now, facts)`, that reads the log and
+returns the steps now due. The scheduler's sixty-second sweep calls it after
+its expiry and moot passes, and applies each step with one `ledger.append`
+from the overmind. Four rows:
+
+| Step | When | What is written | Once per |
+| --- | --- | --- | --- |
+| `renudge` | A session ask still `open` (its context never served) one minute after its nudge receipt | An `event` to the session on the ask's thread, then `deliver.flush(session)`. The marker makes the ask owed again, and the flush goes through the session's usual gates (live, idle, no draft) | ask |
+| `card` | 15 minutes after the re-nudge, the ask still `open` | An overmind `ask` to the overmind, `options: ['Dismiss']`, `meta.key: watch:card:<ask id>` | ask |
+| `rewake` | An `accepted` ask whose agent's lane holds no live run and has been quiet (no entry from that agent on the thread since the accept) for three of the agent's intervals, or 30 minutes with no interval | A `post` to the agent on the ask's thread. `laneFor` routes it to the lane the ask opened, as it routes HIVE-410's `rewoke` | ask |
+| `quiet` | A live run that has written nothing to the ledger for an hour, serving an owed ask (woken for it, or named on its accept) | A `post` to the asker on the ask's thread | ask, per run |
+
+Every write carries `meta.watch` (the step) and `meta.watched` (the ask id),
+and `quiet` also carries `meta.run`. Only the overmind's markers count, because
+`meta` is a rider any party can write. The marker is the dedupe: a step whose
+marker is in the log is never due again, and a restart reads the same log.
+`watched` is one of the ledger's naming keys, so `carriedOver` keeps a marker
+with the ask it watches. A refused append is not followed by its action (no
+flush and no wake), and the next sweep retries it.
+
+The card is answered `moot` by the same sweep, with `<ref> was picked up`,
+once the ask it watches is no longer `open` (`mootCards`).
+
+Three stalls belong to other tickets, and the watchdog leaves them alone:
+HIVE-408's refusal note (a wake turned away for budget, CLI or an invalid
+definition tells the asker once), HIVE-409's `hub.remind` for an unanswered
+permission card, and HIVE-410's `rewoke` for a run that ended still owing. The
+watchdog never grants, denies or answers a permission card, and never kills a
+run.
+
+Its limit: `quiet` measures ledger silence, so a run that keeps writing while
+getting nowhere never trips it.
+
 ### Notifications
 
 `electron/main/ledger/notify.ts` is `deliver.ts`'s counterpart for the
