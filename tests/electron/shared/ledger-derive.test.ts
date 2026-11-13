@@ -1407,4 +1407,15 @@ describe('carriedOver (HIVE-410)', () => {
 
     expect(carriedOver(older, older, NOW).map((item) => item.id)).toEqual(['h1', 'd1']);
   });
+
+  it('carries a watchdog marker with the ask it watches (HIVE-411)', () => {
+    const older = [
+      old({ id: 'k1', kind: 'ask', from: 'sess-a', to: 'builder', ref: 'a1', body: 'build it' }),
+      old({ id: 'p1', from: 'builder', to: 'sess-a', thread: 'k1', body: 'on it', meta: { accepted: true } }),
+      // A card is an ask of its own: it names the watched ask only through meta.
+      old({ id: 'w1', kind: 'ask', from: OVERMIND, to: OVERMIND, ref: 'a2', body: 'not picked up', meta: { watch: 'card', watched: 'k1' } }),
+    ];
+
+    expect(carriedOver(older, older, NOW).map((item) => item.id)).toContain('w1');
+  });
 });

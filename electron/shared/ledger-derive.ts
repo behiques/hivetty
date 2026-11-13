@@ -1138,7 +1138,7 @@ export function unfinishedRuns(entries: readonly LedgerEntry[]): { agent: string
 }
 
 /** The `meta` keys whose value names another entry: main's markers for an ask. */
-const NAMING_KEYS = ['expired', 'released', 'served', 'rewoke', 'redirected', 'delivered'] as const;
+const NAMING_KEYS = ['expired', 'released', 'served', 'rewoke', 'redirected', 'delivered', 'watched'] as const;
 
 /**
  * Of `older`, the entries a restart must not lose (HIVE-410), judged against
