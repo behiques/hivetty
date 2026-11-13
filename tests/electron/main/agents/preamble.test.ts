@@ -154,8 +154,9 @@ describe('the run contract (HIVE-413)', () => {
     expect(AGENT_PREAMBLE).toMatch(/`meta\.rewoke`[^\n]*act on that ask/);
     expect(AGENT_PREAMBLE).toMatch(/an amendment: record it/);
   });
-  it('releases a claim someone else held', () => {
-    expect(AGENT_PREAMBLE).toMatch(/names a previous holder: release at once/);
+  it('releases a claim someone else held, and keeps its own', () => {
+    expect(AGENT_PREAMBLE).toMatch(/names ANOTHER party as previous holder:\s+release at once/);
+    expect(AGENT_PREAMBLE).toMatch(/"\(already yours\)" is your own claim: carry on/);
   });
   it("allows only merge-pr's bounded re-read as a sleep", () => {
     expect(AGENT_PREAMBLE).toMatch(/Never sleep, except the bounded re-read `merge-pr` names/);

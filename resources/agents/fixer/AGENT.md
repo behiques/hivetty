@@ -54,7 +54,7 @@ rules are yours to keep, and every subagent you dispatch inherits them:
    another party: release at once, answer "held by <holder>", end (run
    contract 5).
 3. Find the checkout. `pwd` answers your lane directory,
-   `<hive>/work/fixer/lanes/<lane>`; `<hive>` is three levels up. `git -C <path> worktree list --porcelain`: the first entry is the
+   `<hive>/work/fixer/lanes/<lane>`; `<hive>` is four levels up. `git -C <path> worktree list --porcelain`: the first entry is the
    person's checkout and is never yours. A later entry whose `branch` is
    `refs/heads/<PR branch>` is the builder's linked worktree: work **there**
    after `git -C <that path> pull --ff-only`. Otherwise `hive:worktree`, agent

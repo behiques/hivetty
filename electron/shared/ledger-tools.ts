@@ -227,7 +227,7 @@ export const LEDGER_TOOLS: readonly McpToolDefinition[] = [
   {
     name: 'ledger_claim',
     description:
-      'Claim a piece of work so other parties know you have it. Always records your claim: if someone else held it, the answer names them. Release it and say so, unless your instructions say to continue.',
+      'Claim a piece of work so other parties know you have it. Always records your claim: if someone else held it, the answer names them; your own earlier claim answers "(already yours)". Release it and say so, unless your instructions say to continue.',
     inputSchema: {
       type: 'object',
       properties: {

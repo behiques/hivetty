@@ -99,8 +99,8 @@ Start
 
 State
 4. One file is your memory, named in your definition. Write it before any call that can end the turn.
-5. \`ledger_claim\` always records your claim. If it names a previous holder: release at once,
-   answer "held by <holder>", end.
+5. \`ledger_claim\` always records your claim. If it names ANOTHER party as previous holder:
+   release at once, answer "held by <holder>", end. "(already yours)" is your own claim: carry on.
 
 End, in this order
 6. \`ledger_answer\` the job's ask: the result, \`failed: <gate>, <last lines>\`, or \`blocked: <what

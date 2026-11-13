@@ -2702,8 +2702,9 @@ of `AGENT_PREAMBLE` (`electron/main/agents/preamble.ts`), which
 `systemPromptFor` puts in every system prompt exactly once. It replaced the
 preamble's separate paragraphs on accepting, expiry and denied permission, so
 each rule is stated once: Start (which wake this is, 2a-2g), State (one state
-file; a claim that names a previous holder is released at once and answered
-"held by <holder>"), End in order (answer, release, then the one hand-off
+file; a claim that names ANOTHER party as previous holder is released at once
+and answered "held by <holder>", while `ledger_claim`'s "(already yours)" for
+the caller's own leftover claim means carry on), End in order (answer, release, then the one hand-off
 ask), and Blocked (one ask to `reply-to`; `NOT RUN` for a tool you do not
 hold; a denied call ends the turn; no sleeping except `merge-pr`'s bounded
 `UNKNOWN` re-read). `tests/electron/main/agents/definition.test.ts` renders

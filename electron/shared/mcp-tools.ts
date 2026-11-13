@@ -553,10 +553,28 @@ export function createToolHandlers(
 
     await client.post({ kind: 'claim', body: `claimed ${task}`, meta: { task } });
 
+    /*
+      `claims[task]` also holds the caller's *own* earlier claim — a run that
+      crashed between claim and answer, a fixer re-asked after `blocked`. Run
+      contract 5 releases on a previous holder, so naming the caller there
+      made it abandon its own job (HIVE-413 self review). This handler is
+      never told the caller's party id (an agent's is stamped by the host),
+      so the store answers instead: once the claim is written, the holder it
+      records *is* the caller. Same degradation as above if that read fails.
+    */
+    let mine: string | undefined;
+    if (before !== undefined) {
+      try {
+        mine = (await client.read({ limit: 0 })).claims[task];
+      } catch {
+        mine = undefined;
+      }
+    }
+
+    if (before === undefined) return ok(`claimed ${task}`);
+    if (before === mine) return ok(`claimed ${task} (already yours)`);
     return ok(
-      before === undefined
-        ? `claimed ${task}`
-        : `claimed ${task}, which ${before} was holding. You hold it now — release it if that was not what you meant.`,
+      `claimed ${task}, which ${before} was holding. You hold it now — release it if that was not what you meant.`,
     );
   };
 
