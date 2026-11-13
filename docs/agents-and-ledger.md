@@ -870,8 +870,8 @@ paused would lose the news permanently.
 `Ledger.append` reports failure as a value; ignoring it would re-expire the same
 ask every sixty seconds for as long as the disk stayed unwritable.
 
-**What the woken agent does with it is a contract in the preamble, and the
-wake's reason line is written for it.** The queued entry carries the ask's
+**What the woken agent does with it is a contract in the preamble (run contract
+2e), and the wake's reason line is written for it.** The queued entry carries the ask's
 short `ref` (`PendingWakeEntry.ref`, set by the sweep only), so `describeEntry`
 reads `expired <id> from overmind — your ask a7 expired unanswered`; the ref
 rather than `text`, because a queued entry with `text` is a job. The preamble
@@ -2329,7 +2329,8 @@ exactly the wake that also has to write a handoff.
 `autonomy` reaches the run as one sentence in the system prompt, chosen by
 `AUTONOMY_CLAUSE` in `waker.ts` — `ask` tells the agent to post a `ledger_ask`
 and wait before anything consequential, `act` tells it to proceed and report
-with `ledger_done`. Before that it was parsed into `AgentDefinition` and read
+by closing the ask that brought the work (run contract 6), with `ledger_done`
+only for work nobody asked for (HIVE-413). Before that it was parsed into `AgentDefinition` and read
 by nothing at all: no reader in `electron/` or `src/`, so the field documented
 in the form's help text had no effect on any run. It matters more now that the
 body is standing work — an `ask` agent doing its own job unprompted is exactly
@@ -2682,14 +2683,47 @@ The fixer (HIVE-169) takes a PR and its findings by `ledger_ask`,
 works on the branch where it is already checked out (git allows one worktree
 per branch, and the builder's may still stand) or in a worktree of its own
 under `~/.hivetty/work/fixer/` (detached at the branch's tip, since the person's
-own checkout may hold the branch and is never an agent's), and answers `clean`
-or `blocked`; a judgment call goes to the ask's `reply-to` party with options.
+own checkout may hold the branch and is never an agent's), and answers with
+`meta: { result: "clean" | "blocked" | "blocked-on", rounds, gathered, head,
+pr, repo }`; the shipper reads `meta.result`, never the body. Clean or
+`blocked-on`: answer, then release; `blocked`: answer, keep the claim. A
+judgment call goes to the ask's `reply-to` party with options.
 It claims `<owner>/<repo>#<N> findings`, a key of its own, because the shipper
 holds `<owner>/<repo>#<N>` for the life of the PR. The shipper itself
 asks `acr` with a PR link and `--self`, the one job shape acr accepts with no
 project, and `acr` answers it with `ledger_answer` because the asker is an
 agent. `tests/resources/agents/shipped-agents.test.ts` parses every shipped definition against
 the shipped skills, so a definition the registry would refuse fails here.
+
+### Run contract (HIVE-413)
+
+Every agent's rules for a wake live in one place: the **Run contract** section
+of `AGENT_PREAMBLE` (`electron/main/agents/preamble.ts`), which
+`systemPromptFor` puts in every system prompt exactly once. It replaced the
+preamble's separate paragraphs on accepting, expiry and denied permission, so
+each rule is stated once: Start (which wake this is, 2a-2g), State (one state
+file; a claim that names a previous holder is released at once and answered
+"held by <holder>"), End in order (answer, release, then the one hand-off
+ask), and Blocked (one ask to `reply-to`; `NOT RUN` for a tool you do not
+hold; a denied call ends the turn; no sleeping except `merge-pr`'s bounded
+`UNKNOWN` re-read). `tests/electron/main/agents/definition.test.ts` renders
+every shipped agent's prompt and finds the section once; the shipped
+definitions point at its rule numbers rather than restating them.
+
+The ship intake carries `closes-ticket: yes | no`, `no` on every PR of a split
+but the last; the shipper's row records it as `closesTicket` (absent reads
+`yes`). Jira Done needs `keyConfirmed` and `closesTicket`: a PR with
+`closes-ticket: no` stops at In Review, and `merge-pr` reports `split: not the
+last PR`. The shipper claims `<owner>/<repo>#<N>` before it accepts the intake,
+and it resolves a merge conflict itself (`merge-pr` Step 2.6, with `Edit`).
+`tests/electron/main/skills/shipped-text.test.ts` pins where the shipped
+skills and definitions must agree.
+
+An answer, accept or done on a closed thread is refused with what to do next:
+`whyNotOpen` (`ledger-derive.ts`) reads `thread is not open: <ref>, closed by
+<party> at <HH:MM>: post to <asker> on this thread instead`, or `…, expired
+at <HH:MM>: …`; a thread naming no ask keeps the bare `thread is not open:
+<ref>`.
 
 ### Why this folder pushes where skills pull
 
