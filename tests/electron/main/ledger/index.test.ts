@@ -254,6 +254,18 @@ describe('createLedger', () => {
     });
   });
 
+  it('says who closed the thread and where to post instead (HIVE-413)', () => {
+    const ask = ledger.append({ from: 'sess-a', to: OVERMIND, kind: 'ask', body: 'ship?' });
+    if (!ask.ok) throw new Error('setup failed');
+    ledger.answer({ thread: ask.id, body: 'yes' }, OVERMIND);
+
+    const second = ledger.answer({ thread: ask.id, body: 'no' }, OVERMIND);
+
+    if (second.ok) throw new Error('expected a refusal');
+    expect(second.reason).toContain('closed by overmind at');
+    expect(second.reason).toContain('post to sess-a on this thread instead');
+  });
+
   /**
    * The openness rule belongs to `append`, not to `answer` (HIVE-111 final
    * review, finding 1).
@@ -293,6 +305,8 @@ describe('createLedger', () => {
       expect(second).toMatchObject({ ok: false, status: 400 });
       if (second.ok) throw new Error('expected a refusal');
       expect(second.reason).toContain('not open');
+      expect(second.reason).toContain('closed by sess-b at');
+      expect(second.reason).toContain('post to sess-a on this thread instead');
       expect(ledger.read({}).entries).toHaveLength(2);
     });
 
@@ -1041,7 +1055,11 @@ describe('createLedger', () => {
       expect(accept('builder', id)).toMatchObject({ ok: false, status: 403 });
       expect(accept('shipper')).toMatchObject({ ok: false, status: 400 });
       ledger.append({ from: 'shipper', kind: 'answer', thread: id, body: 'done' });
-      expect(accept('shipper', id)).toMatchObject({ ok: false, status: 400 });
+      const late = accept('shipper', id);
+      expect(late).toMatchObject({ ok: false, status: 400 });
+      if (late.ok) throw new Error('expected a refusal');
+      expect(late.reason).toContain('closed by shipper at');
+      expect(late.reason).toContain('post to sess-a on this thread instead');
       expect(ledger.read({ kind: 'post' }).entries).toEqual([]);
     });
 

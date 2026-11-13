@@ -20,6 +20,7 @@ import {
   openAsks,
   resolveRef,
   taskOf,
+  whyNotOpen,
 } from '@shared/ledger-derive';
 import { honestPermissionAsk } from '@shared/permission-rules';
 
@@ -219,13 +220,13 @@ export function createLedger(options: LedgerOptions): Ledger {
         if (request.kind === 'answer' && !stillOpen) {
           // Also the answer-to-a-non-ask case: `resolveRef` matches any entry
           // id, and only an ask is ever in `openAsks`.
-          return refuse(400, `thread is not open: ${thread}`);
+          return refuse(400, whyNotOpen(all, canonical, thread, now()));
         }
 
         if (accepting) {
           // A held ask is owed to nobody yet; an accept stored now would count the moment it is released.
           if (ask === undefined || openAsk === undefined || openAsk.state === 'held') {
-            return refuse(400, `thread is not open: ${thread}`);
+            return refuse(400, whyNotOpen(all, canonical, thread, now()));
           }
           if (request.from !== ask.to) {
             return refuse(403, `${thread} was asked of ${ask.to ?? 'everyone'}; ${request.from} cannot accept it`);
@@ -492,7 +493,7 @@ export function createLedger(options: LedgerOptions): Ledger {
       const canonical = resolved.id;
       const ask = openAsks(all, now()).find((open) => open.id === canonical);
       if (ask === undefined) {
-        return refuse(400, `thread is not open: ${request.thread}`);
+        return refuse(400, whyNotOpen(all, canonical, request.thread, now()));
       }
 
       /*

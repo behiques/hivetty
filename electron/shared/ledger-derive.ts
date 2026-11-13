@@ -168,6 +168,28 @@ export function ttlOf(entry: Pick<LedgerEntry, 'meta'>): number {
   return Math.min(ttlMs, LEDGER_ASK_TTL_MS);
 }
 
+const hhmm = (ts: number): string => new Date(ts).toTimeString().slice(0, 5);
+
+/**
+ * Why `askId` takes no answer, and where the writer should post instead (HIVE-413).
+ *
+ * A bare "thread is not open" left the agent guessing: retry, re-ask, or give
+ * up. Naming who closed it, when, and who asked tells it the one useful move,
+ * a post to the asker on the same thread. A thread that names no ask, or an
+ * ask that is merely held, keeps the bare reason.
+ */
+export function whyNotOpen(entries: readonly LedgerEntry[], askId: string, ref: string, now: number): string {
+  const bare = `thread is not open: ${ref}`;
+  const ask = entries.find((entry) => entry.id === askId && entry.kind === 'ask');
+  if (ask === undefined) return bare;
+  const next = `post to ${ask.from} on this thread instead`;
+  const closer = entries.find((entry) => entry.thread === askId && CLOSING_KINDS.has(entry.kind));
+  if (closer !== undefined) return `${bare}, closed by ${closer.from} at ${hhmm(closer.ts)}: ${next}`;
+  const expiredAt = ask.ts + ttlOf(ask);
+  if (expiredAt <= now) return `${bare}, expired at ${hhmm(expiredAt)}: ${next}`;
+  return bare;
+}
+
 /**
  * Asks that have just died and have not been told so yet (HIVE-120).
  *
