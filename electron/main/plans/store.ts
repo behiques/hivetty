@@ -125,10 +125,18 @@ export function createPlans({
   };
   const filesOf = (entityId: string): PlanFileRead[] =>
     [...(planFiles.get(entityId) ?? [])].map(([file, { at, noted }]) => ({ file, at, ...(noted ? { noted } : {}) }));
-  /** A plan-file plan from `text`, with its part when the header names one. */
+  /** A plan-file plan from `text`, with its part when the header names one, and the earlier parts this session has not read. */
   const filePlan = (entityId: string, file: string, at: number, text: string, tasks = parsePlanFile(text)): SessionPlan => {
-    const part = parsePlanPart(text);
-    return { entityId, source: 'plan-file', tasks, allDone: isAllDone(tasks), file, fileAt: at, ...(part === undefined ? {} : { part }) };
+    const found = parsePlanPart(text);
+    if (found === undefined) return { entityId, source: 'plan-file', tasks, allDone: isAllDone(tasks), file, fileAt: at };
+    const seen = new Set<number>();
+    for (const { read } of planFiles.get(entityId)?.values() ?? []) {
+      const other = parsePlanPart(read);
+      if (other?.of === found.of) seen.add(other.index);
+    }
+    const missing = Array.from({ length: found.index - 1 }, (_, i) => i + 1).filter((n) => !seen.has(n));
+    const part = missing.length === 0 ? found : { ...found, missing };
+    return { entityId, source: 'plan-file', tasks, allDone: isAllDone(tasks), file, fileAt: at, part };
   };
 
   const publish = (entityId: string, plan: SessionPlan | null): void => {
@@ -201,8 +209,9 @@ export function createPlans({
     const at =
       last !== undefined && (noted || (last.read === read.text && !last.noted)) ? last.at : restored?.at || now();
     const current = plans.get(entityId);
-    // The text counts as shown only once the panel takes it: a file turned
-    // away by rank must still be offered after the plan ahead of it finishes.
+    // The text counts as shown only once the panel takes it: a file turned away (by rank, a build, or an
+    // unfinished earlier part) is kept without `text`, so its next read offers it again. Nothing re-offers it
+    // on its own when the plan ahead of it finishes: no auto-advance.
     // A builder is working another plan: this file is held for a later build,
     // not shown over the one in progress (HIVE-359, the 16:55 case).
     // Only while its builder is alive: a build silent for STALE_BUILD_MS holds nothing.
@@ -211,18 +220,27 @@ export function createPlans({
       current.build?.state === 'building' &&
       current.file !== read.file &&
       now() - (buildSeenAt.get(entityId) ?? Number.NEGATIVE_INFINITY) < STALE_BUILD_MS;
+    // A split's plans can land in any order: a later part waits behind an unfinished earlier one, so "3 of 3" never reads as 1 and 2 done.
+    const part = parsePlanPart(read.text);
+    const later =
+      current?.source === 'plan-file' &&
+      !current.allDone &&
+      current.file !== read.file &&
+      part !== undefined &&
+      current.part?.of === part.of &&
+      current.part.index < part.index;
     const wasLast = lastRead(entityId)?.file === read.file;
     records.delete(read.file);
     records.set(read.file, {
       at,
       read: read.text,
-      ...(!held && accepts(current, 'plan-file') ? { text: read.text } : {}),
+      ...(!held && !later && accepts(current, 'plan-file') ? { text: read.text } : {}),
       ...(noted ? { noted: true as const } : {}),
     });
     planFiles.set(entityId, records);
     // A new file, a new time, or a new order: the history's list changed.
     if (last?.at !== at || !wasLast) onPlanFiles?.(entityId, filesOf(entityId));
-    if (held) return;
+    if (held || later) return;
     const build = current?.source === 'plan-file' && current.file === read.file ? current.build : undefined;
     const shownTasks = build === undefined ? tasks : keepTicks(tasks, current?.tasks ?? []);
     offer(entityId, 'plan-file', {

@@ -42,6 +42,8 @@ export interface PlanBuild {
 export interface PlanPart {
   index: number;
   of: number;
+  /** Earlier parts this session has not read, ascending; absent when it has read them all. */
+  missing?: number[];
 }
 
 /** A plan file a session read, and when its current text was first read (HIVE-359). */
