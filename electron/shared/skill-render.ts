@@ -1,4 +1,5 @@
 import { CAPABILITIES, type HarnessId } from './harness-contract';
+import { FRAGMENTS, fillIncludes, INCLUDE } from './skill-fragments';
 
 /**
  * HiveTTY's skills written once, read by any CLI (HIVE-369).
@@ -76,10 +77,10 @@ function prefixFrontmatterName(text: string, prefix: string): string {
   return lines.join('\n');
 }
 
-/** One skill file as `cli` receives it: Claude-only keys dropped, its name prefixed, placeholders filled. */
+/** One skill file as `cli` receives it: Claude-only keys dropped, includes expanded, its name prefixed, placeholders filled. */
 export function renderSkillText(text: string, cli: HarnessId, root?: string): string {
   const kept = dropFrontmatterKeys(text, dropKeysFor(cli));
-  return fillPlaceholders(prefixFrontmatterName(kept, CAPABILITIES[cli].skills.namePrefix), cli, root);
+  return fillPlaceholders(prefixFrontmatterName(fillIncludes(kept), CAPABILITIES[cli].skills.namePrefix), cli, root);
 }
 
 /** HIVE-372: the plugin Codex installs also loads outside HiveTTY, where the hive tools and receiver are absent. */
@@ -166,6 +167,12 @@ export function portabilityIssues(text: string, known: PortabilityKnown): Portab
       if (!(kind === 'tool' ? known.tools : known.skills).includes(name)) {
         const message = kind === 'tool' ? `No hive tool is called \`${name}\`.` : `No skill is called \`${name}\`.`;
         found.push({ at: match.index, issue: { line, found: whole, fix: null, message } });
+      }
+    }
+    for (const match of content.matchAll(INCLUDE)) {
+      const name = match[1] ?? '';
+      if (FRAGMENTS[name] === undefined) {
+        found.push({ at: match.index, issue: { line, found: match[0], fix: null, message: `No fragment is called \`${name}\`.` } });
       }
     }
     return found.sort((a, b) => a.at - b.at).map(({ issue }) => issue);
