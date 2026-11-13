@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { HISTORY_CAP } from '../../../../electron/shared/session-history-contract';
+import { HISTORY_CAP, SESSION_PRS_MAX } from '../../../../electron/shared/session-history-contract';
 import {
   createSessionHistory,
   readHistory,
@@ -516,13 +516,40 @@ describe('session history', () => {
             createdAt: 1,
             prs: [{ number: 7 }],
           },
+          {
+            id: 'sess-02',
+            project: 'p',
+            task: '',
+            status: 'done',
+            createdAt: 2,
+            prs: [{ number: 7 }, { number: 8, repo: 'p', url: 'https://github.com/demo/p/pull/8' }],
+          },
         ]),
         'utf8',
       );
 
       const records = readHistory(file);
-      expect(records).toHaveLength(1);
-      expect(records[0]).not.toHaveProperty('prs');
+      expect(records).toHaveLength(2);
+      expect(records.find((r) => r.id === 'sess-01')).not.toHaveProperty('prs');
+      // A bad item costs itself, never the list beside it.
+      expect(records.find((r) => r.id === 'sess-02')?.prs).toEqual([
+        { number: 8, repo: 'p', url: 'https://github.com/demo/p/pull/8' },
+      ]);
+    });
+
+    it('keeps the newest PRs when a file holds more than the cap', () => {
+      const prs = Array.from({ length: SESSION_PRS_MAX + 1 }, (_, i) => ({
+        number: i + 1,
+        repo: 'p',
+        url: `https://github.com/demo/p/pull/${String(i + 1)}`,
+      }));
+      writeFileSync(
+        file,
+        JSON.stringify([{ id: 'sess-01', project: 'p', task: '', status: 'done', createdAt: 1, prs }]),
+        'utf8',
+      );
+
+      expect(readHistory(file)[0]?.prs).toEqual(prs.slice(1));
     });
   });
 
