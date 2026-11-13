@@ -18,6 +18,8 @@ import type { HarnessAdapter } from '../harness/port';
 import { withHostAlias } from '../hooks/container-origin';
 import type { McpServerSpec } from '../mcp/agent-config';
 
+import { HANDOFF_RULE } from './preamble';
+
 /**
  * The command line one wake runs (HIVE-115).
  *
@@ -234,7 +236,7 @@ export function wakePrompt(
       : ` ${laneSentence(rotation.agent, rotation.laneMode, rotation.lane)}`;
 
   if (rotation?.lastTurn === true) {
-    return `${because}${lanes} This is your last turn on this session. Carry out your instructions for this wake as usual — they are standing work whether or not anything is waiting in your inbox — then post a handoff with ledger_handoff: what you watch, open threads and their ids, decisions and preferences you have learned, anything a fresh copy of you must know. Then finish your turn.${after}`;
+    return `${because}${lanes} This is your last turn on this session. Carry out your instructions for this wake as usual — they are standing work whether or not anything is waiting in your inbox — then leave a handoff. ${HANDOFF_RULE} Then finish your turn.${after}`;
   }
 
   /*

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { AGENT_PREAMBLE } from '../../../../electron/main/agents/preamble';
+import { AGENT_PREAMBLE, HANDOFF_RULE } from '../../../../electron/main/agents/preamble';
 import { wakeEntries } from '../../../../electron/main/agents/wake-entries';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../electron/main/harness/codex';
@@ -1084,5 +1084,12 @@ describe('a wake that needs no ledger_read (HIVE-412)', () => {
       'the work on this lane is standing work',
     );
     expect(wakePrompt('ledger')).toContain('your instructions are standing work and this wake is one of the times to do them');
+  });
+
+  it('asks a last turn for the same state-only handoff (HIVE-412)', () => {
+    const prompt = wakePrompt('schedule', undefined, { lastTurn: true });
+
+    expect(prompt).toContain(HANDOFF_RULE);
+    expect(prompt).not.toContain('what you watch');
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { AGENT_PREAMBLE } from '../../../../electron/main/agents/preamble';
+import { AGENT_PREAMBLE, HANDOFF_RULE } from '../../../../electron/main/agents/preamble';
 import { ASK_INTENT_GUIDANCE } from '../../../../electron/shared/ledger-tools';
 
 describe('AGENT_PREAMBLE', () => {
@@ -167,5 +167,13 @@ describe('the run contract (HIVE-413)', () => {
     expect(AGENT_PREAMBLE).toContain('Your wake prompt carries the entries this wake is for.');
     expect(AGENT_PREAMBLE).toMatch(/a plain\s+`ledger_read` with no filters returns exactly that/);
     expect(AGENT_PREAMBLE).toMatch(/does not mean this wake has nothing to do/);
+  });
+
+  it('asks for a handoff of state only (HIVE-412)', () => {
+    expect(HANDOFF_RULE).toBe(
+      'Call `ledger_handoff` with state only: what you hold, open thread ids and refs, loose ends, preferences this user has shown. Never restate a skill or your instructions; your next session loads both itself.',
+    );
+    expect(AGENT_PREAMBLE).toContain(HANDOFF_RULE);
+    expect(AGENT_PREAMBLE).toMatch(/ledger_accept/);
   });
 });

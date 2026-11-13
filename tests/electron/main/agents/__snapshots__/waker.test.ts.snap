@@ -368,7 +368,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > handoff (last turn
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. This is your last turn on this session. Carry out your instructions for this wake as usual — they are standing work whether or not anything is waiting in your inbox — then post a handoff with ledger_handoff: what you watch, open threads and their ids, decisions and preferences you have learned, anything a fresh copy of you must know. Then finish your turn.",
+    "You woke because: ledger. This is your last turn on this session. Carry out your instructions for this wake as usual — they are standing work whether or not anything is waiting in your inbox — then leave a handoff. Call \`ledger_handoff\` with state only: what you hold, open thread ids and refs, loose ends, preferences this user has shown. Never restate a skill or your instructions; your next session loads both itself. Then finish your turn.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "env": {
