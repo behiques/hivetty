@@ -524,7 +524,7 @@ export const useUiStore = create<UiState>()((set) => ({
       ...((place ?? state.place) === 'sessions' ? { sessionsTab: id } : {}),
       // An agent opened through `openEntity` lands on its page's Activity (HIVE-204).
       ...(place === 'agents'
-        ? { agentPage: { name: id, view: 'activity' as const }, agentPageAt: -1 }
+        ? { agentPage: { name: id, view: 'activity' as const }, agentPageAt: -1, stallsShown: false }
         : {}),
     })),
 
@@ -770,7 +770,8 @@ export const useUiStore = create<UiState>()((set) => ({
         ? state.agentPageAt === at
           ? state
           : { agentPageAt: at }
-        : { agentPage: { name, view: 'activity' }, agentPageAt: at, stallsShown: false },
+        : // Not `stallsShown`: this is the stage's write-back, never a person's choice (HIVE-411).
+          { agentPage: { name, view: 'activity' }, agentPageAt: at },
     ),
   setAgentPageView: (view) =>
     set((state) => (state.agentPage === null ? {} : { agentPage: { ...state.agentPage, view } })),

@@ -729,12 +729,13 @@ describe('ui-store — the agent page (HIVE-204)', () => {
     expect(useUiStore.getState().stallsShown).toBe(false);
   });
 
-  it('keeps the stalls through a remember of the shown agent, and hides them for another (HIVE-411)', () => {
-    useUiStore.getState().rememberAgentPage('builder', 2);
+  it("keeps the stalls through the stage's write-back of any agent; a row click hides them (HIVE-411)", () => {
     useUiStore.getState().showStalls();
-    useUiStore.getState().rememberAgentPage('builder', 2);
-    expect(useUiStore.getState().stallsShown).toBe(true);
+    // The stage writes back the first agent on a fresh launch, and the next one when the shown agent goes.
+    useUiStore.getState().rememberAgentPage('builder', 0);
     useUiStore.getState().rememberAgentPage('shipper', 3);
+    expect(useUiStore.getState().stallsShown).toBe(true);
+    useUiStore.getState().openTab('shipper', 'agents');
     expect(useUiStore.getState().stallsShown).toBe(false);
   });
 

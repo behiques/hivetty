@@ -99,3 +99,22 @@ describe('AgentsStage with no agent (HIVE-211)', () => {
     expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
   });
 });
+
+describe('AgentsStage — the stalls (HIVE-411)', () => {
+  it('shows the stall panel while the Stalls row is selected, and the agent page otherwise', () => {
+    seedDemoFleet();
+    act(() => useUiStore.getState().showStalls());
+    const { rerender } = render(<AgentsStage />);
+    expect(screen.getByRole('region', { name: 'Stalls' })).toBeInTheDocument();
+
+    act(() => useUiStore.getState().openAgentPage('slack-agent', 'activity'));
+    rerender(<AgentsStage />);
+    expect(screen.queryByRole('region', { name: 'Stalls' })).not.toBeInTheDocument();
+  });
+
+  it('shows the stall panel with no agents defined', () => {
+    act(() => useUiStore.getState().showStalls());
+    render(<AgentsStage />);
+    expect(screen.getByRole('region', { name: 'Stalls' })).toBeInTheDocument();
+  });
+});

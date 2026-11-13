@@ -29,7 +29,9 @@ const agentRows = () =>
       (button) =>
         button.getAttribute('aria-label') !== 'New agent' &&
         !/^(Run .* now|Pause .*|Resume .*)$/.test(button.getAttribute('aria-label') ?? '') &&
-        !button.hasAttribute('aria-expanded'),
+        !button.hasAttribute('aria-expanded') &&
+        // The Stalls row is a toggle, not an agent (HIVE-411).
+        !button.hasAttribute('aria-pressed'),
     );
 
 describe('AgentsPanel', () => {
@@ -343,5 +345,42 @@ describe('AgentsPanel', () => {
 
       expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
     });
+  });
+});
+
+describe('AgentsPanel — the Stalls row (HIVE-411)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+  });
+
+  const stallsRow = () => screen.getByRole('button', { name: /^Stalls/ });
+
+  it('sits above the first group, with no badge while nothing is stalled', () => {
+    render(<AgentsPanel />);
+    const row = stallsRow();
+    const firstGroup = screen.getAllByRole('region')[0] as HTMLElement;
+    expect(row.compareDocumentPosition(firstGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(row).toHaveAttribute('aria-pressed', 'false');
+    expect(row).toHaveTextContent(/^Stalls$/);
+  });
+
+  it('counts what needs a look, and shows the stalls when clicked, unselecting the agent rows', async () => {
+    act(() => {
+      useHiveStore.setState({
+        ledger: [{ id: '20261111-000000-0001', ts: Date.now() - 2 * 24 * 60 * 60_000, from: 'sess-1c', kind: 'claim', body: '', meta: { task: 'HIVE-393' } }],
+      });
+      useUiStore.getState().openAgentPage('slack-agent', 'activity');
+    });
+    render(<AgentsPanel />);
+    expect(stallsRow()).toHaveTextContent('1');
+    expect(agentRow('slack-agent')).toHaveAttribute('aria-current', 'true');
+
+    await userEvent.click(stallsRow());
+
+    expect(useUiStore.getState().stallsShown).toBe(true);
+    expect(stallsRow()).toHaveAttribute('aria-pressed', 'true');
+    expect(agentRow('slack-agent')).not.toHaveAttribute('aria-current');
   });
 });
