@@ -201,6 +201,30 @@ export interface PrLookup {
 export interface PrLookupReply {
   pr: PrRecord | null;
   reason?: string;
+  /** What the PR is waiting on, from main's whole log (HIVE-411). `null` when the log knows nothing of it. */
+  ship?: PrShipStatus | null;
+}
+
+/** One owed ask naming a PR (HIVE-411). */
+export interface PrShipWait {
+  /** The owed ask's ref (or id). */
+  ask: string;
+  /** Who owes the next move. */
+  to: string;
+  state: 'open' | 'delivered' | 'accepted';
+  since: number;
+  /** The owing agent's refusal on any lane, when it has one. */
+  refused?: string;
+  /** Permission cards the owing party has open, oldest first. */
+  cards: { id: string; ageMs: number }[];
+}
+
+/** A PR's ship block on `mcp__hive__pr` (HIVE-411): the shipper's stage, since when, findings rounds, owed asks. */
+export interface PrShipStatus {
+  stage: string | null;
+  since: number | null;
+  rounds: number;
+  waitingOn: PrShipWait[];
 }
 
 /**
