@@ -182,42 +182,25 @@ export function ttlOf(entry: Pick<LedgerEntry, 'meta'>): number {
  * expiry event deliberately does not close the ask — {@link CLOSING_KINDS} is
  * `answer`/`done`/`failed`, and an expiry is none of the three: nobody
  * answered, and nobody took the question back.
+ *
+ * Only main's own marker counts. `meta` is a free-form rider that
+ * `parseLedgerPostBody` passes through verbatim, so any party that can write
+ * to the log could otherwise post
+ * `{ kind: 'event', meta: { expired: '<someone else's ask>' } }` and put that
+ * id in the told set permanently — retiring a question nobody answered, from
+ * the inbox and from the sweep at once, with no expiry ever written. Main
+ * writes this event as the overmind and nothing else legitimately does.
  */
-export function expiredAsks(
-  entries: readonly LedgerEntry[],
-  now: number,
-): LedgerEntry[] {
-  const closed = new Set<string>();
+export function expiredAsks(entries: readonly LedgerEntry[], now: number): LedgerEntry[] {
   const told = new Set<string>();
-
   for (const entry of entries) {
-    if (entry.thread !== undefined && CLOSING_KINDS.has(entry.kind)) {
-      closed.add(entry.thread);
-    }
-
-    /*
-      Only main's own marker counts.
-
-      `meta` is a free-form rider that `parseLedgerPostBody` passes through
-      verbatim, so any party that can write to the log could otherwise post
-      `{ kind: 'event', meta: { expired: '<someone else's ask>' } }` and put that
-      id in this set permanently — retiring a question nobody answered, from the
-      inbox and from the sweep at once, with no expiry ever written. Main writes
-      this event as the overmind and nothing else legitimately does.
-    */
+    // Only main's own marker counts (the forgery note above).
     const expired = entry.meta?.expired;
     if (typeof expired === 'string' && entry.from === OVERMIND) told.add(expired);
   }
-
-  const releases = releaseTimes(entries);
-
-  return entries.filter(
-    (entry) =>
-      entry.kind === 'ask' &&
-      !closed.has(entry.id) &&
-      !told.has(entry.id) &&
-      agedFor(entry, releases, now) >= ttlOf(entry),
-  );
+  return askStates(entries, now)
+    .filter((item) => item.state === 'expired' && !told.has(item.ask.id))
+    .map((item) => item.ask);
 }
 
 /**
@@ -232,23 +215,20 @@ export function expiredAsks(
  * retires it.
  */
 export function openAsks(entries: readonly LedgerEntry[], now: number): OpenAsk[] {
-  const closed = new Set<string>();
-  for (const entry of entries) {
-    if (entry.thread === undefined) continue;
-    if (CLOSING_KINDS.has(entry.kind)) closed.add(entry.thread);
-  }
-
-  const releases = releaseTimes(entries);
   const open: OpenAsk[] = [];
-  for (const entry of entries) {
-    if (entry.kind !== 'ask') continue;
-    if (closed.has(entry.id)) continue;
-    const ageMs = now - entry.ts;
-    if (agedFor(entry, releases, now) >= ttlOf(entry)) continue;
-    open.push({ ...entry, kind: 'ask', open: true, ageMs });
+  for (const { ask, state } of askStates(entries, now)) {
+    if (state !== 'held' && state !== 'open' && state !== 'delivered' && state !== 'accepted') continue;
+    open.push({ ...ask, kind: 'ask', open: true, ageMs: now - ask.ts, state });
   }
   return open;
 }
+
+/**
+ * The open asks a party is still waiting on (HIVE-410). An accepted ask is
+ * owed work, but whoever asked is free: it must not read as `asking`.
+ */
+export const waitingAsks = (open: readonly OpenAsk[]): OpenAsk[] =>
+  open.filter((ask) => ask.state !== 'accepted');
 
 /**
  * Who holds what, by the last word on each task.
@@ -868,29 +848,6 @@ export function isHeld(ask: LedgerEntry, log: readonly LedgerEntry[]): boolean {
   const target = afterTarget(ask);
   if (target === undefined) return false;
   return !log.some((entry) => releasesAfter(entry, target));
-}
-
-/**
- * How long an ask has been aging toward its ttl, which {@link openAsks} and
- * {@link expiredAsks} both read (retro C).
- *
- * A held ask does not age while it waits for its PR: a chain whose earlier PR
- * sits a day in review would otherwise lose the next job, with nothing said to
- * anyone. Released, it ages from the release. Held for
- * {@link LEDGER_HELD_MAX_MS}, it expires at once, so a PR abandoned, handed
- * back or mistyped cannot keep an ask open forever and its asker is told.
- * Every other ask ages from when it was posted, as it always has.
- * `OpenAsk.ageMs` still reports the time since the post, because that is what
- * a person reading the card means by age.
- */
-function agedFor(ask: LedgerEntry, releases: ReadonlyMap<string, number>, now: number): number {
-  const target = afterTarget(ask);
-  if (target === undefined) return now - ask.ts;
-  const released = releases.get(targetKey(target.repo, target.pr));
-  if (released === undefined) {
-    return now - ask.ts >= LEDGER_HELD_MAX_MS ? Number.POSITIVE_INFINITY : 0;
-  }
-  return now - Math.max(ask.ts, released);
 }
 
 /** How long a held ask waits for its PR before it expires like any other (retro C). */

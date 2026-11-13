@@ -91,6 +91,8 @@ export interface OpenAsk extends LedgerEntry {
   kind: 'ask';
   open: true;
   ageMs: number;
+  /** Where it stands (HIVE-410); `askStates` in `ledger-derive.ts` owns the rules. */
+  state: 'held' | 'open' | 'delivered' | 'accepted';
 }
 
 export interface LedgerSnapshot {

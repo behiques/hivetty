@@ -5668,7 +5668,7 @@ describe('the ledger slice', () => {
     it('recovers one only the snapshot’s open asks still name', () => {
       useHiveStore
         .getState()
-        .hydrateLedger(posts(3), [], [{ ...entry({ id: 'a0', kind: 'ask', ts: NOW }), kind: 'ask', open: true, ageMs: 5 }]);
+        .hydrateLedger(posts(3), [], [{ ...entry({ id: 'a0', kind: 'ask', ts: NOW }), kind: 'ask', open: true, ageMs: 5, state: 'open' }]);
 
       const kept = useHiveStore.getState().ledger;
       expect(kept.map((found) => found.id)).toEqual(['a0', 'p00000', 'p00001', 'p00002']);

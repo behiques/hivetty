@@ -41,6 +41,7 @@ import {
   shipTrack,
   thread,
   ttlOf,
+  waitingAsks,
   STAGE_TEXT_MAX,
 } from '../../../electron/shared/ledger-derive';
 
@@ -321,7 +322,7 @@ describe('openAsks', () => {
     const entries = [entry({ id: '20260828-100000-0001', kind: 'ask', ts: NOW - 60_000 })];
 
     expect(openAsks(entries, NOW)).toEqual([
-      { ...entries[0], open: true, ageMs: 60_000 },
+      { ...entries[0], open: true, ageMs: 60_000, state: 'open' },
     ]);
   });
 
@@ -367,7 +368,7 @@ describe('openAsks', () => {
       const ask = entry({ id: '20260828-100000-0001', kind: 'ask', ts: NOW - 60_000 });
       const entries = [ask, entry({ id: '20260828-100001-0001', kind })];
 
-      expect(openAsks(entries, NOW)).toEqual([{ ...ask, open: true, ageMs: 60_000 }]);
+      expect(openAsks(entries, NOW)).toEqual([{ ...ask, open: true, ageMs: 60_000, state: 'open' }]);
     },
   );
 
@@ -1275,5 +1276,38 @@ describe('askStates (HIVE-410)', () => {
       state: 'expired',
       since: 1_000 + 7 * LEDGER_ASK_TTL_MS,
     });
+  });
+});
+
+describe('the views over askStates (HIVE-410)', () => {
+  const ask = entry({ id: 'k1', kind: 'ask', from: 'sess-a', to: 'shipper', ts: NOW - 60_000, body: 'Ship PR #1' });
+  const accept = entry({ id: 'p1', kind: 'post', from: 'shipper', to: 'sess-a', thread: 'k1', body: 'accepted', meta: { accepted: true } });
+
+  it('openAsks carries the state, and keeps an accepted ask open', () => {
+    expect(openAsks([ask], NOW)).toEqual([{ ...ask, open: true, ageMs: 60_000, state: 'open' }]);
+    expect(openAsks([ask, accept], NOW).map((open) => open.state)).toEqual(['accepted']);
+  });
+
+  it('waitingAsks drops the accepted: its asker is free', () => {
+    const other = entry({ id: 'k2', kind: 'ask', from: 'sess-a', to: 'fixer', body: 'fix it' });
+    expect(waitingAsks(openAsks([ask, accept, other], NOW)).map((open) => open.id)).toEqual(['k2']);
+  });
+
+  it('expiredAsks leaves an accepted ask alone at its ttl, and takes it seven days after the accept', () => {
+    const old = { ...ask, ts: 0 };
+    const taken = { ...accept, ts: 1_000 };
+    expect(expiredAsks([old, taken], 2 * LEDGER_ASK_TTL_MS)).toEqual([]);
+    expect(expiredAsks([old, taken], 1_000 + 7 * LEDGER_ASK_TTL_MS)).toEqual([old]);
+  });
+
+  it('a merge answered with stage closed ends the ship stage and track, by the release before it', () => {
+    const log = [
+      entry({ id: 'c1', from: 'shipper', kind: 'claim', body: 'claimed', meta: { task: 'a/x#1' } }),
+      entry({ id: 'r1', from: 'shipper', kind: 'release', body: 'released', meta: { task: 'a/x#1' } }),
+      { ...ask, meta: { pr: 1, repo: 'a/x' } },
+      entry({ id: 'n1', from: 'shipper', kind: 'answer', thread: 'k1', body: 'PR #1 merged', meta: { pr: 1, repo: 'a/x', stage: 'closed' } }),
+    ];
+    expect(shipStage(log, 'a/x', 1)).toBeNull();
+    expect(shipTrack(log, 'a/x', 1, NOW).held).toBe(false);
   });
 });
