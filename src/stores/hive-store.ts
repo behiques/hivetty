@@ -182,6 +182,7 @@ import {
   shipStage,
   shipTrack,
   thread,
+  waitingAsks,
   type Delegate,
   type ShipTrack,
 } from '@shared/ledger-derive';
@@ -7139,7 +7140,7 @@ export const useAgentFacts = (name: string): AgentFacts | null => {
 
     const today = runsToday(entity.today);
     const tokens = tokensToday(entity.today, entity.dailyTokens);
-    const open = openAsks(ledger, Date.now()).find((ask) => ask.from === name);
+    const open = waitingAsks(openAsks(ledger, Date.now())).find((ask) => ask.from === name);
 
     return {
       status: entity.status,
@@ -7193,7 +7194,7 @@ export const useAgentAskRef = (name: string): string | undefined => {
   const ledger = useHiveStore((state) => state.ledger);
 
   return useMemo(
-    () => openAsks(ledger, Date.now()).find((ask) => ask.from === name)?.ref,
+    () => waitingAsks(openAsks(ledger, Date.now())).find((ask) => ask.from === name)?.ref,
     [ledger, name],
   );
 };
@@ -7801,7 +7802,7 @@ const combRowsSelector = (state: HiveState): string[] => {
           : a.status === 'working' ? 'morphing'
             : 'burrowed';
     const ask = combState === 'summons'
-      ? (asks ??= openAsks(state.ledger, Date.now())).find((x) => x.from === id)
+      ? (asks ??= waitingAsks(openAsks(state.ledger, Date.now()))).find((x) => x.from === id)
       : undefined;
     rows.push(row([
       id, 'agent', id, SWARM, combState, a.status, undefined, undefined, undefined,

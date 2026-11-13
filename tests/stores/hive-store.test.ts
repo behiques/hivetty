@@ -6132,6 +6132,21 @@ describe('the agent view selectors', () => {
       expect(result.current?.next).toBe('on answer');
     });
 
+    it('names no ask once the one it sent was accepted (HIVE-410)', () => {
+      useHiveStore.getState().hydrateAgents([summary('a', { status: 'sleeping' })]);
+      useHiveStore.getState().hydrateLedger([
+        { id: '20260830-140000-0001', ts: Date.now(), from: 'a', to: 'shipper', kind: 'ask', ref: 'a71', body: 'Ship PR #1' },
+        {
+          id: '20260830-140001-0001', ts: Date.now(), from: 'shipper', to: 'a', kind: 'post',
+          thread: '20260830-140000-0001', body: 'accepted', meta: { accepted: true },
+        },
+      ]);
+
+      const { result } = renderHook(() => useAgentFacts('a'));
+
+      expect(result.current?.askRef).toBeUndefined();
+    });
+
     it('returns null for a name that is not an agent', () => {
       const { result } = renderHook(() => useAgentFacts('nobody'));
 

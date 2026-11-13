@@ -2159,6 +2159,19 @@ describe('createScheduler', () => {
       meta: { expired: 'a21' },
     };
 
+    it('returns an agent to sleeping when its only open ask was accepted (HIVE-410)', () => {
+      clock = 1_000;
+      entries = [
+        { ...asked, to: 'shipper' },
+        { id: 'p1', ts: 500, from: 'shipper', to: AGENT, kind: 'post', thread: 'a21', body: 'accepted', meta: { accepted: true } },
+      ];
+      state.patch(AGENT, { status: 'asking' });
+      scheduler.start();
+      tick();
+
+      expect(state.read(AGENT).status).toBe('sleeping');
+    });
+
     it('retries the queue on the next tick, so an asking agent hears its expiry', () => {
       entries = [asked];
       clock = LEDGER_ASK_TTL_MS;

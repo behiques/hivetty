@@ -25,6 +25,7 @@ import {
   mergeTarget,
   openAsks,
   releasesAfter,
+  waitingAsks,
 } from '@shared/ledger-derive';
 import { SLACK_COMMAND_KIND, SLACK_SERVER_KEY, SLACK_TRIGGER } from '@shared/slack-contract';
 
@@ -589,7 +590,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       A working agent's run close flushes it, and a day spent out waits for
       the reset above, so neither is retried.
     */
-    const asking = new Set(openAsks(entries, now).map((ask) => ask.from));
+    const asking = new Set(waitingAsks(openAsks(entries, now)).map((ask) => ask.from));
 
     for (const [name, agent] of Object.entries(deps.state.all())) {
       if (agent.status === 'paused' || agent.status === 'working') continue;
