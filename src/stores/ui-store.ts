@@ -776,7 +776,8 @@ export const useUiStore = create<UiState>()((set) => ({
   setAgentPageView: (view) =>
     set((state) => (state.agentPage === null ? {} : { agentPage: { ...state.agentPage, view } })),
   closeAgentPage: () => set({ agentPage: null }),
-  showStalls: () => set({ stallsShown: true, place: 'agents' }),
+  // Dismisses the overlays like openAgentPage: with Settings open the click would otherwise seem to do nothing.
+  showStalls: () => set({ stallsShown: true, place: 'agents', picker: false, settings: false }),
   openPrPage: (ref) =>
     set((state) => ({
       ...freshPr(ref, -1),
