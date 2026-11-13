@@ -210,6 +210,18 @@ const AGENT_ID_IN_PREFIX = /"agent_id"\s*:\s*"([^"\\]+)"/;
  */
 const SESSION_ID_IN_PREFIX = /"session_id"\s*:\s*"([0-9a-fA-F-]+)"/;
 
+const GH_PR_CREATE = /\bgh\s+pr\s+create\b/;
+const PR_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/;
+
+/** The PR a `gh pr create` printed on a Bash call's stdout, or `undefined`. */
+function openedPrOf(toolInput: unknown, toolResponse: unknown): { slug: string; number: number } | undefined {
+  const command = (toolInput as { command?: unknown } | null | undefined)?.command;
+  const stdout = (toolResponse as { stdout?: unknown } | null | undefined)?.stdout;
+  if (typeof command !== 'string' || !GH_PR_CREATE.test(command) || typeof stdout !== 'string') return undefined;
+  const match = PR_URL.exec(stdout);
+  return match === null ? undefined : { slug: match[1], number: Number(match[2]) };
+}
+
 /** Claude Code's hook body read into effects (HIVE-236). Pure: no callbacks, no state. */
 export function readHook({ lane, entityId, body, truncated }: HookInput): HookReading {
   return lane === 'agent' ? readAgent(entityId, body, truncated) : readSession(entityId, body, truncated);
@@ -447,6 +459,11 @@ function readSession(entityId: string, body: string, truncated: boolean): HookRe
     }
     if (op !== undefined) effects.push({ kind: 'plan', update: { entityId, op, ...cwdField } });
     if (callerAgent === undefined && FILE_TOOL_NAMES.has(toolName)) effects.push({ kind: 'file-edit' });
+    // The PR this session opened, whoever in it ran the command; a branch is not a session, so the opener says so.
+    if (toolName === 'Bash' && !truncated) {
+      const pr = openedPrOf(toolInput, toolResponse);
+      if (pr !== undefined) effects.push({ kind: 'pr-opened', pr });
+    }
   }
 
   /*

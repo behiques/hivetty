@@ -577,6 +577,8 @@ export type HookEffect =
   | { kind: 'cleared' }
   | { kind: 'plan'; update: PlanUpdate }
   | { kind: 'file-edit' }
+  /** The session opened a PR: `gh pr create` printed it. `slug` is `owner/name`. */
+  | { kind: 'pr-opened'; pr: { slug: string; number: number } }
   | { kind: 'prompt'; text?: string; conversation?: string };
 
 /** A body that did not parse is `malformed`; empty `effects` means answer 204 and publish nothing. */
