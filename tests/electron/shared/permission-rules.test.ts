@@ -31,6 +31,12 @@ describe('matches', () => {
     expect(matches('Bash(git *)', 'Bash', { command: 'npm test' })).toBe(false);
   });
 
+  it('matches a quoted script path that holds a space (HIVE-413, the clerk)', () => {
+    const command =
+      'bash "/Users/x/Library/Application Support/HiveTTY Pro/hive/plugin/skills/jira-tracker/scripts/jira-api-wrapper.sh" get_issue HIVE-1';
+    expect(matches('Bash(bash *jira-tracker/scripts/*)', 'Bash', { command })).toBe(true);
+  });
+
   it('does not let a specifier match a different tool', () => {
     expect(matches('Bash(git *)', 'Read', { command: 'git push' })).toBe(false);
   });
