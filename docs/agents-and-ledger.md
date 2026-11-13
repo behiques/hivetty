@@ -2726,6 +2726,33 @@ An answer, accept or done on a closed thread is refused with what to do next:
 at <HH:MM>: …`; a thread naming no ask keeps the bare `thread is not open:
 <ref>`.
 
+### Skill fragments and includes (HIVE-413)
+
+A rule that more than one skill or agent definition states is written once, in
+`FRAGMENTS` (`electron/shared/skill-fragments.ts`), and pulled in with a line
+reading `{{include:<name>}}` on its own. Three ship: `ship-intake` (the
+`ledger_ask to: shipper` block and its `reply-to` rule; `ship` and the
+builder), `agent-worktree` (the detached worktree an agent works a PR branch
+in; `ship`'s sync and the fixer) and `literal-target` (repo, PR number,
+workspace and ticket key written out as literals in every command; `ship`,
+`merge-pr` and `review-pr-findings`).
+
+- **Where it expands.** `renderSkillText` runs `fillIncludes` before any other
+  placeholder, so every CLI's plugin folder gets the same words, and
+  `systemPromptFor` (`waker.ts`) runs it over an agent's body, so an agent's
+  prompt gets them too. The preamble's run contract is a plain constant, not
+  a fragment.
+- **One level.** A fragment holds no placeholder of any kind (no `{{`, pinned by
+  `tests/electron/shared/skill-fragments.test.ts`), so the one text serves a
+  skill and an agent prompt alike and an include can never nest.
+- **Unknown names.** `{{include:nope}}` is left as written, and the Settings
+  portability check (`portabilityIssues`) reports it: "No fragment is called
+  `nope`."
+- **Changing one.** A fragment edit changes every agent prompt that includes
+  it, so the prompt hash rotates those agents' lanes, as any body edit does.
+  `tests/electron/main/skills/shipped-text.test.ts` pins which shipped files
+  include which fragment and that none restates it.
+
 ### Why this folder pushes where skills pull
 
 `skills/index.ts` re-reads on demand and has no change channel, and
