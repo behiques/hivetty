@@ -1199,6 +1199,8 @@ export interface LaneState {
   refused?: { reason: string; at: number };
   /** The last run's context size, from {@link contextOf} (HIVE-408). */
   contextTokens?: number;
+  /** The newest ledger id when this lane's last run started (HIVE-412): where the next run's inbox read begins. */
+  cursor?: string;
 }
 
 /** What the form offers to fix an unavailable CLI with (HIVE-396). A fence failure has none. */
@@ -1229,6 +1231,8 @@ export interface AgentRunState {
   refused?: { reason: string; at: number };
   /** The standing lane's {@link LaneState.contextTokens} (HIVE-408). */
   contextTokens?: number;
+  /** The standing lane's {@link LaneState.cursor} (HIVE-412). */
+  cursor?: string;
   status: AgentStatus;
   lastRunAt?: number;
   /** Stored and pushed here; computed by HIVE-121's scheduler. */
