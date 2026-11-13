@@ -12,7 +12,7 @@ what follows is about the two seams that made necessary.
 > - One recursive watcher, on the visible project, 300 ms debounce, 2 s ceiling.
 > - The editor seam is fenced like the terminal's, but its colour is CSS (`--cc-code-*`).
 > - Clean buffers reload silently; saves use optimistic concurrency on mtime.
-> - A raster image reads as a `data:` URL (20 MB cap) and shows as an `<img>`; an SVG
+> - A raster image reads as a `data:` URL (6 MB cap) and shows as an `<img>`; an SVG
 >   opens in Preview from its buffer, with Source one toggle away.
 > - A markdown file previews from the buffer through an app-owned model: no
 >   `innerHTML`, links decided by `classifyHref`, relative ones answered by `fs:resolve`.
@@ -508,7 +508,9 @@ A file whose extension is in `IMAGE_TYPES` (`electron/shared/fs-contract.ts`:
 png, jpg, jpeg, gif, webp, bmp, ico, avif) is read whole by `readFileContent`
 and answered as `ImageContent`, a `data:` URL with its mtime and size. The
 extension is checked before the 1 MB cap and the NUL sniff, because every PNG
-fails the sniff. Past `MAX_IMAGE_BYTES` (20 MB) it is refused `too-large`.
+fails the sniff. Past `MAX_IMAGE_BYTES` (6 MB) it is refused `too-large`: the cap is what keeps
+the encoded reply inside one remote frame (`POST_ATTACH_FRAME_MAX_BYTES`, 8 MiB),
+since a server-mode client drops its connection on anything larger.
 
 A `data:` URL rather than a custom protocol: the CSP already allows
 `img-src data:`, and a protocol is a second way to name a file that would have
