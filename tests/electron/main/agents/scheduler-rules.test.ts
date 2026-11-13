@@ -214,6 +214,33 @@ describe('laneFor (HIVE-186)', () => {
     });
   });
 
+  describe('a post naming a repository (HIVE-412)', () => {
+    it('routes a post with meta.repo to that repo lane, for a repo-laned agent only', () => {
+      const post = at({ id: 'p', to: 'shipper', kind: 'post', meta: { repo: 'Acme/Hive', pr: 7, changed: ['checks'] } });
+      expect(laneFor('repo', post, [post])).toEqual({ lane: 'repo:acme/hive' });
+      expect(laneFor('thread', post, [post])).toEqual({ lane: 'standing' });
+      expect(laneFor(undefined, post, [post])).toEqual({ lane: 'standing' });
+    });
+
+    it.each(['', '/abs/path', 'no-slash', 7, null])('sends a post with meta.repo %j to standing, never a refusal', (repo) => {
+      const post = at({ id: 'p', to: 'shipper', kind: 'post', meta: { repo } });
+      expect(laneFor('repo', post, [post])).toEqual({ lane: 'standing' });
+    });
+
+    it('routes only a post: another kind with meta.repo and no thread stays on standing', () => {
+      for (const kind of ['answer', 'done', 'failed', 'event'] as const) {
+        const item = at({ id: 'e', to: 'shipper', kind, meta: { repo: 'acme/hive' } });
+        expect(laneFor('repo', item, [item])).toEqual({ lane: 'standing' });
+      }
+    });
+
+    it('leaves a threaded post to its thread, whatever meta.repo it names', () => {
+      const ask = at({ id: 'A', to: 'shipper', meta: { repo: 'a/x' } });
+      const post = at({ id: 'p', to: 'shipper', kind: 'post', thread: 'A', meta: { repo: 'b/y' } });
+      expect(laneFor('repo', post, [ask, post])).toEqual({ lane: 'repo:a/x' });
+    });
+  });
+
   // everything else
   it('sends broadcasts, laneless entries and every entry of a pre-lane agent to standing', () => {
     const ask = at({ id: 'A' });

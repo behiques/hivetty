@@ -186,7 +186,9 @@ function openedLane(
  *    it opened. Either way, a thread lane whose opening ask has closed hands
  *    over to standing.
  * 3. A new ask: the lane it opens.
- * 4. Anything else: standing.
+ * 4. A post to a `lane: repo` agent with an `owner/name` `meta.repo` (HIVE-412):
+ *    that repo lane. A malformed one asks for nothing, so it is never refused.
+ * 5. Anything else: standing.
  */
 export function laneFor(
   mode: AgentLane | undefined,
@@ -208,6 +210,10 @@ export function laneFor(
   }
 
   if (entry.kind === 'ask') return openedLane(to, mode, entry, entries);
+  const repo = entry.meta?.['repo'];
+  if (mode === 'repo' && entry.kind === 'post' && typeof repo === 'string' && REPO_SLUG.test(repo)) {
+    return { lane: repoLane(repo) };
+  }
   return { lane: STANDING_LANE };
 }
 
