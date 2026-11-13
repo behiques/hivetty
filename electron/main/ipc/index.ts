@@ -3054,6 +3054,7 @@ export function registerIpcHandlers(
       delete: (run) => hooks.receiverGrants()?.delete(run),
     },
     // HIVE-412: the lane cursor's next value, read at the moment a run's child exists.
+    // shortcut: read() derives open asks and claims over the whole log only to keep one id; add a store-level head() if run starts ever show in a profile.
     ledgerHead: () => ledger.read({ limit: 1 }).entries.at(-1)?.id,
     // HIVE-184: read per call for the reason `grants` is; the receiver binds later.
     runToken: (run) => hooks.runToken(run),
