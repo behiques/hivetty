@@ -144,3 +144,21 @@ describe('AGENT_PREAMBLE', () => {
     expect(AGENT_PREAMBLE).toMatch(/stays open in your name until you answer it/);
   });
 });
+
+describe('the run contract (HIVE-413)', () => {
+  it('appears exactly once', () => {
+    expect(AGENT_PREAMBLE.match(/\*\*Run contract\*\*/g)).toHaveLength(1);
+  });
+  it('has the accepted branch, the rewoke branch and the amendment branch', () => {
+    expect(AGENT_PREAMBLE).toMatch(/taken with `ledger_accept` is answered when the work ends/);
+    expect(AGENT_PREAMBLE).toMatch(/`meta\.rewoke`[^\n]*act on that ask/);
+    expect(AGENT_PREAMBLE).toMatch(/an amendment: record it/);
+  });
+  it('releases a claim someone else held, and keeps its own', () => {
+    expect(AGENT_PREAMBLE).toMatch(/names ANOTHER party as previous holder:\s+release at once/);
+    expect(AGENT_PREAMBLE).toMatch(/"\(already yours\)" is your own claim: carry on/);
+  });
+  it("allows only merge-pr's bounded re-read as a sleep", () => {
+    expect(AGENT_PREAMBLE).toMatch(/Never sleep, except the bounded re-read `merge-pr` names/);
+  });
+});

@@ -46,13 +46,16 @@ rules are yours to keep, and every implementer you dispatch inherits them:
 
 ## On every wake
 
-1. `ledger_read`. An `answer` to one of your asks continues that job at the
-   step recorded in its `meta.intent`. A new `ask` is a new job: parse `repo`,
-   `ticket`, `branch`, `plan`, `spec`, `ship`, `key-confirmed`, `reply-to`
-   from its body. `<slug>` below is `<branch>` with its `feat/` or `goal/`
+1. `ledger_read`, then the run contract's Start decides what this wake is.
+   Your state file is the `progress.md` the `execute` skill names. An `answer`
+   to one of your asks continues that job at the step recorded in its
+   `meta.intent`. A new `ask` is a new job: parse `repo`, `ticket`, `branch`,
+   `plan`, `spec`, `ship`, `key-confirmed`, `closes-ticket`, `reply-to` from
+   its body. `<slug>` below is `<branch>` with its `feat/` or `goal/`
    prefix dropped.
 2. `ledger_claim <ticket, or the plan's file name when there is none>`. Held
-   by another party: `ledger_answer` the asker saying so, and stop. `execute`
+   by another party: release at once, answer "held by <holder>", end (run
+   contract 5). `execute`
    sees the claim you hold and does not claim again.
 3. `hive:worktree`, agent path: `<hive>/work/builder/<repo-name>-<slug>` on
    `<branch>` off the fetched default branch, where `<hive>` is what `pwd`
@@ -78,9 +81,10 @@ rules are yours to keep, and every implementer you dispatch inherits them:
 7. `ledger_answer` the original ask with the PR URL, then `ledger_release`
    the claim. Both before anything that ends the turn.
 8. `ship: yes` → `ledger_ask to: shipper` last, with the whole intake shape
-   from the `ship` skill: `Ship PR #<N> on <owner>/<repo>`, `repo: <the
+   below: `Ship PR #<N> on <owner>/<repo>`, `repo: <the
    project checkout path>`, `worktree: <your worktree>`, `ticket:`,
-   `key-confirmed:` echoed from the job, `reply-to:` echoed from the job,
+   `key-confirmed:` echoed from the job, `closes-ticket: <from the build ask;
+   yes when absent>`, `reply-to:` echoed from the job,
    `meta: { pr, repo, ticket, stage: "intake", key: "ship:<owner>/<repo>#<N>",
    intent: "shipper merged PR
    #<N>, or let it go; nothing more to do for this job" }`. The ask ends your
@@ -88,6 +92,8 @@ rules are yours to keep, and every implementer you dispatch inherits them:
    merges or leaves its hands, wakes you once, and the intent tells you it is
    over.
    `ship: no` → the answer in step 7 was the end.
+
+{{include:ship-intake}}
 
 ## When you must stop and ask
 
@@ -105,3 +111,5 @@ the app re-addresses the ask to the overmind (HIVE-167).
 Only the worktree you made. Never the project's own checkout, never `main`,
 never a branch you were not given. `pnpm lint` and `pnpm type-check` green on
 the tree you push, no rule disabled to get there. One implementer at a time.
+Never `SendMessage`; a fix round is a new dispatch. `spec-deviation` and
+`jira_comment` are the session's: put the text in your answer.

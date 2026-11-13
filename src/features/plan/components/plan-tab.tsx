@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 import { Hint } from '@components/ui/hint';
-import { partLabel } from '@features/plan/plan-fact';
+import { missingLabel, partLabel } from '@features/plan/plan-fact';
 import { formatDuration } from '@lib/format-duration';
 import type { PlanTask, SessionPlan } from '@shared/plan-contract';
 
@@ -52,6 +52,7 @@ export function PlanTab({
   const sum = plan.tasks.reduce((acc, task) => acc + (taskMs(task, now) ?? 0), 0);
   const proposed = plan.source === 'plan-mode';
   const { file } = plan;
+  const missing = plan.part === undefined ? null : missingLabel(plan.part);
 
   return (
     <section aria-label="Plan" className="flex min-h-0 flex-col">
@@ -60,6 +61,7 @@ export function PlanTab({
         <b className="font-semibold text-ink">{`${String(done)} of ${String(total)}`}</b>
         {` tasks · ${formatDuration(sum)}`}
       </p>
+      {missing === null ? null : <p className="px-1 pb-2.5 text-control text-muted">{missing}</p>}
       <div className="mx-1 mb-2.5 h-1 rounded-sm bg-active">
         <i
           className="block h-full rounded-sm bg-green"

@@ -42,8 +42,7 @@ Confirm `gh pr view <N> --repo <owner>/<repo> --json headRefName` matches
 | `gh api graphql` | `-F owner=<owner> -F name=<repo>` |
 | `git` | `-C <workspace>` |
 
-Record all three as literals and substitute them textually. Shell state does
-not survive a call; `--repo ""` resolves from cwd without erroring.
+{{include:literal-target}}
 
 ## Step 1: gather everything in one pass
 
@@ -142,9 +141,10 @@ fixed, what was rejected and why) and report.
   when the Step 1 read that found nothing left ran, the last read before
   this answer. The shipper gathers again from that instant, so a review
   posted after it is read on its next wake and not lost to the answer's
-  own timestamp. Release the claim the fixer took on
-  arrival; when clean, remove the ledger file and the worktree if it was the
-  fixer's own.
+  own timestamp. The claim the fixer took on arrival:
+  clean or `blocked-on`: answer, then release. `blocked`: answer, keep the claim.
+  When clean, remove the ledger file and the worktree if it was the fixer's
+  own.
 - **In a session:** the same two lines, in chat.
 
 "All resolved" describes the moment this skill finished, nothing later. The

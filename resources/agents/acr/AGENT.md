@@ -76,12 +76,13 @@ It reaches you through one of three doors:
 em dash. This is a task run, a fresh conversation for this one job. Report with
 `ledger_done` (step 5).
 
-**A ledger `ask` from a person**: `overmind`, or an id beginning `sess-`. The wake
-names entries, not a job; the job is in the ask's body. Call `ledger_read`, take
-the oldest open ask, and report with `ledger_done` naming its thread.
+**A ledger `ask` from `overmind`.** The job is in the ask's body. Call
+`ledger_read`, take the ask the wake prompt names, and report with
+`ledger_done` naming its thread (run contract 6).
 
-**A ledger `ask` from another agent**, meaning any other `from`. Your answer is
-machinery another agent is waiting on, so `ledger_answer` it (step 5).
+**A ledger `ask` from anyone else**: another agent, or an id beginning `sess-`.
+Take the ask the wake prompt names. Someone is waiting on your answer, so
+`ledger_answer` it (step 5).
 
 If the job matches none of the shapes above, stop and say which shapes you
 accept. If the project won't resolve, stop and say that. Never guess: a review
@@ -89,17 +90,18 @@ of the wrong PR or the wrong checkout is worse than none.
 
 ## 2. Resolve the job to a checkout
 
-Run `pwd`. It answers `<hive>/work/acr`, which gives you `<hive>`. Read
-`<hive>/config.json`; its `projects` array has `key`, `id`, `name` and `path`.
+`mcp__hive__projects` gives each project's `key`, `id`, `name`, `path` and
+`origin`. `<hive>` is the folder above `work/` in what `pwd` answers
+(`<hive>/work/acr`, or `<hive>/work/acr/lanes/<lane>` on a thread lane).
 
-- **A link** names `<owner>/<repo>` and the number. For each project with a path,
-  read `<path>/.git/config` and compare the `origin` url's `<owner>/<repo>`: the
-  pair only, case-insensitive, ignoring a trailing `.git`. No match: stop, and
+- **A link** names `<owner>/<repo>` and the number. Match the link's
+  `<owner>/<repo>` against each project's `origin`: the pair only,
+  case-insensitive, ignoring a trailing `.git`. No match: stop, and
   name the repository and the projects you checked. A review with no checkout
   loses the blame, the history and the repo's own rules.
 - **`<project>`**: match the token against `key`, then `id`, then `name`. First
   match wins, case-insensitive. Take the `<owner>/<repo>` from that project's
-  origin. No match, or a `null` path: fail, and list the keys that exist.
+  `origin`. No match, or a `null` path: fail, and list the keys that exist.
 - **`<path>`**: `git -C <path> rev-parse --show-toplevel` must answer, and its
   `origin` gives `<owner>/<repo>`. Anything else: fail, naming the path.
 
@@ -147,14 +149,13 @@ know exactly what was reviewed. Never post the report anywhere else.
 ## 5. Report one line, to the right place
 
 **Name your asker before you report.** Write one line in your own reasoning:
-"asked by `pr-patrol`; not `overmind`, not `sess-…`, so an agent, so
-`ledger_answer`." A `done` sent to the wrong party succeeds silently and leaves a
-peer waiting a day.
+"asked by `pr-patrol`; not `overmind`, so `ledger_answer`." A `done` sent to
+the wrong party succeeds silently and leaves the asker waiting a day.
 
-- **A `run`, or an ask from a person:** `ledger_done`, naming the thread if there
-  was one.
-- **An ask from another agent:** `ledger_answer` on that thread. Never
-  `ledger_done`, and never both.
+- **A `run`, or an ask from `overmind`:** `ledger_done`, naming the thread if
+  there was one.
+- **An ask from anyone else** (an agent, or `sess-…`): `ledger_answer` on that
+  thread. Never `ledger_done`, and never both.
 
 Put the verdict in `meta` as well as in the line. The line is for a person; the
 `meta` is what an agent branches on:

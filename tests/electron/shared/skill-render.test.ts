@@ -10,6 +10,7 @@ import {
   SKILL_GUARD,
   typedSkill,
 } from '../../../electron/shared/skill-render';
+import { FRAGMENTS } from '../../../electron/shared/skill-fragments';
 
 const SOURCE = 'Call {{tool:ledger_ask}}, then {{skill:plan}} from "{{plugin_root}}/x".';
 
@@ -107,6 +108,14 @@ describe('renderSkillText', () => {
     expect(renderSkillText('---\nname: "work-on"\n---\n', 'copilot')).toBe('---\nname: hive-work-on\n---\n');
     expect(renderSkillText("---\nname: 'work-on'  \n---\n", 'copilot')).toBe('---\nname: hive-work-on\n---\n');
   });
+  it('expands an include before the other placeholders, for every CLI', () => {
+    for (const cli of ['claude-code', 'codex', 'copilot'] as const) {
+      expect(renderSkillText('{{include:ship-intake}}', cli)).toBe(FRAGMENTS['ship-intake']);
+    }
+  });
+  it('leaves an unknown include as written', () => {
+    expect(renderSkillText('{{include:nope}}', 'claude-code')).toBe('{{include:nope}}');
+  });
   it('names a Codex skill hive-<name> too, as its catalog does (HIVE-384)', () => {
     expect(renderSkillText('---\nname: work-on\n---\n', 'codex')).toBe('---\nname: hive-work-on\n---\n');
   });
@@ -138,6 +147,14 @@ describe('makePortable', () => {
 });
 
 describe('portabilityIssues', () => {
+  it('reports an include that names no fragment', () => {
+    expect(portabilityIssues('x {{include:nope}}', { tools: [], skills: [] })).toEqual([
+      { line: 1, found: '{{include:nope}}', fix: null, message: 'No fragment is called `nope`.' },
+    ]);
+  });
+  it('accepts an include that names a fragment', () => {
+    expect(portabilityIssues('{{include:literal-target}}', { tools: [], skills: [] })).toEqual([]);
+  });
   it('flags every CLI-specific literal with its fix', () => {
     const text = [
       'Call mcp__hive__ledger_ask first.',

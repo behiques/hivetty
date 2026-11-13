@@ -954,7 +954,9 @@ and whoever lifts that refusal maps them (HIVE-360 D5).
 
 **Rendering** is `electron/shared/skill-render.ts`, pure, so main and the renderer share it.
 `renderSkillText(text, cli)` fills the three placeholders (`<name>` is `[a-z0-9_-]+`; any other
-text in braces is left alone) and drops the frontmatter keys `dropKeysFor(cli)` names: none for
+text in braces is left alone), after first expanding each `{{include:<name>}}` line from
+`FRAGMENTS` (`electron/shared/skill-fragments.ts`, HIVE-413; see agents-and-ledger.md, "Skill
+fragments and includes"), and drops the frontmatter keys `dropKeysFor(cli)` names: none for
 Claude Code, `hooks` and `allowed-tools` for Codex and Copilot, each with its indented block,
 blank lines included. A skill with no placeholder and none of those keys renders byte for byte as
 written. The shipped skills in `resources/skills` use placeholders; Claude's rendering of them
@@ -980,7 +982,8 @@ that failed. Codex and Copilot get `done` from `harness/done-tool-skill.ts`: cal
 
 **The portability check.** Settings › Skills runs `portabilityIssues(buffer, known)` over the open
 markdown file as it is typed. It flags `mcp__hive__x`, `hive-x` (a hive tool), `hive:x` or
-`/hive:x` (a known skill), `$CLAUDE_PLUGIN_ROOT`, and a placeholder that names no tool or skill.
+`/hive:x` (a known skill), `$CLAUDE_PLUGIN_ROOT`, a placeholder that names no tool or skill,
+and an include that names no fragment.
 **Fix all** applies `makePortable`, which rewrites the buffer, unsaved. Save is never blocked: a
 skill may be meant for one CLI. `known.tools` is `HIVE_TOOL_NAMES` (`electron/shared/ledger-tools.ts`),
 the same `HIVE_TOOLS` list the MCP host serves.

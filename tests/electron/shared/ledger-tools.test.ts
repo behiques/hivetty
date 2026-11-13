@@ -438,3 +438,21 @@ describe('pr_merge (HIVE-409)', () => {
     expect(PR_MERGE_TOOL.inputSchema.required).toEqual(['repo', 'number', 'sha']);
   });
 });
+
+describe('descriptions agents act on (HIVE-413)', () => {
+  const d = (name: string) => LEDGER_TOOLS.find((tool) => tool.name === name)?.description ?? '';
+  it('claim always records and names the previous holder', () => {
+    expect(d('ledger_claim')).toMatch(/always records your claim/i);
+    expect(d('ledger_claim')).toMatch(/names them/i);
+  });
+  it('a threaded post wakes its addressee and closes nothing; an accept wakes nobody', () => {
+    expect(d('ledger_post')).toMatch(/closes nothing/);
+    expect(d('ledger_post')).toMatch(/accept wakes nobody/i);
+  });
+  it('an ask to the shipper needs meta.repo', () => {
+    expect(d('ledger_ask')).toMatch(/`shipper` needs `meta\.repo`/);
+  });
+  it('a denied call ends the turn', () => {
+    expect(d('ledger_failed')).toMatch(/denied call ends the turn/i);
+  });
+});

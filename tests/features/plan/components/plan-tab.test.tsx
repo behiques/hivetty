@@ -59,6 +59,15 @@ describe('PlanTab (HIVE-201)', () => {
     expect(summary('PR 1 of 2 · 1 of 3 tasks · 4m 50s')).toBeInTheDocument();
   });
 
+  it('says which earlier plans of the split this session has not read, so 3 of 3 never reads as 1 and 2 done', () => {
+    const { rerender } = render(<PlanTab plan={{ ...plan, part: { index: 3, of: 3, missing: [1, 2] } }} onOpenFile={vi.fn()} />);
+    expect(screen.getByText("The plans for PR 1 and 2 aren't in this session yet.")).toBeInTheDocument();
+    rerender(<PlanTab plan={{ ...plan, part: { index: 3, of: 3, missing: [2] } }} onOpenFile={vi.fn()} />);
+    expect(screen.getByText("The plan for PR 2 isn't in this session yet.")).toBeInTheDocument();
+    rerender(<PlanTab plan={{ ...plan, part: { index: 3, of: 3 } }} onOpenFile={vi.fn()} />);
+    expect(screen.queryByText(/in this session yet/)).not.toBeInTheDocument();
+  });
+
   it('tints the current task with its activeForm; a task with no startedAt shows no time', () => {
     render(<PlanTab plan={plan} onOpenFile={vi.fn()} />);
     expect(screen.getByText('Pushing and opening the draft PR…')).toBeInTheDocument();

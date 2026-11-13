@@ -131,7 +131,7 @@ export const LEDGER_TOOLS: readonly McpToolDefinition[] = [
   {
     name: 'ledger_post',
     description:
-      'Leave a note on the ledger. Use it to tell other parties what you did or what you found. Nothing is owed back — if you need an answer, use ledger_ask instead. A post addressed to a session appears in its terminal as a notice, and one addressed to an agent wakes it; omit "to" to broadcast to everyone, which wakes nobody.',
+      'Leave a note on the ledger. Use it to tell other parties what you did or what you found. Nothing is owed back — if you need an answer, use ledger_ask instead. A post addressed to a session appears in its terminal as a notice, and one addressed to an agent wakes it; omit "to" to broadcast to everyone, which wakes nobody. A post on a thread wakes its addressee and closes nothing; an accept wakes nobody.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -149,7 +149,7 @@ export const LEDGER_TOOLS: readonly McpToolDefinition[] = [
   {
     name: 'ledger_ask',
     description:
-      'Ask another party a question and open a thread for the answer. Use it before any outward or irreversible action you were not explicitly told to take. Returns the ask id and a short ref. This ENDS YOUR TURN: stop after calling it and wait to be woken with the answer — do not poll for a reply. To hold an ask until a pull request merges, put `"after": "owner/repo#N"` in `meta`: it reaches nobody until that PR\'s shipper `closed` entry lands, and it waits up to seven days.',
+      'Ask another party a question and open a thread for the answer. Use it before any outward or irreversible action you were not explicitly told to take. Returns the ask id and a short ref. This ENDS YOUR TURN: stop after calling it and wait to be woken with the answer — do not poll for a reply. To hold an ask until a pull request merges, put `"after": "owner/repo#N"` in `meta`: it reaches nobody until that PR\'s shipper `closed` entry lands, and it waits up to seven days. An ask to `shipper` needs `meta.repo` (`owner/name`).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -227,7 +227,7 @@ export const LEDGER_TOOLS: readonly McpToolDefinition[] = [
   {
     name: 'ledger_claim',
     description:
-      'Claim a piece of work so other parties know you have it. Advisory, not a lock: if someone else already holds it you are told who, and your claim is still recorded — decide for yourself whether to continue or hand it back with ledger_release.',
+      'Claim a piece of work so other parties know you have it. Always records your claim: if someone else held it, the answer names them; your own earlier claim answers "(already yours)". Release it and say so, unless your instructions say to continue.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -271,7 +271,7 @@ export const LEDGER_TOOLS: readonly McpToolDefinition[] = [
   {
     name: 'ledger_failed',
     description:
-      'Report that you could not finish, and why. Use it when you are blocked, denied, or out of options — a failure someone can read beats a turn that ends silently. Like ledger_done it raises an inbox card, so when another agent or a terminal session asked you, report the failure through ledger_answer on its thread instead: that is the call that reaches the asker.',
+      'Report that you could not finish, and why. Use it when you are blocked, denied, or out of options — a failure someone can read beats a turn that ends silently. Like ledger_done it raises an inbox card, so when another agent or a terminal session asked you, report the failure through ledger_answer on its thread instead: that is the call that reaches the asker. A denied call ends the turn: report it, do not try another route.',
     inputSchema: {
       type: 'object',
       properties: {

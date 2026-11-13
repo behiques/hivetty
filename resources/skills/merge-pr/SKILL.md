@@ -6,7 +6,7 @@ description: Use when a PR is approved and green and it is time to merge it, "me
 # Merge a PR
 
 Whoever runs this reads nothing from the conversation: the arguments are the
-whole input. `{{skill:merge-pr}} <owner>/<repo>#<N> [<workspace>] [KEY]`. No
+whole input. `{{skill:merge-pr}} <owner>/<repo>#<N> [<workspace>] [KEY] [closes-ticket: no]`. No
 arguments at all means cwd is a candidate to verify (below), never an answer.
 
 ## Step 0: the target
@@ -30,8 +30,7 @@ arguments at all means cwd is a candidate to verify (below), never an answer.
    `^[A-Za-z]+-[0-9]+$` is a supplied key. Two or more distinct keys is P0
    (below). Record the literal for the report.
 
-Record repo, number, workspace and key as literals and substitute them
-textually from here on.
+{{include:literal-target}}
 
 ## Step 1: checks
 
@@ -40,7 +39,10 @@ repository is known to have no workflows.
 
 ## One plain command per call
 
-The shipper runs this skill through a permission fence whose Bash rules refuse
+`{{tool:pr_merge}}` is the merge; the shipper's auto-merge grant for it is
+`{{tool:pr_merge}}(owner/name#*)`. When `{{tool:pr_merge}}` is not in your
+tools, the merge too is the fenced Bash fallback, like every other command
+here. The shipper runs Bash through a permission fence whose rules refuse
 any command carrying a shell control character: `|`, `;`, `&`, `<`, `>`, a
 backtick, `$(`. So nothing below is a script. Every command is one plain
 invocation, its output is read by you, and the branching is yours. Values a
@@ -96,7 +98,8 @@ gh pr view <N> --repo <owner>/<repo> --json state,isDraft,mergeable,mergeStateSt
 
 then `gh pr checks <N> --repo <owner>/<repo>`, then `git -C <workspace> rev-parse HEAD`.
 `mergeStateStatus` other than `CLEAN` or `HAS_HOOKS` is a HOLD line
-(`BLOCKED`, `BEHIND`, `DIRTY`, `UNSTABLE`, `UNKNOWN`), `reviewDecision` of
+(`BLOCKED`, `BEHIND`, `DIRTY`, `UNSTABLE`, `UNKNOWN`; `mergeable=UNKNOWN` is
+re-read first, as its row in the action table says), `reviewDecision` of
 `CHANGES_REQUESTED` or `REVIEW_REQUIRED` is one, and the checks rows below
 apply. `gh pr view` cannot see review threads, so the shipper reads two more
 in the same round, and each is a HOLD:
@@ -162,6 +165,7 @@ not a pass, and neither is a JSON you did not read to the end.
 | checks still running, or a `[Bot]` reviewer pending | in a session: wait, then re-run the **whole** gate, bounded at about ten minutes. In a shipper wake: end the wake; the clock re-runs this stage, and nothing sleeps inside a turn |
 | a `[User]` reviewer pending, or CHANGES_REQUESTED | stop and report; nothing here approves for a person |
 | head moved | stop: a wrong repository, or a push mid-run |
+| mergeable=UNKNOWN | re-run the gate after about 10 s, up to six times, in this wake. This is not a CI wait. Still UNKNOWN: HOLD |
 | zero checks | establish whether the repo has CI: `gh workflow list --repo <owner>/<repo> --json name,path,state`, then `gh workflow view <path> --repo <owner>/<repo> --yaml` for each and read whether it triggers on `pull_request` |
 | more than 100 … | paginate; truncated is never CLEAR |
 | empty reading | stop; empty is not a pass |
@@ -217,6 +221,8 @@ HiveTTY's permission fence and becomes an inbox card; the run ends `asking`,
 and the answer wakes a fresh run. That card is the checkpoint, and the wait
 behind it voids the CLEAR like any other wait: **the resumed run re-runs the
 gate** and merges on the new CLEAR, which the one-shot grant now lets through.
+If the head `sha` moved while the card waited, the grant will not match:
+report the HOLD, do not send a second card.
 A merge by REST or by GraphQL mutation is the same act, so the fence holds it
 like `gh pr merge` for the shipper; a session that holds `gh api` does not use
 it for that either.
@@ -233,11 +239,13 @@ it for that either.
 3. A linked worktree: `git -C <main working tree> worktree remove <that path>`.
    On a refusal, `git -C <that path> status --porcelain --untracked-files=all`.
    The worktree is disposable only when **all** of these hold:
-   - the path is under `$HOME/.hivetty/work/`, an agent's worktree and never the
-     person's checkout;
+   - the path is in an agent work directory under the app's `work/` root, an
+     agent's worktree and never the person's checkout;
    - the status prints at least one line, and no line is a tracked change:
      every line starts with `??`;
-   - every `??` path starts with `.hive/`, the agent's own notes folder.
+   - every `??` path starts with `.hive/`, the agent's own notes folder, and
+     none with `.hive/shots/`: `.hive/shots/` is kept: it is evidence, not
+     notes, so a tree holding it is reported, not forced.
 
    Disposable: `git -C <main working tree> worktree remove --force <that path>`,
    and the report says "removed the agent's `.hive/` notes with it". Anything
@@ -245,7 +253,7 @@ it for that either.
    paths. An empty status after a refusal is a stop too: git refused for
    another reason (a submodule, a lock), and the report names it. A refusal
    of `--force` is a stop; never `--force` twice. Then `git -C <main working tree> worktree prune`. An agent worktree
-   under `~/.hivetty/work/<agent>/` is a linked worktree of the project and goes
+   in an agent work directory under the app's `work/` root is a linked worktree of the project and goes
    the same way.
 4. `git -C <main working tree> status --porcelain` and
    `git -C <main working tree> branch --show-current`. The main working tree
@@ -280,6 +288,8 @@ to remove; it does so when it answers `clean`.
 
 ## Step 5: Jira, only on a confirmed key
 
+`closes-ticket: no` → transition nothing; report `split: not the last PR`.
+
 Collect every key in the branch name: every token matching
 `[A-Za-z]+-[0-9]+`, uppercased, unique, read off the `headRefName` from Step 4
 by eye rather than through a pipe; an empty branch name here is a bug, stop.
@@ -291,14 +301,14 @@ Then exactly one rule:
 | P1 | any | one, matching one of them or the branch has none | transition it |
 | P2 | one or more | one, matching none | transition nothing; report both |
 | P3 | none | none | skip; note it |
-| P4 | one | none | remote-link check on that key through `{{tool:jira_get}} { key }` (its `links`; `jira-writer get_remote_links` without HiveTTY's tools): a link naming this PR or branch confirms; otherwise transition nothing, report the candidate |
+| P4 | one | none | remote-link check on that key through `{{tool:jira_get}} { key }` (its `links`; without HiveTTY's tools, the `jira-tracker` skill's `get_remote_links`): a link naming this PR or branch confirms; otherwise transition nothing, report the candidate |
 | P5 | two or more | none | transition nothing; report all |
 
 Transition to **Done**: `{{tool:jira_transition}} { key, status: "Done" }`,
 then read the status back with `{{tool:jira_get}} { key }`. Without the
-Hive's tools: `jira-writer get_transitions <KEY>` gives the id of the Done
-transition, then `jira-writer transition_issue <KEY> <id>`, then read the
-status back with `jira-writer get_issue <KEY> status`. Print, and repeat in
+Hive's tools, the `jira-tracker` skill: `get_transitions <KEY>` gives the id
+of the Done transition, then `transition_issue <KEY> <id>`, then read the
+status back with `get_issue <KEY> status`. Print, and repeat in
 the report:
 
 ```

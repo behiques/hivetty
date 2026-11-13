@@ -604,8 +604,12 @@ describe('ledger_claim and ledger_release', () => {
   });
 
   it('reports the current holder instead of failing', async () => {
+    // Before the post another party holds it; after, the store records the caller.
     const client = stub({
-      read: vi.fn(async () => ({ ...emptySnapshot, claims: { 'HIVE-112': 'slack-watcher' } })),
+      read: vi
+        .fn()
+        .mockResolvedValueOnce({ ...emptySnapshot, claims: { 'HIVE-112': 'slack-watcher' } })
+        .mockResolvedValueOnce({ ...emptySnapshot, claims: { 'HIVE-112': 'sess-a' } }),
     });
 
     const result = await createToolHandlers(client).callTool('ledger_claim', { task: 'HIVE-112' });
@@ -614,6 +618,23 @@ describe('ledger_claim and ledger_release', () => {
     // Not an error: the store records a second claim deliberately.
     expect(result.isError).toBe(false);
     expect(textOf(result)).toMatch(/slack-watcher/);
+    expect(client.post).toHaveBeenCalled();
+  });
+
+  /**
+   * HIVE-413 self review: `claims[task]` also holds the caller's own earlier
+   * claim (a crashed run, a fixer re-asked after `blocked`). Naming the caller
+   * as a previous holder sent run contract 5 into abandoning its own job.
+   */
+  it('says the task is already yours when the previous holder is the caller', async () => {
+    const client = stub({
+      read: vi.fn(async () => ({ ...emptySnapshot, claims: { 'HIVE-112': 'fixer' } })),
+    });
+
+    const result = await createToolHandlers(client).callTool('ledger_claim', { task: 'HIVE-112' });
+
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toBe('claimed HIVE-112 (already yours)');
     expect(client.post).toHaveBeenCalled();
   });
 
