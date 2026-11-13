@@ -166,7 +166,7 @@ import type {
   JiraUser,
 } from '@shared/jira-contract';
 import { LEDGER_DIR, OVERMIND } from '@shared/ledger-contract';
-import { closedAskThreads, delegatesOf, leftOpen, openAsksOnLane, owedBy, waitingAsks } from '@shared/ledger-derive';
+import { closedAskThreads, delegatesOf, leftOpen, openAsksOnLane, owedBy, unfinishedRuns, waitingAsks } from '@shared/ledger-derive';
 import {
   isThisMachineAction,
   type NotificationAction,
@@ -3335,6 +3335,8 @@ export function registerIpcHandlers(
     })
     .finally(() => {
       scheduler?.start();
+      // After `start()`, so the re-wake a lost run earns is routed as it is written (HIVE-410).
+      runs?.settleLost(unfinishedRuns(ledger.read({}).entries));
       slackBridge?.sync();
     });
 

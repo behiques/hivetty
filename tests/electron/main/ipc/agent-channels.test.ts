@@ -272,6 +272,7 @@ vi.mock('../../../../electron/main/agents/runs', () => ({
       kill: trackerKill,
       noteTurnEnded: vi.fn(),
       killAll: trackerKillAll,
+      settleLost: vi.fn(),
       closeAll: trackerCloseAll,
       live: () => liveRuns,
       liveRuns: (_name: string) => liveRunSummaries,

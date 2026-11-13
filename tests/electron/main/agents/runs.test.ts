@@ -2749,6 +2749,58 @@ describe('createRunTracker', () => {
     });
   });
 
+  describe('a run the log shows started and never ended (HIVE-410)', () => {
+    it("is ended as lost, and its lane's re-wake is written once", () => {
+      owed = [{ ask: { id: 'k1', ref: 'a7' }, rewoken: false }];
+
+      tracker.settleLost([{ agent: 'a', run: 'r-old', lane: 'repo:a/x' }]);
+
+      expect(ledger).toEqual([
+        { from: 'a', kind: 'event', body: 'run.ended — failed', meta: { run: 'r-old', outcome: 'failed', reason: 'lost' } },
+        {
+          from: OVERMIND,
+          to: 'a',
+          kind: 'post',
+          thread: 'k1',
+          body: expect.stringContaining('You owe an answer to a7') as string,
+          meta: { run: 'r-old', agent: 'a', outcome: 'failed', reason: 'lost', rewoke: 'k1' },
+        },
+      ]);
+    });
+
+    it("fails a thread lane's ask, which a quit used to leave to its ttl", () => {
+      left = { ask: { id: 'k1' }, claims: [] };
+
+      tracker.settleLost([{ agent: 'a', run: 'r-old', lane: 'thread:k1' }]);
+
+      expect(ledger[1]).toMatchObject({
+        from: OVERMIND,
+        kind: 'failed',
+        thread: 'k1',
+        body: 'a run r-old ended (failed: lost) without answering k1',
+      });
+    });
+
+    it('only ends a run that was waiting on a question of its own', () => {
+      owed = [{ ask: { id: 'k1' }, rewoken: false }];
+      openAsks = true;
+
+      tracker.settleLost([{ agent: 'a', run: 'r-old', lane: 'repo:a/x' }]);
+
+      expect(ledger).toHaveLength(1);
+      expect(ledger[0]).toMatchObject({ body: 'run.ended — failed' });
+    });
+
+    it('leaves a run that is live in this launch alone', () => {
+      tracker.run('a', 'ledger');
+      ledger.length = 0;
+
+      tracker.settleLost([{ agent: 'a', run: 'run-1', lane: 'standing' }]);
+
+      expect(ledger).toEqual([]);
+    });
+  });
+
   describe('licence lapse (HIVE-267)', () => {
     let lapsed: boolean;
     let killGroup: ReturnType<typeof vi.fn<(pgid: number, signal: NodeJS.Signals) => void>>;

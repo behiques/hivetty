@@ -345,6 +345,12 @@ export interface RunTracker {
    * already going away.
    */
   closeAll(reason: string): void;
+  /**
+   * Settle runs the log shows started and never ended (HIVE-410): the last launch quit or
+   * crashed under them. Each gets the `run.ended` it never wrote, which is also what keeps the
+   * next start from finding it again, and its lane's run-end contract is applied once.
+   */
+  settleLost(lost: readonly { agent: string; run: string; lane: string }[]): void;
   /** The names with at least one run in flight. */
   live(): string[];
   /** What this agent has in flight, in the order it started (HIVE-128). */
@@ -1653,6 +1659,26 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     killAll(reason) {
       for (const runs of running.values()) {
         for (const live of runs) escalate(live, reason);
+      }
+    },
+
+    settleLost(lost) {
+      for (const { agent, run, lane } of lost) {
+        // A run this launch started is not lost; its own close settles it.
+        if (liveOf(agent).some((live) => live.run === run)) continue;
+
+        deps.appendLedger({
+          from: agent,
+          kind: 'event',
+          body: 'run.ended — failed',
+          meta: { run, outcome: 'failed', reason: 'lost' },
+        });
+
+        // The same three exemptions a closing run gets: paused, asking, or a lane that is waiting.
+        if (deps.state.read(agent).status === 'paused') continue;
+        if (deps.openAsksFor(agent, run) || deps.openAsksOnLane?.(agent, lane) === true) continue;
+
+        settleOwed(agent, run, lane, 'failed', 'lost');
       }
     },
 
