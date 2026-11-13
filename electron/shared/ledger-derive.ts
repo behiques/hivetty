@@ -253,6 +253,45 @@ export function claims(entries: readonly LedgerEntry[]): Record<string, string> 
   return held;
 }
 
+/** How long a claim, and its holder's silence, last before the stall panel lists it (HIVE-411). */
+export const STALE_CLAIM_MS = 24 * 60 * 60_000;
+
+export interface StaleClaim {
+  task: string;
+  holder: string;
+  /** When the claim was written. */
+  since: number;
+}
+
+/**
+ * Claims nobody is working (HIVE-411): a day old, the holder silent for a day, and owing no ask
+ * (`open`, `delivered` or `accepted`). "No live lane" is read from the log: a live run that quiet
+ * is the watchdog's `quiet` row. Pure.
+ */
+export function staleClaims(entries: readonly LedgerEntry[], now: number): StaleClaim[] {
+  const held = new Map<string, LedgerEntry>();
+  const heard = new Map<string, number>();
+  for (const entry of entries) {
+    heard.set(entry.from, Math.max(heard.get(entry.from) ?? 0, entry.ts));
+    const task = taskOf(entry);
+    if (task === undefined) continue;
+    if (entry.kind === 'claim') held.set(task, entry);
+    else if (entry.kind === 'release') held.delete(task);
+  }
+  const owing = new Set(
+    askStates(entries, now)
+      .filter((s) => s.state === 'open' || s.state === 'delivered' || s.state === 'accepted')
+      .map((s) => s.owes),
+  );
+  const out: StaleClaim[] = [];
+  for (const [task, claim] of held) {
+    if (now - claim.ts < STALE_CLAIM_MS || now - (heard.get(claim.from) ?? 0) < STALE_CLAIM_MS) continue;
+    if (owing.has(claim.from)) continue;
+    out.push({ task, holder: claim.from, since: claim.ts });
+  }
+  return out;
+}
+
 /** The ask itself plus everything that named it, in write order. */
 export function thread(entries: readonly LedgerEntry[], id: string): LedgerEntry[] {
   return entries.filter((entry) => entry.id === id || entry.thread === id);

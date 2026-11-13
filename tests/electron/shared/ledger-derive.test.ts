@@ -38,6 +38,7 @@ import {
   repoAskerOf,
   prOpener,
   resolveRef,
+  staleClaims,
   reviewUrls,
   SHIP_STOPS,
   shipStage,
@@ -1426,5 +1427,28 @@ describe('carriedOver (HIVE-410)', () => {
     ];
 
     expect(carriedOver(older, older, NOW).map((item) => item.id)).toContain('w1');
+  });
+});
+
+describe('staleClaims (HIVE-411)', () => {
+  const DAY = 24 * 60 * 60_000;
+  const claim = (id: string, ts: number, from: string, task: string): LedgerEntry => ({ id, ts, from, kind: 'claim', body: '', meta: { task } });
+
+  it('lists a claim a day old whose holder has been silent a day and owes nothing', () => {
+    const log = [claim('20261110-000000-0001', 0, 'sess-1c', 'HIVE-393')];
+    expect(staleClaims(log, DAY)).toEqual([{ task: 'HIVE-393', holder: 'sess-1c', since: 0 }]);
+    expect(staleClaims(log, DAY - 1)).toEqual([]);
+  });
+
+  it('skips a released claim, a holder heard from today, and a holder that owes an ask', () => {
+    const released: LedgerEntry = { id: '20261110-000001-0001', ts: 1, from: 'sess-1c', kind: 'release', body: '', meta: { task: 'HIVE-393' } };
+    expect(staleClaims([claim('20261110-000000-0001', 0, 'sess-1c', 'HIVE-393'), released], 2 * DAY)).toEqual([]);
+
+    const heard: LedgerEntry = { id: '20261111-000000-0001', ts: DAY + 5, from: 'sess-7b', kind: 'post', body: 'hi' };
+    expect(staleClaims([claim('20261110-000000-0002', 0, 'sess-7b', 'HIVE-404'), heard], DAY + 10)).toEqual([]);
+
+    const owed: LedgerEntry = { id: '20261110-000002-0001', ts: 2, from: 'sess-0a', to: 'builder', kind: 'ask', ref: 'a1', body: 'build' };
+    const accept: LedgerEntry = { id: '20261110-000003-0001', ts: 3, from: 'builder', to: 'sess-0a', kind: 'post', thread: owed.id, body: 'ok', meta: { accepted: true } };
+    expect(staleClaims([claim('20261110-000000-0003', 0, 'builder', 'HIVE-1'), owed, accept], 2 * DAY)).toEqual([]);
   });
 });
