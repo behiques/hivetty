@@ -86,8 +86,11 @@ export function watchSteps(entries: readonly LedgerEntry[], now: number, facts: 
     if (state !== 'open' || to === undefined || to === OVERMIND || facts.isAgent(to)) continue;
     const receipt = nudged.get(ask.id);
     if (receipt === undefined) continue;
-    if (!marked.has(markKey('renudge', ask.id))) {
+    const renudged = marked.get(markKey('renudge', ask.id));
+    if (renudged === undefined) {
       if (now - receipt >= RENUDGE_AFTER_MS) out.push({ step: 'renudge', ask, to });
+    } else if (now - renudged >= CARD_AFTER_MS && !marked.has(markKey('card', ask.id))) {
+      out.push({ step: 'card', ask, to: OVERMIND });
     }
   }
 

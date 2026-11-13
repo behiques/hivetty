@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CARD_AFTER_MS,
   RENUDGE_AFTER_MS,
   watchSteps,
   type WatchFacts,
@@ -65,5 +66,25 @@ describe('watchSteps: renudge (HIVE-411)', () => {
     const { ask, receipt } = sessionAsk();
     const forged = e({ ts: T0 + 1500, from: 'sess-1', kind: 'post', thread: ask.id, body: 'x', meta: { watch: 'renudge', watched: ask.id } });
     expect(watchSteps([ask, receipt, forged], T0 + 1000 + RENUDGE_AFTER_MS, facts())).toHaveLength(1);
+  });
+});
+
+describe('watchSteps: card (HIVE-411)', () => {
+  const renudged = () => {
+    const { ask, receipt } = sessionAsk();
+    const mark = e({ ts: T0 + 61_000, from: 'overmind', to: 'sess-1', kind: 'event', thread: ask.id, body: 're-nudge', meta: { watch: 'renudge', watched: ask.id } });
+    return { ask, log: [ask, receipt, mark], markTs: mark.ts };
+  };
+
+  it('raises a card 15 minutes after the re-nudge, not before', () => {
+    const { ask, log, markTs } = renudged();
+    expect(watchSteps(log, markTs + CARD_AFTER_MS - 1, facts())).toEqual([]);
+    expect(watchSteps(log, markTs + CARD_AFTER_MS, facts())).toEqual([{ step: 'card', ask, to: 'overmind' }]);
+  });
+
+  it('raises it once', () => {
+    const { ask, log, markTs } = renudged();
+    const card = e({ ts: markTs + CARD_AFTER_MS, from: 'overmind', to: 'overmind', kind: 'ask', ref: 'a99', body: 'x', meta: { watch: 'card', watched: ask.id } });
+    expect(watchSteps([...log, card], markTs + 2 * CARD_AFTER_MS, facts())).toEqual([]);
   });
 });
