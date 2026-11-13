@@ -34,9 +34,11 @@ it never takes a PR.
 
 ## On every wake
 
-1. `ledger_read`. In a repository lane, a new ask addressed to you is a PR to take: answer it
-   `accepted` at once, and add its row at stage `intake` with the ask's
-   `reply-to` (who hears about the merge). An answer from `acr` or `fixer`
+1. `ledger_read`. In a repository lane, a new ask addressed to you is a PR to take: take it
+   with `ledger_accept` at once (it stays open; you close it with
+   `ledger_answer` when the row leaves, as the ship skill says), and add its
+   row at stage `intake` with the ask's id, its asker and its `reply-to` (who
+   hears about the merge). An answer from `acr` or `fixer`
    advances the row that was waiting on it and sets its `waitingOn` to null.
    A fixer's `clean` also moves `since` to the `gathered` time it carries,
    never to now (the ship skill says why). Write `prs.json` then.

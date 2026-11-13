@@ -81,9 +81,11 @@ rules are yours to keep, and every implementer you dispatch inherits them:
    from the `ship` skill: `Ship PR #<N> on <owner>/<repo>`, `repo: <the
    project checkout path>`, `worktree: <your worktree>`, `ticket:`,
    `key-confirmed:` echoed from the job, `reply-to:` echoed from the job,
-   `meta: { pr, repo, ticket, stage: "intake", intent: "shipper accepted PR
-   #<N>; nothing more to do for this job" }`. The ask ends your turn; the
-   shipper's `accepted` wakes you once, and the intent tells you it is over.
+   `meta: { pr, repo, ticket, stage: "intake", intent: "shipper merged PR
+   #<N>, or let it go; nothing more to do for this job" }`. The ask ends your
+   turn. The shipper takes it without waking you; its answer, when the PR
+   merges or leaves its hands, wakes you once, and the intent tells you it is
+   over.
    `ship: no` → the answer in step 7 was the end.
 
 ## When you must stop and ask

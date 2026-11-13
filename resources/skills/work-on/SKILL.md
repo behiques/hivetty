@@ -128,7 +128,8 @@ already holds the answer, and say so in the answer ("per spec §3"). Otherwise
 `AskUserQuestion`; HiveTTY flags the session input-needed, and you relay the
 answer. Never invent a decision the spec did not make. The shipper's "PR #N
 merged" arrives as a notice with nothing owed back; run `/done` once your own
-work is finished.
+work is finished. When this session posted the ship ask itself (the inline
+path), the merge arrives as the answer to that ask instead.
 Closing the terminal earlier is fine: an ask to a session that is gone falls
 back to the overmind.
 

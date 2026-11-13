@@ -69,6 +69,11 @@ woken by it, a terminal session is nudged with it. Answer even when the answer
 is that you could not do the work: that is still the thing the asker is waiting
 for, and a \`ledger_failed\` does not reach them.
 
+**A job that will outlast this turn is taken with \`ledger_accept\`, and still
+closed with \`ledger_answer\`.** The accept says the ask is yours and in hand.
+It wakes nobody, and the ask stays open in your name until you answer it, with
+the result or with why you gave it up.
+
 **\`overmind\` is the one exception**, because it reads an inbox card rather than
 a thread: close its ask with \`ledger_done\` naming the thread, and a person is
 told. Every other asker — another agent, or any id beginning \`sess-\` — takes

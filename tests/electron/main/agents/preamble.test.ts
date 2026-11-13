@@ -138,4 +138,9 @@ describe('AGENT_PREAMBLE', () => {
     expect(AGENT_PREAMBLE).toMatch(/meta\.intent/);
     expect(AGENT_PREAMBLE).toMatch(/woken because an ask you opened was answered/i);
   });
+
+  it('tells an agent to take a long job with ledger_accept and still close it with an answer (HIVE-410)', () => {
+    expect(AGENT_PREAMBLE).toContain('ledger_accept');
+    expect(AGENT_PREAMBLE).toMatch(/stays open in your name until you answer it/);
+  });
 });
