@@ -5839,3 +5839,79 @@ describe('the fence route (HIVE-342)', () => {
     });
   });
 });
+
+describe('hook receiver: a PR the session opened reaches onPrOpened', () => {
+  let receiver: Receiver;
+  let url: string;
+  let opened: [string, { slug: string; number: number }][];
+  let events: string[];
+
+  const start = async (onPrOpened: (entityId: string, pr: { slug: string; number: number }) => void) => {
+    receiver = createReceiver({
+      onEvent: (event) => events.push(event.signal.kind),
+      onCleared: () => {},
+      onTicketIntent: () => {},
+      onPlan: () => {},
+      onPrOpened,
+      onPromptName: () => {},
+      onMetrics: () => {},
+      onDone: () => {},
+      onReady: () => {},
+      knowsSession: (entityId) => entityId === 'sess-01',
+      ...noLedger,
+      ...noAgents,
+    });
+    url = (await receiver.start()) as string;
+  };
+
+  beforeEach(async () => {
+    opened = [];
+    events = [];
+    await start((entityId, pr) => opened.push([entityId, pr]));
+  });
+
+  afterEach(async () => {
+    await receiver.stop();
+  });
+
+  const post = (command: string, stdout: string) =>
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [HOOK_HEADER_TOKEN]: receiver.tokenFor('sess-01'),
+        [HOOK_HEADER_SESSION]: 'sess-01',
+      },
+      body: JSON.stringify({
+        session_id: '43fa9e8a-46e9-4c16-9b5c-549db8c85ef8',
+        cwd: '/repo',
+        hook_event_name: 'PostToolUse',
+        tool_name: 'Bash',
+        tool_input: { command },
+        tool_response: { stdout, stderr: '', interrupted: false },
+      }),
+    });
+
+  it('names the session and the PR its gh pr create printed', async () => {
+    await post('gh pr create --draft --fill', 'https://github.com/behiques/hivetty/pull/301\n');
+    expect(opened).toEqual([['sess-01', { slug: 'behiques/hivetty', number: 301 }]]);
+  });
+
+  it('says nothing for a Bash call that opened no PR', async () => {
+    await post('git status', 'nothing to commit');
+    expect(opened).toEqual([]);
+  });
+
+  it('answers and keeps the status when onPrOpened throws', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await receiver.stop();
+    await start(() => {
+      throw new Error('boom');
+    });
+    const response = await post('gh pr create --fill', 'https://github.com/o/r/pull/1');
+    expect(response.status).toBe(204);
+    expect(events).toContain('tool-end');
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('onPrOpened threw'), expect.any(Error));
+    error.mockRestore();
+  });
+});

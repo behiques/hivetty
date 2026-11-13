@@ -220,6 +220,8 @@ export interface HookHandlers {
   onPlan: (update: PlanUpdate) => void;
   /** A main-agent edit (HIVE-201). See `ReceiverOptions.onFileTool`. */
   onFileTool?: (entityId: string) => void;
+  /** A session opened a PR. See `ReceiverOptions.onPrOpened`. */
+  onPrOpened?: (entityId: string, pr: { slug: string; number: number }) => void;
   /** A session reported its context and rate-limit usage (HIVE-79). */
   onMetrics: (entityId: string, metrics: SessionMetrics) => void;
   /** A session declared itself finished — `/done` (HIVE-93). */
@@ -462,6 +464,7 @@ export function createHookRuntime(options: HookRuntimeOptions): HookRuntime {
       onCleared,
       onPlan,
       onFileTool,
+      onPrOpened,
       onMetrics,
       onDone,
       onReady,
@@ -480,6 +483,7 @@ export function createHookRuntime(options: HookRuntimeOptions): HookRuntime {
         onCleared,
         onPlan,
         ...(onFileTool === undefined ? {} : { onFileTool }),
+        ...(onPrOpened === undefined ? {} : { onPrOpened }),
         onMetrics,
         onDone,
         onReady,

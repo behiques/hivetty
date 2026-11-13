@@ -302,6 +302,7 @@ import { createSlackTokens } from '../integrations/slack/tokens';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
+import { prOpenedEntry } from '../ledger/pr-opened';
 import { createPermissionReminder } from '../ledger/reminders';
 import { ACCOUNT_CALLS, hostLicence, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
 import { cliEntitled } from '../licence/entitled';
@@ -3393,6 +3394,15 @@ export function registerIpcHandlers(
       } catch (cause) {
         console.warn(`[ledger] could not replay builds onto ${entityId}:`, cause);
       }
+    },
+    /*
+      A PR a session opened, as the overmind's receipt in the log: the renderer
+      reads it as the session's own (`prClaimOf`), and only the overmind's
+      counts, so no session can claim another's by writing an event itself.
+    */
+    onPrOpened: (entityId, pr) => {
+      const result = ledger.append(prOpenedEntry(entityId, pr));
+      if (!result.ok) console.warn(`[ledger] could not record ${entityId}'s PR: ${result.reason}`);
     },
     /*
       The same register the ledger authenticates a party against (HIVE-115),
