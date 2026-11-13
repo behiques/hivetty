@@ -227,6 +227,49 @@ describe('createPlans: plan file and plan mode (HIVE-180)', () => {
     expect(plans.get('sess-01')).toMatchObject({ file: other, part: { index: 2, of: 2 } });
   });
 
+  describe('a split whose plans land out of order', () => {
+    const part = (index: number, done = false) => {
+      const path = join(root, '.hive', 'plans', `p${String(index)}.md`);
+      writeFileSync(path, `# P${String(index)}\nPR: ${String(index)} of 3\n\n## Task 1: X\n- [${done ? 'x' : ' '}] x\n`);
+      return path;
+    };
+    const write = (plans: Plans, path: string) => onTool(plans, fileCall('Write', { toolInput: { file_path: path } }));
+
+    it('never lets a later part replace an unfinished earlier one', async () => {
+      const plans = createPlans({ send: vi.fn() });
+      await write(plans, part(1));
+      await write(plans, part(3));
+
+      expect(plans.get('sess-01')).toMatchObject({ file: part(1), part: { index: 1, of: 3 } });
+      expect(plans.files('sess-01').map((read) => read.file)).toEqual([part(1), part(3)]);
+    });
+
+    it('lets an earlier part replace a later one', async () => {
+      const plans = createPlans({ send: vi.fn() });
+      await write(plans, part(3));
+      await write(plans, part(1));
+
+      expect(plans.get('sess-01')).toMatchObject({ file: part(1), part: { index: 1, of: 3 } });
+    });
+
+    it('shows a later part once the earlier one is all done', async () => {
+      const plans = createPlans({ send: vi.fn() });
+      await write(plans, part(1, true));
+      await write(plans, part(3));
+
+      expect(plans.get('sess-01')).toMatchObject({ file: part(3), part: { index: 3, of: 3, missing: [2] } });
+    });
+
+    it('names the earlier parts this session has not read', async () => {
+      const plans = createPlans({ send: vi.fn() });
+      await write(plans, part(3));
+
+      expect(plans.get('sess-01')?.part).toEqual({ index: 3, of: 3, missing: [1, 2] });
+      await write(plans, part(1));
+      expect(plans.get('sess-01')?.part).toEqual({ index: 1, of: 3 });
+    });
+  });
+
   it('builds a held plan from the text it read, without reading the disk again (HIVE-359)', async () => {
     const plans = createPlans({ send: vi.fn() });
     await onTool(plans, fileCall());
