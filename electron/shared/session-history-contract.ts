@@ -32,10 +32,10 @@ export const SESSION_HISTORY_FILE = 'sessions.json';
 export const HISTORY_CAP = 20;
 
 /**
- * The pull request a session produced, as it survives a restart.
+ * One pull request a session produced, as it survives a restart.
  *
- * Three fields and deliberately no state — see {@link SessionRecord.pr}, which
- * is the only place this is stored.
+ * Deliberately no state — see {@link SessionRecord.prs}, which is the only
+ * place this is stored.
  */
 export interface SessionPrRecord {
   number: number;
@@ -43,7 +43,16 @@ export interface SessionPrRecord {
   repo: string;
   /** The GitHub page. What a `#123` link opens. */
   url: string;
+  /**
+   * The session opened it: a `gh pr create` its hooks saw, or its ask to the
+   * shipper. Absent when only the sweep matched it by branch, which is a guess
+   * another session's ownership overrides.
+   */
+  owned?: true;
 }
+
+/** The most PRs one session remembers; the oldest falls off first. */
+export const SESSION_PRS_MAX = 20;
 
 /**
  * One session, as it survives a restart.
@@ -165,7 +174,13 @@ export interface SessionRecord {
    */
   endedBy?: 'finished';
   /**
-   * The last pull request seen on this session's branch.
+   * The pull requests this session produced, oldest first.
+   *
+   * A list because one session can open several, and because a branch is not
+   * a session: two sessions in one checkout share a branch, so the one slot this
+   * replaced filed one session's PR under the other. `owned` marks the ones the
+   * session is known to have opened; the rest the sweep matched by branch.
+   * A file written before the list carries `pr`, read as a one-item list.
    *
    * The field this file used to refuse, on the theory that "a restored row
    * re-associates with its PR through `branch`, which is a fact somebody
@@ -195,7 +210,7 @@ export interface SessionRecord {
    * {@link SessionNoteRequest} gives about the ticket key: main does not sweep
    * GitHub, the renderer does.
    */
-  pr?: SessionPrRecord;
+  prs?: SessionPrRecord[];
   createdAt: number;
   /** When the session ended, if it has. What retention sorts on. */
   endedAt?: number;
@@ -293,5 +308,6 @@ export interface SessionNoteRequest {
  */
 export interface SessionPrRequest {
   entityId: string;
-  pr: SessionPrRecord;
+  /** The session's whole list, at most {@link SESSION_PRS_MAX}; it replaces what main holds. */
+  prs: SessionPrRecord[];
 }

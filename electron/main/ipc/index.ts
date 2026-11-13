@@ -302,6 +302,7 @@ import { createSlackTokens } from '../integrations/slack/tokens';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
+import { prOpenedEntry } from '../ledger/pr-opened';
 import { createPermissionReminder } from '../ledger/reminders';
 import { ACCOUNT_CALLS, hostLicence, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
 import { cliEntitled } from '../licence/entitled';
@@ -3395,6 +3396,15 @@ export function registerIpcHandlers(
       }
     },
     /*
+      A PR a session opened, as the overmind's receipt in the log: the renderer
+      reads it as the session's own (`prClaimOf`), and only the overmind's
+      counts, so no session can claim another's by writing an event itself.
+    */
+    onPrOpened: (entityId, pr) => {
+      const result = ledger.append(prOpenedEntry(entityId, pr));
+      if (!result.ok) console.warn(`[ledger] could not record ${entityId}'s PR: ${result.reason}`);
+    },
+    /*
       The same register the ledger authenticates a party against (HIVE-115),
       and deliberately not a second one: an agent that may write to the log is
       exactly an agent whose hooks the receiver should answer, and two lists
@@ -3781,7 +3791,7 @@ export function registerIpcHandlers(
   handle(CH.sessionPr, (_event, raw: unknown): void => {
     const request = parseSessionPrRequest(raw);
     if (!history?.all().some((record) => record.id === request.entityId)) return;
-    history.record(request.entityId, { pr: request.pr });
+    history.record(request.entityId, { prs: request.prs });
   });
 
   /*

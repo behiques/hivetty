@@ -209,6 +209,8 @@ interface UiState {
    * launch would describe a tree that an agent has been rewriting all night.
    */
   explorerExpanded: Record<string, boolean>;
+  /** The PR each session's PR tab shows, by URL, when it has several. View state, not persisted. */
+  prPick: Record<string, string>;
   /**
    * Bumped whenever the filesystem is known to have changed — by the watcher,
    * and by the explorer's ↻ button.
@@ -328,6 +330,7 @@ interface UiState {
   setNewModel: (model: Model, cli?: HarnessId) => void;
   setNewEffort: (effort: Effort, cli?: HarnessId) => void;
   toggleExplorerDir: (projectId: string, relPath: string) => void;
+  setPrPick: (sessionId: string, url: string) => void;
   collapseExplorer: () => void;
   bumpFsRevision: () => void;
   /**
@@ -443,6 +446,7 @@ const initialUiState = {
   consoleShown: false,
   expanded: {} as Record<string, boolean>,
   explorerExpanded: {} as Record<string, boolean>,
+  prPick: {} as Record<string, string>,
   fsRevision: 0,
   workTicket: null as string | null,
   workTicketAt: -1,
@@ -691,6 +695,8 @@ export const useUiStore = create<UiState>()((set) => ({
       const id = cli ?? s.newCli ?? 'claude-code';
       return { newPicks: { ...s.newPicks, [id]: { ...s.newPicks[id], effort } } };
     }),
+
+  setPrPick: (sessionId, url) => set((state) => ({ prPick: { ...state.prPick, [sessionId]: url } })),
 
   toggleExplorerDir: (projectId, relPath) =>
     set((state) => {
@@ -1073,6 +1079,12 @@ export const useSetSelId = () => useUiStore((state) => state.setSelId);
  */
 export const useExplorerExpanded = (projectId: string, relPath: string) =>
   useUiStore((state) => Boolean(state.explorerExpanded[`${projectId}:${relPath}`]));
+
+/** The PR a session's tab shows, by URL; `undefined` until the user picks one. */
+export const usePrPick = (sessionId: string): string | undefined =>
+  useUiStore((state) => state.prPick[sessionId]);
+
+export const useSetPrPick = () => useUiStore((state) => state.setPrPick);
 
 export const useToggleExplorerDir = () =>
   useUiStore((state) => state.toggleExplorerDir);

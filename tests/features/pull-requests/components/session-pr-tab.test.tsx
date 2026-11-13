@@ -43,7 +43,7 @@ afterEach(() => {
 describe('SessionPrTab (HIVE-209)', () => {
   it('heads with number, flap and state, the title, and head → base · size', () => {
     stage({ headRef: 'fix/hive-193-history-spec', baseRef: 'main', additions: 75, deletions: 6, changedFiles: 2 });
-    render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     expect(screen.getByTestId('session-pr-sub')).toHaveTextContent('#313 · INCUBATING · open');
     expect(screen.getByText('History spec waits for the first page')).toBeInTheDocument();
     expect(screen.getByTestId('session-pr-facts')).toHaveTextContent(
@@ -53,7 +53,7 @@ describe('SessionPrTab (HIVE-209)', () => {
 
   it('before the first read: the branch and a loading line', () => {
     stage();
-    render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     expect(screen.getByTestId('session-pr-facts')).toHaveTextContent('feat/incorp-598-fee-rule');
     expect(screen.getByRole('status', { name: 'Loading pull request' })).toBeInTheDocument();
   });
@@ -65,7 +65,7 @@ describe('SessionPrTab (HIVE-209)', () => {
         prDetails: { [key]: { key, state: 'failed', problem: 'gh is signed out' } },
       }),
     );
-    render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     expect(screen.getByText('gh is signed out')).toBeInTheDocument();
   });
 
@@ -87,7 +87,7 @@ describe('SessionPrTab (HIVE-209)', () => {
         },
       ],
     });
-    const { unmount } = render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    const { unmount } = render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     expect(screen.getByRole('heading', { name: 'Checks 2 of 4' })).toBeInTheDocument();
     const names = screen.getAllByTestId('check-name').map((el) => el.textContent);
     expect(names).toEqual(['lint', 'unit', 'e2e', 'type-check']);
@@ -97,7 +97,7 @@ describe('SessionPrTab (HIVE-209)', () => {
     unmount();
 
     stage({ checks: [] });
-    render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     expect(screen.getByText('No checks yet')).toBeInTheDocument();
   });
 
@@ -105,7 +105,7 @@ describe('SessionPrTab (HIVE-209)', () => {
   it('reads this PR on mount, again each minute, and stops when the tab goes', async () => {
     vi.useFakeTimers();
     stage({});
-    const { unmount } = render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    const { unmount } = render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     expect(load).toHaveBeenCalledTimes(1);
     expect(load).toHaveBeenCalledWith('acme', 'incorpx-server', 313);
     await act(() => vi.advanceTimersByTimeAsync(60_000));
@@ -119,7 +119,7 @@ describe('SessionPrTab (HIVE-209)', () => {
   it('a remembered PR: last seen, Open on GitHub only, no read', () => {
     stage();
     render(
-      <SessionPrTab sessionId="s1" sessionPr={{ pr: { n: 298, url: 'https://github.com/a/b/pull/298' }, row: null }} />,
+      <SessionPrTab sessionId="s1" sessionPrs={[{ pr: { n: 298, url: 'https://github.com/a/b/pull/298' }, row: null }]} />,
     );
     expect(screen.getByText('#298 · last seen')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open on GitHub ›' })).toHaveAttribute(
@@ -132,7 +132,7 @@ describe('SessionPrTab (HIVE-209)', () => {
 
   it('Open on GitHub links out; Show in PRs opens the PR page with this row', () => {
     stage({});
-    render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     expect(screen.getByRole('link', { name: 'Open on GitHub ›' })).toHaveAttribute('href', row.pr.url);
     fireEvent.click(screen.getByRole('button', { name: 'Show in PRs ›' }));
     expect(useUiStore.getState().prPage).toEqual({ owner: 'acme', repo: 'incorpx-server', n: 313, row });
@@ -170,7 +170,7 @@ describe('SessionPrTab review and threads (HIVE-209)', () => {
       reviews: [{ author: 'dana', state: 'APPROVED', body: '', submittedAt: '2026-10-03T09:00:00Z', url: 'https://r/1' }],
     });
     shipperHolds();
-    render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     const rows = screen.getAllByTestId('holder').map((el) => el.textContent);
     expect(rows).toEqual(['shipper took it · checks running', 'dana approved', 'acr review requested']);
     expect(screen.getByText('took it · checks running')).toHaveClass('text-amber-text');
@@ -178,7 +178,7 @@ describe('SessionPrTab review and threads (HIVE-209)', () => {
 
   it('Review is not drawn when nobody holds or reviews it', () => {
     stage({});
-    render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     expect(screen.queryByRole('heading', { name: 'Review' })).toBeNull();
   });
 
@@ -190,7 +190,7 @@ describe('SessionPrTab review and threads (HIVE-209)', () => {
         prThread({ id: 'PRRT_2', isResolved: true }),
       ],
     });
-    render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     expect(screen.getByRole('heading', { name: 'Open threads 1' })).toBeInTheDocument();
     const thread = screen.getByRole('button', { name: /history-spec\.ts:42/ });
     expect(thread).toHaveTextContent('acr An LLC without a registered agent passes validation.');
@@ -200,11 +200,46 @@ describe('SessionPrTab review and threads (HIVE-209)', () => {
 
   it("no open threads: acr's promise when acr was asked, else None yet.", () => {
     stage({ reviewRequests: ['acr'] });
-    const { unmount } = render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    const { unmount } = render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     expect(screen.getByText("None yet. acr's findings land here, each with its file and line.")).toBeInTheDocument();
     unmount();
     stage({});
-    render(<SessionPrTab sessionId="s1" sessionPr={live} />);
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
     expect(screen.getByText('None yet.')).toBeInTheDocument();
+  });
+});
+
+describe('SessionPrTab with several PRs', () => {
+  const remembered = { pr: { n: 298, url: 'https://github.com/a/b/pull/298' }, row: null };
+
+  it('draws no picker for one PR', () => {
+    stage();
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
+    expect(screen.queryByRole('group', { name: 'Pull requests' })).toBeNull();
+  });
+
+  it('draws a chip per PR, the first chosen, and a chip click shows that PR', () => {
+    stage();
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live, remembered]} />);
+    const picker = screen.getByRole('group', { name: 'Pull requests' });
+    const first = screen.getByRole('button', { name: '#313' });
+    const second = screen.getByRole('button', { name: '#298' });
+    expect(picker).toContainElement(first);
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+    expect(second).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('session-pr-sub')).toHaveTextContent('#313');
+
+    fireEvent.click(second);
+
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('#298 · last seen')).toBeInTheDocument();
+    expect(screen.queryByTestId('session-pr-sub')).toBeNull();
+  });
+
+  it('falls back to the first when the picked PR has left the list', () => {
+    stage();
+    act(() => useUiStore.getState().setPrPick('s1', 'https://github.com/a/b/pull/1'));
+    render(<SessionPrTab sessionId="s1" sessionPrs={[live, remembered]} />);
+    expect(screen.getByRole('button', { name: '#313' })).toHaveAttribute('aria-pressed', 'true');
   });
 });

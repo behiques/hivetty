@@ -271,7 +271,7 @@ export const STAGE_TEXT_MAX = 32;
  * from `"pr": 214`. Read strictly, the wrong one would fail silently and read
  * exactly like "the shipper has not touched this PR".
  */
-const wholeNumberOf = (value: unknown): number | undefined => {
+export const wholeNumberOf = (value: unknown): number | undefined => {
   if (typeof value === 'number') return Number.isInteger(value) ? value : undefined;
   if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value);
   return undefined;

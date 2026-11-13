@@ -211,6 +211,12 @@ export interface SessionsOptions {
    */
   onPlanRestored?: (entityId: string) => void;
   /**
+   * A session opened a PR: its hooks saw `gh pr create` print one. The one
+   * consumer writes it to the ledger, where the renderer records it as the
+   * session's own.
+   */
+  onPrOpened?: (entityId: string, pr: { slug: string; number: number }) => void;
+  /**
    * The agent names this app has definitions for (HIVE-115).
    *
    * A **function**, not a snapshot, for the reason `config` is one and the
@@ -620,6 +626,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     onEnded,
     onReady,
     onPlanRestored,
+    onPrOpened,
     /*
       An empty register is the honest default (HIVE-115): a build with no agents
       answers a hook under an unknown name exactly as it did before the second
@@ -1381,6 +1388,7 @@ export function createSessions(options: SessionsOptions): Sessions {
     onPlan: (update) => plans.apply(update),
     // Changed files (HIVE-201): a main-agent edit re-reads the transcript.
     onFileTool: (entityId) => void changedFiles.onFileTool(entityId),
+    ...(onPrOpened === undefined ? {} : { onPrOpened }),
     /**
      * The first prompt named the session (first-prompt naming).
      *

@@ -200,6 +200,12 @@ export interface ReceiverOptions {
    */
   onFileTool?: (entityId: string) => void;
   /**
+   * A session opened a PR: its hooks saw `gh pr create` print one. Session
+   * path, whole bodies, a subagent's too (the PR is the session's whoever ran
+   * it). Optional, so a host without a ledger ignores it.
+   */
+  onPrOpened?: (entityId: string, pr: { slug: string; number: number }) => void;
+  /**
    * A session reported its context and rate-limit usage (HIVE-79).
    *
    * Arrives on a second path from Claude Code's status line rather than from a
@@ -568,6 +574,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     onCleared,
     onPlan,
     onFileTool,
+    onPrOpened,
     onMetrics,
     onDone,
     onReady,
@@ -1717,6 +1724,14 @@ export function createReceiver(options: ReceiverOptions): Receiver {
             onFileTool?.(entityId);
           } catch (cause) {
             console.error('[hive] onFileTool threw; changed files missed one edit:', cause);
+          }
+          break;
+        case 'pr-opened':
+          // A view's input, like a plan: a throw must not cost the session the status after it.
+          try {
+            onPrOpened?.(entityId, effect.pr);
+          } catch (cause) {
+            console.error('[hive] onPrOpened threw; a session PR went unrecorded:', cause);
           }
           break;
         case 'prompt': {

@@ -80,7 +80,7 @@ export interface TicketPr {
  *
  * Resolving live fixed it for *this week's* work and left the rest of the
  * column empty, because the sweep is open PRs plus 24 hours of merges: a row
- * whose PR landed on Tuesday matched nothing on Thursday. `Session.lastPr` is
+ * whose PR landed on Tuesday matched nothing on Thursday. `Session.prs` is
  * the answer to that — a PR the app saw and wrote down, offered only when the
  * live list has nothing, and marked as remembered by the absence of `state`.
  */
@@ -90,7 +90,7 @@ export interface SessionPr {
    * The live state — **absent when this is a remembered PR** rather than one
    * the current sweep can see.
    *
-   * The optionality is the whole honesty of the fallback. `Session.lastPr` is
+   * The optionality is the whole honesty of the fallback. `Session.prs` is
    * written down when a sweep resolves it and is never revisited, so by the
    * time it is being read the PR may have been approved, merged or closed. A
    * state carried across that gap would be a claim nothing stands behind — and

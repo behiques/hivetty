@@ -147,6 +147,37 @@ describe('readHook, plan, file and prompt effects (HIVE-236)', () => {
     const todo = session(json({ hook_event_name: 'PostToolUse', agent_id: 'ag-1', tool_name: 'TodoWrite', tool_input: { todos: [{ content: 'a', status: 'pending' }] } })).effects;
     expect(todo.some((effect) => effect.kind === 'plan')).toBe(false);
   });
+  /**
+   * A session's PR, read at the moment it opens it (the sess-19 bug): a branch
+   * is not a session, so the opener says so itself. Bash's `tool_response` is
+   * `{ stdout, stderr, interrupted }`; `gh pr create` prints the URL on stdout.
+   */
+  describe('gh pr create', () => {
+    const bash = (command: string, stdout: unknown, extra: Record<string, unknown> = {}) =>
+      session(json({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command }, tool_response: { stdout, stderr: '' }, ...extra })).effects;
+    const opened = (slug: string, number: number) => ({ kind: 'pr-opened', pr: { slug, number } });
+
+    it('reads the PR it printed', () => {
+      expect(bash('gh pr create --draft --title "x" --body "$(cat <<EOF\nbody\nEOF\n)"', 'Warning: 1 uncommitted change\nhttps://github.com/behiques/hivetty/pull/301\n'))
+        .toEqual([opened('behiques/hivetty', 301), status('tool-end')]);
+    });
+    it('reads it from a subagent and inside a compound command too', () => {
+      expect(bash('cd /w && git push -u origin HEAD && gh pr create --fill', 'https://github.com/o/r.js/pull/7', { agent_id: 'ag-1' }))
+        .toEqual([opened('o/r.js', 7), status('tool-end', { agentId: 'ag-1' })]);
+    });
+    it('ignores any other gh command that prints a PR URL', () => {
+      expect(bash('gh pr view 301 --json url -q .url', 'https://github.com/behiques/hivetty/pull/301')).toEqual([status('tool-end')]);
+      expect(bash('echo gh pr created', 'https://github.com/behiques/hivetty/pull/301')).toEqual([status('tool-end')]);
+    });
+    it('ignores a create that printed no PR URL, or no stdout', () => {
+      expect(bash('gh pr create --fill', 'a pull request for branch "x" already exists')).toEqual([status('tool-end')]);
+      expect(bash('gh pr create --fill', undefined)).toEqual([status('tool-end')]);
+    });
+    it('ignores a truncated body', () => {
+      expect(session('{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"gh pr create --body \'', true).effects)
+        .toEqual([status('tool-end')]);
+    });
+  });
   it('drops a truncated plan-mode plan and says so', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect(session('{"hook_event_name":"PostToolUse","tool_name":"ExitPlanMode","tool_input":{"plan":"', true).effects)

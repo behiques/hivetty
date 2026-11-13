@@ -29,7 +29,9 @@ vi.mock('@features/work/components/ticket-tab', () => ({
 }));
 
 vi.mock('@features/pull-requests/components/session-pr-tab', () => ({
-  SessionPrTab: ({ sessionPr }: { sessionPr: { pr: { n: number } } }) => <div>pr tab {sessionPr.pr.n}</div>,
+  SessionPrTab: ({ sessionPrs }: { sessionPrs: { pr: { n: number } }[] }) => (
+    <div>pr tab {sessionPrs.map(({ pr }) => pr.n).join(' ')}</div>
+  ),
 }));
 
 /** Point the seeded `hero-refresh` session at a ticket, or at none. */
@@ -368,6 +370,24 @@ describe('the PR tab (HIVE-209)', () => {
     expect(selected()).toBe(before);
     fireEvent.click(screen.getByRole('tab', { name: /^PR/ }));
     expect(screen.getByText('pr tab 482')).toBeInTheDocument();
+  });
+
+  it('a session with two PRs reads PRs 2 and hands the tab both, the live one first', () => {
+    withPr();
+    act(() => {
+      useHiveStore.setState((state) => ({
+        entities: {
+          ...state.entities,
+          'hero-refresh': {
+            ...(state.entities['hero-refresh'] as Session),
+            prs: [{ number: 118, repo: 'nova-web', url: 'https://github.com/demo/nova-web/pull/118', owned: true }],
+          },
+        },
+      }));
+    });
+    render(<SessionPanel rowRef={createRef()} />);
+    fireEvent.click(screen.getByRole('tab', { name: /^PRs 2/ }));
+    expect(screen.getByText('pr tab 482 118')).toBeInTheDocument();
   });
 
   it('closed: the strip carries the PR icon with its fact and dot', () => {

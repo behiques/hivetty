@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { HISTORY_CAP } from '../../../../electron/shared/session-history-contract';
+import { HISTORY_CAP, SESSION_PRS_MAX } from '../../../../electron/shared/session-history-contract';
 import {
   createSessionHistory,
   readHistory,
@@ -117,19 +117,17 @@ describe('session history', () => {
      * writer — `session:pr` — now sends this, and it survives the same way
      * every other field here does.
      */
-    it('round-trips the pull request a session produced', () => {
-      const pr = {
-        number: 118,
-        repo: 'the-hive',
-        url: 'https://github.com/demo/the-hive/pull/118',
-      };
+    it('round-trips the pull requests a session produced', () => {
+      const prs = [
+        { number: 118, repo: 'the-hive', url: 'https://github.com/demo/the-hive/pull/118', owned: true as const },
+      ];
       const history = createSessionHistory(file, () => 1000);
       history.record('sess-01', { project: 'the-hive', task: '', status: 'working' });
-      history.record('sess-01', { pr });
+      history.record('sess-01', { prs });
       history.flush();
 
       const reopened = createSessionHistory(file, () => 2000);
-      expect(reopened.all()[0]).toMatchObject({ id: 'sess-01', pr });
+      expect(reopened.all()[0]).toMatchObject({ id: 'sess-01', prs });
     });
 
     // A restored session re-reads every plan file it read (HIVE-359).
@@ -430,26 +428,75 @@ describe('session history', () => {
     });
 
     /**
-     * A later sweep resolving a different PR — a branch reused, or a second one
-     * raised — replaces rather than merging into. Only one PR is remembered,
-     * which is what the 34px column can show.
+     * The renderer authors a session's whole PR list, so a later write replaces
+     * the list it sent before rather than merging into it.
      */
-    it('replaces a remembered pull request rather than merging into it', () => {
+    it('replaces the PR list with the one written last', () => {
       const history = createSessionHistory(file, () => 1000);
       history.record('sess-01', { project: 'p', task: '', status: 'working' });
       history.record('sess-01', {
-        pr: { number: 1, repo: 'p', url: 'https://github.com/demo/p/pull/1' },
+        prs: [{ number: 1, repo: 'p', url: 'https://github.com/demo/p/pull/1' }],
       });
       history.record('sess-01', {
-        pr: { number: 2, repo: 'p', url: 'https://github.com/demo/p/pull/2' },
+        prs: [
+          { number: 1, repo: 'p', url: 'https://github.com/demo/p/pull/1' },
+          { number: 2, repo: 'p', url: 'https://github.com/demo/p/pull/2', owned: true },
+        ],
       });
       history.flush();
 
-      expect(readHistory(file)[0]?.pr).toEqual({
-        number: 2,
-        repo: 'p',
-        url: 'https://github.com/demo/p/pull/2',
-      });
+      expect(readHistory(file)[0]?.prs).toEqual([
+        { number: 1, repo: 'p', url: 'https://github.com/demo/p/pull/1' },
+        { number: 2, repo: 'p', url: 'https://github.com/demo/p/pull/2', owned: true },
+      ]);
+    });
+
+    /** A file from before the list: its one remembered PR becomes a one-item, unowned list. */
+    it('reads a legacy pr as a one-item list', () => {
+      writeFileSync(
+        file,
+        JSON.stringify([
+          {
+            id: 'sess-01',
+            project: 'p',
+            task: '',
+            status: 'done',
+            createdAt: 1,
+            pr: { number: 4, repo: 'p', url: 'https://github.com/demo/p/pull/4' },
+          },
+        ]),
+        'utf8',
+      );
+
+      const [record] = readHistory(file);
+      expect(record?.prs).toEqual([{ number: 4, repo: 'p', url: 'https://github.com/demo/p/pull/4' }]);
+      expect(record).not.toHaveProperty('pr');
+    });
+
+    /** `owned` is kept only as `true`; anything else reads as unowned rather than costing the item. */
+    it('keeps owned only when it is true', () => {
+      writeFileSync(
+        file,
+        JSON.stringify([
+          {
+            id: 'sess-01',
+            project: 'p',
+            task: '',
+            status: 'done',
+            createdAt: 1,
+            prs: [
+              { number: 5, repo: 'p', url: 'https://github.com/demo/p/pull/5', owned: true },
+              { number: 6, repo: 'p', url: 'https://github.com/demo/p/pull/6', owned: 'yes' },
+            ],
+          },
+        ]),
+        'utf8',
+      );
+
+      expect(readHistory(file)[0]?.prs).toEqual([
+        { number: 5, repo: 'p', url: 'https://github.com/demo/p/pull/5', owned: true },
+        { number: 6, repo: 'p', url: 'https://github.com/demo/p/pull/6' },
+      ]);
     });
 
     /**
@@ -467,15 +514,42 @@ describe('session history', () => {
             task: '',
             status: 'done',
             createdAt: 1,
-            pr: { number: 7 },
+            prs: [{ number: 7 }],
+          },
+          {
+            id: 'sess-02',
+            project: 'p',
+            task: '',
+            status: 'done',
+            createdAt: 2,
+            prs: [{ number: 7 }, { number: 8, repo: 'p', url: 'https://github.com/demo/p/pull/8' }],
           },
         ]),
         'utf8',
       );
 
       const records = readHistory(file);
-      expect(records).toHaveLength(1);
-      expect(records[0]).not.toHaveProperty('pr');
+      expect(records).toHaveLength(2);
+      expect(records.find((r) => r.id === 'sess-01')).not.toHaveProperty('prs');
+      // A bad item costs itself, never the list beside it.
+      expect(records.find((r) => r.id === 'sess-02')?.prs).toEqual([
+        { number: 8, repo: 'p', url: 'https://github.com/demo/p/pull/8' },
+      ]);
+    });
+
+    it('keeps the newest PRs when a file holds more than the cap', () => {
+      const prs = Array.from({ length: SESSION_PRS_MAX + 1 }, (_, i) => ({
+        number: i + 1,
+        repo: 'p',
+        url: `https://github.com/demo/p/pull/${String(i + 1)}`,
+      }));
+      writeFileSync(
+        file,
+        JSON.stringify([{ id: 'sess-01', project: 'p', task: '', status: 'done', createdAt: 1, prs }]),
+        'utf8',
+      );
+
+      expect(readHistory(file)[0]?.prs).toEqual(prs.slice(1));
     });
   });
 

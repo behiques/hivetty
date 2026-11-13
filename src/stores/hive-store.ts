@@ -185,6 +185,7 @@ import {
   waitingAsks,
   type Delegate,
   type ShipTrack,
+  wholeNumberOf,
 } from '@shared/ledger-derive';
 import type { SessionMetrics } from '@shared/metrics-contract';
 import { isSessionSummons, laneOf, trimNotifications, waitsOnYou, type AskOpen } from '@shared/notification-lanes';
@@ -194,9 +195,11 @@ import {
   soleTicketKeyIn,
   type SessionNameOrigin,
 } from '@shared/session-contract';
-import type {
-  SessionHistoryEntry,
-  SessionPrRequest,
+import {
+  SESSION_PRS_MAX,
+  type SessionHistoryEntry,
+  type SessionPrRecord,
+  type SessionPrRequest,
 } from '@shared/session-history-contract';
 import { type AgentGroupKey, type TableFilter, useFleetView, useUiStore } from '@stores/ui-store';
 
@@ -4029,7 +4032,9 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       },
     })),
 
-  hydrateLedger: (snapshot, closed = [], open = []) =>
+  hydrateLedger: (snapshot, closed = [], open = []) => {
+    // A PR a session handed the shipper is its own; computed before the write, sent after it (`hydratePrs`' shape).
+    const claimed = claimSessionPrs(get(), [...snapshot, ...open]);
     set((state) => {
       // `open`/`ageMs`/`state` are derived at read time and go stale in a mirror.
       const entries = [
@@ -4066,14 +4071,28 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         entries,
       );
 
-      return { ledger: capLedger(merged, closedAsks), closedAsks };
-    }),
+      const entities = rememberSessionPrs(state.entities, claimed);
+      return {
+        ledger: capLedger(merged, closedAsks),
+        closedAsks,
+        ...(entities === state.entities ? {} : { entities }),
+      };
+    });
+    for (const note of claimed) noteSessionPr(note);
+  },
 
   ledgerAppend: (entry) => {
+    const claimed = claimSessionPrs(get(), [entry]);
     set((state) => {
       const closedAsks = withClosed(state.closedAsks, [entry]);
-      return { ledger: capLedger([...state.ledger, entry], closedAsks), closedAsks };
+      const entities = rememberSessionPrs(state.entities, claimed);
+      return {
+        ledger: capLedger([...state.ledger, entry], closedAsks),
+        closedAsks,
+        ...(entities === state.entities ? {} : { entities }),
+      };
     });
+    for (const note of claimed) noteSessionPr(note);
     /*
       An entry naming a PR is the shipper (or a session) reporting a move gh
       made outside this app: marked ready, merged. Sweep now rather than at the
@@ -4219,11 +4238,11 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           createdAt: item.createdAt,
           ...(item.endedAt === undefined ? {} : { endedAt: item.endedAt }),
           /*
-            The pull request this session was last seen to own. Written down by
-            a sweep in some previous run — the live list cannot answer for it any
-            more, which is the entire reason it is on the record.
+            The pull requests this session produced. Written down in some
+            previous run — the live list cannot answer for them any more, which
+            is the entire reason they are on the record.
           */
-          ...(item.pr === undefined ? {} : { lastPr: item.pr }),
+          ...(item.prs === undefined ? {} : { prs: item.prs }),
           /*
             Checked against the closed lists rather than trusted (HIVE-87).
             `history.ts` casts these on the way in and says the store validates
@@ -8585,6 +8604,64 @@ function sessionForPr(
   return pool.find((session) => !session.ended)?.id ?? null;
 }
 
+/** One PR, two spellings: GitHub's URL and the one built from a ledger `meta.repo`. */
+const sameUrl = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
+
+/**
+ * `pr` added to a session's list, or `undefined` when the list already says it.
+ *
+ * The one writer for every source (the hook's receipt, an ask to the shipper,
+ * the sweep), so they cannot disagree about a duplicate. A branch guess that
+ * later turns out to be the session's own is upgraded in place, keeping its
+ * position; ownership is never taken back by a guess. The oldest falls off past
+ * {@link SESSION_PRS_MAX}.
+ */
+export function upsertSessionPr(
+  list: readonly SessionPrRecord[] | undefined,
+  pr: SessionPrRecord,
+): SessionPrRecord[] | undefined {
+  const current = list ?? [];
+  const at = current.findIndex((item) => sameUrl(item.url, pr.url));
+  if (at === -1) return [...current, pr].slice(-SESSION_PRS_MAX);
+  if (pr.owned !== true || current[at].owned === true) return undefined;
+  return current.map((item, index) => (index === at ? { ...item, owned: true as const } : item));
+}
+
+/** `owner/name`, nothing else: it becomes a URL path. */
+const REPO_SLUG = /^[\w.-]+\/[\w.-]+$/;
+
+/**
+ * The session a ledger entry says opened a PR, and that PR, or `null`.
+ *
+ * Two entries say it. A session's `ask` to the shipper (every hive flow hands
+ * its PR over that way, with `meta: { pr, repo }`), and the `event` main writes
+ * when a session's hooks show `gh pr create` printing a PR URL. That one counts
+ * only from the overmind: any party can append an `event`, so a session could
+ * otherwise claim another's PR.
+ */
+export function prClaimOf(entry: LedgerEntry): { session: string; pr: SessionPrRecord } | null {
+  const number = wholeNumberOf(entry.meta?.['pr']);
+  const slug = entry.meta?.['repo'];
+  if (number === undefined || number < 1 || typeof slug !== 'string' || !REPO_SLUG.test(slug)) return null;
+  const opened = entry.meta?.['prOpened'];
+  const session =
+    entry.kind === 'ask' && entry.to === 'shipper'
+      ? entry.from
+      : entry.kind === 'event' && entry.from === OVERMIND && typeof opened === 'string'
+        ? opened
+        : null;
+  if (session === null) return null;
+  return {
+    session,
+    pr: {
+      number,
+      repo: slug.slice(slug.indexOf('/') + 1),
+      url: `https://github.com/${slug}/pull/${String(number)}`,
+      owned: true,
+    },
+  };
+}
+
 /**
  * The pull request a session owns, or `null` — {@link sessionForPr} run
  * backwards (HIVE-100).
@@ -8620,39 +8697,20 @@ export function resolveSessionPr(
   branch: string | undefined,
   project: string | undefined,
   prs: readonly PrRecord[],
-  /**
-   * The PR this session was last seen to own, if the live list cannot answer.
-   *
-   * Consulted **only** when the branch match finds nothing, never as a tie
-   * break, because a live record is strictly better information: it is current,
-   * it carries a state, and it is about the branch the session is on *now*.
-   *
-   * It is offered without a state, which is what marks the answer as a memory —
-   * see {@link SessionPr.state}. It is what fills the column for the ordinary
-   * case the live match cannot reach: a session that raised a PR, saw it merged
-   * more than a day ago, and has since had its worktree torn down so its branch
-   * reads `main` again.
-   */
-  remembered?: Session['lastPr'],
 ): SessionPr | null {
-  const fallback: SessionPr | null =
-    remembered === undefined
-      ? null
-      : { n: remembered.number, url: remembered.url };
-
   /*
     An unobserved branch matches nothing — the same guard `sessionForPr` states
     for the same reason (HIVE-78). The empty string is excluded too: it is what
     `branchLabel` already treats as absent, and a `''` here would be a value
     that compares equal to nothing while looking like it could.
 
-    An unobserved branch falls through to the memory rather than to `null`: a
-    row whose branch nobody ever read is exactly the row that most needs one.
+    The live answer only: a session's own list (`resolveSessionPrs`) is what
+    answers once the branch has moved on.
   */
-  if (branch === undefined || branch === '') return fallback;
+  if (branch === undefined || branch === '') return null;
 
   const candidates = prs.filter((pr) => pr.branch === branch);
-  if (candidates.length === 0) return fallback;
+  if (candidates.length === 0) return null;
 
   const sameProject =
     project === undefined
@@ -8670,6 +8728,71 @@ export function resolveSessionPr(
   });
 
   return { n: best.number, state: best.state, url: best.url };
+}
+
+/**
+ * A session's pull requests, in the order its PR tab lists them.
+ *
+ * Its own list (`Session.prs`) plus the live branch match when the list does
+ * not hold it yet, each with its live state when the sweep can see it. A PR
+ * another session **owns** is dropped, guess or branch match alike: a branch is
+ * not a session, and two sessions in one checkout share one.
+ * `ownedElsewhere` holds those URLs lower-cased.
+ *
+ * Open first, then merged, then remembered (no state: the sweep cannot see it),
+ * newest first within each. The list is oldest first and the branch match is
+ * newest, so reversing it and sorting stably by group is the whole order.
+ */
+export function resolveSessionPrs(
+  branch: string | undefined,
+  project: string | undefined,
+  prs: readonly PrRecord[],
+  own: readonly SessionPrRecord[] | undefined,
+  ownedElsewhere: ReadonlySet<string>,
+): SessionPr[] {
+  const found: SessionPr[] = (own ?? [])
+    .filter((record) => record.owned === true || !ownedElsewhere.has(record.url.toLowerCase()))
+    .map((record) => {
+      const live = prs.find((pr) => sameUrl(pr.url, record.url));
+      return live === undefined ? { n: record.number, url: record.url } : { n: record.number, state: live.state, url: record.url };
+    });
+  const match = resolveSessionPr(branch, project, prs);
+  if (match !== null && !ownedElsewhere.has(match.url.toLowerCase()) && !found.some((pr) => sameUrl(pr.url, match.url))) {
+    found.push(match);
+  }
+  const group = (pr: SessionPr) => (pr.state === undefined ? 2 : pr.state === 'merged' ? 1 : 0);
+  return found.reverse().sort((a, b) => group(a) - group(b));
+}
+
+/**
+ * What the ledger says sessions opened ({@link prClaimOf}), as one note per
+ * session whose list changes. A claim naming no session (an agent, an id
+ * retention has dropped) is ignored.
+ */
+function claimSessionPrs(state: HiveState, entries: readonly LedgerEntry[]): SessionPrRequest[] {
+  const notes = new Map<string, SessionPrRecord[]>();
+  for (const entry of entries) {
+    const claim = prClaimOf(entry);
+    if (claim === null) continue;
+    const id = currentSessionIn(state, claim.session);
+    const entity = state.entities[id];
+    if (entity === undefined || !isSession(entity)) continue;
+    const next = upsertSessionPr(notes.get(id) ?? entity.prs, claim.pr);
+    if (next !== undefined) notes.set(id, next);
+  }
+  return [...notes].map(([entityId, prs]) => ({ entityId, prs }));
+}
+
+/** Whether a session other than `except` owns the PR at `url`. */
+function ownedBy(state: HiveState, url: string, except: string): boolean {
+  return state.order.some((id) => {
+    const entity = id === except ? undefined : state.entities[id];
+    return (
+      entity !== undefined &&
+      isSession(entity) &&
+      (entity.prs ?? []).some((pr) => pr.owned === true && sameUrl(pr.url, url))
+    );
+  });
 }
 
 /**
@@ -8710,16 +8833,20 @@ function learnSessionPrs(
     const entity = state.entities[id];
     if (!entity || !isSession(entity)) continue;
 
-    /*
-      Resolved without the fallback: this is asking what the *live* list says,
-      and passing the memory in would make a row that already has one resolve
-      to itself and compare equal forever — correct, but only by accident.
-    */
     const live = resolveSessionPr(entity.branch, entity.project, prs);
     if (live === null) continue;
 
-    const known = entity.lastPr;
-    if (known?.number === live.n && known.url === live.url) continue;
+    /*
+      A branch is not a session. Another session on this branch in this
+      checkout could as well have opened it, so the sweep guesses for neither,
+      and a PR another session owns is never guessed onto this one. The
+      opener's own receipt records it (`prClaimOf`).
+    */
+    const shared = state.order.some((other) => {
+      const peer = other === id ? undefined : state.entities[other];
+      return peer !== undefined && isSession(peer) && peer.branch === entity.branch && peer.cwd === entity.cwd;
+    });
+    if (shared || ownedBy(state, live.url, id)) continue;
 
     /*
       **GitHub's repository name, not the project id**, which is what
@@ -8738,10 +8865,10 @@ function learnSessionPrs(
     const record = prs.find((pr) => pr.number === live.n && pr.url === live.url);
     if (record === undefined) continue;
 
-    learned.push({
-      entityId: id,
-      pr: { number: live.n, repo: record.repo, url: live.url },
-    });
+    const next = upsertSessionPr(entity.prs, { number: live.n, repo: record.repo, url: live.url });
+    if (next === undefined) continue;
+
+    learned.push({ entityId: id, prs: next });
   }
 
   return learned;
@@ -8765,7 +8892,7 @@ function rememberSessionPrs(
   for (const note of learned) {
     const entity = next[note.entityId];
     if (!entity || !isSession(entity)) continue;
-    next[note.entityId] = { ...entity, lastPr: note.pr };
+    next[note.entityId] = { ...entity, prs: note.prs };
   }
   return next;
 }
@@ -9466,7 +9593,8 @@ export const usePrFlapCounts = (): FlapCount[] => {
 };
 
 /**
- * One row's pull request, resolved from the live list (HIVE-100).
+ * A row's pull requests (HIVE-100): its own list, each read live when the
+ * sweep can see it, in {@link resolveSessionPrs}' order.
  *
  * Takes an id rather than a branch so it can be called before the caller has
  * narrowed its entity: the fleet row bails out on a missing or non-session
@@ -9480,24 +9608,46 @@ export const usePrFlapCounts = (): FlapCount[] => {
  * than they do. A status flip therefore re-renders the row without re-resolving
  * its PR.
  */
-export const useSessionPr = (id: string): SessionPr | null => {
+export const useSessionPrs = (id: string): SessionPr[] => {
   const prs = useHiveStore((state) => state.prs);
   const entity = useHiveStore((state) => state.entities[id]);
+  /*
+    The PRs other sessions own, as one string so an unrelated entity change
+    (a status flip, a rename) compares equal and costs this row nothing.
+  */
+  const ownedElsewhere = useHiveStore((state) => ownedElsewhereKey(state, id));
 
   const session = entity !== undefined && isSession(entity) ? entity : undefined;
+  const known = session !== undefined;
   const branch = session?.branch;
   const project = session?.project;
-  /*
-    A third memo input, and it changes about as often as the other two: it is
-    written once per session by the sweep that first resolves a PR for it, and
-    then never again unless the answer genuinely changes.
-  */
-  const remembered = session?.lastPr;
+  // Written only when a source learns something new, so it changes about as often as the two strings above.
+  const own = session?.prs;
 
   return useMemo(
-    () => resolveSessionPr(branch, project, prs, remembered),
-    [branch, project, prs, remembered],
+    () =>
+      known
+        ? resolveSessionPrs(branch, project, prs, own, new Set(ownedElsewhere === '' ? [] : ownedElsewhere.split('\n')))
+        : [],
+    [known, branch, project, prs, own, ownedElsewhere],
   );
+};
+
+/** Lower-cased URLs of PRs owned by sessions other than `id`, sorted and joined by newline. */
+function ownedElsewhereKey(state: HiveState, id: string): string {
+  const urls: string[] = [];
+  for (const other of state.order) {
+    const entity = other === id ? undefined : state.entities[other];
+    if (entity === undefined || !isSession(entity)) continue;
+    for (const pr of entity.prs ?? []) if (pr.owned === true) urls.push(pr.url.toLowerCase());
+  }
+  return urls.sort().join('\n');
+}
+
+/** The first of {@link useSessionPrs}: the one PR a single cell (the fleet's PR column, the header) shows. */
+export const useSessionPr = (id: string): SessionPr | null => {
+  const prs = useSessionPrs(id);
+  return prs[0] ?? null;
 };
 
 /** A session's PR and, when the sweep can see it, its Hatchery row (HIVE-209). */
@@ -9508,17 +9658,17 @@ export interface SessionPrRow {
 }
 
 /**
- * The session panel's PR tab and strip dot read this (HIVE-209): `useSessionPr`
- * for which PR, `useHatchery` for its flap. Matched by URL, which is unique
- * across repos where the number is not.
+ * The session panel's PR tab and strip dot read this (HIVE-209): every PR
+ * {@link useSessionPrs} lists, each with its Hatchery row for its flap. Matched
+ * by URL, which is unique across repos where the number is not.
  */
-export const useSessionPrRow = (id: string): SessionPrRow | null => {
-  const pr = useSessionPr(id);
+export const useSessionPrRows = (id: string): SessionPrRow[] => {
+  const prs = useSessionPrs(id);
   const rows = useHatchery();
 
   return useMemo(
-    () => (pr === null ? null : { pr, row: rows.find((row) => row.pr.url === pr.url) ?? null }),
-    [pr, rows],
+    () => prs.map((pr) => ({ pr, row: rows.find((row) => sameUrl(row.pr.url, pr.url)) ?? null })),
+    [prs, rows],
   );
 };
 

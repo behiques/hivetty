@@ -9,6 +9,8 @@ import {
 } from '@shared/session-contract';
 import {
   HISTORY_CAP,
+  SESSION_PRS_MAX,
+  type SessionPrRecord,
   type SessionRecord,
 } from '@shared/session-history-contract';
 
@@ -205,7 +207,7 @@ const cleanName = (value: unknown): string | undefined => {
  * re-typed rather than re-authorised — the renderer resolves it against its own
  * CSP before it becomes an `href`.
  */
-const prRecord = (value: unknown): SessionRecord['pr'] => {
+const prRecord = (value: unknown): SessionPrRecord | undefined => {
   if (!isRecord(value)) return undefined;
   const number = finite(value.number);
   const repo = text(value.repo);
@@ -213,7 +215,14 @@ const prRecord = (value: unknown): SessionRecord['pr'] => {
   if (number === undefined || repo === undefined || url === undefined) {
     return undefined;
   }
-  return { number, repo, url };
+  return { number, repo, url, ...(value.owned === true ? { owned: true as const } : {}) };
+};
+
+/** `prs`, or a legacy single `pr` as a one-item list; a malformed item costs only itself. */
+const prList = (value: unknown, legacy: unknown): SessionRecord['prs'] => {
+  const items: unknown[] = Array.isArray(value) ? value : legacy === undefined ? [] : [legacy];
+  const list = items.flatMap((item) => prRecord(item) ?? []);
+  return list.length === 0 ? undefined : list.slice(-SESSION_PRS_MAX);
 };
 
 /**
@@ -260,7 +269,7 @@ function reviveRecord(raw: unknown): SessionRecord | undefined {
     cwd: text(raw.cwd),
     planFiles: planFileList(raw.planFiles, raw.planFile),
     sessionUuid: text(raw.sessionUuid),
-    pr: prRecord(raw.pr),
+    prs: prList(raw.prs, raw.pr),
     ...(raw.endedBy === 'finished' ? { endedBy: 'finished' as const } : {}),
     endedAt: finite(raw.endedAt),
     /*

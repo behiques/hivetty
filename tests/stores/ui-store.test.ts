@@ -1076,3 +1076,20 @@ describe('ui-store — What’s new', () => {
     expect(useUiStore.getState()).toMatchObject({ whatsNewOpen: true, settings: false });
   });
 });
+
+/** Which PR a session's PR tab shows, when it has several. View state: it dies with the window. */
+describe('the PR pick', () => {
+  it('remembers one per session', () => {
+    useUiStore.getState().setPrPick('sess-1', 'https://github.com/o/r/pull/2');
+    expect(useUiStore.getState().prPick).toEqual({ 'sess-1': 'https://github.com/o/r/pull/2' });
+
+    useUiStore.getState().setPrPick('sess-2', 'https://github.com/o/r/pull/3');
+    expect(useUiStore.getState().prPick['sess-1']).toBe('https://github.com/o/r/pull/2');
+  });
+
+  it('is cleared by reset', () => {
+    useUiStore.getState().setPrPick('sess-1', 'u');
+    useUiStore.getState().reset();
+    expect(useUiStore.getState().prPick).toEqual({});
+  });
+});
