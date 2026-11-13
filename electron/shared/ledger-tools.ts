@@ -1,5 +1,6 @@
 /**
- * The nine ledger tools, as data (HIVE-112, `ledger_handoff` added by HIVE-122),
+ * The ten ledger tools, as data (HIVE-112, `ledger_handoff` added by HIVE-122,
+ * `ledger_accept` by HIVE-410),
  * plus the two served beside them and deliberately outside that list:
  * {@link AGENTS_TOOL} (HIVE-127) and {@link APPROVE_TOOL} (HIVE-119).
  *
@@ -197,6 +198,25 @@ export const LEDGER_TOOLS: readonly McpToolDefinition[] = [
         meta,
       },
       required: ['thread', 'body'],
+    },
+  },
+  {
+    name: 'ledger_accept',
+    description:
+      'Take a job someone asked of you without closing it. Use it when the work will outlast this turn: nobody is woken, the asker is free to go on, and the ask stays open in your name until you close it with ledger_answer, with the result or with why you gave it up. "thread" takes either the ask id or its short ref (for example "a12"). Refused if the thread is closed or was not asked of you.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        thread: {
+          type: 'string',
+          description: 'The ask id, or its short ref such as "a12".',
+        },
+        body: {
+          type: 'string',
+          description: 'An optional note. Defaults to "accepted".',
+        },
+      },
+      required: ['thread'],
     },
   },
   {

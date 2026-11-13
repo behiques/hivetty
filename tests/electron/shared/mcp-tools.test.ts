@@ -41,17 +41,18 @@ const textOf = (result: { content: { text: string }[] }): string =>
 
 describe('createToolHandlers — listing', () => {
   /*
-    Order is asserted, not just membership: the nine ledger tools first, then
+    Order is asserted, not just membership: the ten ledger tools first, then
     `agents` (HIVE-127), then `approve` last — the tools a model is meant to
     call ahead of the one only the CLI ever reaches, on its behalf.
   */
-  it('lists the nineteen shared definitions unchanged', () => {
+  it('lists every shared definition, in order', () => {
     const handlers = createToolHandlers(stub());
     expect(handlers.listTools().map((tool) => tool.name)).toEqual([
       'ledger_read',
       'ledger_post',
       'ledger_ask',
       'ledger_answer',
+      'ledger_accept',
       'ledger_claim',
       'ledger_release',
       'ledger_done',
@@ -494,6 +495,25 @@ describe('the writing tools', () => {
 
     expect(result.structuredContent).toEqual({ id: 'id-1' });
     expect(result.structuredContent).not.toHaveProperty('ref');
+  });
+
+  it('ledger_accept posts a threaded accept, and the caller cannot unset the key (HIVE-410)', async () => {
+    const client = stub();
+    const handlers = createToolHandlers(client);
+
+    await handlers.callTool('ledger_accept', { thread: 'a12' });
+    expect(client.post).toHaveBeenCalledWith({ kind: 'post', thread: 'a12', body: 'accepted', meta: { accepted: true } });
+
+    await handlers.callTool('ledger_accept', { thread: 'a12', body: 'on it', meta: { accepted: false } });
+    expect(client.post).toHaveBeenLastCalledWith({ kind: 'post', thread: 'a12', body: 'on it', meta: { accepted: true } });
+  });
+
+  it('ledger_accept needs the thread it accepts (HIVE-410)', async () => {
+    const client = stub();
+    const result = await createToolHandlers(client).callTool('ledger_accept', {});
+
+    expect(result.isError).toBe(true);
+    expect(client.post).not.toHaveBeenCalled();
   });
 
   it('ledger_answer sends the thread through untouched, ref or id', async () => {
