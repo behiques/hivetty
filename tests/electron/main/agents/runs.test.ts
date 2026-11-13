@@ -96,6 +96,7 @@ describe('createRunTracker', () => {
     kind?: string;
     lane?: string;
     budgetUsd?: number;
+    delivered?: string;
   }[];
   /** What `limits.parallel` says for the agent under test (HIVE-128). */
   let parallel: number;
@@ -148,6 +149,7 @@ describe('createRunTracker', () => {
           ...(options?.kind === undefined ? {} : { kind: options.kind }),
           ...(options?.lane === undefined ? {} : { lane: options.lane }),
           ...(options?.budgetUsd === undefined ? {} : { budgetUsd: options.budgetUsd }),
+          ...(options?.delivered === undefined ? {} : { delivered: options.delivered }),
         });
 
         return {
@@ -250,6 +252,12 @@ describe('createRunTracker', () => {
     tracker.run('a', 'ledger', 'ask a1 from overmind', { wakes: ['k1', 'k2'] });
 
     expect(ledger[0]).toMatchObject({ body: 'run.started — ledger', meta: { wakes: ['k1', 'k2'] } });
+  });
+
+  it('hands the delivered entries to the command builder (HIVE-412)', () => {
+    tracker.run('a', 'ledger', 'ask a1 from overmind', { wakes: ['a1'], delivered: 'BLOCK' });
+
+    expect(commandArgs[0]).toMatchObject({ delivered: 'BLOCK' });
   });
 
   it('writes no wakes for a run that was started for no entry (HIVE-410)', () => {

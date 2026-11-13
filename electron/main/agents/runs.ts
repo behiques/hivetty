@@ -154,7 +154,7 @@ export interface RunTrackerDeps {
     trigger: string,
     extra?: string,
     /** `budgetUsd` caps the run's `--max-budget-usd` at what is left of the day (HIVE-408). */
-    options?: { kind?: RunKind; lane?: string; budgetUsd?: number },
+    options?: { kind?: RunKind; lane?: string; budgetUsd?: number; delivered?: string },
   ) =>
     | (WakeCommand & {
         sessionUuid: string;
@@ -306,8 +306,8 @@ export interface RunTracker {
     name: string,
     trigger: string,
     extra?: string,
-    /** `wakes` names the ledger entries this run was started for (HIVE-410); `extra` says the same for a reader. */
-    options?: { job?: true; lane?: string; wakes?: readonly string[] },
+    /** `wakes` names the ledger entries this run was started for (HIVE-410); `extra` says the same for a reader; `delivered` carries them (HIVE-412). */
+    options?: { job?: true; lane?: string; wakes?: readonly string[]; delivered?: string },
   ): RunStart;
   /** Every run under this name, or only `run` (HIVE-185). */
   kill(name: string, run?: string): boolean;
@@ -1328,7 +1328,12 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
       // A reservation below `budget_usd` is the day's last room, and the CLI's own cap holds the run to it (HIVE-408).
       const capped = limits.budgetUsd !== undefined && reservation < limits.budgetUsd ? { budgetUsd: reservation } : {};
-      const command = deps.command(name, trigger, extra, { kind, ...(onLane ? { lane } : {}), ...capped });
+      const command = deps.command(name, trigger, extra, {
+        kind,
+        ...(onLane ? { lane } : {}),
+        ...capped,
+        ...(options?.delivered === undefined ? {} : { delivered: options.delivered }),
+      });
 
       if ('problem' in command) {
         // HIVE-399: a `wait` agent's CLI is down for now, and the queue keeps the wake until it is back.
