@@ -1206,6 +1206,24 @@ describe('a merge is what a command runs, not what it mentions (HIVE-409 follow-
       expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
     }
   });
+
+  it('runs under bare Bash when a $ or backtick only follows the merge text: the builder card of 12 Nov', () => {
+    for (const command of [
+      'WT=/x; cd $WT; grep -n "#\\${" f.ts | head; grep -rn "gh pr merge\\` is granted\\|tool:pr_merge" resources docs | head; pnpm exec eslint t.ts 2>&1 | tail -3',
+      'grep -rn "gh pr merge $(date +%Y)" docs',
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'allow' });
+    }
+  });
+
+  it('still asks for literal merge text after a $ or backtick, which arithmetic evaluation would run', () => {
+    for (const command of [
+      "[[ 'a[$(gh pr merge 1)]' -eq 0 ]]",
+      "x='a[`gh pr merge 1`]'; [[ $x -eq 0 ]]",
+    ]) {
+      expect(decide('Bash', { command }, ['Bash']), command).toEqual({ behavior: 'ask' });
+    }
+  });
 });
 
 describe('auto-merge consent covers the merge however the shipper spells it (HIVE-409 follow-up)', () => {
