@@ -53,6 +53,7 @@ import {
   type WakeDecision,
 } from './scheduler-rules';
 import type { AgentState } from './state';
+import { wakeEntries } from './wake-entries';
 import { inQuiet, nextRunFrom, quietEndAfter } from './wake-schedule';
 
 /**
@@ -141,7 +142,7 @@ interface SchedulerDeps {
     name: string,
     trigger: string,
     extra?: string,
-    options?: { job?: true; lane?: string; wakes?: readonly string[] },
+    options?: { job?: true; lane?: string; wakes?: readonly string[]; delivered?: string },
   ) => RunStart;
   state: Pick<AgentState, 'read' | 'patch' | 'all' | 'lane' | 'patchLane' | 'forgetLane'>;
   /** Whether a party id names a registered agent rather than a session. */
@@ -1104,9 +1105,12 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     lane: string,
     wakes: readonly string[] = [],
   ): RunStart => {
+    // The woken entries in the prompt itself (HIVE-412); read off the log, which already holds the one routed now.
+    const delivered = wakes.length === 0 ? undefined : wakeEntries(wakes, deps.ledger.read().entries, name);
     const options = {
       ...(lane === STANDING_LANE ? {} : { lane }),
       ...(wakes.length === 0 ? {} : { wakes }),
+      ...(delivered === undefined ? {} : { delivered }),
     };
     const started = noteStart(
       name,

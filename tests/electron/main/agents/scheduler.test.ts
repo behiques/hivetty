@@ -38,6 +38,7 @@ const entry = (over: Partial<LedgerEntry> = {}): LedgerEntry => ({
 describe('createScheduler', () => {
   let woke: { name: string; trigger: string; extra?: string; job?: true; lane?: string }[];
   let wakeIds: (readonly string[] | undefined)[];
+  let delivered: (string | undefined)[];
   let entries: LedgerEntry[];
   let appended: LedgerPostRequest[];
   let clock: number;
@@ -121,6 +122,7 @@ describe('createScheduler', () => {
         if (liveLanes?.has(options?.lane ?? 'standing') === true) return { started: false, refused: 'working' };
 
         wakeIds.push(options?.wakes);
+        delivered.push(options?.delivered);
         woke.push({
           name,
           trigger,
@@ -172,6 +174,7 @@ describe('createScheduler', () => {
   beforeEach(() => {
     woke = [];
     wakeIds = [];
+    delivered = [];
     entries = [];
     appended = [];
     clock = 0;
@@ -242,6 +245,59 @@ describe('createScheduler', () => {
       scheduler.manualWake(AGENT);
 
       expect(wakeIds).toEqual([undefined]);
+    });
+  });
+
+  describe('delivered (HIVE-412)', () => {
+    it('hands the run the routed entry, rendered from the log', () => {
+      entries = [entry({ ref: 'a1', body: 'please look at #9', meta: { pr: 9 } })];
+
+      scheduler.onEntry(entries[0] as LedgerEntry);
+
+      expect(delivered[0]).toContain('--- ask a1 from overmind (thread a1) ---\nmeta: {"pr":9}\nplease look at #9');
+    });
+
+    it('hands a flush every ledger entry it wakes for, in order', () => {
+      entries = [
+        entry({ id: 'a1', ref: 'a1', body: 'first' }),
+        entry({ id: 'a2', kind: 'answer', from: 'sess-2', thread: 'a1', body: 'second' }),
+      ];
+      state.patch(AGENT, {
+        status: 'sleeping',
+        pendingWake: [
+          { kind: 'ask', id: 'a1', from: 'overmind' },
+          { kind: 'answer', id: 'a2', from: 'sess-2' },
+        ],
+      });
+
+      scheduler.onRunClosed(AGENT);
+
+      const block = delivered[0] ?? '';
+      expect(block.indexOf('first')).toBeGreaterThan(-1);
+      expect(block.indexOf('first')).toBeLessThan(block.indexOf('second'));
+    });
+
+    it('hands a re-wake the ask it owes', () => {
+      entries = [
+        entry({ id: 'k1', from: 'sess-1', body: 'Ship PR #1' }),
+        entry({ id: 'w1', from: 'overmind', kind: 'post', thread: 'k1', body: 'You owe an answer to k1', meta: { rewoke: 'k1' } }),
+      ];
+
+      scheduler.start();
+
+      expect(delivered[0]).toContain('You still owe an answer to ask k1:');
+    });
+
+    it('hands no block for a manual run', () => {
+      scheduler.manualWake(AGENT);
+
+      expect(delivered).toEqual([undefined]);
+    });
+
+    it('hands no block for an entry the log no longer has', () => {
+      scheduler.onEntry(entry());
+
+      expect(delivered).toEqual([undefined]);
     });
   });
 
