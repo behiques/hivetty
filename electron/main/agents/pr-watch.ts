@@ -1,6 +1,8 @@
 import type { PrRecord, PrsSnapshot } from '@shared/github-contract';
-import type { LedgerEntry } from '@shared/ledger-contract';
+import { OVERMIND, type LedgerEntry, type LedgerPostRequest, type LedgerResult } from '@shared/ledger-contract';
 import { askStates, claims } from '@shared/ledger-derive';
+
+import type { Github } from '../integrations/github';
 
 /**
  * Wake the shipper when a PR it holds moves on GitHub (HIVE-412).
@@ -12,6 +14,9 @@ import { askStates, claims } from '@shared/ledger-derive';
  */
 
 export const PR_WATCH_AGENT = 'shipper';
+
+/** How often main sweeps while the shipper holds a PR (D1). */
+export const PR_WATCH_MS = 60_000;
 
 const FACETS = ['state', 'checks', 'reviewDecision', 'findings', 'head', 'mergeable'] as const;
 
@@ -76,4 +81,58 @@ export function prChanges(
     changes.push({ repo, pr: record.number, changed, line: `${repo}#${String(record.number)} changed: ${moves.join(', ')}` });
   }
   return changes;
+}
+
+interface PrWatchDeps {
+  github: Pick<Github, 'prs'>;
+  ledger: {
+    read: () => { entries: readonly LedgerEntry[] };
+    append: (request: LedgerPostRequest) => LedgerResult;
+  };
+  now: () => number;
+  isAgent: (id: string) => boolean;
+}
+
+export interface PrWatch {
+  /** Diff one sweep against the last and post each held PR's move to the shipper. */
+  observe(snapshot: PrsSnapshot): void;
+  /** Sweep, only while the shipper holds a PR. */
+  tick(): void;
+}
+
+export function createPrWatch(deps: PrWatchDeps): PrWatch {
+  const facets = new Map<string, PrFacet>();
+  const held = (): Set<string> => heldPrs(PR_WATCH_AGENT, deps.ledger.read().entries, deps.now());
+
+  return {
+    observe(snapshot) {
+      if (!deps.isAgent(PR_WATCH_AGENT)) return;
+      const keys = held();
+      for (const change of prChanges(facets, snapshot, keys)) {
+        const written = deps.ledger.append({
+          from: OVERMIND,
+          to: PR_WATCH_AGENT,
+          kind: 'post',
+          body: change.line,
+          meta: { repo: change.repo, pr: change.pr, changed: change.changed },
+        });
+        // The facets move anyway, so the next sweep cannot repeat it; the 30 m wake covers the loss.
+        if (!written.ok) console.warn(`[hive] could not tell the shipper ${change.line} (${written.reason})`);
+      }
+      // A PR no longer held starts again from a baseline if it is held again.
+      for (const key of facets.keys()) if (!keys.has(key)) facets.delete(key);
+      for (const record of snapshot.prs) {
+        const key = keyOf(`${record.owner}/${record.repo}`, record.number);
+        if (!keys.has(key)) continue;
+        const { state, checks, reviewDecision, findings, head, mergeable } = record;
+        // GitHub says UNKNOWN while it recomputes; keep the last known answer (HIVE-412).
+        const known = mergeable === 'UNKNOWN' ? (facets.get(key)?.mergeable ?? mergeable) : mergeable;
+        facets.set(key, { state, checks, reviewDecision, findings, head, mergeable: known });
+      }
+    },
+    tick() {
+      if (!deps.isAgent(PR_WATCH_AGENT) || held().size === 0) return;
+      void deps.github.prs().catch(() => undefined);
+    },
+  };
 }

@@ -1,9 +1,9 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { heldPrs, prChanges, type PrFacet } from '../../../../electron/main/agents/pr-watch';
+import { createPrWatch, heldPrs, prChanges, type PrFacet } from '../../../../electron/main/agents/pr-watch';
 import type { PrRecord, PrsSnapshot } from '../../../../electron/shared/github-contract';
-import type { LedgerEntry } from '../../../../electron/shared/ledger-contract';
+import type { LedgerEntry, LedgerPostRequest, LedgerResult } from '../../../../electron/shared/ledger-contract';
 import { prRecord } from '../../../support/prs';
 
 const NOW = Date.parse('2026-11-13T12:00:00Z');
@@ -84,5 +84,100 @@ describe('prChanges (HIVE-412)', () => {
 
   it('says nothing about a held PR missing from the sweep', () => {
     expect(prChanges(new Map([['acme/hive#7', facetOf(pr7())]]), snapshot(), held)).toEqual([]);
+  });
+});
+
+describe('createPrWatch (HIVE-412)', () => {
+  const setup = (log: LedgerEntry[], { shipper = true, ok = true } = {}) => {
+    const posts: LedgerPostRequest[] = [];
+    const prs = vi.fn(() => Promise.resolve({ ok: true as const, value: snapshot() }));
+    const append = (request: LedgerPostRequest): LedgerResult => {
+      posts.push(request);
+      return ok ? { ok: true, id: `p${String(posts.length)}` } : { ok: false, status: 500, reason: 'disk full' };
+    };
+    const watch = createPrWatch({
+      github: { prs },
+      ledger: { read: () => ({ entries: log }), append },
+      now: () => NOW,
+      isAgent: (id) => shipper && id === 'shipper',
+    });
+    return { watch, posts, prs };
+  };
+
+  it('posts one overmind post per change to the shipper, with repo, pr and changed', () => {
+    const { watch, posts } = setup([claim('acme/hive#7')]);
+
+    watch.observe(snapshot(pr7()));
+    expect(posts).toEqual([]);
+
+    watch.observe(snapshot(pr7({ checks: 'passing' })));
+    expect(posts).toEqual([{
+      from: 'overmind', to: 'shipper', kind: 'post',
+      body: 'Acme/Hive#7 changed: checks running → passing',
+      meta: { repo: 'Acme/Hive', pr: 7, changed: ['checks'] },
+    }]);
+
+    watch.observe(snapshot());
+    watch.observe(snapshot(pr7({ checks: 'passing' })));
+    expect(posts).toHaveLength(1);
+  });
+
+  it('starts a PR from a fresh baseline once it is held again', () => {
+    const log = [claim('acme/hive#7')];
+    const { watch, posts } = setup(log);
+    watch.observe(snapshot(pr7()));
+    log.push(entry({ id: 'r', from: 'shipper', to: undefined, kind: 'release', body: '', meta: { task: 'acme/hive#7' } }));
+    watch.observe(snapshot(pr7({ checks: 'failing' })));
+    log.push({ ...claim('acme/hive#7'), id: 'c2' });
+    watch.observe(snapshot(pr7({ checks: 'passing' })));
+    expect(posts).toEqual([]);
+  });
+
+  it('does not repeat a change whose post failed, and says why on the console', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { watch, posts } = setup([claim('acme/hive#7')], { ok: false });
+    watch.observe(snapshot(pr7()));
+    watch.observe(snapshot(pr7({ checks: 'passing' })));
+    watch.observe(snapshot(pr7({ checks: 'passing' })));
+    expect(posts).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('disk full'));
+    warn.mockRestore();
+  });
+
+  it('keeps the last known mergeable through an UNKNOWN, so the next real answer is diffed against it', () => {
+    const { watch, posts } = setup([claim('acme/hive#7')]);
+    watch.observe(snapshot(pr7({ mergeable: 'MERGEABLE' })));
+    watch.observe(snapshot(pr7({ mergeable: 'UNKNOWN' })));
+    watch.observe(snapshot(pr7({ mergeable: 'CONFLICTING' })));
+    expect(posts.map((post) => post.body)).toEqual(['Acme/Hive#7 changed: mergeable MERGEABLE → CONFLICTING']);
+  });
+
+  it('posts nothing without a shipper', () => {
+    const { watch, posts } = setup([claim('acme/hive#7')], { shipper: false });
+    watch.observe(snapshot(pr7()));
+    watch.observe(snapshot(pr7({ checks: 'passing' })));
+    expect(posts).toEqual([]);
+  });
+
+  it('sweeps on a tick only while the shipper holds a PR', () => {
+    const idle = setup([]);
+    idle.watch.tick();
+    expect(idle.prs).not.toHaveBeenCalled();
+
+    const alone = setup([claim('acme/hive#7')], { shipper: false });
+    alone.watch.tick();
+    expect(alone.prs).not.toHaveBeenCalled();
+
+    const busy = setup([claim('acme/hive#7')]);
+    busy.watch.tick();
+    expect(busy.prs).toHaveBeenCalledTimes(1);
+  });
+
+  it('swallows a sweep that rejects', async () => {
+    const { watch, prs } = setup([claim('acme/hive#7')]);
+    prs.mockImplementationOnce(() => Promise.reject(new Error('spawn gh EACCES')));
+    watch.tick();
+    await Promise.resolve();
+    expect(prs).toHaveBeenCalledTimes(1);
   });
 });
