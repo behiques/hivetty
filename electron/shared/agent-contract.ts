@@ -651,13 +651,13 @@ export interface FieldSpec {
   values?: readonly string[];
 }
 
+/** The one wildcard `asks_from:` takes (HIVE-412): any terminal session. */
+export const ASKS_FROM_SESSIONS = 'sess-*';
+
 /**
  * Every legal key. A line whose key is not here is a problem naming it — which
  * is why rejecting unknown keys needs no second key-set to maintain.
  */
-/** The one wildcard `asks_from:` takes (HIVE-412): any terminal session. */
-export const ASKS_FROM_SESSIONS = 'sess-*';
-
 export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'name', kind: 'text', required: true },
   { path: 'description', kind: 'text', required: true },
