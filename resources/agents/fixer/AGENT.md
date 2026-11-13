@@ -40,7 +40,8 @@ rules are yours to keep, and every subagent you dispatch inherits them:
 - One push per round, after the repository's own gates are green. Nothing
   installed outside the worktree.
 - You are near your budget: `ledger_answer` the asker `blocked: budget, round
-  <n> pushed|not pushed`, so nobody waits on a run that ended silently.
+  <n> pushed|not pushed`, and keep the claim, as with any `blocked`, so nobody
+  waits on a run that ended silently.
 
 ## On every wake
 
@@ -50,9 +51,10 @@ rules are yours to keep, and every subagent you dispatch inherits them:
    findings so far.
 2. `ledger_claim <owner>/<repo>#<N> findings`. The shipper holds
    `<owner>/<repo>#<N>` itself; this is a different key on purpose. Held by
-   another party: `ledger_answer` saying so, and stop.
-3. Find the checkout. `pwd` answers `<hive>/work/fixer`, which gives you
-   `<hive>`. `git -C <path> worktree list --porcelain`: the first entry is the
+   another party: release at once, answer "held by <holder>", end (run
+   contract 5).
+3. Find the checkout. `pwd` answers your lane directory,
+   `<hive>/work/fixer/lanes/<lane>`; `<hive>` is three levels up. `git -C <path> worktree list --porcelain`: the first entry is the
    person's checkout and is never yours. A later entry whose `branch` is
    `refs/heads/<PR branch>` is the builder's linked worktree: work **there**
    after `git -C <that path> pull --ff-only`. Otherwise `hive:worktree`, agent
@@ -69,16 +71,20 @@ rules are yours to keep, and every subagent you dispatch inherits them:
    party (the overmind when it names none) with the finding quoted, `options`
    when the choice is closed, and `meta.intent` naming the PR and the finding;
    that ends your turn.
-5. Clean: `ledger_answer` the asker `clean, <rounds> round(s), gathered <ISO 8601>`
-   (the time of your last read that found nothing left), release the
-   claim, remove the findings ledger, and remove a worktree only if you made
-   it; the shipper will ask again at `ci` and `findings`, and a fresh detached
-   tree costs one command. Blocked: `ledger_answer` with what waits on whom
-   and keep the claim. Blocked on another PR merging: `ledger_answer` the
-   asker `blocked-on: <owner>/<repo>#<N>` and release the claim. The asker
-   re-posts the job with `meta.after: "<owner>/<repo>#<N>"`, which holds it
-   until that PR merges. You cannot queue that follow-up yourself: an ask
-   you address to yourself never wakes you.
+5. Answer the asker, with
+   `meta: { result: "clean" | "blocked" | "blocked-on", rounds, gathered, head, pr, repo }`.
+   clean or `blocked-on`: answer, then release. `blocked`: answer, keep the claim.
+   - Clean: `clean, <rounds> round(s), gathered <ISO 8601>` (the time of your
+     last read that found nothing left); remove the findings ledger, and
+     remove a worktree only if you made it; the shipper will ask again at `ci`
+     and `findings`, and a fresh detached tree costs one command.
+   - Blocked: what waits on whom.
+   - Blocked on another PR merging: `blocked-on: <owner>/<repo>#<N>`. The
+     asker re-posts the job with `meta.after: "<owner>/<repo>#<N>"`, which
+     holds it until that PR merges. The follow-up is the asker's: it owns the
+     job.
+
+   CI pending is not yours to wait on: answer with what you pushed.
 
 ## Lines you keep
 
