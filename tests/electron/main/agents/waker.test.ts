@@ -1035,3 +1035,25 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
     );
   });
 });
+
+describe('the delivered entries (HIVE-412)', () => {
+  const BLOCK = 'HiveTTY delivered these ledger entries for this wake.\n\n--- ask a1 from sess-1 (thread a1) ---\nShip PR #1';
+
+  it('ends an ordinary wake with the block', () => {
+    expect(wakePrompt('ledger', 'ask a1 from sess-1', { delivered: BLOCK }).endsWith(`\n\n${BLOCK}`)).toBe(true);
+  });
+
+  it('carries it on a last turn, and after a handoff', () => {
+    expect(wakePrompt('ledger', undefined, { lastTurn: true, delivered: BLOCK }).endsWith(BLOCK)).toBe(true);
+    expect(wakePrompt('ledger', undefined, { handoff: 'I watch #ops.', delivered: BLOCK }).endsWith(BLOCK)).toBe(true);
+  });
+
+  it('reaches the argv through wakeCommand', () => {
+    expect(build({ delivered: BLOCK }).args.at(-1)).toContain('--- ask a1 from sess-1 (thread a1) ---');
+  });
+
+  it('adds nothing when there is no block', () => {
+    expect(wakePrompt('ledger')).toBe(wakePrompt('ledger', undefined, {}));
+    expect(wakePrompt('ledger')).not.toContain('HiveTTY delivered');
+  });
+});

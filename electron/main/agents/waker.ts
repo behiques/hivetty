@@ -99,6 +99,8 @@ interface WakeInput {
    * `--session-id` that starts it. Never set with {@link WakeInput.lastTurn}.
    */
   handoff?: string;
+  /** The ledger entries this wake is for, rendered by `wakeEntries` (HIVE-412). Absent: none. */
+  delivered?: string;
   /**
    * A task run (HIVE-128): a fresh session for one job. Chooses the task
    * prompt. The argv is otherwise the same; the fresh `--session-id` is
@@ -178,6 +180,8 @@ export function wakePrompt(
     /** The definition's `lane:`, and the agent's name, for the lane sentence. */
     laneMode?: AgentLane;
     agent?: string;
+    /** The woken entries (HIVE-412): the sender's words, so they come last and nothing of ours follows. */
+    delivered?: string;
   },
 ): string {
   /*
@@ -196,6 +200,7 @@ export function wakePrompt(
     extra === undefined || extra === ''
       ? `You woke because: ${trigger}.`
       : `You woke because: ${trigger} — ${extra}.`;
+  const after = rotation?.delivered === undefined ? '' : `\n\n${rotation.delivered}`;
 
   /*
     The reason comes first here too (HIVE-126).
@@ -219,7 +224,7 @@ export function wakePrompt(
     It also never asks for a handoff: there is no conversation to hand on.
   */
   if (rotation?.task === true) {
-    return `${because} This is a task run: a fresh conversation with no memory of your standing session, started for this one job. Do the job named above and nothing else — do not act on your ledger inbox and do not do your standing work; your standing session handles both. When the job is done, report the result with ledger_done, or with ledger_failed if it could not be done, then end your turn.`;
+    return `${because} This is a task run: a fresh conversation with no memory of your standing session, started for this one job. Do the job named above and nothing else — do not act on your ledger inbox and do not do your standing work; your standing session handles both. When the job is done, report the result with ledger_done, or with ledger_failed if it could not be done, then end your turn.${after}`;
   }
 
   // A task run is no lane's, so it gets no lane sentence; the return above is its whole prompt.
@@ -229,7 +234,7 @@ export function wakePrompt(
       : ` ${laneSentence(rotation.agent, rotation.laneMode, rotation.lane)}`;
 
   if (rotation?.lastTurn === true) {
-    return `${because}${lanes} This is your last turn on this session. Carry out your instructions for this wake as usual — they are standing work whether or not anything is waiting in your inbox — then post a handoff with ledger_handoff: what you watch, open threads and their ids, decisions and preferences you have learned, anything a fresh copy of you must know. Then finish your turn.`;
+    return `${because}${lanes} This is your last turn on this session. Carry out your instructions for this wake as usual — they are standing work whether or not anything is waiting in your inbox — then post a handoff with ledger_handoff: what you watch, open threads and their ids, decisions and preferences you have learned, anything a fresh copy of you must know. Then finish your turn.${after}`;
   }
 
   /*
@@ -251,8 +256,8 @@ export function wakePrompt(
 
   // The handoff comes first: it is the context the rest of the prompt assumes.
   return rotation?.handoff === undefined
-    ? normal
-    : `You are continuing from a previous session of yourself. Its handoff:\n\n${rotation.handoff}\n\n${normal}`;
+    ? `${normal}${after}`
+    : `You are continuing from a previous session of yourself. Its handoff:\n\n${rotation.handoff}\n\n${normal}${after}`;
 }
 
 /** One sentence on the lane this run is, or how the standing lane hands work over (HIVE-188). */
@@ -401,6 +406,7 @@ export function wakeCommand(input: WakeInput): WakeCommand {
       ...(input.kind === 'task' ? { task: true as const } : {}),
       ...(input.lane === undefined ? {} : { lane: input.lane }),
       ...(input.def.lane === undefined ? {} : { laneMode: input.def.lane, agent: input.def.name }),
+      ...(input.delivered === undefined ? {} : { delivered: input.delivered }),
     })}`,
     subscriptionAuth: env.subscriptionAuth,
     instructions: input.instructions,
