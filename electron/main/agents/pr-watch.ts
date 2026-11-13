@@ -1,3 +1,4 @@
+import type { PrRecord, PrsSnapshot } from '@shared/github-contract';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import { askStates, claims } from '@shared/ledger-derive';
 
@@ -11,6 +12,20 @@ import { askStates, claims } from '@shared/ledger-derive';
  */
 
 export const PR_WATCH_AGENT = 'shipper';
+
+const FACETS = ['state', 'checks', 'reviewDecision', 'findings', 'head', 'mergeable'] as const;
+
+/** What a wake cares about in one PR. */
+export type PrFacet = Pick<PrRecord, (typeof FACETS)[number]>;
+
+export interface PrChange {
+  /** `owner/name`, as GitHub spells it. */
+  repo: string;
+  pr: number;
+  changed: string[];
+  /** The post's body: `owner/name#N changed: checks running → passing`. */
+  line: string;
+}
 
 /** `owner/name#N`, the task the shipper claims at intake; a `… findings` claim does not match. */
 const PR_TASK = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+$/;
@@ -31,4 +46,34 @@ export function heldPrs(agent: string, entries: readonly LedgerEntry[], now: num
     if (PR_TASK.test(`${repo}#${String(pr)}`)) held.add(keyOf(repo, pr));
   }
   return held;
+}
+
+const shown = (value: unknown): string => (value === null ? 'none' : String(value));
+
+/**
+ * The held PRs whose facets moved since `before`. A PR with no facet in `before`
+ * is a baseline, never a change; a held PR missing from `after` says nothing.
+ */
+export function prChanges(
+  before: ReadonlyMap<string, PrFacet>,
+  after: PrsSnapshot,
+  held: ReadonlySet<string>,
+): PrChange[] {
+  const changes: PrChange[] = [];
+  for (const record of after.prs) {
+    const repo = `${record.owner}/${record.repo}`;
+    const key = keyOf(repo, record.number);
+    const was = before.get(key);
+    if (!held.has(key) || was === undefined) continue;
+    // UNKNOWN is GitHub still computing mergeability: no information, so never a move either way.
+    const changed = FACETS.filter(
+      (facet) =>
+        was[facet] !== record[facet] &&
+        !(facet === 'mergeable' && (was.mergeable === 'UNKNOWN' || record.mergeable === 'UNKNOWN')),
+    );
+    if (changed.length === 0) continue;
+    const moves = changed.map((facet) => `${facet} ${shown(was[facet])} → ${shown(record[facet])}`);
+    changes.push({ repo, pr: record.number, changed, line: `${repo}#${String(record.number)} changed: ${moves.join(', ')}` });
+  }
+  return changes;
 }
