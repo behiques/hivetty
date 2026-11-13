@@ -26,19 +26,23 @@ function header(entry: LedgerEntry, byId: ById): string {
   return `--- ${entry.kind}${ref} from ${entry.from}${threadRef === undefined ? '' : ` (thread ${threadRef})`} ---`;
 }
 
+/** The openings of the lines this block writes itself: a header, an intent, a meta, a re-wake, a cut pointer. */
+const APP_LINE = /^(?:---|your ask |meta: |You still owe |\[cut: )/gm;
+
 function entryText(entry: LedgerEntry, byId: ById, agent: string): string {
   const lines = [header(entry, byId)];
   // The intent the agent wrote on its own ask, so the answer's wake needs no read to know why it asked.
   const asked = entry.kind === 'answer' && entry.thread !== undefined ? byId.get(entry.thread) : undefined;
   const intent = asked !== undefined && asked.from === agent ? asked.meta?.['intent'] : undefined;
   if (asked !== undefined && typeof intent === 'string' && intent.trim() !== '') {
-    lines.push(`your ask ${asked.ref ?? asked.id} said: ${intent}`);
+    // One line, whatever the intent holds: a line break in it must not open a line of HiveTTY's own.
+    lines.push(`your ask ${asked.ref ?? asked.id} said: ${intent.replace(/\s+/g, ' ')}`);
   }
   if (entry.meta !== undefined && Object.keys(entry.meta).length > 0) {
     lines.push(`meta: ${clip(JSON.stringify(entry.meta), META_MAX)}`);
   }
-  // Only a header HiveTTY writes starts a line with `---`; a sender's own is indented, so it cannot forge one.
-  const body = entry.body.replace(/^---/gm, '  ---');
+  // Only HiveTTY writes a line that opens like one of its own; a sender's is indented, so it cannot forge one.
+  const body = entry.body.replace(APP_LINE, '  $&');
   lines.push(body.length <= BODY_MAX ? body : `${body.slice(0, BODY_MAX)}\n${pointer(entry)}`);
   return lines.join('\n');
 }
@@ -61,6 +65,7 @@ export function wakeEntries(ids: readonly string[], entries: readonly LedgerEntr
     if (entry === undefined) continue;
     const text = render(entry, byId, agent);
     // Past the cap, a header and the pointer: the run still knows the entry exists and where to read it.
+    // shortcut: those header lines are not capped themselves, so a wake for dozens of entries runs past BLOCK_MAX; collapse them to a count if a wake ever carries that many.
     const part = used + 2 + text.length <= BLOCK_MAX ? text : `${header(entry, byId)}\n${pointer(entry)}`;
     parts.push(part);
     used += 2 + part.length;
