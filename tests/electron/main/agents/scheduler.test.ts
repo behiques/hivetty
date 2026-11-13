@@ -41,6 +41,7 @@ describe('createScheduler', () => {
   let delivered: (string | undefined)[];
   let entries: LedgerEntry[];
   let appended: LedgerPostRequest[];
+  let asksFromList: string[] | undefined;
   let clock: number;
   let timers: Map<number, () => void>;
   let nextTimerId: number;
@@ -137,6 +138,7 @@ describe('createScheduler', () => {
       wakesOnLedger: () => wakesOnLedger,
       parallelFor: () => parallel,
       laneOf: () => laneMode,
+      asksFrom: () => asksFromList,
       removeLaneDir: (name, lane) => {
         removed.push(`${name}:${lane}`);
       },
@@ -177,6 +179,7 @@ describe('createScheduler', () => {
     delivered = [];
     entries = [];
     appended = [];
+    asksFromList = undefined;
     clock = 0;
     timers = new Map();
     nextTimerId = 1;
@@ -298,6 +301,55 @@ describe('createScheduler', () => {
       scheduler.onEntry(entry());
 
       expect(delivered).toEqual([undefined]);
+    });
+  });
+
+  describe('asks_from (HIVE-412)', () => {
+    const refusals = () => appended.filter((request) => request.kind === 'answer' && request.from === 'overmind');
+
+    it('answers a new ask from an unlisted party on its thread, and wakes nobody', () => {
+      asksFromList = ['builder'];
+
+      scheduler.onEntry(entry({ id: 'k9', from: 'sess-9' }));
+
+      expect(woke).toEqual([]);
+      expect(refusals()).toEqual([
+        {
+          from: 'overmind',
+          to: 'sess-9',
+          kind: 'answer',
+          thread: 'k9',
+          body: 'pr-reviewer does not take asks from sess-9; it takes them from builder and overmind.',
+        },
+      ]);
+    });
+
+    it('wakes for a listed party, a session under sess-*, the overmind and itself', () => {
+      asksFromList = ['builder', 'sess-*'];
+
+      scheduler.onEntry(entry({ id: 'k1', from: 'builder' }));
+      scheduler.onRunClosed(AGENT);
+      scheduler.onEntry(entry({ id: 'k2', from: 'sess-3f2' }));
+      scheduler.onRunClosed(AGENT);
+      scheduler.onEntry(entry({ id: 'k3' }));
+
+      expect(woke).toHaveLength(3);
+      expect(refusals()).toEqual([]);
+    });
+
+    it('never filters a thread entry', () => {
+      asksFromList = [];
+
+      scheduler.onEntry(entry({ id: 'n1', kind: 'answer', from: 'acr', thread: 'k0' }));
+
+      expect(woke).toHaveLength(1);
+      expect(refusals()).toEqual([]);
+    });
+
+    it('takes asks from anyone when the definition names no list', () => {
+      scheduler.onEntry(entry({ id: 'k1', from: 'acr' }));
+
+      expect(woke).toHaveLength(1);
     });
   });
 

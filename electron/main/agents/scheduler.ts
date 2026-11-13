@@ -43,6 +43,7 @@ import { MOOT, isPermissionAsk } from './permissions';
 import type { RunStart } from './runs';
 import {
   acceptedLanes,
+  askRefusal,
   decide,
   decideForEvent,
   decideForStatus,
@@ -171,6 +172,11 @@ interface SchedulerDeps {
    * at one lane.
    */
   laneOf?: (name: string) => AgentLane | undefined;
+  /**
+   * `asks_from:` from the definition (HIVE-412), from the same cached listing as `laneOf`. Absent: any
+   * party may open work.
+   */
+  asksFrom?: (name: string) => readonly string[] | undefined;
   /**
    * Whether a conversation run holds this lane right now (HIVE-186). Absent in
    * a spec that predates lanes, which is every agent at one lane.
@@ -1423,7 +1429,9 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
    * lane that wrote it and wakes any other.
    */
   const deliver = (to: string, item: LedgerEntry, entries: readonly LedgerEntry[]): void => {
-    const routed = laneFor(deps.laneOf?.(to), item, entries);
+    // A sender `asks_from:` does not name is answered at once, on the path a lane refusal takes (HIVE-412).
+    const refused = askRefusal(to, deps.asksFrom?.(to), item);
+    const routed = refused === undefined ? laneFor(deps.laneOf?.(to), item, entries) : { refuse: refused };
 
     if ('refuse' in routed) {
       const written = deps.ledger.append({
