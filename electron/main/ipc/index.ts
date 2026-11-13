@@ -216,6 +216,7 @@ import {
   agentsRoot,
 } from '../agents/paths';
 import { createPermissions, isPermissionAsk, type Permissions } from '../agents/permissions';
+import { createPrWatch, PR_WATCH_MS } from '../agents/pr-watch';
 import { createAgentRunFiles } from '../agents/run-files';
 import {
   createRunTracker,
@@ -285,6 +286,7 @@ import { createHookRuntime } from '../hooks';
 import { readGhStatus, runCommand } from '../integrations/gh';
 import { createGithub } from '../integrations/github';
 import { answerPrLookup } from '../integrations/github/lookup';
+import type { RepoRef } from '../integrations/github/query';
 import { runAsync, type RunAsync } from '../integrations/github/run';
 import { createJira } from '../integrations/jira';
 import { credentialFile } from '../integrations/jira/auth';
@@ -942,6 +944,8 @@ let permissions: Permissions | null = null;
  * after registration has assigned this.
  */
 let autoMergeGrants: AutoMergeGrants | null = null;
+/** The PR watch's sweep timer (HIVE-412), cleared on quit and on reset. */
+let prWatchTimer: ReturnType<typeof setInterval> | null = null;
 /**
  * The agent names the ledger will accept as a party.
  *
@@ -2307,12 +2311,23 @@ export function registerIpcHandlers(
     directed post per flipped project; nothing when no shipper exists.
   */
   onConfigChange((before, after) => {
-    for (const post of autoMergeNotices(before, after, knownAgents.has(AUTO_MERGE_AGENT))) {
-      const written = ledger.append(post);
-      if (!written.ok) {
-        console.warn(`[hive] could not tell the shipper auto-merge changed (${written.reason})`);
-      }
-    }
+    const hasShipper = knownAgents.has(AUTO_MERGE_AGENT);
+    if (autoMergeNotices(before, after, hasShipper, new Map()).length === 0) return;
+    /*
+      HIVE-412: each post names its repository, so it reaches that repo lane. `github` is declared
+      further down; a config change lands only after this whole body has run, as `prMerged` argues.
+    */
+    void loginEnvStatus()
+      .then(() => github.resolveProjects())
+      .catch(() => new Map<string, RepoRef>())
+      .then((repos) => {
+        for (const post of autoMergeNotices(before, after, hasShipper, repos)) {
+          const written = ledger.append(post);
+          if (!written.ok) {
+            console.warn(`[hive] could not tell the shipper auto-merge changed (${written.reason})`);
+          }
+        }
+      });
   });
 
   ledger.onChange((entry) => {
@@ -3710,6 +3725,8 @@ export function registerIpcHandlers(
     */
     slackBridge?.stop();
     scheduler?.stop();
+    if (prWatchTimer !== null) clearInterval(prWatchTimer);
+    prWatchTimer = null;
     stopPermissionReminder?.();
     runs?.closeAll('app-closed');
     agentState?.flush();
@@ -4344,7 +4361,24 @@ export function registerIpcHandlers(
     env: () => ({ ...process.env, ...effectiveRuntime(getConfig(), null).env }),
     run: runAsync,
     now: () => Date.now(),
+    // `prWatch` is declared just below; a sweep resolves only after this body has run.
+    onSweep: (snapshot) => prWatch.observe(snapshot),
   });
+
+  /*
+    HIVE-412. Every sweep is diffed for the PRs the shipper holds, and main sweeps on its own
+    while it holds one, so a CI result or an approval wakes the shipper within a minute.
+  */
+  const prWatch = createPrWatch({
+    github,
+    ledger: { read: () => ledger.read({}), append: (request) => ledger.append(request) },
+    now: () => Date.now(),
+    isAgent: (id) => knownAgents.has(id),
+  });
+  if (prWatchTimer !== null) clearInterval(prWatchTimer);
+  prWatchTimer = setInterval(() => {
+    void loginEnvStatus().then(() => prWatch.tick(), () => undefined);
+  }, PR_WATCH_MS);
 
   /*
     HIVE-166. Refreshed once now, in the background, so the first shipper wake
@@ -6072,6 +6106,8 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
   // HIVE-166. A boot refresh still in flight must not reach a `gh` spawn
   // against a finished test's project paths.
   autoMergeGrants = null;
+  if (prWatchTimer !== null) clearInterval(prWatchTimer);
+  prWatchTimer = null;
   runs?.closeAll('reset');
   runs = null;
   /*
