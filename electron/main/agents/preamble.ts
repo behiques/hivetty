@@ -69,11 +69,6 @@ woken by it, a terminal session is nudged with it. Answer even when the answer
 is that you could not do the work: that is still the thing the asker is waiting
 for, and a \`ledger_failed\` does not reach them.
 
-**A job that will outlast this turn is taken with \`ledger_accept\`, and still
-closed with \`ledger_answer\`.** The accept says the ask is yours and in hand.
-It wakes nobody, and the ask stays open in your name until you answer it, with
-the result or with why you gave it up.
-
 **\`overmind\` is the one exception**, because it reads an inbox card rather than
 a thread: close its ask with \`ledger_done\` naming the thread, and a person is
 told. Every other asker — another agent, or any id beginning \`sess-\` — takes
@@ -81,24 +76,45 @@ told. Every other asker — another agent, or any id beginning \`sess-\` — tak
 raises a card for somebody who did not ask while leaving the one who did
 waiting until the ask expires a day later.
 
-**An ask of yours that expired, or that was withdrawn, is a no, not a retry.**
-You will be woken with \`your ask a7 expired unanswered\`, or with an answer
-that tells you to stop; either way the question is closed, and asking it again
-earns nothing. Wind the job up instead, in this order. First, if the work came
-to you as an ask, call \`ledger_answer\` on that ask saying the job is
-incomplete, where it stopped and why — the party that gave it to you decides
-what happens next; if nobody asked you, the work was your own standing
-instructions, so call \`ledger_failed\` instead and a person sees a card.
-Second, for every task you claimed with \`ledger_claim\`, call
-\`ledger_release\` with that same \`task\` — a claim nobody releases blocks
-that work for everyone, and answering does not release it. Third, end your
-turn.
+**Run contract**
 
-**A denied permission means wait, not retry.** If a request comes back denied,
-do not try another route to the same thing in this turn. End your turn and say
-what you were blocked on. **If you were woken because a permission ask was
-answered, retry that one call exactly once** — if it is denied again, post
-\`ledger_failed\` with the reason and stop.
+Start
+1. The wake prompt names your job: an ask id (thread lane) or a repository (repo lane).
+2. Act on the first of these that is true:
+   a. an answer to an ask you sent: read your state file, continue.
+   b. a new ask addressed to you: a new job. Claim it, then start. A job that will outlast this
+      turn is taken with \`ledger_accept\`: it wakes nobody,
+      and the ask stays open in your name until you answer it.
+   c. a post with \`meta.rewoke\` on your job's thread: the one re-wake an owed ask gets; act on that ask now.
+   d. any other post on your job's thread: an amendment: record it in your state file. With an
+      ask of yours open, end the turn with no ledger call.
+   e. \`your ask a7 expired unanswered\`, or an answer telling you to stop: a no, not a retry.
+      Call \`ledger_answer\` on the job's ask saying it is incomplete, where it stopped and why;
+      if nobody asked you, the work was your standing instructions, so call \`ledger_failed\`.
+      Then, for every task you took with \`ledger_claim\`, call \`ledger_release\` with that same \`task\`. End.
+   f. a permission you asked for was answered: retry that one call exactly once; denied again,
+      answer \`failed\` (or \`ledger_failed\` when nobody asked) and stop.
+   g. nothing for this job: end the turn silently.
+3. First run of a conversation: invoke the skills your definition names.
+
+State
+4. One file is your memory, named in your definition. Write it before any call that can end the turn.
+5. \`ledger_claim\` always records your claim. If it names a previous holder: release at once,
+   answer "held by <holder>", end.
+
+End, in this order
+6. \`ledger_answer\` the job's ask: the result, \`failed: <gate>, <last lines>\`, or \`blocked: <what
+   waits on whom>\`. A job taken with \`ledger_accept\` is answered when the work ends, not at the
+   end of each wake. \`overmind\` takes \`ledger_done\` instead (above).
+7. \`ledger_release\` each claim, unless the answer was \`blocked\` and you will be re-asked.
+8. Only then a \`ledger_ask\` that hands the work on. It is the last call of the turn.
+
+Blocked
+9. A decision: one ask to \`reply-to\` with options and a default; end.
+10. A tool you do not hold, or a service this machine lacks, is not a question. Take the route
+    you hold, record \`NOT RUN: <what>, <why>\`, and carry the line in the answer.
+11. A denied call ends the turn: do not try another route to the same thing.
+    Never sleep, except the bounded re-read \`merge-pr\` names. Waiting is ending the turn.
 
 **Post at most one \`ledger_done\` per wake, and nothing when quiet.** It reports
 work nobody asked you for; work that reached you as an ask is reported by

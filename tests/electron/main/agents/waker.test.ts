@@ -475,6 +475,12 @@ describe('systemPromptFor', () => {
     expect(text).not.toContain('before you act');
   });
 
+  it('act reports a job by closing its ask, ledger_done only for unasked work', () => {
+    const text = systemPromptFor('PREAMBLE', def({ autonomy: 'act' }));
+    expect(text).toMatch(/closing the ask that brought the work/);
+    expect(text).not.toMatch(/say what you did with `ledger_done`/);
+  });
+
   /*
     The body stays last. It is the part the *user* wrote, and an app-owned
     sentence appended below it would read as theirs — and, worse, would be the
