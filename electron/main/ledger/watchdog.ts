@@ -7,6 +7,7 @@
  * restart because the log does, as expiry's and delivery's receipts do. It never grants, denies, answers
  * a card or kills a run.
  */
+import { STANDING_LANE } from '@shared/agent-contract';
 import { OVERMIND, type LedgerEntry } from '@shared/ledger-contract';
 import { askStates } from '@shared/ledger-derive';
 
@@ -75,13 +76,35 @@ function receipts(entries: readonly LedgerEntry[]): Map<string, number> {
   return out;
 }
 
+/** The newest entry each party wrote on each thread, keyed `<from> <thread>`. */
+function newestOnThread(entries: readonly LedgerEntry[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.thread === undefined) continue;
+    const key = `${entry.from} ${entry.thread}`;
+    out.set(key, Math.max(out.get(key) ?? 0, entry.ts));
+  }
+  return out;
+}
+
 export function watchSteps(entries: readonly LedgerEntry[], now: number, facts: WatchFacts): WatchStep[] {
   const states = askStates(entries, now);
   const marked = marks(entries);
   const nudged = receipts(entries);
+  const onThread = newestOnThread(entries);
   const out: WatchStep[] = [];
 
-  for (const { ask, state } of states) {
+  for (const { ask, state, since, owes, lane } of states) {
+    // An accepted ask whose lane has gone quiet: wake the lane that holds it again.
+    if (state === 'accepted' && owes !== undefined && facts.isAgent(owes)) {
+      const held = lane ?? STANDING_LANE;
+      // Only the owing agent's own entries count, or the re-wake mark itself would reset the quiet.
+      const last = Math.max(since, onThread.get(`${owes} ${ask.id}`) ?? 0);
+      if (!facts.laneLive(owes, held) && now - last >= facts.quietMs(owes) && !marked.has(markKey('rewake', ask.id))) {
+        out.push({ step: 'rewake', ask, to: owes });
+      }
+      continue;
+    }
     const to = ask.to;
     if (state !== 'open' || to === undefined || to === OVERMIND || facts.isAgent(to)) continue;
     const receipt = nudged.get(ask.id);

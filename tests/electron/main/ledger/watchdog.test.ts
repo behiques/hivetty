@@ -88,3 +88,40 @@ describe('watchSteps: card (HIVE-411)', () => {
     expect(watchSteps([...log, card], markTs + 2 * CARD_AFTER_MS, facts())).toEqual([]);
   });
 });
+
+describe('watchSteps: rewake (HIVE-411)', () => {
+  /** sess-0a asked the shipper; the shipper accepted at T0 + 5000 on its repo lane. */
+  const accepted = () => {
+    const ask = e({ ts: T0, from: 'sess-0a', to: 'shipper', kind: 'ask', ref: 'a50', body: 'ship behiques/hivetty-cloud#40', meta: { repo: 'behiques/hivetty-cloud', pr: 40 } });
+    const started = e({ ts: T0 + 1000, from: 'shipper', kind: 'event', body: 'run.started', meta: { run: 'r1', lane: 'repo:behiques/hivetty-cloud', wakes: [ask.id] } });
+    const accept = e({ ts: T0 + 5000, from: 'shipper', to: 'sess-0a', kind: 'post', thread: ask.id, body: 'accepted', meta: { accepted: true, run: 'r1' } });
+    return { ask, log: [ask, started, accept], acceptTs: accept.ts };
+  };
+  const quiet = 3 * 5 * 60_000; // a 5-minute repo lane, three intervals
+
+  it('re-wakes the agent once its lane has been quiet for quietMs since the accept', () => {
+    const { ask, log, acceptTs } = accepted();
+    const f = facts({ quietMs: () => quiet });
+    expect(watchSteps(log, acceptTs + quiet - 1, f)).toEqual([]);
+    expect(watchSteps(log, acceptTs + quiet, f)).toEqual([{ step: 'rewake', ask, to: 'shipper' }]);
+  });
+
+  it('measures quiet from the agent’s newest entry on the thread', () => {
+    const { ask, log, acceptTs } = accepted();
+    const later = e({ ts: acceptTs + 60_000, from: 'shipper', to: 'sess-0a', kind: 'post', thread: ask.id, body: 'ci running' });
+    const f = facts({ quietMs: () => quiet });
+    expect(watchSteps([...log, later], acceptTs + quiet, f)).toEqual([]);
+  });
+
+  it('leaves a lane alone while a run holds it', () => {
+    const { log, acceptTs } = accepted();
+    const f = facts({ quietMs: () => quiet, laneLive: (agent, lane) => agent === 'shipper' && lane === 'repo:behiques/hivetty-cloud' });
+    expect(watchSteps(log, acceptTs + 10 * quiet, f)).toEqual([]);
+  });
+
+  it('re-wakes once', () => {
+    const { ask, log, acceptTs } = accepted();
+    const mark = e({ ts: acceptTs + quiet, from: 'overmind', to: 'shipper', kind: 'post', thread: ask.id, body: 're-wake', meta: { watch: 'rewake', watched: ask.id } });
+    expect(watchSteps([...log, mark], acceptTs + 10 * quiet, facts({ quietMs: () => quiet }))).toEqual([]);
+  });
+});
