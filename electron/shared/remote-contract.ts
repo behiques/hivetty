@@ -98,8 +98,9 @@ import { isThisMachineAction } from './notification-contract';
  * 41 → 42 (HIVE-398): `AgentSummary` gained `dailyTokens`; `today` gained `tokens`; `RunSummary.usage` is normalised
  *   and Claude Code now sends it.
  * 42 → 43 (skip permission prompts): `CliConfig` and `SetCliRequest` gained `skipPermissions`.
+ * 43 → 44 (HIVE-412): `PrRecord` (on `github:prs` and `github:search-prs`) gained `reviewDecision`, `head` and `mergeable`.
  */
-export const REMOTE_PROTOCOL_VERSION = 43;
+export const REMOTE_PROTOCOL_VERSION = 44;
 
 /**
  * What a frame is for.
