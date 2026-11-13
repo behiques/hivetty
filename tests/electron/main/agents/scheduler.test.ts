@@ -29,6 +29,7 @@ const entry = (over: Partial<LedgerEntry> = {}): LedgerEntry => ({
 
 describe('createScheduler', () => {
   let woke: { name: string; trigger: string; extra?: string; job?: true; lane?: string }[];
+  let wakeIds: (readonly string[] | undefined)[];
   let entries: LedgerEntry[];
   let appended: LedgerPostRequest[];
   let clock: number;
@@ -105,6 +106,7 @@ describe('createScheduler', () => {
         }
         if (liveLanes?.has(options?.lane ?? 'standing') === true) return { started: false, refused: 'working' };
 
+        wakeIds.push(options?.wakes);
         woke.push({
           name,
           trigger,
@@ -148,6 +150,7 @@ describe('createScheduler', () => {
 
   beforeEach(() => {
     woke = [];
+    wakeIds = [];
     entries = [];
     appended = [];
     clock = 0;
@@ -189,6 +192,35 @@ describe('createScheduler', () => {
     `closed` entry. Released once, with a `released` event as the dedup, so a
     restart routes one released while the app was down and nothing twice.
   */
+  describe('wakes (HIVE-410)', () => {
+    it('names the routed entry', () => {
+      scheduler.onEntry(entry());
+
+      expect(wakeIds).toEqual([['a1']]);
+    });
+
+    it('names every flushed ledger entry, in order, and not a queued manual run', () => {
+      state.patch(AGENT, {
+        status: 'sleeping',
+        pendingWake: [
+          { kind: 'manual', id: 'run', from: 'overmind' },
+          { kind: 'ask', id: 'a1', from: 'overmind' },
+          { kind: 'answer', id: 'a2', from: 'sess-2' },
+        ],
+      });
+
+      scheduler.onRunClosed(AGENT);
+
+      expect(wakeIds).toEqual([['a1', 'a2']]);
+    });
+
+    it('names nothing for a manual run', () => {
+      scheduler.manualWake(AGENT);
+
+      expect(wakeIds).toEqual([undefined]);
+    });
+  });
+
   describe('a held ask (meta.after)', () => {
     const held = entry({ id: 'h1', meta: { after: 'a/b#3' } });
     const closed = (pr = 3, repo = 'a/b'): LedgerEntry =>

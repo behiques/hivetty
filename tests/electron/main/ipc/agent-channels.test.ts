@@ -784,12 +784,12 @@ describe('ledger-addressed wakes reach the tracker (HIVE-120)', () => {
 
     capturedOnChange?.(addressed());
 
-    // A ledger-routed wake carries no job options (HIVE-128).
+    // A ledger-routed wake carries no job options (HIVE-128), only the entry it is for (HIVE-410).
     expect(trackerRun).toHaveBeenCalledWith(
       'slack-watcher',
       'ledger',
       'ask a1 from overmind',
-      undefined,
+      { wakes: ['a1'] },
     );
   });
 
@@ -834,7 +834,7 @@ describe('ledger-addressed wakes reach the tracker (HIVE-120)', () => {
       'slack-watcher',
       'ledger',
       'answer a4 from overmind',
-      undefined,
+      { wakes: ['a4'] },
     );
   });
 
@@ -852,7 +852,7 @@ describe('ledger-addressed wakes reach the tracker (HIVE-120)', () => {
       'slack-watcher',
       'ledger',
       'ask a5 from overmind',
-      undefined,
+      { wakes: ['a5'] },
     );
   });
 });

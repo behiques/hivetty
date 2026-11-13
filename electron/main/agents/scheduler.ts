@@ -37,6 +37,7 @@ import {
   isClosedLane,
   laneClaims,
   laneFor,
+  WAKING_KINDS,
   type WakeDecision,
 } from './scheduler-rules';
 import type { AgentState } from './state';
@@ -128,7 +129,7 @@ interface SchedulerDeps {
     name: string,
     trigger: string,
     extra?: string,
-    options?: { job?: true; lane?: string },
+    options?: { job?: true; lane?: string; wakes?: readonly string[] },
   ) => RunStart;
   state: Pick<AgentState, 'read' | 'patch' | 'all' | 'lane' | 'patchLane' | 'forgetLane'>;
   /** Whether a party id names a registered agent rather than a session. */
@@ -351,6 +352,10 @@ export function mootCards(
 /** `ask a12 from overmind` — how a wake says what it woke for. */
 const describeEntries = (queued: readonly PendingWakeEntry[]): string =>
   queued.map(describeEntry).join(', ');
+
+/** The ledger entries a wake is for (HIVE-410): a manual run, a Slack event and an expiry notice name none. */
+const wakesOf = (items: readonly PendingWakeEntry[]): string[] =>
+  items.filter((item) => WAKING_KINDS.has(item.kind)).map((item) => item.id);
 
 /**
  * Which trigger a flushed queue reports (HIVE-126, HIVE-124).
@@ -994,18 +999,21 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     return started;
   };
 
-  /** A standing wake keeps its three-argument shape; another lane names itself. */
+  /** A standing wake for nothing keeps its three-argument shape; a lane or a wake list names itself. */
   const runOnLane = (
     name: string,
     trigger: string,
     extra: string | undefined,
     lane: string,
+    wakes: readonly string[] = [],
   ): RunStart => {
+    const options = {
+      ...(lane === STANDING_LANE ? {} : { lane }),
+      ...(wakes.length === 0 ? {} : { wakes }),
+    };
     const started = noteStart(
       name,
-      lane === STANDING_LANE
-        ? deps.run(name, trigger, extra)
-        : deps.run(name, trigger, extra, { lane }),
+      Object.keys(options).length === 0 ? deps.run(name, trigger, extra) : deps.run(name, trigger, extra, options),
     );
     // A run on the lane ends the refusal it recorded (HIVE-408).
     if (started.started && deps.state.lane(name, lane).refused !== undefined) {
@@ -1099,7 +1107,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     let saturated = false;
 
     if (rest.length > 0) {
-      const started = runOnLane(name, triggerFor(rest), describeEntries(rest), lane);
+      const started = runOnLane(name, triggerFor(rest), describeEntries(rest), lane, wakesOf(rest));
 
       if (!started.started) {
         back.push(...rest);
@@ -1288,7 +1296,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     lane: string = STANDING_LANE,
   ): void => {
     if (decision === 'wake') {
-      const started = runOnLane(name, trigger, describeEntry(item), lane);
+      const started = runOnLane(name, trigger, describeEntry(item), lane, wakesOf([item]));
       if (started.started) return;
       tellRefused(name, lane, [item], started);
     }
