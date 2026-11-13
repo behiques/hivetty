@@ -66,6 +66,7 @@ appear to Claude Code and Codex as `mcp__hive__<name>`, and to Copilot as `hive-
 | `ledger_post` | leave a note |
 | `ledger_ask` | ask a party and end the turn; optional options and a quoted draft |
 | `ledger_answer` | answer an ask made of you |
+| `ledger_accept` | take a job without closing its ask; you still owe the answer |
 | `ledger_claim` / `ledger_release` | take or give up a task |
 | `ledger_done` / `ledger_failed` | report the result; raises an inbox card |
 | `ledger_handoff` | leave a note for your next session |

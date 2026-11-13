@@ -182,6 +182,7 @@ import {
   shipStage,
   shipTrack,
   thread,
+  waitingAsks,
   type Delegate,
   type ShipTrack,
 } from '@shared/ledger-derive';
@@ -4030,8 +4031,11 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
   hydrateLedger: (snapshot, closed = [], open = []) =>
     set((state) => {
-      // `open`/`ageMs` are derived at read time and go stale in a mirror.
-      const entries = [...snapshot, ...open.map(({ open: _open, ageMs: _ageMs, ...ask }) => ask)];
+      // `open`/`ageMs`/`state` are derived at read time and go stale in a mirror.
+      const entries = [
+        ...snapshot,
+        ...open.map(({ open: _open, ageMs: _ageMs, state: _state, ...ask }) => ask),
+      ];
       /**
        * Union, not replacement — `hydrateNotifs`' reason, with one difference
        * that makes it sharper.
@@ -7136,7 +7140,7 @@ export const useAgentFacts = (name: string): AgentFacts | null => {
 
     const today = runsToday(entity.today);
     const tokens = tokensToday(entity.today, entity.dailyTokens);
-    const open = openAsks(ledger, Date.now()).find((ask) => ask.from === name);
+    const open = waitingAsks(openAsks(ledger, Date.now())).find((ask) => ask.from === name);
 
     return {
       status: entity.status,
@@ -7190,7 +7194,7 @@ export const useAgentAskRef = (name: string): string | undefined => {
   const ledger = useHiveStore((state) => state.ledger);
 
   return useMemo(
-    () => openAsks(ledger, Date.now()).find((ask) => ask.from === name)?.ref,
+    () => waitingAsks(openAsks(ledger, Date.now())).find((ask) => ask.from === name)?.ref,
     [ledger, name],
   );
 };
@@ -7798,7 +7802,7 @@ const combRowsSelector = (state: HiveState): string[] => {
           : a.status === 'working' ? 'morphing'
             : 'burrowed';
     const ask = combState === 'summons'
-      ? (asks ??= openAsks(state.ledger, Date.now())).find((x) => x.from === id)
+      ? (asks ??= waitingAsks(openAsks(state.ledger, Date.now()))).find((x) => x.from === id)
       : undefined;
     rows.push(row([
       id, 'agent', id, SWARM, combState, a.status, undefined, undefined, undefined,

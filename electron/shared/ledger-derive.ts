@@ -182,42 +182,25 @@ export function ttlOf(entry: Pick<LedgerEntry, 'meta'>): number {
  * expiry event deliberately does not close the ask — {@link CLOSING_KINDS} is
  * `answer`/`done`/`failed`, and an expiry is none of the three: nobody
  * answered, and nobody took the question back.
+ *
+ * Only main's own marker counts. `meta` is a free-form rider that
+ * `parseLedgerPostBody` passes through verbatim, so any party that can write
+ * to the log could otherwise post
+ * `{ kind: 'event', meta: { expired: '<someone else's ask>' } }` and put that
+ * id in the told set permanently — retiring a question nobody answered, from
+ * the inbox and from the sweep at once, with no expiry ever written. Main
+ * writes this event as the overmind and nothing else legitimately does.
  */
-export function expiredAsks(
-  entries: readonly LedgerEntry[],
-  now: number,
-): LedgerEntry[] {
-  const closed = new Set<string>();
+export function expiredAsks(entries: readonly LedgerEntry[], now: number): LedgerEntry[] {
   const told = new Set<string>();
-
   for (const entry of entries) {
-    if (entry.thread !== undefined && CLOSING_KINDS.has(entry.kind)) {
-      closed.add(entry.thread);
-    }
-
-    /*
-      Only main's own marker counts.
-
-      `meta` is a free-form rider that `parseLedgerPostBody` passes through
-      verbatim, so any party that can write to the log could otherwise post
-      `{ kind: 'event', meta: { expired: '<someone else's ask>' } }` and put that
-      id in this set permanently — retiring a question nobody answered, from the
-      inbox and from the sweep at once, with no expiry ever written. Main writes
-      this event as the overmind and nothing else legitimately does.
-    */
+    // Only main's own marker counts (the forgery note above).
     const expired = entry.meta?.expired;
     if (typeof expired === 'string' && entry.from === OVERMIND) told.add(expired);
   }
-
-  const releases = releaseTimes(entries);
-
-  return entries.filter(
-    (entry) =>
-      entry.kind === 'ask' &&
-      !closed.has(entry.id) &&
-      !told.has(entry.id) &&
-      agedFor(entry, releases, now) >= ttlOf(entry),
-  );
+  return askStates(entries, now)
+    .filter((item) => item.state === 'expired' && !told.has(item.ask.id))
+    .map((item) => item.ask);
 }
 
 /**
@@ -232,23 +215,20 @@ export function expiredAsks(
  * retires it.
  */
 export function openAsks(entries: readonly LedgerEntry[], now: number): OpenAsk[] {
-  const closed = new Set<string>();
-  for (const entry of entries) {
-    if (entry.thread === undefined) continue;
-    if (CLOSING_KINDS.has(entry.kind)) closed.add(entry.thread);
-  }
-
-  const releases = releaseTimes(entries);
   const open: OpenAsk[] = [];
-  for (const entry of entries) {
-    if (entry.kind !== 'ask') continue;
-    if (closed.has(entry.id)) continue;
-    const ageMs = now - entry.ts;
-    if (agedFor(entry, releases, now) >= ttlOf(entry)) continue;
-    open.push({ ...entry, kind: 'ask', open: true, ageMs });
+  for (const { ask, state } of askStates(entries, now)) {
+    if (state !== 'held' && state !== 'open' && state !== 'delivered' && state !== 'accepted') continue;
+    open.push({ ...ask, kind: 'ask', open: true, ageMs: now - ask.ts, state });
   }
   return open;
 }
+
+/**
+ * The open asks a party is still waiting on (HIVE-410). An accepted ask is
+ * owed work, but whoever asked is free: it must not read as `asking`.
+ */
+export const waitingAsks = (open: readonly OpenAsk[]): OpenAsk[] =>
+  open.filter((ask) => ask.state !== 'accepted');
 
 /**
  * Who holds what, by the last word on each task.
@@ -870,29 +850,6 @@ export function isHeld(ask: LedgerEntry, log: readonly LedgerEntry[]): boolean {
   return !log.some((entry) => releasesAfter(entry, target));
 }
 
-/**
- * How long an ask has been aging toward its ttl, which {@link openAsks} and
- * {@link expiredAsks} both read (retro C).
- *
- * A held ask does not age while it waits for its PR: a chain whose earlier PR
- * sits a day in review would otherwise lose the next job, with nothing said to
- * anyone. Released, it ages from the release. Held for
- * {@link LEDGER_HELD_MAX_MS}, it expires at once, so a PR abandoned, handed
- * back or mistyped cannot keep an ask open forever and its asker is told.
- * Every other ask ages from when it was posted, as it always has.
- * `OpenAsk.ageMs` still reports the time since the post, because that is what
- * a person reading the card means by age.
- */
-function agedFor(ask: LedgerEntry, releases: ReadonlyMap<string, number>, now: number): number {
-  const target = afterTarget(ask);
-  if (target === undefined) return now - ask.ts;
-  const released = releases.get(targetKey(target.repo, target.pr));
-  if (released === undefined) {
-    return now - ask.ts >= LEDGER_HELD_MAX_MS ? Number.POSITIVE_INFINITY : 0;
-  }
-  return now - Math.max(ask.ts, released);
-}
-
 /** How long a held ask waits for its PR before it expires like any other (retro C). */
 const LEDGER_HELD_MAX_MS = 7 * LEDGER_ASK_TTL_MS;
 
@@ -913,6 +870,151 @@ function releaseTimes(entries: readonly LedgerEntry[]): Map<string, number> {
     if (!at.has(key)) at.set(key, entry.ts);
   }
   return at;
+}
+
+/** Where an ask stands (HIVE-410). The first four are still owed; the last four are terminal. */
+export type AskStateName =
+  | 'held'
+  | 'open'
+  | 'delivered'
+  | 'accepted'
+  | 'answered'
+  | 'failed'
+  | 'expired'
+  | 'moot';
+
+export interface AskState {
+  ask: LedgerEntry;
+  state: AskStateName;
+  /** When it entered this state. */
+  since: number;
+  /** Who owes the next move: the party asked, while the ask is open, delivered or accepted. */
+  owes: string | undefined;
+  /** The recipient agent's lane that holds it, read from the log. A session has none. */
+  lane: string | undefined;
+}
+
+/**
+ * The instant an ask expires: retro C's aging rule, stated once (HIVE-410).
+ * An accepted ask and a held one do not age, and each lasts at most
+ * {@link LEDGER_HELD_MAX_MS}: from the accept, or from the post. A released
+ * ask ages from its release; every other ask from its post.
+ */
+function deadlineOf(
+  ask: LedgerEntry,
+  releases: ReadonlyMap<string, number>,
+  acceptedAt: number | undefined,
+): number {
+  if (acceptedAt !== undefined) return acceptedAt + LEDGER_HELD_MAX_MS;
+  const target = afterTarget(ask);
+  if (target === undefined) return ask.ts + ttlOf(ask);
+  const released = releases.get(targetKey(target.repo, target.pr));
+  return released === undefined ? ask.ts + LEDGER_HELD_MAX_MS : Math.max(ask.ts, released) + ttlOf(ask);
+}
+
+/**
+ * Every ask in the log and where it stands (HIVE-410): the one loop that
+ * decides it. {@link openAsks} and {@link expiredAsks} are views over this;
+ * the scheduler, the notifier and the renderer mirror read those or this.
+ */
+export function askStates(entries: readonly LedgerEntry[], now: number): AskState[] {
+  const closing = new Map<string, LedgerEntry>();
+  const expiry = new Map<string, number>();
+  const accepts = new Map<string, LedgerEntry[]>(); // thread → entries carrying `meta.accepted`
+  const served = new Map<string, LedgerEntry[]>(); // entry id → the overmind's `served` confirmations
+  const woke = new Map<string, LedgerEntry[]>(); // entry id → each `run.started` that lists it
+  const begun = new Map<string, LedgerEntry>(); // `<agent> <run>` → that run's `run.started`
+  const push = (map: Map<string, LedgerEntry[]>, key: string, entry: LedgerEntry): void => {
+    const list = map.get(key);
+    if (list === undefined) map.set(key, [entry]);
+    else list.push(entry);
+  };
+
+  for (const entry of entries) {
+    if (entry.thread !== undefined && CLOSING_KINDS.has(entry.kind) && !closing.has(entry.thread)) {
+      closing.set(entry.thread, entry);
+    }
+    // Only main's own marker counts, for `expiredAsks`' reason.
+    const expired = entry.meta?.expired;
+    if (typeof expired === 'string' && entry.from === OVERMIND && !expiry.has(expired)) {
+      expiry.set(expired, entry.ts);
+    }
+    if (entry.thread !== undefined && entry.meta?.['accepted'] === true) push(accepts, entry.thread, entry);
+    const servedId = entry.meta?.['served'];
+    if (typeof servedId === 'string' && entry.from === OVERMIND) push(served, servedId, entry);
+    if (entry.kind === 'event' && entry.body.startsWith('run.started')) {
+      const run = entry.meta?.['run'];
+      const key = `${entry.from} ${String(run)}`;
+      if (typeof run === 'string' && !begun.has(key)) begun.set(key, entry);
+      const wakes = entry.meta?.['wakes'];
+      if (Array.isArray(wakes)) {
+        for (const id of wakes as readonly unknown[]) if (typeof id === 'string') push(woke, id, entry);
+      }
+    }
+  }
+
+  const releases = releaseTimes(entries);
+  const out: AskState[] = [];
+  const laneOfStarted = (started: LedgerEntry | undefined): string | undefined => {
+    if (started === undefined) return undefined;
+    const lane = started.meta?.['lane'];
+    return typeof lane === 'string' && lane !== '' ? lane : STANDING_LANE;
+  };
+
+  for (const ask of entries) {
+    if (ask.kind !== 'ask') continue;
+    const terminal = (state: AskStateName, since: number): void => {
+      out.push({ ask, state, since, owes: undefined, lane: undefined });
+    };
+
+    const closed = closing.get(ask.id);
+    if (closed !== undefined) {
+      // A card the sweep closed as moot (HIVE-409) is over, but nobody answered it.
+      const moot =
+        closed.kind === 'answer' && closed.from === OVERMIND && typeof closed.meta?.['moot'] === 'string';
+      terminal(moot ? 'moot' : closed.kind === 'failed' ? 'failed' : 'answered', closed.ts);
+      continue;
+    }
+
+    const target = afterTarget(ask);
+    const released = target === undefined ? undefined : releases.get(targetKey(target.repo, target.pr));
+    const held = target !== undefined && released === undefined;
+
+    // Only the party asked can accept: `meta` is a rider anyone can write.
+    const accept = held ? undefined : accepts.get(ask.id)?.find((entry) => entry.from === ask.to);
+
+    const deadline = deadlineOf(ask, releases, accept?.ts);
+    if (now >= deadline) {
+      terminal('expired', expiry.get(ask.id) ?? deadline);
+      continue;
+    }
+
+    if (held) {
+      terminal('held', ask.ts);
+      continue;
+    }
+
+    // A run of the party asked that was started for this ask.
+    const wake = woke.get(ask.id)?.find((entry) => entry.from === ask.to);
+
+    if (accept !== undefined) {
+      const run = accept.meta?.['run'];
+      const own = typeof run === 'string' ? begun.get(`${accept.from} ${run}`) : undefined;
+      out.push({ ask, state: 'accepted', since: accept.ts, owes: ask.to, lane: laneOfStarted(own) ?? laneOfStarted(wake) });
+      continue;
+    }
+
+    const confirmed = served.get(ask.id)?.find((entry) => entry.to === ask.to);
+    const first = wake !== undefined && (confirmed === undefined || wake.ts <= confirmed.ts) ? wake : confirmed;
+    if (first !== undefined) {
+      out.push({ ask, state: 'delivered', since: first.ts, owes: ask.to, lane: laneOfStarted(wake) });
+      continue;
+    }
+
+    out.push({ ask, state: 'open', since: Math.max(ask.ts, released ?? 0), owes: ask.to, lane: undefined });
+  }
+
+  return out;
 }
 
 /**

@@ -77,12 +77,13 @@ describe('createHandlers without an environment', () => {
     differed depending on how the process was started would make `/mcp` report
     a different server than the one an agent actually gets.
   */
-  it('still lists the twenty tools, so /mcp shows the server connected', () => {
+  it('still lists the twenty-one tools, so /mcp shows the server connected', () => {
     const handlers = createHandlers({}, vi.fn() as never);
-    // Twenty since HIVE-409 added pr_merge.
-    expect(handlers.listTools()).toHaveLength(20);
+    // Twenty since HIVE-409 added pr_merge; twenty-one since HIVE-410 added ledger_accept.
+    expect(handlers.listTools()).toHaveLength(21);
     expect(handlers.listTools().map((tool) => tool.name)).toContain('project_auto_merge');
     expect(handlers.listTools().map((tool) => tool.name)).toContain('pr_merge');
+    expect(handlers.listTools().map((tool) => tool.name)).toContain('ledger_accept');
   });
 
   it('answers every call with a legible reason instead of hanging', async () => {

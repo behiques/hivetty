@@ -996,7 +996,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
         ref: 'a1',
         body: 'Reply with the single word kumquat and nothing else.',
       };
-      ledgerRead = () => ({ entries: [ask], openAsks: [{ ...ask, kind: 'ask', open: true, ageMs: 0 } satisfies OpenAsk], claims: {} });
+      ledgerRead = () => ({ entries: [ask], openAsks: [{ ...ask, kind: 'ask', open: true, ageMs: 0, state: 'open' } satisfies OpenAsk], claims: {} });
       const id = '11111111-2222-4333-8444-5555555555c4';
       const { log } = await run('marker', id, {
         spec: { pluginDir: rendered, hiveServer: hive() },

@@ -784,12 +784,12 @@ describe('ledger-addressed wakes reach the tracker (HIVE-120)', () => {
 
     capturedOnChange?.(addressed());
 
-    // A ledger-routed wake carries no job options (HIVE-128).
+    // A ledger-routed wake carries no job options (HIVE-128), only the entry it is for (HIVE-410).
     expect(trackerRun).toHaveBeenCalledWith(
       'slack-watcher',
       'ledger',
       'ask a1 from overmind',
-      undefined,
+      { wakes: ['a1'] },
     );
   });
 
@@ -834,7 +834,7 @@ describe('ledger-addressed wakes reach the tracker (HIVE-120)', () => {
       'slack-watcher',
       'ledger',
       'answer a4 from overmind',
-      undefined,
+      { wakes: ['a4'] },
     );
   });
 
@@ -852,7 +852,7 @@ describe('ledger-addressed wakes reach the tracker (HIVE-120)', () => {
       'slack-watcher',
       'ledger',
       'ask a5 from overmind',
-      undefined,
+      { wakes: ['a5'] },
     );
   });
 });
@@ -1040,6 +1040,23 @@ describe('what the tracker was handed (HIVE-115)', () => {
     composition's reader, and the only other exercise it gets is the live
     suite's clone.
   */
+  it('does not count an ask its recipient accepted: the asker is free (HIVE-410)', () => {
+    ledgerOpenAsks = [
+      {
+        id: '20260830-010500-0002',
+        ts: 2,
+        from: 'slack-watcher',
+        kind: 'ask',
+        body: 'Ship PR #1',
+        meta: { run: 'run-1' },
+        state: 'accepted',
+      } as LedgerEntry,
+    ];
+
+    expect(trackerDeps?.openAsksFor('slack-watcher', 'run-1')).toBe(false);
+    expect(trackerDeps?.hasOpenAsk('slack-watcher')).toBe(false);
+  });
+
   it('sees an open ask from any run, and only from this party', () => {
     ledgerOpenAsks = [
       {

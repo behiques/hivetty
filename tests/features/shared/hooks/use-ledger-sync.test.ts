@@ -57,7 +57,7 @@ describe('useLedgerSync', () => {
   });
 
   it('hands the snapshot’s open asks to the store', async () => {
-    const ask = { ...entry('q1'), kind: 'ask', ts: Date.now(), open: true, ageMs: 0 };
+    const ask = { ...entry('q1'), kind: 'ask', ts: Date.now(), open: true, ageMs: 0, state: 'open' };
     (window as { hive?: unknown }).hive = {
       ledger: {
         list: vi.fn().mockResolvedValue({ entries: [], openAsks: [ask], claims: {} }),

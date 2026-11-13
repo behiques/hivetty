@@ -13,6 +13,7 @@ import {
   INBOUND_NAME_MAX,
   INBOUND_TEXT_MAX,
   asInbound,
+  askStates,
   buildProgressFor,
   claims,
   closedAskThreads,
@@ -40,6 +41,7 @@ import {
   shipTrack,
   thread,
   ttlOf,
+  waitingAsks,
   STAGE_TEXT_MAX,
 } from '../../../electron/shared/ledger-derive';
 
@@ -320,7 +322,7 @@ describe('openAsks', () => {
     const entries = [entry({ id: '20260828-100000-0001', kind: 'ask', ts: NOW - 60_000 })];
 
     expect(openAsks(entries, NOW)).toEqual([
-      { ...entries[0], open: true, ageMs: 60_000 },
+      { ...entries[0], open: true, ageMs: 60_000, state: 'open' },
     ]);
   });
 
@@ -366,7 +368,7 @@ describe('openAsks', () => {
       const ask = entry({ id: '20260828-100000-0001', kind: 'ask', ts: NOW - 60_000 });
       const entries = [ask, entry({ id: '20260828-100001-0001', kind })];
 
-      expect(openAsks(entries, NOW)).toEqual([{ ...ask, open: true, ageMs: 60_000 }]);
+      expect(openAsks(entries, NOW)).toEqual([{ ...ask, open: true, ageMs: 60_000, state: 'open' }]);
     },
   );
 
@@ -1185,5 +1187,127 @@ describe('mergeTarget (HIVE-409)', () => {
     expect(mergeTarget({ tool: 'Bash' })).toBeUndefined();
     expect(mergeTarget({ tool: 'Read', input: { command: 'gh pr merge 1 --repo a/b' } })).toBeUndefined();
     expect(mergeTarget(undefined)).toBeUndefined();
+  });
+});
+
+describe('askStates (HIVE-410)', () => {
+  const ask = (over: Partial<LedgerEntry> = {}): LedgerEntry =>
+    entry({ id: 'k1', kind: 'ask', from: 'sess-a', to: 'shipper', ts: NOW - 60_000, body: 'Ship PR #1', ...over });
+  const stateOf = (log: LedgerEntry[], now = NOW) => askStates(log, now).find((s) => s.ask.id === 'k1');
+
+  it('is open from its post, owed by the party asked', () => {
+    expect(stateOf([ask()])).toEqual({ ask: ask(), state: 'open', since: NOW - 60_000, owes: 'shipper', lane: undefined });
+  });
+
+  it('is answered by an answer or a done, and failed by a failed, since that entry', () => {
+    for (const [kind, state] of [['answer', 'answered'], ['done', 'answered'], ['failed', 'failed']] as const) {
+      const log = [ask(), entry({ id: 'c1', kind, from: 'shipper', thread: 'k1', ts: NOW - 5 })];
+      expect(stateOf(log)).toMatchObject({ state, since: NOW - 5, owes: undefined });
+    }
+  });
+
+  it('is moot when the overmind answers with meta.moot, and answered without it', () => {
+    const card = ask({ from: 'shipper', to: OVERMIND, meta: { kind: 'permission' } });
+    const moot = entry({ id: 'm1', kind: 'answer', from: OVERMIND, thread: 'k1', body: 'moot', meta: { moot: 'a/x#1 merged' } });
+    expect(stateOf([card, moot])?.state).toBe('moot');
+    expect(stateOf([card, { ...moot, from: 'sess-b' }])?.state).toBe('answered');
+    expect(stateOf([card, { ...moot, meta: {} }])?.state).toBe('answered');
+  });
+
+  it('expires at its ttl, since the deadline, or since the overmind said so', () => {
+    const old = ask({ ts: 0 });
+    expect(stateOf([old], LEDGER_ASK_TTL_MS - 1)?.state).toBe('open');
+    expect(stateOf([old], LEDGER_ASK_TTL_MS)).toMatchObject({ state: 'expired', since: LEDGER_ASK_TTL_MS, owes: undefined });
+    const told = entry({ id: 'e1', kind: 'event', from: OVERMIND, ts: LEDGER_ASK_TTL_MS + 30_000, meta: { expired: 'k1' } });
+    expect(stateOf([old, told], LEDGER_ASK_TTL_MS + 60_000)).toMatchObject({ state: 'expired', since: LEDGER_ASK_TTL_MS + 30_000 });
+  });
+
+  it('is held until its PR closes, then open since the release', () => {
+    const held = ask({ ts: 0, meta: { after: 'a/x#3' } });
+    expect(stateOf([held], 3 * LEDGER_ASK_TTL_MS)).toMatchObject({ state: 'held', since: 0, owes: undefined });
+    const closed = entry({ id: 'c1', from: 'shipper', ts: 3 * LEDGER_ASK_TTL_MS, meta: { stage: 'closed', pr: 3, repo: 'a/x' } });
+    expect(stateOf([held, closed], 3 * LEDGER_ASK_TTL_MS + 1)).toMatchObject({ state: 'open', since: 3 * LEDGER_ASK_TTL_MS, owes: 'shipper' });
+    expect(stateOf([held], 7 * LEDGER_ASK_TTL_MS)?.state).toBe('expired');
+  });
+
+  const started = (meta: Record<string, unknown>, ts = NOW - 50_000): LedgerEntry =>
+    entry({ id: `s-${String(meta['run'])}`, kind: 'event', from: 'shipper', ts, body: 'run.started — ledger', meta });
+  const accept = (over: Partial<LedgerEntry> = {}): LedgerEntry =>
+    entry({
+      id: 'p1', kind: 'post', from: 'shipper', to: 'sess-a', thread: 'k1', ts: NOW - 30_000,
+      body: 'accepted', meta: { accepted: true, run: 'r1' }, ...over,
+    });
+
+  it("is delivered once a run.started of the party asked lists it in wakes, on that run's lane", () => {
+    const log = [ask(), started({ run: 'r1', lane: 'repo:a/x', wakes: ['k1'] })];
+    expect(stateOf(log)).toMatchObject({ state: 'delivered', since: NOW - 50_000, owes: 'shipper', lane: 'repo:a/x' });
+  });
+
+  it("ignores a wakes list on another party's run, and reads no lane as standing", () => {
+    expect(stateOf([ask(), { ...started({ run: 'r1', wakes: ['k1'] }), from: 'builder' }])?.state).toBe('open');
+    expect(stateOf([ask(), started({ run: 'r1', wakes: ['k1'] })])?.lane).toBe('standing');
+  });
+
+  it('is delivered to a session once the overmind confirms its marker was served', () => {
+    const toSession = ask({ from: OVERMIND, to: 'sess-b' });
+    const served = entry({
+      id: 'v1', kind: 'event', from: OVERMIND, to: 'sess-b', ts: NOW - 40_000,
+      body: 'nudge served (k1)', meta: { served: 'k1' },
+    });
+    expect(stateOf([toSession, served])).toMatchObject({ state: 'delivered', since: NOW - 40_000, lane: undefined });
+    expect(stateOf([toSession, { ...served, from: 'sess-b' }])?.state).toBe('open');
+  });
+
+  it("is accepted, still owed, on the accepting run's lane, until it is answered", () => {
+    const log = [ask(), started({ run: 'r1', lane: 'repo:a/x', wakes: ['k1'] }), accept()];
+    expect(stateOf(log)).toMatchObject({ state: 'accepted', since: NOW - 30_000, owes: 'shipper', lane: 'repo:a/x' });
+    const answered = entry({ id: 'c1', kind: 'answer', from: 'shipper', thread: 'k1', ts: NOW - 5, body: 'PR #1 merged' });
+    expect(stateOf([...log, answered])).toMatchObject({ state: 'answered', since: NOW - 5 });
+  });
+
+  it('ignores an accept from anyone but the party asked', () => {
+    expect(stateOf([ask(), accept({ from: 'builder' })])?.state).toBe('open');
+  });
+
+  it('stops aging once accepted, and expires seven days after the accept', () => {
+    const log = [ask({ ts: 0 }), accept({ ts: 1_000, meta: { accepted: true } })];
+    expect(stateOf(log, 6 * LEDGER_ASK_TTL_MS)).toMatchObject({ state: 'accepted', lane: undefined });
+    expect(stateOf(log, 1_000 + 7 * LEDGER_ASK_TTL_MS)).toMatchObject({
+      state: 'expired',
+      since: 1_000 + 7 * LEDGER_ASK_TTL_MS,
+    });
+  });
+});
+
+describe('the views over askStates (HIVE-410)', () => {
+  const ask = entry({ id: 'k1', kind: 'ask', from: 'sess-a', to: 'shipper', ts: NOW - 60_000, body: 'Ship PR #1' });
+  const accept = entry({ id: 'p1', kind: 'post', from: 'shipper', to: 'sess-a', thread: 'k1', body: 'accepted', meta: { accepted: true } });
+
+  it('openAsks carries the state, and keeps an accepted ask open', () => {
+    expect(openAsks([ask], NOW)).toEqual([{ ...ask, open: true, ageMs: 60_000, state: 'open' }]);
+    expect(openAsks([ask, accept], NOW).map((open) => open.state)).toEqual(['accepted']);
+  });
+
+  it('waitingAsks drops the accepted: its asker is free', () => {
+    const other = entry({ id: 'k2', kind: 'ask', from: 'sess-a', to: 'fixer', body: 'fix it' });
+    expect(waitingAsks(openAsks([ask, accept, other], NOW)).map((open) => open.id)).toEqual(['k2']);
+  });
+
+  it('expiredAsks leaves an accepted ask alone at its ttl, and takes it seven days after the accept', () => {
+    const old = { ...ask, ts: 0 };
+    const taken = { ...accept, ts: 1_000 };
+    expect(expiredAsks([old, taken], 2 * LEDGER_ASK_TTL_MS)).toEqual([]);
+    expect(expiredAsks([old, taken], 1_000 + 7 * LEDGER_ASK_TTL_MS)).toEqual([old]);
+  });
+
+  it('a merge answered with stage closed ends the ship stage and track, by the release before it', () => {
+    const log = [
+      entry({ id: 'c1', from: 'shipper', kind: 'claim', body: 'claimed', meta: { task: 'a/x#1' } }),
+      entry({ id: 'r1', from: 'shipper', kind: 'release', body: 'released', meta: { task: 'a/x#1' } }),
+      { ...ask, meta: { pr: 1, repo: 'a/x' } },
+      entry({ id: 'n1', from: 'shipper', kind: 'answer', thread: 'k1', body: 'PR #1 merged', meta: { pr: 1, repo: 'a/x', stage: 'closed' } }),
+    ];
+    expect(shipStage(log, 'a/x', 1)).toBeNull();
+    expect(shipTrack(log, 'a/x', 1, NOW).held).toBe(false);
   });
 });

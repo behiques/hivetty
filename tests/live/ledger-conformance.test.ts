@@ -164,6 +164,7 @@ describe.skipIf(!RUN)('the hive MCP server, against a real claude', () => {
       'ledger_post',
       'ledger_ask',
       'ledger_answer',
+      'ledger_accept',
       'ledger_claim',
       'ledger_release',
       'ledger_done',

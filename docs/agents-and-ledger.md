@@ -311,14 +311,44 @@ re-enter it and it would feed itself. Receipts and `nudge served` confirmations
 are `event`s, so they never pass it. `failed` and `done` close a thread the
 session asked: a builder run that died, a job reported finished (HIVE-408).
 
-An `answer` whose whole body is `accepted` is not delivered: the shipper's
-intake receipt says nothing the session must act on. It matches the body
-until `ledger_accept` (HIVE-410) gives it a key of its own.
+An accept is not delivered and wakes nobody (HIVE-410): `ledger_accept` writes a
+threaded `post` with `meta.accepted`, which says the ask is in hand and still
+open. `deliver.ts` and `decide` both key on that field, never on the body.
 
 A `post` addressed to a session is delivered like an answer, as a one-way
 notice: the shipper's "PR #N merged" reaches the terminal without opening a
 thread, and its context says nothing is owed back. A broadcast post is not
 delivered.
+
+### Where an ask stands
+
+`askStates(entries, now)` in `electron/shared/ledger-derive.ts` is the one loop
+that decides it (HIVE-410). `openAsks` and `expiredAsks` are views over it, and
+nothing else re-derives an open ask. `closedAskThreads` and `isClosedLane` keep
+their own loop on purpose: they answer "is this thread id closed" without the
+ask entry, which the renderer's 500-entry mirror can lose.
+
+| State | Rule |
+| --- | --- |
+| `held` | carries `meta.after`, and no `closed` entry names its PR yet |
+| `open` | posted, or released from its hold, and nothing below is true |
+| `delivered` | a `run.started` of the party asked lists it in `meta.wakes`, or the overmind's `served` event names it |
+| `accepted` | the party asked wrote a threaded entry with `meta.accepted` (`ledger_accept`) |
+| `answered` | closed by an `answer` or a `done` |
+| `failed` | closed by a `failed` |
+| `expired` | not closed, and past its deadline |
+| `moot` | a permission card the sweep closed with `meta.moot` (HIVE-409) |
+
+The first four are still owed. An accepted ask stops aging, like a held one,
+and expires seven days after the accept. It is open, but its asker is not
+waiting on it: `waitingAsks` leaves it out, which is what a run's outcome, an
+agent's resting status and its row's ask ref read. Only the party asked can
+accept, and `Ledger.append` refuses an accept on a closed or held thread, and
+on a closing kind.
+
+`run.started` carries `meta.wakes`, the ids of the ledger entries the wake was
+for; `meta.extra` says the same for a reader. A repo lane keeps its clock while
+it holds a claim or an accepted ask (`acceptedLanes`).
 
 **A held ask (retro C).** An ask carrying `meta.after: "owner/repo#N"` reaches
 nobody until that PR's shipper `closed` entry lands: that is the post to a
@@ -1178,8 +1208,9 @@ receiver routes are POST**, and the host's `ReceiverClient` (`client.ts`)
 calls them with the same two headers the hook path uses
 (`x-hive-session`, `x-hive-token`) and the same per-launch token.
 
-**The nine ledger tools, one ledger kind each:** `ledger_post` → `post`,
-`ledger_ask` → `ask`, `ledger_answer` → `answer`, `ledger_claim` → `claim`,
+**The ten ledger tools, one ledger kind each:** `ledger_post` → `post`,
+`ledger_ask` → `ask`, `ledger_answer` → `answer`, `ledger_accept` → a threaded
+`post` with `meta.accepted`, `ledger_claim` → `claim`,
 `ledger_release` → `release`, `ledger_done` → `done`, `ledger_failed` →
 `failed`, `ledger_handoff` → `handoff`, and `ledger_read`, which
 takes no kind — it is the one tool that reads rather than appends.
@@ -1320,7 +1351,7 @@ all of it in one tool result.
 
 Proved against a real `claude` binary in `tests/live/ledger-conformance.test.ts`
 (`pnpm test:ledger`): that the binary actually loads the generated config and
-finds the tools named the short way — the nine ledger ones and `agents` — that
+finds the tools named the short way — the ten ledger ones and `agents` — that
 the identity in the environment, not anything the model typed, is what lands in
 a written line's `from`, and that a refusal's reason reaches the model as
 readable text.

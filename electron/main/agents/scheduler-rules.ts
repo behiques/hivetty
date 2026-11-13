@@ -6,7 +6,7 @@ import {
   type AgentStatus,
 } from '@shared/agent-contract';
 import { OVERMIND, type LedgerEntry } from '@shared/ledger-contract';
-import { CLOSING_KINDS, claims, laneOfRun, taskOf } from '@shared/ledger-derive';
+import { CLOSING_KINDS, askStates, claims, laneOfRun, taskOf } from '@shared/ledger-derive';
 
 /**
  * What to do with one entry addressed to one agent (HIVE-120).
@@ -112,6 +112,8 @@ export function decide(
   */
   if (entry.from === entry.to && (options?.sameLane ?? true)) return 'ignore';
   if (!WAKING_KINDS.has(entry.kind)) return 'ignore';
+  // An accept (HIVE-410) is a receipt: the asker is free, and nothing in it is theirs to act on.
+  if (entry.meta?.['accepted'] === true) return 'ignore';
 
   return decideForStatus(status);
 }
@@ -227,6 +229,20 @@ export function laneClaims(agent: string, entries: readonly LedgerEntry[]): Map<
   for (const claim of held.values()) {
     if (claim.from !== agent) continue;
     const lane = laneOfRun(agent, claim.meta?.['run'], entries);
+    lanes.set(lane, (lanes.get(lane) ?? 0) + 1);
+  }
+  return lanes;
+}
+
+/**
+ * Which of an agent's lanes hold an ask it accepted and has not closed
+ * (HIVE-410), and how many. An accepted ask is work the lane owes whether or
+ * not a claim stands beside it, so the lane keeps its clock.
+ */
+export function acceptedLanes(agent: string, entries: readonly LedgerEntry[], now: number): Map<string, number> {
+  const lanes = new Map<string, number>();
+  for (const { ask, state, lane } of askStates(entries, now)) {
+    if (state !== 'accepted' || ask.to !== agent || lane === undefined) continue;
     lanes.set(lane, (lanes.get(lane) ?? 0) + 1);
   }
   return lanes;

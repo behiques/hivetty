@@ -31,12 +31,13 @@ const standing = (name: string): boolean =>
   HIVE_STANDING_GRANTS.some((rule) => matches(rule, name, {}));
 
 describe('ledger-tools', () => {
-  it('ships exactly the nine tools the epic names', () => {
+  it('ships exactly the ten ledger tools', () => {
     expect(LEDGER_TOOL_NAMES).toEqual([
       'ledger_read',
       'ledger_post',
       'ledger_ask',
       'ledger_answer',
+      'ledger_accept',
       'ledger_claim',
       'ledger_release',
       'ledger_done',

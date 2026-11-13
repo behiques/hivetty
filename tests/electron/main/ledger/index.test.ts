@@ -1003,4 +1003,62 @@ describe('createLedger', () => {
 
     expect(ledger.read({}).entries[0]?.body).toBe('just a note');
   });
+
+  describe('an accept (HIVE-410)', () => {
+    const asked = (): string => {
+      const result = ledger.append({ from: 'sess-a', to: 'shipper', kind: 'ask', body: 'Ship PR #1' });
+      if (!result.ok) throw new Error('setup failed');
+      return result.id;
+    };
+    const accept = (from: string, thread?: string) =>
+      ledger.append({
+        from,
+        kind: 'post',
+        body: 'accepted',
+        meta: { accepted: true },
+        ...(thread === undefined ? {} : { thread }),
+      });
+
+    it('is stored addressed to the asker, and leaves the ask open and accepted', () => {
+      const id = asked();
+
+      expect(accept('shipper', id)).toMatchObject({ ok: true });
+      expect(ledger.read({ kind: 'post' }).entries[0]).toMatchObject({ to: 'sess-a', thread: id });
+      expect(ledger.read({}).openAsks.map((ask) => [ask.id, ask.state])).toEqual([[id, 'accepted']]);
+    });
+
+    it('still takes the answer that closes it', () => {
+      const id = asked();
+      accept('shipper', id);
+
+      expect(ledger.append({ from: 'shipper', kind: 'answer', thread: id, body: 'PR #1 merged' })).toMatchObject({ ok: true });
+      expect(ledger.read({}).openAsks).toEqual([]);
+    });
+
+    it('is refused from anyone but the party asked, with no thread, and on a closed thread', () => {
+      const id = asked();
+
+      expect(accept('builder', id)).toMatchObject({ ok: false, status: 403 });
+      expect(accept('shipper')).toMatchObject({ ok: false, status: 400 });
+      ledger.append({ from: 'shipper', kind: 'answer', thread: id, body: 'done' });
+      expect(accept('shipper', id)).toMatchObject({ ok: false, status: 400 });
+      expect(ledger.read({ kind: 'post' }).entries).toEqual([]);
+    });
+
+    it('is refused on a held ask: it is owed to nobody until its PR closes', () => {
+      const held = ledger.append({ from: 'sess-a', to: 'shipper', kind: 'ask', body: 'next', meta: { after: 'a/x#3' } });
+      if (!held.ok) throw new Error('setup failed');
+
+      expect(accept('shipper', held.id)).toMatchObject({ ok: false, status: 400 });
+    });
+
+    it('is refused on a closing kind: an answer cannot also leave the ask open', () => {
+      const id = asked();
+
+      expect(
+        ledger.append({ from: 'shipper', kind: 'answer', thread: id, body: 'done', meta: { accepted: true } }),
+      ).toMatchObject({ ok: false, status: 400 });
+      expect(ledger.read({}).openAsks.map((ask) => ask.id)).toEqual([id]);
+    });
+  });
 });

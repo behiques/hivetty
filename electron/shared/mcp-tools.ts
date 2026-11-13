@@ -20,8 +20,8 @@ import {
 } from './permission-rules';
 
 /**
- * The nine ledger tools, as behaviour (HIVE-112, `ledger_handoff` added by
- * HIVE-122), plus the two served beside them: `agents` (HIVE-127) and
+ * The ten ledger tools, as behaviour (HIVE-112, `ledger_handoff` added by
+ * HIVE-122, `ledger_accept` by HIVE-410), plus the two served beside them: `agents` (HIVE-127) and
  * `approve` (HIVE-119).
  *
  * Every one of them is the same three steps: read the arguments, make one
@@ -712,6 +712,13 @@ export function createToolHandlers(
             return stringArg(args, 'thread') === undefined
               ? failed('ledger_answer needs the thread it answers')
               : await write('answer', args);
+          case 'ledger_accept':
+            return stringArg(args, 'thread') === undefined
+              ? failed('ledger_accept needs the thread it accepts')
+              : await write('post', args, {
+                  body: stringArg(args, 'body') ?? 'accepted',
+                  meta: { accepted: true },
+                });
           case 'ledger_claim':
             return await claim(args);
           case 'ledger_release':

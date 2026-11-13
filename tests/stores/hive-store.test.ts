@@ -5668,12 +5668,13 @@ describe('the ledger slice', () => {
     it('recovers one only the snapshot’s open asks still name', () => {
       useHiveStore
         .getState()
-        .hydrateLedger(posts(3), [], [{ ...entry({ id: 'a0', kind: 'ask', ts: NOW }), kind: 'ask', open: true, ageMs: 5 }]);
+        .hydrateLedger(posts(3), [], [{ ...entry({ id: 'a0', kind: 'ask', ts: NOW }), kind: 'ask', open: true, ageMs: 5, state: 'open' }]);
 
       const kept = useHiveStore.getState().ledger;
       expect(kept.map((found) => found.id)).toEqual(['a0', 'p00000', 'p00001', 'p00002']);
       // The derived fields stay with the snapshot; the mirror holds plain entries.
       expect(kept[0]).not.toHaveProperty('ageMs');
+      expect(kept[0]).not.toHaveProperty('state');
     });
   });
 
@@ -6129,6 +6130,21 @@ describe('the agent view selectors', () => {
 
       expect(result.current?.askRef).toBe('a71');
       expect(result.current?.next).toBe('on answer');
+    });
+
+    it('names no ask once the one it sent was accepted (HIVE-410)', () => {
+      useHiveStore.getState().hydrateAgents([summary('a', { status: 'sleeping' })]);
+      useHiveStore.getState().hydrateLedger([
+        { id: '20260830-140000-0001', ts: Date.now(), from: 'a', to: 'shipper', kind: 'ask', ref: 'a71', body: 'Ship PR #1' },
+        {
+          id: '20260830-140001-0001', ts: Date.now(), from: 'shipper', to: 'a', kind: 'post',
+          thread: '20260830-140000-0001', body: 'accepted', meta: { accepted: true },
+        },
+      ]);
+
+      const { result } = renderHook(() => useAgentFacts('a'));
+
+      expect(result.current?.askRef).toBeUndefined();
     });
 
     it('returns null for a name that is not an agent', () => {

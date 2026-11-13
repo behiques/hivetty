@@ -166,7 +166,7 @@ import type {
   JiraUser,
 } from '@shared/jira-contract';
 import { LEDGER_DIR, OVERMIND } from '@shared/ledger-contract';
-import { closedAskThreads, delegatesOf, leftOpen, openAsksOnLane } from '@shared/ledger-derive';
+import { closedAskThreads, delegatesOf, leftOpen, openAsksOnLane, waitingAsks } from '@shared/ledger-derive';
 import {
   isThisMachineAction,
   type NotificationAction,
@@ -2906,7 +2906,8 @@ export function registerIpcHandlers(
   const openAsksFor = (name: string, run: string): boolean => {
     const { openAsks } = ledger.read({ from: name });
 
-    return openAsks.some((ask) => ask.from === name && ask.meta?.['run'] === run);
+    // An accepted ask is in hand, and its asker is free (HIVE-410).
+    return waitingAsks(openAsks).some((ask) => ask.from === name && ask.meta?.['run'] === run);
   };
 
   /**
@@ -2919,7 +2920,7 @@ export function registerIpcHandlers(
    * find. `agents:resume` recomputes from exactly this, for the same reason.
    */
   const hasOpenAsk = (name: string): boolean =>
-    ledger.read({}).openAsks.some((ask) => ask.from === name);
+    waitingAsks(ledger.read({}).openAsks).some((ask) => ask.from === name);
 
   /** The handoff this run posted, if any — the last one wins (HIVE-122, HIVE-128). */
   const handoffFor = (name: string, run: string): string | undefined => {

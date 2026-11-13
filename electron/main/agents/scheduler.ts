@@ -25,18 +25,21 @@ import {
   mergeTarget,
   openAsks,
   releasesAfter,
+  waitingAsks,
 } from '@shared/ledger-derive';
 import { SLACK_COMMAND_KIND, SLACK_SERVER_KEY, SLACK_TRIGGER } from '@shared/slack-contract';
 
 import { MOOT, isPermissionAsk } from './permissions';
 import type { RunStart } from './runs';
 import {
+  acceptedLanes,
   decide,
   decideForEvent,
   decideForStatus,
   isClosedLane,
   laneClaims,
   laneFor,
+  WAKING_KINDS,
   type WakeDecision,
 } from './scheduler-rules';
 import type { AgentState } from './state';
@@ -128,7 +131,7 @@ interface SchedulerDeps {
     name: string,
     trigger: string,
     extra?: string,
-    options?: { job?: true; lane?: string },
+    options?: { job?: true; lane?: string; wakes?: readonly string[] },
   ) => RunStart;
   state: Pick<AgentState, 'read' | 'patch' | 'all' | 'lane' | 'patchLane' | 'forgetLane'>;
   /** Whether a party id names a registered agent rather than a session. */
@@ -351,6 +354,10 @@ export function mootCards(
 /** `ask a12 from overmind` — how a wake says what it woke for. */
 const describeEntries = (queued: readonly PendingWakeEntry[]): string =>
   queued.map(describeEntry).join(', ');
+
+/** The ledger entries a wake is for (HIVE-410): a manual run, a Slack event and an expiry notice name none. */
+const wakesOf = (items: readonly PendingWakeEntry[]): string[] =>
+  items.filter((item) => WAKING_KINDS.has(item.kind)).map((item) => item.id);
 
 /**
  * Which trigger a flushed queue reports (HIVE-126, HIVE-124).
@@ -583,7 +590,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       A working agent's run close flushes it, and a day spent out waits for
       the reset above, so neither is retried.
     */
-    const asking = new Set(openAsks(entries, now).map((ask) => ask.from));
+    const asking = new Set(waitingAsks(openAsks(entries, now)).map((ask) => ask.from));
 
     for (const [name, agent] of Object.entries(deps.state.all())) {
       if (agent.status === 'paused' || agent.status === 'working') continue;
@@ -896,7 +903,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     /*
       Repo lanes keep their own clock while they hold work (HIVE-186, spec §4).
       The standing lane's loop above is unchanged; a thread lane never ticks.
-      A lane with no open claim has no clock, and a stale one is cleared.
+      A lane with no open claim and no accepted ask has no clock, and a stale one is cleared.
     */
     for (const [name, schedule] of listed) {
       if (deps.laneOf?.(name) !== 'repo' || schedule.wake.everyMs === undefined) continue;
@@ -908,6 +915,10 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       if (schedule.wake.quiet !== undefined && inQuiet(minuteOfDay(now), schedule.wake.quiet)) continue;
 
       const holding = laneClaims(name, entries);
+      // An accepted ask is work too (HIVE-410): the claim comes later in the wake, or never if the run died.
+      const accepted = acceptedLanes(name, entries, now);
+      // shortcut: max() cannot tell a claim and an accepted ask on different PRs apart, so a card on one can silence the other; key both by repo#pr if HIVE-411's watchdog does not cover it.
+      const work = (key: string): number => Math.max(holding.get(key) ?? 0, accepted.get(key) ?? 0);
       const cardOnLane = (agentName: string, key: string): boolean =>
         openAsks(entries, now).some(
           (ask) => isPermissionAsk(ask) && ask.from === agentName && laneOfRun(agentName, ask.meta?.['run'], entries) === key,
@@ -916,7 +927,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       for (const [key, lane] of Object.entries(agent.lanes ?? {})) {
         if (!key.startsWith('repo:')) continue;
 
-        if (!holding.has(key)) {
+        if (work(key) === 0) {
           if (lane.nextRunAt !== undefined) deps.state.patchLane(name, key, { nextRunAt: undefined });
           continue;
         }
@@ -939,8 +950,9 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         /*
           Its one PR waits on the person's card (HIVE-408): the answer wakes the lane, and an interval
           wake would find nothing to do. A lane holding another PR keeps ticking for that one.
+          Kept on purpose for an accepted ask as well (HIVE-410); the watchdog wakes such a lane (HIVE-411).
         */
-        if (holding.get(key) === 1 && cardOnLane(name, key)) continue;
+        if (work(key) === 1 && cardOnLane(name, key)) continue;
         deps.run(name, INTERVAL_TRIGGER, undefined, { lane: key });
       }
     }
@@ -994,18 +1006,21 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     return started;
   };
 
-  /** A standing wake keeps its three-argument shape; another lane names itself. */
+  /** A standing wake for nothing keeps its three-argument shape; a lane or a wake list names itself. */
   const runOnLane = (
     name: string,
     trigger: string,
     extra: string | undefined,
     lane: string,
+    wakes: readonly string[] = [],
   ): RunStart => {
+    const options = {
+      ...(lane === STANDING_LANE ? {} : { lane }),
+      ...(wakes.length === 0 ? {} : { wakes }),
+    };
     const started = noteStart(
       name,
-      lane === STANDING_LANE
-        ? deps.run(name, trigger, extra)
-        : deps.run(name, trigger, extra, { lane }),
+      Object.keys(options).length === 0 ? deps.run(name, trigger, extra) : deps.run(name, trigger, extra, options),
     );
     // A run on the lane ends the refusal it recorded (HIVE-408).
     if (started.started && deps.state.lane(name, lane).refused !== undefined) {
@@ -1099,7 +1114,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     let saturated = false;
 
     if (rest.length > 0) {
-      const started = runOnLane(name, triggerFor(rest), describeEntries(rest), lane);
+      const started = runOnLane(name, triggerFor(rest), describeEntries(rest), lane, wakesOf(rest));
 
       if (!started.started) {
         back.push(...rest);
@@ -1288,7 +1303,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     lane: string = STANDING_LANE,
   ): void => {
     if (decision === 'wake') {
-      const started = runOnLane(name, trigger, describeEntry(item), lane);
+      const started = runOnLane(name, trigger, describeEntry(item), lane, wakesOf([item]));
       if (started.started) return;
       tellRefused(name, lane, [item], started);
     }
