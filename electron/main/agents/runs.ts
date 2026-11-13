@@ -294,7 +294,8 @@ export interface RunTracker {
     name: string,
     trigger: string,
     extra?: string,
-    options?: { job?: true; lane?: string },
+    /** `wakes` names the ledger entries this run was started for (HIVE-410); `extra` says the same for a reader. */
+    options?: { job?: true; lane?: string; wakes?: readonly string[] },
   ): RunStart;
   /** Every run under this name, or only `run` (HIVE-185). */
   kill(name: string, run?: string): boolean;
@@ -1294,6 +1295,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
           kind,
           ...(extra === undefined ? {} : { extra }),
           ...(onLane ? { lane } : {}),
+          ...(options?.wakes === undefined || options.wakes.length === 0 ? {} : { wakes: [...options.wakes] }),
         },
       });
 

@@ -240,6 +240,18 @@ describe('createRunTracker', () => {
     expect(state.read('a').status).toBe('working');
   });
 
+  it('lists the entries a wake is for on run.started (HIVE-410)', () => {
+    tracker.run('a', 'ledger', 'ask a1 from overmind', { wakes: ['k1', 'k2'] });
+
+    expect(ledger[0]).toMatchObject({ body: 'run.started — ledger', meta: { wakes: ['k1', 'k2'] } });
+  });
+
+  it('writes no wakes for a run that was started for no entry (HIVE-410)', () => {
+    tracker.run('a', 'manual', undefined, { wakes: [] });
+
+    expect(ledger[0]?.meta).not.toHaveProperty('wakes');
+  });
+
   it('tells the overmind once when a lane lost its conversation and started fresh (HIVE-404)', () => {
     commandOver = { sessionLost: 'gone-uuid' };
     tracker.run('shipper', 'ledger', undefined, { lane: 'repo:a/x' });
