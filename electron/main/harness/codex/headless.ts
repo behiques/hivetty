@@ -55,7 +55,7 @@ const HIVE_SERVER_ENV = [
   HOOK_ENV_RUN,
   HOOK_ENV_RUN_TOKEN,
   HOOK_ENV_GRANTS,
-  // HIVE-412: the lane cursor; empty on a run with none, so Copilot's `${…}` never reads unset.
+  // HIVE-412: the lane cursor, forwarded by name; empty on a run with none.
   HOOK_ENV_LEDGER_SINCE,
 ];
 
