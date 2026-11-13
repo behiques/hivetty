@@ -226,7 +226,7 @@ import { createScheduler, type Scheduler } from '../agents/scheduler';
 import { laneClaims } from '../agents/scheduler-rules';
 import { sessionMergeConsent } from '../agents/session-merge';
 import { createAgentState, type AgentState } from '../agents/state';
-import { mergeRunState } from '../agents/summary';
+import { mergeRunState, refusalsOf } from '../agents/summary';
 import { createHarnessCheck, createWakeCommand, type WakeCommandDeps } from '../agents/wake-command';
 import { createCloneFlow, type CloneFlow } from '../clone';
 import {
@@ -2948,6 +2948,7 @@ export function registerIpcHandlers(
 
     const last = state.runs[state.runs.length - 1];
     const cost = formatRunCost(last?.costUsd);
+    const refused = refusalsOf(state);
 
     send(CH.agentsStatus, {
       name,
@@ -2976,6 +2977,7 @@ export function registerIpcHandlers(
         ? {}
         : { skipsSinceRun: state.skipsSinceRun }),
       ...(cost === undefined ? {} : { cost }),
+      ...(refused.length === 0 ? {} : { refused }),
     } satisfies AgentStatusPush);
   };
 

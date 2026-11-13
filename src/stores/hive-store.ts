@@ -3907,6 +3907,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           */
           ...(summary.today === undefined ? {} : { today: summary.today }),
           skipsSinceRun: summary.skipsSinceRun ?? 0,
+          refused: summary.refused ?? [],
           rotateAfter: summary.rotateAfter,
           ...(summary.dailyTokens === undefined ? {} : { dailyTokens: summary.dailyTokens }),
           runs: summary.runs,
@@ -3975,6 +3976,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
             */
             ...(push.today === undefined ? {} : { today: push.today }),
             skipsSinceRun: push.skipsSinceRun ?? 0,
+            // Replaced, never merged: main is the only writer (HIVE-411).
+            refused: push.refused ?? [],
           },
         },
       };

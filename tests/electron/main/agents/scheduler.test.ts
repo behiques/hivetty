@@ -815,6 +815,18 @@ describe('createScheduler', () => {
       expect(state.read(AGENT).pendingWake).toEqual([expect.objectContaining({ id: 'a26' })]);
     });
 
+    it('pushes the agent once the refusal is recorded, so the stall panel sees it (HIVE-411)', () => {
+      refuse = 'budget';
+      entries = [asked];
+      scheduler.start();
+      pushed = [];
+      scheduler.onEntry(asked);
+      tick();
+
+      expect(state.read(AGENT).refused).toMatchObject({ reason: 'budget' });
+      expect(pushed).toContain(AGENT);
+    });
+
     it('does not repeat a note the log already holds', () => {
       refuse = 'budget';
       entries = [

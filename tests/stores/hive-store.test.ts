@@ -3209,6 +3209,28 @@ describe('hive-store', () => {
       else would — which is what keeps `next 18:20 · skipped 3` live on an
       agent that is deliberately not running.
     */
+    it('stores refused wakes from a summary and replaces them from a push (HIVE-411)', () => {
+      const r = { lane: 'standing', reason: 'budget', at: 5, queued: 1 };
+      useHiveStore.getState().hydrateAgents([
+        {
+          name: 'slack-watcher',
+          description: 'Watches #incorp-dev.',
+          icon: 'ph-robot',
+          status: 'sleeping',
+          wake: { on: ['ledger'] },
+          mcp: [],
+          tools: [],
+          rotateAfter: 50,
+          runs: [],
+          refused: [r],
+        },
+      ]);
+      expect(useHiveStore.getState().entities['slack-watcher']).toMatchObject({ refused: [r] });
+
+      useHiveStore.getState().setAgentStatus({ name: 'slack-watcher', status: 'sleeping', live: [], runs: [], runsSinceRotate: 0 });
+      expect(useHiveStore.getState().entities['slack-watcher']).toMatchObject({ refused: [] });
+    });
+
     it("takes today's totals and the skip count from a push", () => {
       seedAgent();
       useHiveStore.getState().setAgentStatus({
@@ -5772,6 +5794,7 @@ describe('the ledger slice', () => {
             runsSinceRotate: 0,
             rotateAfter: 50,
             skipsSinceRun: 0,
+            refused: [],
             runs: [],
             live: [],
             lines: [],

@@ -1135,6 +1135,8 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   const tellRefused = (name: string, lane: string, items: readonly PendingWakeEntry[], started: RunStart): void => {
     if (started.started) return;
     deps.state.patchLane(name, lane, { refused: { reason: started.refused, at: deps.now() } });
+    // The stall panel shows the refusal as it lands (HIVE-411).
+    deps.pushStatus(name);
     if (!TOLD.has(started.refused)) return;
 
     const asks = items.filter((item) => item.kind === 'ask' && !told.has(`${item.id} ${started.refused}`));
