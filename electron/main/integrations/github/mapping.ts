@@ -1,7 +1,9 @@
 import {
   GH_MERGED_WINDOW_MS,
+  type GhMergeable,
   type GhPrChecks,
   type GhPrState,
+  type GhReviewDecision,
   type PrCheck,
   type PrCheckStatus,
   type PrComment,
@@ -118,6 +120,13 @@ export function toState(raw: unknown): GhPrState {
   return 'open';
 }
 
+const REVIEW_DECISIONS: readonly GhReviewDecision[] = ['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED'];
+const MERGEABLE_STATES: readonly GhMergeable[] = ['MERGEABLE', 'CONFLICTING', 'UNKNOWN'];
+
+/** `value` when it is one of `allowed`, else `undefined`: GitHub's enums, with no cast. */
+const oneOf = <T extends string>(value: unknown, allowed: readonly T[]): T | undefined =>
+  allowed.find((item) => item === value);
+
 /**
  * The repository a node came from, or `null`.
  *
@@ -179,6 +188,9 @@ export function toPrRecord(raw: unknown, mine = false): PrRecord | null {
     updatedAt,
     mergedAt: text(raw.mergedAt),
     mine,
+    reviewDecision: oneOf(raw.reviewDecision, REVIEW_DECISIONS) ?? null,
+    head: text(raw.headRefOid) ?? '',
+    mergeable: oneOf(raw.mergeable, MERGEABLE_STATES) ?? 'UNKNOWN',
   };
 }
 

@@ -142,6 +142,8 @@ interface GithubDeps {
   run: RunAsync;
   /** Injected so the merged window is testable without touching the clock. */
   now: () => number;
+  /** Called once after each successful sweep, whoever started it (HIVE-412: the PR watch). */
+  onSweep?: (snapshot: PrsSnapshot) => void;
 }
 
 export function createGithub(deps: GithubDeps): Github {
@@ -214,6 +216,7 @@ export function createGithub(deps: GithubDeps): Github {
 
     const value = { prs: result.value, repos: repos.length };
     last = { at, value };
+    deps.onSweep?.(value);
     return { ok: true, value };
   };
 

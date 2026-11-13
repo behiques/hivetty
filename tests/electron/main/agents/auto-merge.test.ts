@@ -243,7 +243,7 @@ describe('autoMergeNotices (retro C)', () => {
       { id: 'other', path: '/repos/other', autoMerge: false },
     ]);
 
-    const posts = autoMergeNotices(before, after, true);
+    const posts = autoMergeNotices(before, after, true, new Map());
 
     expect(posts).toHaveLength(1);
     expect(posts[0]).toMatchObject({
@@ -260,7 +260,7 @@ describe('autoMergeNotices (retro C)', () => {
     const on = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: true }]);
     const off = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: false }]);
 
-    expect(autoMergeNotices(on, off, true)[0]?.meta).toMatchObject({ autoMerge: false });
+    expect(autoMergeNotices(on, off, true, new Map())[0]?.meta).toMatchObject({ autoMerge: false });
   });
 
   it('posts nothing for no change, a change to another field, the first load, or no shipper', () => {
@@ -270,9 +270,36 @@ describe('autoMergeNotices (retro C)', () => {
     ]);
     const flipped = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: true }]);
 
-    expect(autoMergeNotices(before, before, true)).toEqual([]);
-    expect(autoMergeNotices(before, renamed, true)).toEqual([]);
-    expect(autoMergeNotices(null, flipped, true)).toEqual([]);
-    expect(autoMergeNotices(before, flipped, false)).toEqual([]);
+    expect(autoMergeNotices(before, before, true, new Map())).toEqual([]);
+    expect(autoMergeNotices(before, renamed, true, new Map())).toEqual([]);
+    expect(autoMergeNotices(null, flipped, true, new Map())).toEqual([]);
+    expect(autoMergeNotices(before, flipped, false, new Map())).toEqual([]);
+  });
+
+  it('names the repository and the merge tool when the project resolves (HIVE-412)', () => {
+    const repos = new Map([['the-hive', hive]]);
+    const on = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: true }]);
+    const off = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: false }]);
+
+    const [turnedOn] = autoMergeNotices(off, on, true, repos);
+    expect(turnedOn?.meta).toEqual({
+      kind: 'auto-merge', project: 'the-hive', path: '/repos/the-hive', autoMerge: true, repo: 'yunidbauza/the-hive',
+    });
+    expect(turnedOn?.body).toBe(
+      'Auto-merge turned on for the-hive (yunidbauza/the-hive). `mcp__hive__pr_merge` is granted for yunidbauza/the-hive#* without a card.\n' +
+        'Re-run approval for every row in yunidbauza/the-hive in this wake.',
+    );
+
+    const [turnedOff] = autoMergeNotices(on, off, true, repos);
+    expect(turnedOff?.body).toContain('`mcp__hive__pr_merge` is no longer granted for yunidbauza/the-hive#*: merges go back to a card.');
+  });
+
+  it('keeps the notice without a repo when the project cannot be placed, or its slug is unsafe (HIVE-412)', () => {
+    const flipped = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: true }]);
+    for (const repos of [new Map([['other', hive]]), new Map([['the-hive', { owner: 'a b', name: 'x' }]])]) {
+      const [post] = autoMergeNotices(before, flipped, true, repos);
+      expect(post?.meta).not.toHaveProperty('repo');
+      expect(post?.body).toContain('Re-run approval for every row whose path is /repos/the-hive in this wake.');
+    }
   });
 });

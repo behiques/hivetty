@@ -21,6 +21,9 @@ const record = (over: Partial<PrRecord> = {}): PrRecord => ({
   updatedAt: '2026-09-11T10:00:00Z',
   mergedAt: null,
   mine: true,
+  reviewDecision: null,
+  head: '',
+  mergeable: 'UNKNOWN' as const,
   ...over,
 });
 

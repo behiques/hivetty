@@ -9,7 +9,7 @@ codex:
 copilot:
   model: claude-sonnet-5.5
 wake:
-  every: 10m
+  every: 30m
   check: always
   on: [ledger]
 skills: [ship, merge-pr]
@@ -55,7 +55,7 @@ it never takes a PR.
    CI pending, an ask already out and unanswered (`waitingOn` set), or a fix
    in flight (the ship skill's pending-fix check), and the next row starts; or an ask it sends this wake, the merge fence's card
    included, which ends the whole wake (step 3). Moving a row to `approval` and
-   ending the wake there wastes ten minutes: its check is yours to run now.
+   ending the wake there leaves it until the next wake: its check is yours to run now.
    You never sleep in a turn.
 
    **An empty inbox is not an unchanged row.** Every wake, whatever woke you,
@@ -69,8 +69,9 @@ it never takes a PR.
    Your conversation carries earlier wakes, so a post that says "autoMerge is
    false" must cite a `mcp__hive__projects` call made in this same wake.
 3. **A `ledger_ask` ends the wake.** Write `prs.json` before you post one, and
-   accept that the rows after it advance on the next tick. One ask per wake is
-   the throughput, and the ten-minute clock makes it enough.
+   accept that the rows after it advance on the next wake. One ask per wake is
+   the throughput: an answer or a GitHub change wakes you again, and the
+   thirty-minute clock is only the safety net.
 4. **One merge per wake.** `merge-pr` is the heaviest thing you run. After one
    row merges, run its `closed` stage, write `prs.json` and end the wake,
    except while a row sits at `intake`: run that row to its acr ask. The next

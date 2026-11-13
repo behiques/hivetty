@@ -9,11 +9,11 @@ description: >-
 
 # Ship
 
-A state machine the shipper advances one wake at a time; the ledger and a
-ten-minute clock wake it. Nothing sleeps inside a turn except merge-pr's
-bounded `UNKNOWN` re-read. Claim, answer, release, denial and expiry follow
-the run contract. It sequences `pr-review` (`acr`), `review-pr-findings`
-(`fixer`) and `merge-pr`.
+A state machine the shipper advances one wake at a time; the ledger (HiveTTY
+posts when a PR you hold moves on GitHub) and a thirty-minute clock wake it.
+Nothing sleeps inside a turn except merge-pr's bounded `UNKNOWN` re-read.
+Claim, answer, release, denial and expiry follow the run contract. It sequences
+`pr-review` (`acr`), `review-pr-findings` (`fixer`) and `merge-pr`.
 
 ## Intake
 
@@ -61,8 +61,15 @@ Before stage work, except at `merge` and `closed`, read `gh pr view <N> --repo
 <owner>/<repo> --json state`: `MERGED` → `merge`; `CLOSED` → release, remove
 the row, answer its `ask`.
 
-An overmind `meta.kind: auto-merge` post re-runs `approval` for rows on its
-`meta.path`; a row at `merge` without consent goes back to `approval`.
+An overmind `meta.kind: auto-merge` post re-runs `approval` for rows in its
+`meta.repo` (without one, rows on its `meta.path`); a row at `merge` without
+consent goes back to `approval`.
+
+An overmind post with `meta.changed` means a PR you hold moved on GitHub
+(HiveTTY sweeps every minute while you hold one: `owner/repo#N changed: checks
+running → passing`, with `meta.repo`, `meta.pr` and the facets in
+`meta.changed`: `state`, `checks`, `reviewDecision`, `findings`, `head`,
+`mergeable`). Re-run that row's stage check in this wake.
 
 **Pending-fix check**, first at `findings`, `approval` and `merge`:
 `ledger_read { limit: 0 }`; `claims["<owner>/<repo>#<N> findings"]` held by

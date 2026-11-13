@@ -338,6 +338,33 @@ describe('createGithub', () => {
     expect(github.latestPrs(90_000)).toBeNull();
   });
 
+  it('hands each successful sweep to onSweep once, and a failed one to nobody (HIVE-412)', async () => {
+    const onSweep = vi.fn();
+    const github = createGithub({
+      config: () => config([project()]),
+      env: () => ({ PATH: withGh() }),
+      run: runner(),
+      now: () => 0,
+      onSweep,
+    });
+
+    const result = await github.prs();
+
+    expect(onSweep).toHaveBeenCalledTimes(1);
+    expect(onSweep).toHaveBeenCalledWith(result.ok ? result.value : undefined);
+
+    const failing = createGithub({
+      config: () => config([project({ isRepo: false })]),
+      env: () => ({ PATH: withGh() }),
+      run: runner(),
+      now: () => 0,
+      onSweep,
+    });
+    await failing.prs();
+
+    expect(onSweep).toHaveBeenCalledTimes(1);
+  });
+
   it('shares one sweep between callers that arrive while it runs', async () => {
     const run = vi.fn<RunAsync>(runner());
     const github = createGithub({

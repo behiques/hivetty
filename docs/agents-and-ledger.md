@@ -580,7 +580,7 @@ lane of every addressed entry. A broadcast goes to standing. An entry in a
 thread follows the thread's ask: the agent's own ask follows the lane of the
 run that wrote it, and an ask made of the agent follows the lane it opened. A
 new ask opens `thread:<id>` or `repo:<meta.repo>` by the definition's `lane:`.
-Everything else goes to standing. A lane's status is computed, never stored:
+A post with no thread to a `lane: repo` agent that carries an `owner/name` `meta.repo` goes to that repo lane (HIVE-412); a malformed one goes to standing, never refused, since a post asks for nothing. Everything else goes to standing. A lane's status is computed, never stored:
 paused with the agent, working while a conversation run holds it, else
 sleeping. An agent's own entry wakes only a different lane. A repo-laned ask
 without an `owner/name` `meta.repo` is answered at once by the overmind with
@@ -593,6 +593,23 @@ holds an open claim, and has no clock otherwise. Two limits remain. The
 and the standing tick still skips while the agent's rollup is not `sleeping`
 or `failed`. Both err toward a late or an extra standing wake, never a lost
 entry.
+
+**Waking on a GitHub change (HIVE-412).** `createGithub` takes an `onSweep`
+dep, called once after every successful sweep, whoever started it: the PRs
+panel's poll, an `mcp__hive__pr` lookup, or main's own timer.
+`agents/pr-watch.ts` diffs each sweep for the PRs the shipper holds
+(`heldPrs`: its open `owner/repo#N` claims plus its `accepted` asks carrying
+`meta.repo` and a numeric `meta.pr`) over six facets: `state`, `checks`,
+`reviewDecision`, `findings`, `head` and `mergeable`. Each PR that moved gets
+one overmind post to the shipper, `owner/repo#N changed: checks running →
+passing`, with `meta: { repo, pr, changed }`, which the rule above routes to
+that repo lane. A held PR seen for the first time is a baseline, never a
+change, and one missing from a sweep keeps its last facets; a PR that stops
+being held starts from a fresh baseline. A failed write is logged and not
+retried, and the shipper's thirty-minute wake is the safety net. Main sweeps
+every 60 s (`PR_WATCH_MS`) only while the shipper holds a PR, so `gh` never
+runs for nothing, and `prs()` shares an in-flight sweep, so the timer and the
+window never run two. Nothing posts when no agent named `shipper` exists.
 
 **Lane directories, claims and prompts (HIVE-188).** The standing lane runs in
 `~/.hivetty/work/<agent>/`, so files already there stay the standing lane's. Every
@@ -1432,7 +1449,7 @@ a tool rather than by opening `~/.hivetty/config.json`. The projection
 `PrRecord` for one PR, from the same GitHub sweep the PRs panel runs, run
 fresh on each call since main keeps no snapshot of it:
 `state`, `findings` (unresolved review threads), `checks`, `branch`, `url`,
-`updatedAt`. The shipper reads this rather than `gh api` (whose REST or GraphQL
+`updatedAt`, and since HIVE-412 `reviewDecision`, `head` (the head commit's sha) and `mergeable`, GitHub's own enum spellings. The shipper reads this rather than `gh api` (whose REST or GraphQL
 merge the fence holds like `gh pr merge`), so this is how its gate gets a contemporaneous thread count.
 A PR the sweep does not list answers `pr: null` with a reason, which is a real
 answer: the sweep covers PRs the user authored, open or merged in the last day,
@@ -1986,6 +2003,15 @@ what exists and never runs on a denied call. The slug is checked against
 GitHub's own alphabet before it is composed, so nothing the glob reads can
 arrive through a repository name. A project whose repository is not known yet
 grants nothing and schedules a refresh; its merge raises the card, once.
+
+**The consent notice names its repository (retro C, HIVE-412).** When a
+project's `autoMerge` flips, `autoMergeNotices` writes one overmind post to the
+shipper. `ipc/index.ts` first awaits `github.resolveProjects()`, so a project
+it places carries `meta.repo` and reaches that repo lane, with a body naming the
+grant: "`mcp__hive__pr_merge` is granted for owner/name#* without a card", or,
+turned off, "is no longer granted for owner/name#*: merges go back to a card".
+A project it cannot place keeps the path-only notice, which lands on standing.
+Two projects on one repository give two posts on one lane.
 
 **Merging through the tool (HIVE-409).** `mcp__hive__pr_merge { repo, number,
 sha, subject, body }` is the merge `merge-pr` uses. Main runs `gh pr merge
@@ -2641,8 +2667,9 @@ one does. Packaged, the two trees ride `extraResources` beside the tray icon;
 ### The agents the app ships (HIVE-168)
 
 `resources/agents/{builder,shipper,acr,fixer}/AGENT.md`, seeded like the
-skills. The shipper is a patrol: a ten-minute wake with
-`check: always` plus ledger wakes, `prs.json` in its work dir as memory, one
+skills. The shipper is a patrol: a thirty-minute safety-net wake with
+`check: always`, ledger wakes, and a post within a minute of a held PR moving
+on GitHub (HIVE-412), `prs.json` in its work dir as memory, one
 `ledger_ask` per wake because an ask ends the wake. It holds all of Bash but
 never the merge: `isPrMerge` (`permission-rules.ts`) refuses `gh pr merge`, a
 REST merge through `gh api` and the GraphQL merge mutations to every wide rule,

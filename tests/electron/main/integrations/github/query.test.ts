@@ -68,6 +68,8 @@ describe('buildPrQuery', () => {
     expect(query).toContain('reviewDecision');
     expect(query).toContain('isDraft');
     expect(query).toContain('mergedAt');
+    expect(query).toContain('headRefOid');
+    expect(query).toContain('mergeable');
   });
 
   /**

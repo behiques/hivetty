@@ -833,6 +833,9 @@ describe('createToolHandlers — projects and pr (HIVE-173)', () => {
     updatedAt: '2026-09-11T10:00:00Z',
     mergedAt: null,
     mine: true,
+    reviewDecision: null,
+    head: '',
+    mergeable: 'UNKNOWN' as const,
   };
 
   it('lists projects with their path, consent and container mount', async () => {
