@@ -15,6 +15,7 @@ import {
 import type { HarnessId } from '@shared/harness-contract';
 import {
   HOOK_ENV_GRANTS,
+  HOOK_ENV_LEDGER_SINCE,
   HOOK_ENV_RUN,
   HOOK_ENV_RUN_KIND,
   HOOK_ENV_RUN_TOKEN,
@@ -268,9 +269,11 @@ export interface RunTrackerDeps {
    * (HIVE-342). Optional only because a unit spec composes no receiver.
    */
   grants?: {
-    set(run: string, owner: string, grants: readonly string[]): void;
+    set(run: string, owner: string, grants: readonly string[], since?: string): void;
     delete(run: string): void;
   };
+  /** The newest ledger entry's id (HIVE-412): the lane cursor's next value. Optional so a spec that keeps none needs none. */
+  ledgerHead?: () => string | undefined;
   /**
    * The receiver's token for a run (HIVE-184), or null before the receiver
    * exists. Optional so a host-only spec needs none.
@@ -1379,12 +1382,16 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         run's asks and handoff from a concurrent neighbour's.
       */
       const token = deps.runToken?.(run) ?? null;
+      // Where this lane's last run started reading (HIVE-412). A task run is told to leave the inbox alone.
+      const since = kind === 'standing' ? deps.state.lane(name, lane).cursor : undefined;
       const env: Record<string, string> = {
         ...command.env,
         [HOOK_ENV_RUN]: run,
         [HOOK_ENV_RUN_KIND]: kind,
         // HIVE-184: the run id is a claim the receiver checks against this token.
         ...(token === null ? {} : { [HOOK_ENV_RUN_TOKEN]: token }),
+        // Empty rather than absent: Copilot substitutes the name. A container's host is HTTP and reads the registration.
+        ...(command.container === undefined ? { [HOOK_ENV_LEDGER_SINCE]: since ?? '' } : {}),
       };
 
       /*
@@ -1395,7 +1402,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
         a host run registering a list nobody reads costs one map entry that
         `close()` removes.
       */
-      deps.grants?.set(run, name, parseGrants(env[HOOK_ENV_GRANTS]));
+      deps.grants?.set(run, name, parseGrants(env[HOOK_ENV_GRANTS]), since);
 
       /*
         A container run is wrapped here, not in `wakeCommand` (HIVE-137):
@@ -1486,6 +1493,10 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
 
         return { started: false, refused: 'invalid', reason: message };
       }
+
+      // Moved once a child exists (HIVE-412): a refused or thrown start leaves the lane reading from where it was.
+      const next = kind === 'standing' ? deps.ledgerHead?.() : undefined;
+      if (next !== undefined) deps.state.patchLane(name, lane, { cursor: next });
 
       const started: LiveRun = {
         run,
