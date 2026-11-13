@@ -362,7 +362,7 @@ export const PROJECTS_TOOL: McpToolDefinition = {
 export const PR_TOOL: McpToolDefinition = {
   name: 'pr',
   description:
-    'Look up one pull request in HiveTTY\'s own GitHub sweep: its state (open, draft, approved, merged), `findings` (unresolved review threads), checks (passing, running, failing), branch, URL and when it was last updated. The sweep covers PRs you authored, open or merged in the last day, on configured projects only; anything else answers with no record and a reason. Use it for an unresolved-thread count when you hold no `gh api`.',
+    'Look up one pull request in HiveTTY\'s own GitHub sweep: its state (open, draft, approved, merged), `findings` (unresolved review threads), checks (passing, running, failing), branch, URL and when it was last updated. The sweep covers PRs you authored, open or merged in the last day, on configured projects only; anything else answers with no record and a reason. Use it for an unresolved-thread count when you hold no `gh api`. Also answers `ship`: the shipper\'s stage, how long it has been there, the findings rounds, and every ask naming the PR that is still owed, with that party\'s refusal and open cards. Read this before guessing why a PR is slow.',
   inputSchema: {
     type: 'object',
     properties: {

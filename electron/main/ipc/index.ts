@@ -304,6 +304,7 @@ import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
 import { prOpenedEntry } from '../ledger/pr-opened';
 import { createPermissionReminder } from '../ledger/reminders';
+import { shipStatus } from '../ledger/ship-status';
 import { ACCOUNT_CALLS, hostLicence, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
 import { cliEntitled } from '../licence/entitled';
 import { createSuspender, installSuspender, isLapsed, releaseNow, runContainer } from '../licence/suspend';
@@ -3495,7 +3496,11 @@ export function registerIpcHandlers(
     */
     onPrLookup: async (_caller, lookup) => {
       await loginEnvStatus();
-      return answerPrLookup(github, lookup);
+      const reply = await answerPrLookup(github, lookup);
+      // HIVE-411: what it is waiting on, from main's whole log, whether or not the sweep lists the PR.
+      const refusalOf = (agent: string): string | undefined =>
+        agentState === null ? undefined : refusalsOf(agentState.read(agent))[0]?.reason;
+      return { ...reply, ship: shipStatus(ledger.read({}).entries, lookup.repo, lookup.number, Date.now(), refusalOf) };
     },
     /*
       HIVE-409. The fence has already decided: an auto-merge project's rule, or a card's once. This only
