@@ -218,7 +218,7 @@ export function wakePrompt(
 
   /*
     A task run is told what it is before it is told what to do, because the
-    preamble it shares with the standing run says "read your inbox first" —
+    preamble it shares with the standing run tells it to act on the entries its wake delivers —
     and a task run that drains the inbox acts on asks the standing session is
     about to handle. The prompt overrides the preamble on exactly that point.
     It also never asks for a handoff: there is no conversation to hand on.
@@ -252,7 +252,12 @@ export function wakePrompt(
     inbox" and "do the work" read as one instruction with a precondition rather
     than two separate things to do.
   */
-  const normal = `${because}${lanes} Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.`;
+  // A lane's run has the lane's work; "one of the times" is the standing lane's clock (HIVE-412).
+  const onLane = rotation?.lane !== undefined && rotation.lane !== STANDING_LANE;
+  const standing = onLane
+    ? 'the work on this lane is standing work'
+    : 'your instructions are standing work and this wake is one of the times to do them';
+  const normal = `${because}${lanes} Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — ${standing}. End your turn when that work is done, or when you are waiting on an answer.`;
 
   // The handoff comes first: it is the context the rest of the prompt assumes.
   return rotation?.handoff === undefined

@@ -161,4 +161,11 @@ describe('the run contract (HIVE-413)', () => {
   it("allows only merge-pr's bounded re-read as a sleep", () => {
     expect(AGENT_PREAMBLE).toMatch(/Never sleep, except the bounded re-read `merge-pr` names/);
   });
+
+  it('no longer mandates a ledger_read before anything else (HIVE-412)', () => {
+    expect(AGENT_PREAMBLE).not.toContain('Call `ledger_read` first');
+    expect(AGENT_PREAMBLE).toContain('Your wake prompt carries the entries this wake is for.');
+    expect(AGENT_PREAMBLE).toMatch(/a plain\s+`ledger_read` with no filters returns exactly that/);
+    expect(AGENT_PREAMBLE).toMatch(/does not mean this wake has nothing to do/);
+  });
 });
