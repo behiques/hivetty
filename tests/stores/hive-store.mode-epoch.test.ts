@@ -225,7 +225,7 @@ describe('a PR sweep that outlives the mode switch it started under', () => {
 
     expect(noteSessionPr).not.toHaveBeenCalled();
     expect(state().entities['sess-01']).not.toMatchObject({
-      lastPr: { number: 482 },
+      prs: [{ number: 482 }],
     });
   });
 

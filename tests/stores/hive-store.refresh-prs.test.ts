@@ -302,19 +302,21 @@ describe('refreshPrs', () => {
       await useHiveStore.getState().refreshPrs();
 
       expect(useHiveStore.getState().entities[id]).toMatchObject({
-        lastPr: {
+        prs: [{
           number: 482,
           repo: 'nova-web',
           url: 'https://github.com/acme/nova-web/pull/482',
-        },
+        }],
       });
       expect(noteSessionPr).toHaveBeenCalledWith({
         entityId: id,
-        pr: {
-          number: 482,
-          repo: 'nova-web',
-          url: 'https://github.com/acme/nova-web/pull/482',
-        },
+        prs: [
+          {
+            number: 482,
+            repo: 'nova-web',
+            url: 'https://github.com/acme/nova-web/pull/482',
+          },
+        ],
       });
     });
 
@@ -351,7 +353,7 @@ describe('refreshPrs', () => {
       await useHiveStore.getState().refreshPrs();
 
       expect(useHiveStore.getState().entities[id]).toMatchObject({
-        lastPr: { number: 482 },
+        prs: [{ number: 482 }],
       });
     });
 
@@ -370,7 +372,7 @@ describe('refreshPrs', () => {
       await useHiveStore.getState().refreshPrs();
 
       expect(useHiveStore.getState().entities[id]).toMatchObject({
-        lastPr: { number: 482 },
+        prs: [{ number: 482 }],
       });
     });
 
@@ -387,7 +389,7 @@ describe('refreshPrs', () => {
       await useHiveStore.getState().refreshPrs();
 
       expect(useHiveStore.getState().entities[id]).toMatchObject({
-        lastPr: { repo: 'nova-web' },
+        prs: [{ repo: 'nova-web' }],
       });
     });
 
@@ -397,7 +399,7 @@ describe('refreshPrs', () => {
 
       await useHiveStore.getState().refreshPrs();
 
-      expect(useHiveStore.getState().entities[id]).not.toHaveProperty('lastPr');
+      expect(useHiveStore.getState().entities[id]).not.toHaveProperty('prs');
       expect(noteSessionPr).not.toHaveBeenCalled();
     });
   });

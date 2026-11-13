@@ -274,10 +274,12 @@ export interface Session {
    */
   resumedAt?: number;
   /**
-   * The last pull request seen on this session's branch (HIVE-100 follow-up).
+   * The pull requests this session produced, oldest first (HIVE-100 follow-up;
+   * a list since one session can open several, and since a branch is not a
+   * session). `owned` marks the ones it is known to have opened.
    *
-   * A *memory*, not a resolution — `useSessionPr` still prefers the live sweep
-   * and only falls back to this. It exists because the two facts the live match
+   * A *memory*, not a resolution — `useSessionPrs` reads each one's live state
+   * from the sweep when it can see it. It exists because the two facts the live match
    * is built from both decay: the sweep holds open PRs plus 24 hours of merges,
    * and `branch` is wherever the agent is *now*, which is back on the default
    * branch the moment a worktree is torn down. Between them, a session that
@@ -288,7 +290,7 @@ export interface Session {
    * claim about GitHub that nothing keeps current, and the cell renders a
    * remembered PR in neutral rather than in a colour it cannot stand behind.
    */
-  lastPr?: SessionPrRecord;
+  prs?: SessionPrRecord[];
   status: SessionStatus;
   /**
    * How a `done` session came to be done (HIVE-93).

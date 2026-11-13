@@ -277,7 +277,7 @@ describe('SessionTable', () => {
    * A PR the app wrote down, offered when the sweep can no longer see it.
    *
    * The column was empty for anything older than a day, because it resolves
-   * against a list of open PRs plus 24 hours of merges. `Session.lastPr` is the
+   * against a list of open PRs plus 24 hours of merges. `Session.prs` is the
    * memory that fills it — and it must never pass for a live match: no state,
    * so no `prStateText` colour, and "last seen" in both the title and the
    * accessible name.
@@ -289,11 +289,11 @@ describe('SessionTable', () => {
           ...state.entities,
           'lead-form': {
             ...(state.entities['lead-form'] as Session),
-            lastPr: {
+            prs: [{
               number: 118,
               repo: 'nova-web',
               url: 'https://github.com/demo/nova-web/pull/118',
-            },
+            }],
           },
         },
       }));

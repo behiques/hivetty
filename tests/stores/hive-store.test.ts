@@ -5139,25 +5139,15 @@ describe('lifecycle timestamps', () => {
     });
 
     /** The remembered PR rides back with the rest of the record. */
-    it('restores the pull request the record was carrying', () => {
+    it('restores the pull requests the record was carrying', () => {
+      const prs = [
+        { number: 118, repo: 'nova-web', url: 'https://github.com/demo/nova-web/pull/118', owned: true as const },
+      ];
       useHiveStore.getState().hydrateSessions([
-        {
-          id: 'old-04',
-          project: 'nova-web',
-          task: '',
-          status: 'terminated',
-          createdAt: 1,
-          pr: {
-            number: 118,
-            repo: 'nova-web',
-            url: 'https://github.com/demo/nova-web/pull/118',
-          },
-        },
+        { id: 'old-04', project: 'nova-web', task: '', status: 'terminated', createdAt: 1, prs },
       ]);
 
-      expect(sessionAt('old-04')).toMatchObject({
-        lastPr: { number: 118, url: 'https://github.com/demo/nova-web/pull/118' },
-      });
+      expect(sessionAt('old-04')).toMatchObject({ prs });
     });
   });
 });

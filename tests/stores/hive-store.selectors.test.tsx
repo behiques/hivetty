@@ -1834,7 +1834,7 @@ describe('hive-store selectors', () => {
      * The sweep holds open PRs plus 24 hours of merges, so a session that
      * raised and landed one last Tuesday matches nothing — and `—` is
      * indistinguishable from a branch that never had a PR, which is why it
-     * never looked like a bug. `Session.lastPr` is what the app wrote down when
+     * never looked like a bug. `Session.prs` is what the app wrote down when
      * it *could* see the PR.
      */
     describe('the remembered PR', () => {
@@ -1845,11 +1845,11 @@ describe('hive-store selectors', () => {
               ...state.entities,
               [id]: {
                 ...(state.entities[id] as Session),
-                lastPr: {
+                prs: [{
                   number: 118,
                   repo: 'nova-web',
                   url: 'https://github.com/demo/nova-web/pull/118',
-                },
+                }],
               },
             },
           }));
@@ -2954,7 +2954,7 @@ describe('useSessionPrRow (HIVE-209)', () => {
           ...state.entities,
           'hero-refresh': {
             ...state.entities['hero-refresh'],
-            lastPr: { number: 118, url: 'https://github.com/demo/nova-web/pull/118' },
+            prs: [{ number: 118, url: 'https://github.com/demo/nova-web/pull/118' }],
           } as never,
         },
       })),

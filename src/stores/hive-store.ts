@@ -185,6 +185,7 @@ import {
   waitingAsks,
   type Delegate,
   type ShipTrack,
+  wholeNumberOf,
 } from '@shared/ledger-derive';
 import type { SessionMetrics } from '@shared/metrics-contract';
 import { isSessionSummons, laneOf, trimNotifications, waitsOnYou, type AskOpen } from '@shared/notification-lanes';
@@ -194,9 +195,11 @@ import {
   soleTicketKeyIn,
   type SessionNameOrigin,
 } from '@shared/session-contract';
-import type {
-  SessionHistoryEntry,
-  SessionPrRequest,
+import {
+  SESSION_PRS_MAX,
+  type SessionHistoryEntry,
+  type SessionPrRecord,
+  type SessionPrRequest,
 } from '@shared/session-history-contract';
 import { type AgentGroupKey, type TableFilter, useFleetView, useUiStore } from '@stores/ui-store';
 
@@ -4219,11 +4222,11 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
           createdAt: item.createdAt,
           ...(item.endedAt === undefined ? {} : { endedAt: item.endedAt }),
           /*
-            The pull request this session was last seen to own. Written down by
-            a sweep in some previous run — the live list cannot answer for it any
-            more, which is the entire reason it is on the record.
+            The pull requests this session produced. Written down in some
+            previous run — the live list cannot answer for them any more, which
+            is the entire reason they are on the record.
           */
-          ...(item.pr === undefined ? {} : { lastPr: item.pr }),
+          ...(item.prs === undefined ? {} : { prs: item.prs }),
           /*
             Checked against the closed lists rather than trusted (HIVE-87).
             `history.ts` casts these on the way in and says the store validates
@@ -8585,6 +8588,64 @@ function sessionForPr(
   return pool.find((session) => !session.ended)?.id ?? null;
 }
 
+/** One PR, two spellings: GitHub's URL and the one built from a ledger `meta.repo`. */
+const sameUrl = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
+
+/**
+ * `pr` added to a session's list, or `undefined` when the list already says it.
+ *
+ * The one writer for every source (the hook's receipt, an ask to the shipper,
+ * the sweep), so they cannot disagree about a duplicate. A branch guess that
+ * later turns out to be the session's own is upgraded in place, keeping its
+ * position; ownership is never taken back by a guess. The oldest falls off past
+ * {@link SESSION_PRS_MAX}.
+ */
+export function upsertSessionPr(
+  list: readonly SessionPrRecord[] | undefined,
+  pr: SessionPrRecord,
+): SessionPrRecord[] | undefined {
+  const current = list ?? [];
+  const at = current.findIndex((item) => sameUrl(item.url, pr.url));
+  if (at === -1) return [...current, pr].slice(-SESSION_PRS_MAX);
+  if (pr.owned !== true || current[at].owned === true) return undefined;
+  return current.map((item, index) => (index === at ? { ...item, owned: true as const } : item));
+}
+
+/** `owner/name`, nothing else: it becomes a URL path. */
+const REPO_SLUG = /^[\w.-]+\/[\w.-]+$/;
+
+/**
+ * The session a ledger entry says opened a PR, and that PR, or `null`.
+ *
+ * Two entries say it. A session's `ask` to the shipper (every hive flow hands
+ * its PR over that way, with `meta: { pr, repo }`), and the `event` main writes
+ * when a session's hooks show `gh pr create` printing a PR URL. That one counts
+ * only from the overmind: any party can append an `event`, so a session could
+ * otherwise claim another's PR.
+ */
+export function prClaimOf(entry: LedgerEntry): { session: string; pr: SessionPrRecord } | null {
+  const number = wholeNumberOf(entry.meta?.['pr']);
+  const slug = entry.meta?.['repo'];
+  if (number === undefined || number < 1 || typeof slug !== 'string' || !REPO_SLUG.test(slug)) return null;
+  const opened = entry.meta?.['prOpened'];
+  const session =
+    entry.kind === 'ask' && entry.to === 'shipper'
+      ? entry.from
+      : entry.kind === 'event' && entry.from === OVERMIND && typeof opened === 'string'
+        ? opened
+        : null;
+  if (session === null) return null;
+  return {
+    session,
+    pr: {
+      number,
+      repo: slug.slice(slug.indexOf('/') + 1),
+      url: `https://github.com/${slug}/pull/${String(number)}`,
+      owned: true,
+    },
+  };
+}
+
 /**
  * The pull request a session owns, or `null` — {@link sessionForPr} run
  * backwards (HIVE-100).
@@ -8633,7 +8694,7 @@ export function resolveSessionPr(
    * more than a day ago, and has since had its worktree torn down so its branch
    * reads `main` again.
    */
-  remembered?: Session['lastPr'],
+  remembered?: SessionPrRecord,
 ): SessionPr | null {
   const fallback: SessionPr | null =
     remembered === undefined
@@ -8718,9 +8779,6 @@ function learnSessionPrs(
     const live = resolveSessionPr(entity.branch, entity.project, prs);
     if (live === null) continue;
 
-    const known = entity.lastPr;
-    if (known?.number === live.n && known.url === live.url) continue;
-
     /*
       **GitHub's repository name, not the project id**, which is what
       `SessionPrRecord.repo` says it holds. The two are allowed to differ —
@@ -8738,10 +8796,10 @@ function learnSessionPrs(
     const record = prs.find((pr) => pr.number === live.n && pr.url === live.url);
     if (record === undefined) continue;
 
-    learned.push({
-      entityId: id,
-      pr: { number: live.n, repo: record.repo, url: live.url },
-    });
+    const next = upsertSessionPr(entity.prs, { number: live.n, repo: record.repo, url: live.url });
+    if (next === undefined) continue;
+
+    learned.push({ entityId: id, prs: next });
   }
 
   return learned;
@@ -8765,7 +8823,7 @@ function rememberSessionPrs(
   for (const note of learned) {
     const entity = next[note.entityId];
     if (!entity || !isSession(entity)) continue;
-    next[note.entityId] = { ...entity, lastPr: note.pr };
+    next[note.entityId] = { ...entity, prs: note.prs };
   }
   return next;
 }
@@ -9492,7 +9550,7 @@ export const useSessionPr = (id: string): SessionPr | null => {
     written once per session by the sweep that first resolves a PR for it, and
     then never again unless the answer genuinely changes.
   */
-  const remembered = session?.lastPr;
+  const remembered = session?.prs?.at(-1);
 
   return useMemo(
     () => resolveSessionPr(branch, project, prs, remembered),

@@ -103,11 +103,13 @@ describe('session history', () => {
   describe('noteSessionPr', () => {
     const request = {
       entityId: 'sess-01',
-      pr: {
-        number: 118,
-        repo: 'nova-web',
-        url: 'https://github.com/demo/nova-web/pull/118',
-      },
+      prs: [
+        {
+          number: 118,
+          repo: 'nova-web',
+          url: 'https://github.com/demo/nova-web/pull/118',
+        },
+      ],
     };
 
     it('hands the resolved pull request to main', () => {

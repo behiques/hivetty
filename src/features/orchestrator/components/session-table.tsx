@@ -899,7 +899,7 @@ function SessionTableRow({
               'underline underline-offset-2',
               /*
                 Neutral for a **remembered** PR — one the current sweep cannot
-                see, offered from `Session.lastPr`. Every colour in `prStateText`
+                see, offered from `Session.prs`. Every colour in `prStateText`
                 asserts something current about GitHub (green is "alive and not
                 yet landed"), and a number the app wrote down days ago has no
                 standing to assert any of them. `text-subtle` is the same
