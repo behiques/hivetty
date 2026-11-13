@@ -33,8 +33,7 @@ ledger_ask
 ```
 
 An intake without the `closes-ticket` line reads `yes`. A write to `reply-to`
-refused `unknown party` goes to the ask's `from`, which becomes `replyTo`. A
-second ship ask with the same `key` returns the first; that PR is in hand.
+refused `unknown party` goes to the ask's `from`, which becomes `replyTo`.
 
 Intake order: `ledger_claim <owner>/<repo>#<N>`, then `ledger_accept <ask id>`,
 then write the row, before any other row's work:
@@ -59,14 +58,15 @@ The standing lane never advances a row: it hands a PR to its repo lane with a
 self-addressed `ledger_ask to: shipper` carrying `meta.repo`, no `key`.
 
 Every `gh` command carries `--repo <owner>/<repo>`, every `git` command `-C
-<path>`. Re-read the head SHA in the call that uses it.
+<path>`.
 
 ## Stages
 
 On a stage change: write `prs.json`, one `ledger_post` with `meta: { pr,
 repo, stage }`, and fall through in the same wake. A row stops only where it waits: CI pending, or `waitingOn` naming
 `acr`, `fixer` or `reply-to`. A row that stops this wake gets one `ledger_post`
-naming the stage and what it waits on. Write `prs.json` whenever a field
+naming the stage and what it waits on. The write that records an answer
+clears `waitingOn`. Write `prs.json` whenever a field
 changes, and before any `ledger_ask`, which ends the wake. One merge per wake
 does not end the wake while a row sits at `intake`: run that row to its acr
 ask.
@@ -76,7 +76,7 @@ Before stage work, except at `merge` and `closed`, read `gh pr view <N> --repo
 the row, answer its `ask`.
 
 An overmind `meta.kind: auto-merge` post re-runs `approval` for rows on its
-`meta.path`.
+`meta.path`; a row at `merge` without consent goes back to `approval`.
 
 **Pending-fix check**, first at `findings`, `approval` and `merge`:
 `ledger_read { limit: 0 }`; `claims["<owner>/<repo>#<N> findings"]` held by
@@ -137,6 +137,7 @@ names. `blocked`, or any other shape → a stuck row.
    - (c) `REVIEW_REQUIRED`, `CHANGES_REQUESTED`, or a requested review: once,
      `waitingOn: "reply-to"`, ask "PR #N waits on a review", options `[merge
      now, wait for review, hand back]`, no `merge now` when the decision blocks.
+     `wait for review` → stay, no further asks.
 
 Jira Done is merge-pr's, only when `keyConfirmed` and `closesTicket`;
 `closes-ticket: no` stops at In Review.
