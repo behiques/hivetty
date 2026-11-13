@@ -1198,6 +1198,15 @@ describe('askStates (HIVE-410)', () => {
     entry({ id: 'k1', kind: 'ask', from: 'sess-a', to: 'shipper', ts: NOW - 60_000, body: 'Ship PR #1', ...over });
   const stateOf = (log: LedgerEntry[], now = NOW) => askStates(log, now).find((s) => s.ask.id === 'k1');
 
+  it('keeps when an ask was accepted, through to its answer (HIVE-411)', () => {
+    const a: LedgerEntry = { id: '20261113-100000-0001', ts: 100, from: 'sess-a', to: 'builder', kind: 'ask', ref: 'a1', body: 'build' };
+    const accept: LedgerEntry = { id: '20261113-100001-0001', ts: 160, from: 'builder', to: 'sess-a', kind: 'post', thread: a.id, body: 'on it', meta: { accepted: true } };
+    const answer: LedgerEntry = { id: '20261113-100002-0001', ts: 900, from: 'builder', to: 'sess-a', kind: 'answer', thread: a.id, body: 'done' };
+    expect(askStates([a, accept], 200)[0]).toMatchObject({ state: 'accepted', since: 160, acceptedAt: 160 });
+    expect(askStates([a, accept, answer], 1000)[0]).toMatchObject({ state: 'answered', since: 900, acceptedAt: 160 });
+    expect(askStates([a], 200)[0]?.acceptedAt).toBeUndefined();
+  });
+
   it('is open from its post, owed by the party asked', () => {
     expect(stateOf([ask()])).toEqual({ ask: ask(), state: 'open', since: NOW - 60_000, owes: 'shipper', lane: undefined });
   });

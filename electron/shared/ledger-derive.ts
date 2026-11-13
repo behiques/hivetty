@@ -892,6 +892,8 @@ export interface AskState {
   owes: string | undefined;
   /** The recipient agent's lane that holds it, read from the log. A session has none. */
   lane: string | undefined;
+  /** When the party asked accepted it (HIVE-411): time to accept is `acceptedAt − ask.ts`. */
+  acceptedAt?: number;
 }
 
 /**
@@ -963,8 +965,8 @@ export function askStates(entries: readonly LedgerEntry[], now: number): AskStat
 
   for (const ask of entries) {
     if (ask.kind !== 'ask') continue;
-    const terminal = (state: AskStateName, since: number): void => {
-      out.push({ ask, state, since, owes: undefined, lane: undefined });
+    const terminal = (state: AskStateName, since: number, acceptedAt?: number): void => {
+      out.push({ ask, state, since, owes: undefined, lane: undefined, ...(acceptedAt === undefined ? {} : { acceptedAt }) });
     };
 
     const closed = closing.get(ask.id);
@@ -972,7 +974,9 @@ export function askStates(entries: readonly LedgerEntry[], now: number): AskStat
       // A card the sweep closed as moot (HIVE-409) is over, but nobody answered it.
       const moot =
         closed.kind === 'answer' && closed.from === OVERMIND && typeof closed.meta?.['moot'] === 'string';
-      terminal(moot ? 'moot' : closed.kind === 'failed' ? 'failed' : 'answered', closed.ts);
+      // A closed ask is not held: an accept by the party asked counts (HIVE-411).
+      const accepted = accepts.get(ask.id)?.find((entry) => entry.from === ask.to);
+      terminal(moot ? 'moot' : closed.kind === 'failed' ? 'failed' : 'answered', closed.ts, accepted?.ts);
       continue;
     }
 
@@ -1000,7 +1004,14 @@ export function askStates(entries: readonly LedgerEntry[], now: number): AskStat
     if (accept !== undefined) {
       const run = accept.meta?.['run'];
       const own = typeof run === 'string' ? begun.get(`${accept.from} ${run}`) : undefined;
-      out.push({ ask, state: 'accepted', since: accept.ts, owes: ask.to, lane: laneOfStarted(own) ?? laneOfStarted(wake) });
+      out.push({
+        ask,
+        state: 'accepted',
+        since: accept.ts,
+        owes: ask.to,
+        lane: laneOfStarted(own) ?? laneOfStarted(wake),
+        acceptedAt: accept.ts,
+      });
       continue;
     }
 
