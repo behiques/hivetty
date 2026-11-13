@@ -22,7 +22,7 @@ exports[`launchCopilotHeadless > spells a first wake 1`] = `
   "--deny-tool",
   "shell(rm:*)",
   "--additional-mcp-config",
-  "{"mcpServers":{"hive":{"type":"local","command":"/Apps/HiveTTY","args":["/u/mcp-host.js"],"env":{"ELECTRON_RUN_AS_NODE":"1","HIVE_RECEIVER_URL":"\${HIVE_RECEIVER_URL}","HIVE_SESSION_ID":"\${HIVE_SESSION_ID}","HIVE_HOOK_TOKEN":"\${HIVE_HOOK_TOKEN}","HIVE_RUN_ID":"\${HIVE_RUN_ID}","HIVE_RUN_TOKEN":"\${HIVE_RUN_TOKEN}","HIVE_GRANTS":"\${HIVE_GRANTS}"},"tools":["*"]}}}",
+  "{"mcpServers":{"hive":{"type":"local","command":"/Apps/HiveTTY","args":["/u/mcp-host.js"],"env":{"ELECTRON_RUN_AS_NODE":"1","HIVE_RECEIVER_URL":"\${HIVE_RECEIVER_URL}","HIVE_SESSION_ID":"\${HIVE_SESSION_ID}","HIVE_HOOK_TOKEN":"\${HIVE_HOOK_TOKEN}","HIVE_RUN_ID":"\${HIVE_RUN_ID}","HIVE_RUN_TOKEN":"\${HIVE_RUN_TOKEN}","HIVE_GRANTS":"\${HIVE_GRANTS}","HIVE_LEDGER_SINCE":"\${HIVE_LEDGER_SINCE}"},"tools":["*"]}}}",
   "--secret-env-vars",
   "COPILOT_GITHUB_TOKEN",
   "--usage-output-file",

@@ -32,6 +32,10 @@ const spec = (over: Partial<HeadlessSpec> = {}): HeadlessSpec => ({
 const U = '11111111-2222-4333-8444-555555555551';
 
 describe('launchCopilotHeadless', () => {
+  it('forwards the lane cursor to the hive server by name (HIVE-412)', () => {
+    expect(launchCopilotHeadless(spec()).args.join(' ')).toContain('"HIVE_LEDGER_SINCE":');
+  });
+
   it('spells a first wake', () => {
     expect(
       launchCopilotHeadless(spec({ model: 'claude-sonnet-5.5', effort: 'high', deny: ['shell(rm:*)'] }))
