@@ -73,6 +73,21 @@ describe('shipped agents', () => {
     expect(allows('git -C /w branch --show-current')).toBe(true);
   });
 
+  it('wakes the shipper every thirty minutes, a safety net under its GitHub and ledger wakes (HIVE-412)', () => {
+    const source = readFileSync(join(resources, 'agents', 'shipper', 'AGENT.md'), 'utf8');
+    const result = parseAgent(source, {
+      folder: 'shipper',
+      skillNames: shippedSkills,
+      hiveSkillNames: shippedSkills,
+      integrations: ['slack'],
+    });
+    if (!('def' in result)) throw new Error('shipper does not parse');
+
+    expect(result.def.wake.everyMs).toBe(30 * 60_000);
+    expect(source).not.toMatch(/ten.minute|ten minutes/);
+    expect(readFileSync(join(resources, 'skills', 'ship', 'SKILL.md'), 'utf8')).not.toMatch(/ten.minute|ten minutes/);
+  });
+
   it('never lets the shipper push to the default branch unasked, and still to a PR branch (HIVE-395)', () => {
     const source = readFileSync(join(resources, 'agents', 'shipper', 'AGENT.md'), 'utf8');
     const result = parseAgent(source, {

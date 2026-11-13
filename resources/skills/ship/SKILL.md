@@ -11,8 +11,9 @@ description: >-
 
 The old `ship` was one long session tail that slept twenty minutes at a time.
 This one is a **state machine the shipper agent advances on every wake**. The
-waits between stages are the agent asleep; the wake-ups are the ledger and a
-ten-minute clock. Nothing here sleeps inside a turn.
+waits between stages are the agent asleep; the wake-ups are the ledger
+(HiveTTY posts when a PR you hold moves on GitHub) and a thirty-minute clock.
+Nothing here sleeps inside a turn.
 
 The mechanics live elsewhere and are not repeated: findings triage in
 `review-pr-findings` (run by `fixer`), the whole-branch review in `pr-review`
@@ -86,7 +87,7 @@ one checkout from colliding.
   only ever holds this repository's PRs. "One ask per wake" is per lane.
 - **The standing lane never takes a PR, syncs, merges or advances a row.** It
   wakes for what reaches no repo lane: the overmind's question about a PR the
-  app could not match to a claim, and your ten-minute clock. For the first,
+  app could not match to a claim, and your thirty-minute clock. For the first,
   answer with the open claims (`ledger_read`, `claims`) and ask which
   repository, or, when the ask names one, hand it over with a self-addressed
   `ledger_ask to: shipper` carrying `meta.repo` and the original words and no `key`, and
@@ -133,13 +134,21 @@ further work for that row.
 **A `ledger_ask` ends the wake.** That is the tool's contract, not a choice
 here. So a row whose stage posts an ask is the last row this wake touches;
 write `prs.json` before the ask, and the rows after it advance on the next
-tick, ten minutes on. One ask per wake is the throughput, and it is enough.
+wake: its answer, a GitHub change or the thirty-minute clock. One ask per wake is the throughput, and it is enough.
 
 **A post from the overmind with `meta.kind: auto-merge` means a project's
 consent changed.** The app writes one whenever a project's `autoMerge` flips,
 through Settings or a hand edit and reload. Re-run `approval` in this wake for
-every row whose `path` is that post's `meta.path`. With `autoMerge: false`, a
+every row in that post's `meta.repo` (without one, every row whose `path` is its
+`meta.path`). With `autoMerge: false`, a
 row about to merge no longer has consent: it goes back to `approval` and waits.
+
+**A post from the overmind with `meta.changed` means a PR you hold moved on
+GitHub.** HiveTTY sweeps every minute while you hold a PR and writes one post
+per move, `owner/repo#N changed: checks running → passing`, with `meta.repo`,
+`meta.pr` and the facets in `meta.changed` (`state`, `checks`,
+`reviewDecision`, `findings`, `head`, `mergeable`). Re-run that row's stage
+check in this wake.
 
 **The pending-fix check: nothing merges while a fix is in flight.** At
 `findings`, `approval` and `merge`, before anything else, `ledger_read
