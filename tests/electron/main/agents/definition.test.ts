@@ -968,3 +968,38 @@ describe('codex: and copilot: blocks (HIVE-396)', () => {
     }
   });
 });
+
+describe('asks_from (HIVE-412)', () => {
+  const QUIET = `---
+name: quiet-one
+description: Does nothing on a schedule.
+icon: Ghost
+---
+Wait to be asked.
+`;
+  const alone = { folder: 'quiet-one', skillNames: [], hiveSkillNames: [] };
+  const withAsks = (value: string) => QUIET.replace('icon: Ghost', `icon: Ghost\nasks_from: ${value}`);
+
+  it('reads party ids and sess-*', () => {
+    expect(definition(withAsks('[sess-*, builder]'), alone).asksFrom).toEqual(['sess-*', 'builder']);
+  });
+
+  it('is absent when the file names none, which is any party', () => {
+    expect(definition(QUIET, alone).asksFrom).toBeUndefined();
+  });
+
+  it('keeps an empty list, which admits only the overmind and the agent itself', () => {
+    expect(definition(withAsks('[]'), alone).asksFrom).toEqual([]);
+  });
+
+  it('accepts a name no agent has yet, since peers come and go', () => {
+    expect(definition(withAsks('[some-future-peer]'), alone).asksFrom).toEqual(['some-future-peer']);
+  });
+
+  it('refuses a wildcard other than sess-*, which could never match', () => {
+    expect(problems(withAsks('[builder*, sess-*]'), alone)).toContainEqual({
+      field: 'asks_from',
+      reason: 'builder* is not a party: name an agent, overmind, or sess-* for any terminal session.',
+    });
+  });
+});

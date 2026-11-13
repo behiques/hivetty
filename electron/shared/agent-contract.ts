@@ -317,6 +317,11 @@ export interface AgentDefinition {
   mcp: string[];
   tools: string[];
   autonomy: Autonomy;
+  /**
+   * Who may open work with this agent (HIVE-412): party ids, and {@link ASKS_FROM_SESSIONS} for any
+   * terminal session. The overmind and the agent itself always may. Absent: any party.
+   */
+  asksFrom?: string[];
   /** How the agent's work divides into conversations (HIVE-184). Absent is one lane. */
   lane?: AgentLane;
   /**
@@ -650,6 +655,9 @@ export interface FieldSpec {
  * Every legal key. A line whose key is not here is a problem naming it — which
  * is why rejecting unknown keys needs no second key-set to maintain.
  */
+/** The one wildcard `asks_from:` takes (HIVE-412): any terminal session. */
+export const ASKS_FROM_SESSIONS = 'sess-*';
+
 export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'name', kind: 'text', required: true },
   { path: 'description', kind: 'text', required: true },
@@ -667,6 +675,8 @@ export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'tools', kind: 'list', required: false },
   // HIVE-409. Rules a permission card granted; written by `permissions.ts` only, never shipped, never seeded.
   { path: 'grants', kind: 'list', required: false },
+  // HIVE-412. Who may open work with this agent; absent is anyone.
+  { path: 'asks_from', kind: 'list', required: false },
   { path: 'harness', kind: 'list', required: false },
   { path: 'fallback', kind: 'enum', required: false, values: AGENT_FALLBACKS },
   // HIVE-396. Codex's list is the account's, so its model is a shape the parser checks, not an enum.
