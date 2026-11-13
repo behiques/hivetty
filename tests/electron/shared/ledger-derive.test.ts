@@ -1228,4 +1228,52 @@ describe('askStates (HIVE-410)', () => {
     expect(stateOf([held, closed], 3 * LEDGER_ASK_TTL_MS + 1)).toMatchObject({ state: 'open', since: 3 * LEDGER_ASK_TTL_MS, owes: 'shipper' });
     expect(stateOf([held], 7 * LEDGER_ASK_TTL_MS)?.state).toBe('expired');
   });
+
+  const started = (meta: Record<string, unknown>, ts = NOW - 50_000): LedgerEntry =>
+    entry({ id: `s-${String(meta['run'])}`, kind: 'event', from: 'shipper', ts, body: 'run.started — ledger', meta });
+  const accept = (over: Partial<LedgerEntry> = {}): LedgerEntry =>
+    entry({
+      id: 'p1', kind: 'post', from: 'shipper', to: 'sess-a', thread: 'k1', ts: NOW - 30_000,
+      body: 'accepted', meta: { accepted: true, run: 'r1' }, ...over,
+    });
+
+  it("is delivered once a run.started of the party asked lists it in wakes, on that run's lane", () => {
+    const log = [ask(), started({ run: 'r1', lane: 'repo:a/x', wakes: ['k1'] })];
+    expect(stateOf(log)).toMatchObject({ state: 'delivered', since: NOW - 50_000, owes: 'shipper', lane: 'repo:a/x' });
+  });
+
+  it("ignores a wakes list on another party's run, and reads no lane as standing", () => {
+    expect(stateOf([ask(), { ...started({ run: 'r1', wakes: ['k1'] }), from: 'builder' }])?.state).toBe('open');
+    expect(stateOf([ask(), started({ run: 'r1', wakes: ['k1'] })])?.lane).toBe('standing');
+  });
+
+  it('is delivered to a session once the overmind confirms its marker was served', () => {
+    const toSession = ask({ from: OVERMIND, to: 'sess-b' });
+    const served = entry({
+      id: 'v1', kind: 'event', from: OVERMIND, to: 'sess-b', ts: NOW - 40_000,
+      body: 'nudge served (k1)', meta: { served: 'k1' },
+    });
+    expect(stateOf([toSession, served])).toMatchObject({ state: 'delivered', since: NOW - 40_000, lane: undefined });
+    expect(stateOf([toSession, { ...served, from: 'sess-b' }])?.state).toBe('open');
+  });
+
+  it("is accepted, still owed, on the accepting run's lane, until it is answered", () => {
+    const log = [ask(), started({ run: 'r1', lane: 'repo:a/x', wakes: ['k1'] }), accept()];
+    expect(stateOf(log)).toMatchObject({ state: 'accepted', since: NOW - 30_000, owes: 'shipper', lane: 'repo:a/x' });
+    const answered = entry({ id: 'c1', kind: 'answer', from: 'shipper', thread: 'k1', ts: NOW - 5, body: 'PR #1 merged' });
+    expect(stateOf([...log, answered])).toMatchObject({ state: 'answered', since: NOW - 5 });
+  });
+
+  it('ignores an accept from anyone but the party asked', () => {
+    expect(stateOf([ask(), accept({ from: 'builder' })])?.state).toBe('open');
+  });
+
+  it('stops aging once accepted, and expires seven days after the accept', () => {
+    const log = [ask({ ts: 0 }), accept({ ts: 1_000, meta: { accepted: true } })];
+    expect(stateOf(log, 6 * LEDGER_ASK_TTL_MS)).toMatchObject({ state: 'accepted', lane: undefined });
+    expect(stateOf(log, 1_000 + 7 * LEDGER_ASK_TTL_MS)).toMatchObject({
+      state: 'expired',
+      since: 1_000 + 7 * LEDGER_ASK_TTL_MS,
+    });
+  });
 });

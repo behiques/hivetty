@@ -963,6 +963,15 @@ function deadlineOf(
 export function askStates(entries: readonly LedgerEntry[], now: number): AskState[] {
   const closing = new Map<string, LedgerEntry>();
   const expiry = new Map<string, number>();
+  const accepts = new Map<string, LedgerEntry[]>(); // thread → entries carrying `meta.accepted`
+  const served = new Map<string, LedgerEntry[]>(); // entry id → the overmind's `served` confirmations
+  const woke = new Map<string, LedgerEntry[]>(); // entry id → each `run.started` that lists it
+  const begun = new Map<string, LedgerEntry>(); // `<agent> <run>` → that run's `run.started`
+  const push = (map: Map<string, LedgerEntry[]>, key: string, entry: LedgerEntry): void => {
+    const list = map.get(key);
+    if (list === undefined) map.set(key, [entry]);
+    else list.push(entry);
+  };
 
   for (const entry of entries) {
     if (entry.thread !== undefined && CLOSING_KINDS.has(entry.kind) && !closing.has(entry.thread)) {
@@ -973,10 +982,27 @@ export function askStates(entries: readonly LedgerEntry[], now: number): AskStat
     if (typeof expired === 'string' && entry.from === OVERMIND && !expiry.has(expired)) {
       expiry.set(expired, entry.ts);
     }
+    if (entry.thread !== undefined && entry.meta?.['accepted'] === true) push(accepts, entry.thread, entry);
+    const servedId = entry.meta?.['served'];
+    if (typeof servedId === 'string' && entry.from === OVERMIND) push(served, servedId, entry);
+    if (entry.kind === 'event' && entry.body.startsWith('run.started')) {
+      const run = entry.meta?.['run'];
+      const key = `${entry.from} ${String(run)}`;
+      if (typeof run === 'string' && !begun.has(key)) begun.set(key, entry);
+      const wakes = entry.meta?.['wakes'];
+      if (Array.isArray(wakes)) {
+        for (const id of wakes as readonly unknown[]) if (typeof id === 'string') push(woke, id, entry);
+      }
+    }
   }
 
   const releases = releaseTimes(entries);
   const out: AskState[] = [];
+  const laneOfStarted = (started: LedgerEntry | undefined): string | undefined => {
+    if (started === undefined) return undefined;
+    const lane = started.meta?.['lane'];
+    return typeof lane === 'string' && lane !== '' ? lane : STANDING_LANE;
+  };
 
   for (const ask of entries) {
     if (ask.kind !== 'ask') continue;
@@ -997,7 +1023,10 @@ export function askStates(entries: readonly LedgerEntry[], now: number): AskStat
     const released = target === undefined ? undefined : releases.get(targetKey(target.repo, target.pr));
     const held = target !== undefined && released === undefined;
 
-    const deadline = deadlineOf(ask, releases, undefined);
+    // Only the party asked can accept: `meta` is a rider anyone can write.
+    const accept = held ? undefined : accepts.get(ask.id)?.find((entry) => entry.from === ask.to);
+
+    const deadline = deadlineOf(ask, releases, accept?.ts);
     if (now >= deadline) {
       terminal('expired', expiry.get(ask.id) ?? deadline);
       continue;
@@ -1005,6 +1034,23 @@ export function askStates(entries: readonly LedgerEntry[], now: number): AskStat
 
     if (held) {
       terminal('held', ask.ts);
+      continue;
+    }
+
+    // A run of the party asked that was started for this ask.
+    const wake = woke.get(ask.id)?.find((entry) => entry.from === ask.to);
+
+    if (accept !== undefined) {
+      const run = accept.meta?.['run'];
+      const own = typeof run === 'string' ? begun.get(`${accept.from} ${run}`) : undefined;
+      out.push({ ask, state: 'accepted', since: accept.ts, owes: ask.to, lane: laneOfStarted(own) ?? laneOfStarted(wake) });
+      continue;
+    }
+
+    const confirmed = served.get(ask.id)?.find((entry) => entry.to === ask.to);
+    const first = wake !== undefined && (confirmed === undefined || wake.ts <= confirmed.ts) ? wake : confirmed;
+    if (first !== undefined) {
+      out.push({ ask, state: 'delivered', since: first.ts, owes: ask.to, lane: laneOfStarted(wake) });
       continue;
     }
 
