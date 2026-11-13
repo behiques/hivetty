@@ -15,6 +15,7 @@ import {
   asInbound,
   askStates,
   buildProgressFor,
+  carriedOver,
   claims,
   closedAskThreads,
   delegatesOf,
@@ -1358,5 +1359,52 @@ describe('owedBy and unfinishedRuns (HIVE-410)', () => {
       { agent: 'shipper', run: 'r2', lane: 'repo:a/x' },
       { agent: 'builder', run: 'r3', lane: 'standing' },
     ]);
+  });
+});
+
+describe('carriedOver (HIVE-410)', () => {
+  const old = (over: Partial<LedgerEntry> & Pick<LedgerEntry, 'id'>): LedgerEntry =>
+    entry({ ts: NOW - 3 * LEDGER_ASK_TTL_MS, ...over });
+
+  it('keeps a held ask, an accepted ask with its thread and run marks, and an unreleased claim', () => {
+    const older = [
+      old({ id: 'h1', kind: 'ask', to: 'builder', body: 'Build B', meta: { after: 'a/x#3' } }),
+      old({ id: 'k1', kind: 'ask', to: 'shipper', body: 'Ship PR #1' }),
+      old({ id: 's1', kind: 'event', from: 'shipper', body: 'run.started — ledger', meta: { run: 'r1', lane: 'repo:a/x', wakes: ['k1'] } }),
+      old({ id: 'p1', from: 'shipper', to: 'sess-a', thread: 'k1', body: 'accepted', meta: { accepted: true, run: 'r1' } }),
+      old({ id: 'c1', from: 'shipper', kind: 'claim', body: 'claimed a/x#1', meta: { task: 'a/x#1', run: 'r1' } }),
+      old({ id: 'e1', kind: 'event', from: 'shipper', body: 'run.ended — done', meta: { run: 'r1', outcome: 'done' } }),
+      old({ id: 'k2', kind: 'ask', to: 'fixer', body: 'fix it' }),
+      old({ id: 'n2', kind: 'answer', from: 'fixer', thread: 'k2', body: 'clean' }),
+      old({ id: 's9', kind: 'event', from: 'fixer', body: 'run.started — ledger', meta: { run: 'r9' } }),
+      old({ id: 'c2', from: 'builder', kind: 'claim', body: 'claimed HIVE-1', meta: { task: 'HIVE-1' } }),
+      old({ id: 'r2', from: 'builder', kind: 'release', body: 'released HIVE-1', meta: { task: 'HIVE-1' } }),
+      old({ id: 'x1', body: 'a note' }),
+    ];
+
+    expect(carriedOver(older, older, NOW).map((item) => item.id)).toEqual(['h1', 'k1', 's1', 'p1', 'c1', 'e1']);
+  });
+
+  it('drops an old claim a recent entry released, and an old ask a recent entry answered', () => {
+    const older = [
+      old({ id: 'c1', from: 'shipper', kind: 'claim', body: 'claimed', meta: { task: 'a/x#1' } }),
+      old({ id: 'h1', kind: 'ask', to: 'builder', body: 'Build B', meta: { after: 'a/x#3' } }),
+    ];
+    const recent = [
+      entry({ id: 'r1', from: 'shipper', kind: 'release', body: 'released', meta: { task: 'a/x#1' } }),
+      entry({ id: 'n1', from: 'builder', kind: 'answer', thread: 'h1', body: 'built' }),
+    ];
+
+    expect(carriedOver(older, [...older, ...recent], NOW)).toEqual([]);
+  });
+
+  it("keeps the overmind's markers for an ask it keeps", () => {
+    const older = [
+      old({ id: 'h1', kind: 'ask', to: 'sess-b', body: 'Build B', meta: { after: 'a/x#3' } }),
+      old({ id: 'd1', kind: 'event', from: OVERMIND, to: 'sess-b', body: 'nudged', meta: { delivered: 'h1' } }),
+      old({ id: 'd2', kind: 'event', from: OVERMIND, to: 'sess-b', body: 'nudged', meta: { delivered: 'gone' } }),
+    ];
+
+    expect(carriedOver(older, older, NOW).map((item) => item.id)).toEqual(['h1', 'd1']);
   });
 });

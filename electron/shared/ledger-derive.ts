@@ -1137,6 +1137,57 @@ export function unfinishedRuns(entries: readonly LedgerEntry[]): { agent: string
   return out;
 }
 
+/** The `meta` keys whose value names another entry: main's markers for an ask. */
+const NAMING_KEYS = ['expired', 'released', 'served', 'rewoke', 'redirected', 'delivered'] as const;
+
+/**
+ * Of `older`, the entries a restart must not lose (HIVE-410), judged against
+ * the whole log `all`: each ask still owed (at that age only a held or an
+ * accepted one can be) and each claim never released, with everything that
+ * names them: their thread, main's markers for them, and the `run.started` and
+ * `run.ended` of the runs that wrote them. A lane is read from the first; the
+ * second keeps an old run from looking unfinished at every start.
+ */
+export function carriedOver(
+  older: readonly LedgerEntry[],
+  all: readonly LedgerEntry[],
+  now: number,
+): LedgerEntry[] {
+  const live = new Set<string>();
+  for (const { ask, state } of askStates(all, now)) {
+    if (state === 'held' || state === 'open' || state === 'delivered' || state === 'accepted') live.add(ask.id);
+  }
+
+  const held = new Map<string, LedgerEntry>();
+  for (const item of all) {
+    const task = taskOf(item);
+    if (task === undefined) continue;
+    if (item.kind === 'claim') held.set(task, item);
+    else if (item.kind === 'release') held.delete(task);
+  }
+  for (const claim of held.values()) live.add(claim.id);
+
+  const names = (item: LedgerEntry): boolean =>
+    live.has(item.id) ||
+    (item.thread !== undefined && live.has(item.thread)) ||
+    NAMING_KEYS.some((key) => {
+      const id = item.meta?.[key];
+      return typeof id === 'string' && live.has(id);
+    });
+
+  const runs = new Set<string>();
+  for (const item of older) {
+    const run = item.meta?.['run'];
+    if (names(item) && typeof run === 'string') runs.add(`${item.from} ${run}`);
+  }
+  const marksRun = (item: LedgerEntry): boolean =>
+    item.kind === 'event' &&
+    (item.body.startsWith('run.started') || item.body.startsWith('run.ended')) &&
+    runs.has(`${item.from} ${String(item.meta?.['run'])}`);
+
+  return older.filter((item) => names(item) || marksRun(item));
+}
+
 /**
  * An agent this party asked directly, still on the job, and the agents it
  * brought in for the same job (idle with agents, 6 Oct 2026).
