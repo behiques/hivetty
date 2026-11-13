@@ -915,6 +915,105 @@ function releaseTimes(entries: readonly LedgerEntry[]): Map<string, number> {
   return at;
 }
 
+/** Where an ask stands (HIVE-410). The first four are still owed; the last four are terminal. */
+export type AskStateName =
+  | 'held'
+  | 'open'
+  | 'delivered'
+  | 'accepted'
+  | 'answered'
+  | 'failed'
+  | 'expired'
+  | 'moot';
+
+export interface AskState {
+  ask: LedgerEntry;
+  state: AskStateName;
+  /** When it entered this state. */
+  since: number;
+  /** Who owes the next move: the party asked, while the ask is open, delivered or accepted. */
+  owes: string | undefined;
+  /** The recipient agent's lane that holds it, read from the log. A session has none. */
+  lane: string | undefined;
+}
+
+/**
+ * The instant an ask expires: retro C's aging rule, stated once (HIVE-410).
+ * An accepted ask and a held one do not age, and each lasts at most
+ * {@link LEDGER_HELD_MAX_MS}: from the accept, or from the post. A released
+ * ask ages from its release; every other ask from its post.
+ */
+function deadlineOf(
+  ask: LedgerEntry,
+  releases: ReadonlyMap<string, number>,
+  acceptedAt: number | undefined,
+): number {
+  if (acceptedAt !== undefined) return acceptedAt + LEDGER_HELD_MAX_MS;
+  const target = afterTarget(ask);
+  if (target === undefined) return ask.ts + ttlOf(ask);
+  const released = releases.get(targetKey(target.repo, target.pr));
+  return released === undefined ? ask.ts + LEDGER_HELD_MAX_MS : Math.max(ask.ts, released) + ttlOf(ask);
+}
+
+/**
+ * Every ask in the log and where it stands (HIVE-410): the one loop that
+ * decides it. {@link openAsks} and {@link expiredAsks} are views over this;
+ * the scheduler, the notifier and the renderer mirror read those or this.
+ */
+export function askStates(entries: readonly LedgerEntry[], now: number): AskState[] {
+  const closing = new Map<string, LedgerEntry>();
+  const expiry = new Map<string, number>();
+
+  for (const entry of entries) {
+    if (entry.thread !== undefined && CLOSING_KINDS.has(entry.kind) && !closing.has(entry.thread)) {
+      closing.set(entry.thread, entry);
+    }
+    // Only main's own marker counts, for `expiredAsks`' reason.
+    const expired = entry.meta?.expired;
+    if (typeof expired === 'string' && entry.from === OVERMIND && !expiry.has(expired)) {
+      expiry.set(expired, entry.ts);
+    }
+  }
+
+  const releases = releaseTimes(entries);
+  const out: AskState[] = [];
+
+  for (const ask of entries) {
+    if (ask.kind !== 'ask') continue;
+    const terminal = (state: AskStateName, since: number): void => {
+      out.push({ ask, state, since, owes: undefined, lane: undefined });
+    };
+
+    const closed = closing.get(ask.id);
+    if (closed !== undefined) {
+      // A card the sweep closed as moot (HIVE-409) is over, but nobody answered it.
+      const moot =
+        closed.kind === 'answer' && closed.from === OVERMIND && typeof closed.meta?.['moot'] === 'string';
+      terminal(moot ? 'moot' : closed.kind === 'failed' ? 'failed' : 'answered', closed.ts);
+      continue;
+    }
+
+    const target = afterTarget(ask);
+    const released = target === undefined ? undefined : releases.get(targetKey(target.repo, target.pr));
+    const held = target !== undefined && released === undefined;
+
+    const deadline = deadlineOf(ask, releases, undefined);
+    if (now >= deadline) {
+      terminal('expired', expiry.get(ask.id) ?? deadline);
+      continue;
+    }
+
+    if (held) {
+      terminal('held', ask.ts);
+      continue;
+    }
+
+    out.push({ ask, state: 'open', since: Math.max(ask.ts, released ?? 0), owes: ask.to, lane: undefined });
+  }
+
+  return out;
+}
+
 /**
  * The lane a run ran in, read from its own `run.started` (HIVE-185 writes
  * `meta.lane` for a non-standing lane). The log rather than `runs[]`: that
