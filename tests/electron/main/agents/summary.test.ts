@@ -4,8 +4,9 @@ import { describe, expect, it } from 'vitest';
 import type {
   AgentRunState,
   AgentsSnapshot,
+  PendingWakeEntry,
 } from '../../../../electron/shared/agent-contract';
-import { mergeRunState } from '../../../../electron/main/agents/summary';
+import { mergeRunState, refusalsOf } from '../../../../electron/main/agents/summary';
 
 /**
  * R2. The three fields HIVE-115 added to `AgentSummary` had nothing filling
@@ -234,5 +235,31 @@ describe('mergeRunState', () => {
 
     expect(merged.agents[0]).not.toHaveProperty('today');
     expect(merged.agents[0]).not.toHaveProperty('skipsSinceRun');
+  });
+});
+
+describe('refusalsOf (HIVE-411)', () => {
+  const p1: PendingWakeEntry = { kind: 'ask', id: 'a1', from: 'sess-a' };
+  const p2: PendingWakeEntry = { kind: 'ask', id: 'a2', from: 'sess-b' };
+
+  it('lists the standing lane from the top level and every other refused lane, with its queue', () => {
+    expect(
+      refusalsOf(
+        state({
+          refused: { reason: 'budget', at: 5 },
+          pendingWake: [p1],
+          lanes: { 'repo:o/r': { refused: { reason: 'cli', at: 7 }, pendingWake: [p1, p2], runsSinceRotate: 0 }, 'thread:x': { runsSinceRotate: 0 } },
+        }),
+      ),
+    ).toEqual([
+      { lane: 'standing', reason: 'budget', at: 5, queued: 1 },
+      { lane: 'repo:o/r', reason: 'cli', at: 7, queued: 2 },
+    ]);
+  });
+
+  it('puts refused on the summary only when a lane has one', () => {
+    const refused = mergeRunState(snapshot(), { 'slack-watcher': state({ refused: { reason: 'budget', at: 5 } }) });
+    expect(refused.agents[0]?.refused).toEqual([{ lane: 'standing', reason: 'budget', at: 5, queued: 0 }]);
+    expect(mergeRunState(snapshot(), { 'slack-watcher': state() }).agents[0]).not.toHaveProperty('refused');
   });
 });

@@ -17,7 +17,7 @@ import {
   useEntity,
   useOpenEntity,
 } from '@stores/hive-store';
-import { useAgentPage } from '@stores/ui-store';
+import { useAgentPage, useStallsShown } from '@stores/ui-store';
 
 interface AgentRowProps {
   id: string;
@@ -72,6 +72,8 @@ const messageOf = (cause: unknown) => (cause instanceof Error ? cause.message : 
 export function AgentRow({ id }: AgentRowProps) {
   const entity = useEntity(id);
   const page = useAgentPage();
+  // While the stall panel is shown no agent row is (HIVE-411).
+  const stallsShown = useStallsShown();
   const openEntity = useOpenEntity();
   const live = useAgentLiveCount(id);
   const last = useAgentLastWord(id);
@@ -123,7 +125,7 @@ export function AgentRow({ id }: AgentRowProps) {
   };
 
   const broken = entity.invalid !== undefined;
-  const current = page?.name === id;
+  const current = !stallsShown && page?.name === id;
 
   let tone: TileTone = 'resting';
   if (entity.status === 'asking') tone = 'asking';

@@ -226,7 +226,7 @@ import { createScheduler, type Scheduler } from '../agents/scheduler';
 import { laneClaims } from '../agents/scheduler-rules';
 import { sessionMergeConsent } from '../agents/session-merge';
 import { createAgentState, type AgentState } from '../agents/state';
-import { mergeRunState } from '../agents/summary';
+import { mergeRunState, refusalsOf } from '../agents/summary';
 import { createHarnessCheck, createWakeCommand, type WakeCommandDeps } from '../agents/wake-command';
 import { createCloneFlow, type CloneFlow } from '../clone';
 import {
@@ -304,6 +304,7 @@ import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
 import { prOpenedEntry } from '../ledger/pr-opened';
 import { createPermissionReminder } from '../ledger/reminders';
+import { shipStatus } from '../ledger/ship-status';
 import { ACCOUNT_CALLS, hostLicence, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
 import { cliEntitled } from '../licence/entitled';
 import { createSuspender, installSuspender, isLapsed, releaseNow, runContainer } from '../licence/suspend';
@@ -2948,6 +2949,7 @@ export function registerIpcHandlers(
 
     const last = state.runs[state.runs.length - 1];
     const cost = formatRunCost(last?.costUsd);
+    const refused = refusalsOf(state);
 
     send(CH.agentsStatus, {
       name,
@@ -2976,6 +2978,7 @@ export function registerIpcHandlers(
         ? {}
         : { skipsSinceRun: state.skipsSinceRun }),
       ...(cost === undefined ? {} : { cost }),
+      ...(refused.length === 0 ? {} : { refused }),
     } satisfies AgentStatusPush);
   };
 
@@ -3493,7 +3496,11 @@ export function registerIpcHandlers(
     */
     onPrLookup: async (_caller, lookup) => {
       await loginEnvStatus();
-      return answerPrLookup(github, lookup);
+      const reply = await answerPrLookup(github, lookup);
+      // HIVE-411: what it is waiting on, from main's whole log, whether or not the sweep lists the PR.
+      const refusalOf = (agent: string): string | undefined =>
+        agentState === null ? undefined : refusalsOf(agentState.read(agent))[0]?.reason;
+      return { ...reply, ship: shipStatus(ledger.read({}).entries, lookup.repo, lookup.number, Date.now(), refusalOf) };
     },
     /*
       HIVE-409. The fence has already decided: an auto-merge project's rule, or a card's once. This only

@@ -1,6 +1,7 @@
 import type { TermLine } from '@/types/terminal';
 
 import type {
+  AgentRefusal,
   AgentStatus,
   LiveRunSummary,
   RunSummary,
@@ -458,6 +459,8 @@ export interface Agent {
    * not a run, so `runs` above cannot count these.
    */
   skipsSinceRun: number;
+  /** As AgentSummary.refused (HIVE-411); empty when none. */
+  refused: AgentRefusal[];
   lines: TermLine[];
 }
 

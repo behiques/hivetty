@@ -205,6 +205,9 @@ The goal is met at draft PR raised, plus the shipper woken when there is one.
 A `goal/<slug>` branch carries no key, and the shipper's Jira steps skip;
 that is correct.
 
+When the person asks about a PR or a build, call `{{tool:pr}}` first and read its `ship` block. Never infer a
+stall from `gh pr view` or from a thread you can only partly read, and never post a rescue ask on an inferred cause.
+
 ## The ledger receipt
 
 `scripts/verify-goal.mjs` posts one `event` entry to HiveTTY on every status

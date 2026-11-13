@@ -4,9 +4,10 @@ import { Button } from '@components/ui/button';
 import { CombGlyph } from '@components/ui/comb-glyph';
 import { EmptyPlace } from '@components/ui/empty-place';
 import { AgentPage } from '@features/agents/components/agent-page';
+import { StallPanel } from '@features/agents/components/stall-panel';
 import { useShownAgent } from '@features/agents/shown-agent';
 import { useAgentsListed } from '@stores/hive-store';
-import { useAgentPageActions } from '@stores/ui-store';
+import { useAgentPageActions, useStallsShown } from '@stores/ui-store';
 
 /**
  * The Agents place's stage (HIVE-204): the shown agent's page (`useShownAgent`:
@@ -22,6 +23,10 @@ export function AgentsStage() {
   const name = useShownAgent();
   const listed = useAgentsListed();
   const { openAgentPage } = useAgentPageActions();
+  const stallsShown = useStallsShown();
+
+  // The Stalls row is selected (HIVE-411): the stall panel, with or without agents.
+  if (stallsShown) return <StallPanel />;
 
   if (name === undefined) {
     if (!listed) {

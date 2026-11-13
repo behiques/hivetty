@@ -721,6 +721,36 @@ describe('ui-store — the agent page (HIVE-204)', () => {
     expect(useUiStore.getState().agentPage).toBeNull();
   });
 
+  it('shows the stalls on the Agents place, and an opened agent hides them (HIVE-411)', () => {
+    expect(useUiStore.getState().stallsShown).toBe(false);
+    useUiStore.getState().showStalls();
+    expect(useUiStore.getState()).toMatchObject({ stallsShown: true, place: 'agents' });
+    useUiStore.getState().openAgentPage('builder', 'activity');
+    expect(useUiStore.getState().stallsShown).toBe(false);
+  });
+
+  it('showStalls dismisses the picker and Settings, so the click is seen (HIVE-411)', () => {
+    useUiStore.getState().openSettings('agents');
+    useUiStore.setState({ picker: true });
+    useUiStore.getState().showStalls();
+    expect(useUiStore.getState()).toMatchObject({
+      stallsShown: true,
+      place: 'agents',
+      picker: false,
+      settings: false,
+    });
+  });
+
+  it("keeps the stalls through the stage's write-back of any agent; a row click hides them (HIVE-411)", () => {
+    useUiStore.getState().showStalls();
+    // The stage writes back the first agent on a fresh launch, and the next one when the shown agent goes.
+    useUiStore.getState().rememberAgentPage('builder', 0);
+    useUiStore.getState().rememberAgentPage('shipper', 3);
+    expect(useUiStore.getState().stallsShown).toBe(true);
+    useUiStore.getState().openTab('shipper', 'agents');
+    expect(useUiStore.getState().stallsShown).toBe(false);
+  });
+
   it('openAgentPage opens the Agents place on the asked view and dismisses overlays', () => {
     useUiStore.getState().openSettings('agents');
     useUiStore.getState().openAgentPage('acr', 'definition');

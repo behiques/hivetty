@@ -13,6 +13,8 @@
  */
 import {
   formatRunCost,
+  STANDING_LANE,
+  type AgentRefusal,
   type AgentRunState,
   type AgentsSnapshot,
   type AgentSummary,
@@ -42,6 +44,16 @@ export function mergeRunState(
   };
 }
 
+/** Every lane whose last wake was refused (HIVE-411): the standing lane's from the top level, the rest from `lanes`. */
+export function refusalsOf(run: AgentRunState): AgentRefusal[] {
+  const out: AgentRefusal[] = [];
+  if (run.refused !== undefined) out.push({ lane: STANDING_LANE, ...run.refused, queued: run.pendingWake?.length ?? 0 });
+  for (const [lane, state] of Object.entries(run.lanes ?? {})) {
+    if (state.refused !== undefined) out.push({ lane, ...state.refused, queued: state.pendingWake?.length ?? 0 });
+  }
+  return out;
+}
+
 function withRunState(
   agent: AgentSummary,
   run: AgentRunState | undefined,
@@ -50,6 +62,7 @@ function withRunState(
 
   const last = run.runs[run.runs.length - 1];
   const cost = formatRunCost(last?.costUsd);
+  const refused = refusalsOf(run);
 
   return {
     ...agent,
@@ -79,5 +92,6 @@ function withRunState(
     ...(run.nextRunAt === undefined ? {} : { nextRunAt: run.nextRunAt }),
     ...(run.sessionUuid === undefined ? {} : { sessionUuid: run.sessionUuid }),
     ...(cost === undefined ? {} : { cost }),
+    ...(refused.length === 0 ? {} : { refused }),
   };
 }

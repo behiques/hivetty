@@ -1,14 +1,16 @@
-import { CaretRight, Plus } from '@phosphor-icons/react';
+import { CaretRight, Clock, Plus } from '@phosphor-icons/react';
 
 import { cn } from '@/lib/utils';
 
 import { EmptyState } from '@components/ui/empty-state';
 import { AgentRow } from '@features/agents/components/agent-row';
-import { useAgentsByGroup } from '@stores/hive-store';
+import { useAgentsByGroup, useStallCount } from '@stores/hive-store';
 import {
   type AgentGroupKey,
   useAgentPageActions,
   useAgentsFolded,
+  useShowStalls,
+  useStallsShown,
   useToggleAgentGroup,
 } from '@stores/ui-store';
 
@@ -52,6 +54,9 @@ export function AgentsPanel() {
   const folded = useAgentsFolded();
   const toggle = useToggleAgentGroup();
   const { openAgentPage } = useAgentPageActions();
+  const stallsShown = useStallsShown();
+  const showStalls = useShowStalls();
+  const stalls = useStallCount();
 
   const count = (key: AgentGroupKey) =>
     groups.find((group) => group.key === key)?.ids.length ?? 0;
@@ -87,6 +92,25 @@ export function AgentsPanel() {
           <Plus size={14} aria-hidden="true" />
         </button>
       </div>
+
+      {/* What every ask, wake and card is waiting on (HIVE-411): the stall panel, shown on the stage. */}
+      <button
+        type="button"
+        aria-pressed={stallsShown}
+        onClick={showStalls}
+        className={cn(
+          'mb-1.5 flex items-center justify-between rounded-md px-2.5 py-[var(--cc-row-py)] text-ui',
+          stallsShown ? 'bg-active text-ink' : 'text-muted hover:bg-hover',
+        )}
+      >
+        <span className="flex items-center gap-2">
+          <Clock aria-hidden="true" className="size-3.5 text-amber-text" />
+          <span className="font-medium">Stalls</span>
+        </span>
+        {stalls === 0 ? null : (
+          <span className="rounded-full bg-amber px-1.5 text-micro font-semibold text-on-brand">{stalls}</span>
+        )}
+      </button>
 
       {groups.length === 0 ? (
         <EmptyState phrase="empty.agents" creature="mutalisk">

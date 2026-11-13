@@ -394,7 +394,17 @@ export const isContainerName = (value: unknown): value is string =>
 export const isContainerCommand = (value: unknown): value is string =>
   typeof value === 'string' && ONE_TOKEN.test(value);
 
+/** One lane's refused wake (HIVE-411), for the stall panel. */
+export interface AgentRefusal {
+  lane: string;
+  reason: string;
+  at: number;
+  queued: number;
+}
+
 export interface AgentSummary {
+  /** Lanes whose last wake was refused, with how many entries wait (HIVE-411). Absent: none. */
+  refused?: AgentRefusal[];
   name: string;
   description: string;
   icon: string;
@@ -1546,6 +1556,8 @@ export type AgentRotateResult = Exclude<AgentRunResult, { queued: true }>;
  * hour is the cheaper honesty.
  */
 export interface AgentStatusPush {
+  /** Lanes whose last wake was refused, with how many entries wait (HIVE-411). Absent: none. */
+  refused?: AgentRefusal[];
   name: string;
   status: AgentStatus;
   lastRunAt?: number;

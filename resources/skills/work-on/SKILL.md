@@ -133,6 +133,9 @@ path), the merge arrives as the answer to that ask instead.
 Closing the terminal earlier is fine: an ask to a session that is gone falls
 back to the overmind.
 
+When the person asks about a PR or a build, call `{{tool:pr}}` first and read its `ship` block. Never infer a
+stall from `gh pr view` or from a thread you can only partly read, and never post a rescue ask on an inferred cause.
+
 *Detached (`--detach`).* `reply-to: overmind`, then `/done` now.
 
 *Inline (`--inline`, no `builder` on this machine, or a plan of one task).*

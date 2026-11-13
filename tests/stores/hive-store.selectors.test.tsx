@@ -79,6 +79,11 @@ import {
   useUnreadCount,
   useEchoes,
   usePermissionCards,
+  usePermissionCardList,
+  useStalls,
+  useStaleClaims,
+  useAgentRefusals,
+  useStallCount,
   useSummons,
   useSummonsCount,
   useYoursAgain,
@@ -1251,6 +1256,68 @@ describe('hive-store selectors', () => {
       expect(renderHook(() => useAgentLive('watcher')).result.current).toHaveLength(1);
       expect(renderHook(() => useAgentLiveCount('watcher')).result.current).toBe(1);
       expect(renderHook(() => useAgentLive('nobody')).result.current).toEqual([]);
+    });
+  });
+
+  describe('the stall hooks (HIVE-411)', () => {
+    const NOW = Date.UTC(2026, 10, 13, 15, 0);
+    const MIN = 60_000;
+    const DAY = 24 * 60 * MIN;
+    const openAsk: LedgerEntry = { id: '20261113-141900-0001', ts: NOW - 41 * MIN, from: 'sess-1b', to: 'builder', kind: 'ask', ref: 'a26', body: 'Build HIVE-411\nrepo: x' };
+    const acceptedAsk: LedgerEntry = { id: '20261113-130600-0001', ts: NOW - 114 * MIN, from: 'sess-0d', to: 'shipper', kind: 'ask', ref: 'a31', body: 'Ship PR #40' };
+    const accept: LedgerEntry = { id: '20261113-130800-0001', ts: NOW - 112 * MIN, from: 'shipper', to: 'sess-0d', kind: 'post', thread: acceptedAsk.id, body: 'ok', meta: { accepted: true } };
+    const answeredAsk: LedgerEntry = { id: '20261113-120000-0001', ts: NOW - 200 * MIN, from: 'sess-0d', to: 'acr', kind: 'ask', ref: 'a20', body: 'Review' };
+    const answer: LedgerEntry = { id: '20261113-121000-0001', ts: NOW - 190 * MIN, from: 'acr', to: 'sess-0d', kind: 'answer', thread: answeredAsk.id, body: 'clean' };
+    const staleClaim: LedgerEntry = { id: '20261111-000000-0001', ts: NOW - 2 * DAY, from: 'sess-1c', kind: 'claim', body: '', meta: { task: 'HIVE-393' } };
+    const card = (id: string, createdAt: number) => ({ ...notif({ id, kind: 'agent.permission', action: { type: 'ask', thread: id } }), createdAt });
+    const agent = (name: string, over: Partial<AgentSummary> = {}): AgentSummary => ({
+      name, description: 'x', icon: 'Robot', status: 'sleeping', wake: { on: [] }, mcp: [], tools: [], rotateAfter: 50, runs: [], ...over,
+    });
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+      act(() => useHiveStore.setState({ notifs: [], ledger: [], closedAsks: new Set() }));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('useStalls lists owed asks oldest first with their three ages, never an answered one', () => {
+      act(() => useHiveStore.setState({ ledger: [answeredAsk, answer, acceptedAsk, accept, openAsk] }));
+      const rows = renderHook(() => useStalls()).result.current;
+      expect(rows).toEqual([
+        { id: acceptedAsk.id, ref: 'a31', body: 'Ship PR #40', from: 'sess-0d', owes: 'shipper', state: 'accepted', inStateMs: 112 * MIN, toAcceptMs: 2 * MIN, openMs: 114 * MIN },
+        { id: openAsk.id, ref: 'a26', body: 'Build HIVE-411', from: 'sess-1b', owes: 'builder', state: 'open', inStateMs: 41 * MIN, toAcceptMs: null, openMs: 41 * MIN },
+      ]);
+    });
+
+    it('useStaleClaims reads the tail', () => {
+      act(() => useHiveStore.setState({ ledger: [staleClaim] }));
+      expect(renderHook(() => useStaleClaims()).result.current).toEqual([{ task: 'HIVE-393', holder: 'sess-1c', since: NOW - 2 * DAY }]);
+    });
+
+    it('usePermissionCardList lists open cards oldest first and leaves out a moot one', () => {
+      act(() => {
+        useHiveStore.getState().hydrateNotifs([card('p1', 50), card('p2', 20), card('p3', 10)]);
+        useHiveStore.setState({ closedAsks: new Set(['p3']) });
+      });
+      expect(renderHook(() => usePermissionCardList(null)).result.current.map((n) => n.id)).toEqual(['p2', 'p1']);
+    });
+
+    it('useAgentRefusals names the agent of each refused lane', () => {
+      const refusal = { lane: 'standing', reason: 'budget', at: NOW - 5 * MIN, queued: 1 };
+      act(() => useHiveStore.getState().hydrateAgents([agent('reviewer', { refused: [refusal] }), agent('quiet')]));
+      expect(renderHook(() => useAgentRefusals()).result.current).toEqual([{ agent: 'reviewer', refusal }]);
+    });
+
+    it('useStallCount counts refusals, cards, stale claims and unaccepted asks past 15 minutes', () => {
+      act(() => {
+        useHiveStore.getState().hydrateAgents([agent('reviewer', { refused: [{ lane: 'standing', reason: 'budget', at: NOW, queued: 1 }] })]);
+        useHiveStore.getState().hydrateNotifs([card('p1', 50)]);
+        useHiveStore.setState({ ledger: [staleClaim, acceptedAsk, accept, openAsk] });
+      });
+      expect(renderHook(() => useStallCount()).result.current).toBe(4);
     });
   });
 

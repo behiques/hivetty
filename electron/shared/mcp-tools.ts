@@ -1,5 +1,5 @@
 import type { ProjectsDirectory } from './config-contract';
-import type { PrMergeRequest } from './github-contract';
+import type { PrMergeRequest, PrShipStatus } from './github-contract';
 import { parsePrMerge } from './guards';
 import type { AdfBlock, JiraError, JiraMention, JiraToolIssue } from './jira-contract';
 import type { LedgerKind, LedgerReadQuery } from './ledger-contract';
@@ -468,6 +468,24 @@ export function createToolHandlers(
     return ok(`Merged ${request.repo}#${String(request.number)}.\n${reply.output}`.trim(), { merged: true });
   };
 
+  /** One line for a PR's ship block (HIVE-411), or `''`. */
+  const describeShip = (ship: PrShipStatus | null | undefined, now = Date.now()): string => {
+    if (ship === null || ship === undefined) return '';
+    const age = (ms: number): string => `${String(Math.max(0, Math.round(ms / 60_000)))}m`;
+    const stage =
+      ship.stage === null
+        ? 'not held by the shipper'
+        : `${ship.stage}${ship.since === null ? '' : ` for ${age(now - ship.since)}`}`;
+    const rounds = `${String(ship.rounds)} round${ship.rounds === 1 ? '' : 's'}`;
+    const waits = ship.waitingOn.map((w) => {
+      const extra = [w.refused === undefined ? '' : `refused: ${w.refused}`, ...w.cards.map((c) => `card ${c.id} ${age(c.ageMs)}`)]
+        .filter(Boolean)
+        .join(', ');
+      return `${w.to} (${w.ask}, ${w.state})${extra === '' ? '' : `: ${extra}`}`;
+    });
+    return `\nship: ${stage}, ${rounds}${waits.length === 0 ? '' : `; waiting on ${waits.join('; ')}`}`;
+  };
+
   /** One PR record (HIVE-173). A missing record is an answer, not an error. */
   const pr = async (args: Record<string, unknown>): Promise<CallToolResult> => {
     const repo = stringArg(args, 'repo');
@@ -482,18 +500,21 @@ export function createToolHandlers(
     }
 
     const reply = await client.pr({ repo, number });
+    // HIVE-411: what it is waiting on, said whether or not the sweep lists the PR.
+    const shipLine = describeShip(reply.ship);
+    const ship = reply.ship ?? null;
     if (reply.pr === null) {
       const reason = reply.reason ?? 'not in the sweep';
       return ok(
-        `No record of ${repo}#${number}: ${reason}. The sweep lists PRs you authored, open or merged in the last day, on configured projects only.`,
-        { pr: null, reason },
+        `No record of ${repo}#${number}: ${reason}. The sweep lists PRs you authored, open or merged in the last day, on configured projects only.${shipLine}`,
+        { pr: null, reason, ship },
       );
     }
 
     const record = reply.pr;
     return ok(
-      `${repo}#${number} "${record.title}" — ${record.state}; ${record.findings} unresolved review thread(s); checks ${record.checks}; branch ${record.branch}; updated ${record.updatedAt}; ${record.url}`,
-      { pr: record },
+      `${repo}#${number} "${record.title}" — ${record.state}; ${record.findings} unresolved review thread(s); checks ${record.checks}; branch ${record.branch}; updated ${record.updatedAt}; ${record.url}${shipLine}`,
+      { pr: record, ship },
     );
   };
 

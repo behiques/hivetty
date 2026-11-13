@@ -38,6 +38,8 @@ import {
   repoAskerOf,
   prOpener,
   resolveRef,
+  shipAsked,
+  staleClaims,
   reviewUrls,
   SHIP_STOPS,
   shipStage,
@@ -1198,6 +1200,15 @@ describe('askStates (HIVE-410)', () => {
     entry({ id: 'k1', kind: 'ask', from: 'sess-a', to: 'shipper', ts: NOW - 60_000, body: 'Ship PR #1', ...over });
   const stateOf = (log: LedgerEntry[], now = NOW) => askStates(log, now).find((s) => s.ask.id === 'k1');
 
+  it('keeps when an ask was accepted, through to its answer (HIVE-411)', () => {
+    const a: LedgerEntry = { id: '20261113-100000-0001', ts: 100, from: 'sess-a', to: 'builder', kind: 'ask', ref: 'a1', body: 'build' };
+    const accept: LedgerEntry = { id: '20261113-100001-0001', ts: 160, from: 'builder', to: 'sess-a', kind: 'post', thread: a.id, body: 'on it', meta: { accepted: true } };
+    const answer: LedgerEntry = { id: '20261113-100002-0001', ts: 900, from: 'builder', to: 'sess-a', kind: 'answer', thread: a.id, body: 'done' };
+    expect(askStates([a, accept], 200)[0]).toMatchObject({ state: 'accepted', since: 160, acceptedAt: 160 });
+    expect(askStates([a, accept, answer], 1000)[0]).toMatchObject({ state: 'answered', since: 900, acceptedAt: 160 });
+    expect(askStates([a], 200)[0]?.acceptedAt).toBeUndefined();
+  });
+
   it('is open from its post, owed by the party asked', () => {
     expect(stateOf([ask()])).toEqual({ ask: ask(), state: 'open', since: NOW - 60_000, owes: 'shipper', lane: undefined });
   });
@@ -1417,5 +1428,52 @@ describe('carriedOver (HIVE-410)', () => {
     ];
 
     expect(carriedOver(older, older, NOW).map((item) => item.id)).toContain('w1');
+  });
+});
+
+describe('staleClaims (HIVE-411)', () => {
+  const DAY = 24 * 60 * 60_000;
+  const claim = (id: string, ts: number, from: string, task: string): LedgerEntry => ({ id, ts, from, kind: 'claim', body: '', meta: { task } });
+
+  it('lists a claim a day old whose holder has been silent a day and owes nothing', () => {
+    const log = [claim('20261110-000000-0001', 0, 'sess-1c', 'HIVE-393')];
+    expect(staleClaims(log, DAY)).toEqual([{ task: 'HIVE-393', holder: 'sess-1c', since: 0 }]);
+    expect(staleClaims(log, DAY - 1)).toEqual([]);
+  });
+
+  it('skips a released claim, a holder heard from today, and a holder that owes an ask', () => {
+    const released: LedgerEntry = { id: '20261110-000001-0001', ts: 1, from: 'sess-1c', kind: 'release', body: '', meta: { task: 'HIVE-393' } };
+    expect(staleClaims([claim('20261110-000000-0001', 0, 'sess-1c', 'HIVE-393'), released], 2 * DAY)).toEqual([]);
+
+    const heard: LedgerEntry = { id: '20261111-000000-0001', ts: DAY + 5, from: 'sess-7b', kind: 'post', body: 'hi' };
+    expect(staleClaims([claim('20261110-000000-0002', 0, 'sess-7b', 'HIVE-404'), heard], DAY + 10)).toEqual([]);
+
+    const owed: LedgerEntry = { id: '20261110-000002-0001', ts: 2, from: 'sess-0a', to: 'builder', kind: 'ask', ref: 'a1', body: 'build' };
+    const accept: LedgerEntry = { id: '20261110-000003-0001', ts: 3, from: 'builder', to: 'sess-0a', kind: 'post', thread: owed.id, body: 'ok', meta: { accepted: true } };
+    expect(staleClaims([claim('20261110-000000-0003', 0, 'builder', 'HIVE-1'), owed, accept], 2 * DAY)).toEqual([]);
+  });
+
+  it('skips a holder waiting on an ask it made: accepted by another party, or held behind a PR', () => {
+    // The shipper handed the PR on and is waiting; the party asked accepted it, so the ask lives past a day.
+    const handed: LedgerEntry = { id: '20261110-000002-0002', ts: 2, from: 'shipper', to: 'fixer', kind: 'ask', ref: 'a2', body: 'fix #9' };
+    const taken: LedgerEntry = { id: '20261110-000003-0002', ts: 3, from: 'fixer', to: 'shipper', kind: 'post', thread: handed.id, body: 'ok', meta: { accepted: true } };
+    expect(staleClaims([claim('20261110-000000-0004', 0, 'shipper', 'acme/app#9'), handed, taken], 2 * DAY)).toEqual([]);
+
+    // Held behind another PR's merge: nobody is told until then.
+    const held: LedgerEntry = { id: '20261110-000002-0003', ts: 2, from: 'shipper', to: 'builder', kind: 'ask', ref: 'a3', body: 'next', meta: { after: 'acme/app#8' } };
+    expect(staleClaims([claim('20261110-000000-0005', 0, 'shipper', 'acme/app#10'), held], 2 * DAY)).toEqual([]);
+  });
+});
+
+describe('shipAsked (HIVE-411)', () => {
+  const ask: LedgerEntry = { id: '20261113-100000-0009', ts: 100, from: 'sess-a', to: 'shipper', kind: 'ask', ref: 'a9', body: 'Ship', meta: { pr: 313, repo: 'Acme/Server' } };
+
+  it('is true while the shipper owes an ask naming the PR, and false once it is answered or names another', () => {
+    expect(shipAsked([ask], 'acme/server', 313, 200)).toBe(true);
+    expect(shipAsked([ask], 'acme/server', 314, 200)).toBe(false);
+    expect(shipAsked([ask], '', 313, 200)).toBe(false);
+    const answered: LedgerEntry = { id: '20261113-100001-0009', ts: 150, from: 'shipper', to: 'sess-a', kind: 'answer', thread: ask.id, body: 'merged' };
+    expect(shipAsked([ask, answered], 'acme/server', 313, 200)).toBe(false);
+    expect(shipAsked([{ ...ask, to: 'fixer' }], 'acme/server', 313, 200)).toBe(false);
   });
 });

@@ -253,6 +253,50 @@ export function claims(entries: readonly LedgerEntry[]): Record<string, string> 
   return held;
 }
 
+/** How long a claim, and its holder's silence, last before the stall panel lists it (HIVE-411). */
+export const STALE_CLAIM_MS = 24 * 60 * 60_000;
+
+export interface StaleClaim {
+  task: string;
+  holder: string;
+  /** When the claim was written. */
+  since: number;
+}
+
+/**
+ * Claims nobody is working (HIVE-411): a day old, the holder silent for a day, owing no ask
+ * (`open`, `delivered` or `accepted`), and waiting on none it made (those, or `held` behind a PR):
+ * a shipper that handed a PR on is waiting, not stalled. "No live lane" is read from the log: a
+ * live run that quiet is the watchdog's `quiet` row. Pure.
+ */
+export function staleClaims(entries: readonly LedgerEntry[], now: number): StaleClaim[] {
+  const held = new Map<string, LedgerEntry>();
+  const heard = new Map<string, number>();
+  for (const entry of entries) {
+    heard.set(entry.from, Math.max(heard.get(entry.from) ?? 0, entry.ts));
+    const task = taskOf(entry);
+    if (task === undefined) continue;
+    if (entry.kind === 'claim') held.set(task, entry);
+    else if (entry.kind === 'release') held.delete(task);
+  }
+  const states = askStates(entries, now);
+  const owing = new Set(
+    states.filter((s) => s.state === 'open' || s.state === 'delivered' || s.state === 'accepted').map((s) => s.owes),
+  );
+  const waiting = new Set(
+    states
+      .filter((s) => s.state === 'open' || s.state === 'delivered' || s.state === 'accepted' || s.state === 'held')
+      .map((s) => s.ask.from),
+  );
+  const out: StaleClaim[] = [];
+  for (const [task, claim] of held) {
+    if (now - claim.ts < STALE_CLAIM_MS || now - (heard.get(claim.from) ?? 0) < STALE_CLAIM_MS) continue;
+    if (owing.has(claim.from) || waiting.has(claim.from)) continue;
+    out.push({ task, holder: claim.from, since: claim.ts });
+  }
+  return out;
+}
+
 /** The ask itself plus everything that named it, in write order. */
 export function thread(entries: readonly LedgerEntry[], id: string): LedgerEntry[] {
   return entries.filter((entry) => entry.id === id || entry.thread === id);
@@ -345,6 +389,20 @@ const namesPr = (meta: Record<string, unknown> | undefined, slug: string, n: num
   const repo = meta?.['repo'];
   return wholeNumberOf(meta?.['pr']) === n && typeof repo === 'string' && repo.toLowerCase() === slug.toLowerCase();
 };
+
+/**
+ * Whether the shipper owes an ask naming one PR (HIVE-411): handed over, whether or not a stage has
+ * been posted yet. Owed is `open`, `delivered` or `accepted`. Pure.
+ */
+export function shipAsked(entries: readonly LedgerEntry[], slug: string, n: number, now: number): boolean {
+  if (slug === '') return false;
+  return askStates(entries, now).some(
+    (s) =>
+      s.ask.to === 'shipper' &&
+      (s.state === 'open' || s.state === 'delivered' || s.state === 'accepted') &&
+      namesPr(s.ask.meta, slug, n),
+  );
+}
 
 /**
  * Whether an open ask to you names one PR (HIVE-215, the hatch rule's rule 2).
@@ -892,6 +950,8 @@ export interface AskState {
   owes: string | undefined;
   /** The recipient agent's lane that holds it, read from the log. A session has none. */
   lane: string | undefined;
+  /** When the party asked accepted it (HIVE-411): time to accept is `acceptedAt − ask.ts`. */
+  acceptedAt?: number;
 }
 
 /**
@@ -963,8 +1023,8 @@ export function askStates(entries: readonly LedgerEntry[], now: number): AskStat
 
   for (const ask of entries) {
     if (ask.kind !== 'ask') continue;
-    const terminal = (state: AskStateName, since: number): void => {
-      out.push({ ask, state, since, owes: undefined, lane: undefined });
+    const terminal = (state: AskStateName, since: number, acceptedAt?: number): void => {
+      out.push({ ask, state, since, owes: undefined, lane: undefined, ...(acceptedAt === undefined ? {} : { acceptedAt }) });
     };
 
     const closed = closing.get(ask.id);
@@ -972,7 +1032,9 @@ export function askStates(entries: readonly LedgerEntry[], now: number): AskStat
       // A card the sweep closed as moot (HIVE-409) is over, but nobody answered it.
       const moot =
         closed.kind === 'answer' && closed.from === OVERMIND && typeof closed.meta?.['moot'] === 'string';
-      terminal(moot ? 'moot' : closed.kind === 'failed' ? 'failed' : 'answered', closed.ts);
+      // A closed ask is not held: an accept by the party asked counts (HIVE-411).
+      const accepted = accepts.get(ask.id)?.find((entry) => entry.from === ask.to);
+      terminal(moot ? 'moot' : closed.kind === 'failed' ? 'failed' : 'answered', closed.ts, accepted?.ts);
       continue;
     }
 
@@ -1000,7 +1062,14 @@ export function askStates(entries: readonly LedgerEntry[], now: number): AskStat
     if (accept !== undefined) {
       const run = accept.meta?.['run'];
       const own = typeof run === 'string' ? begun.get(`${accept.from} ${run}`) : undefined;
-      out.push({ ask, state: 'accepted', since: accept.ts, owes: ask.to, lane: laneOfStarted(own) ?? laneOfStarted(wake) });
+      out.push({
+        ask,
+        state: 'accepted',
+        since: accept.ts,
+        owes: ask.to,
+        lane: laneOfStarted(own) ?? laneOfStarted(wake),
+        acceptedAt: accept.ts,
+      });
       continue;
     }
 

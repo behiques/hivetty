@@ -500,6 +500,28 @@ its own tab stop. An answer that is not a start takes line 2 for five seconds,
 amber, `role="status"`. The row button's accessible name says the state, the
 live runs and the last word, so the tile's colour is never the only carrier.
 
+**The Stalls row** (HIVE-411) sits above the first lane: a pill-row button
+("Stalls", an amber clock, and an amber count badge of what needs a look:
+refused wakes, open permission cards, stale claims and owed asks not accepted
+within 15 minutes, omitted at zero), `aria-pressed` while shown. Clicking it
+calls `showStalls()` in ui-store (`stallsShown`), which `AgentsStage` reads to
+show `<StallPanel />` instead of an agent; no agent row is highlighted
+meanwhile. Opening an agent (`openAgentPage`, a row click through `openTab`)
+hides it; the stage's own write-back (`rememberAgentPage`) never does.
+
+### `<StallPanel />`
+
+`src/features/agents/components/stall-panel.tsx` (HIVE-411): a `section` named
+"Stalls" — a 15px title and one subtle line, then an **Open asks** table (ask
+ref and first line, from → owes, a state chip — open muted, delivered amber,
+accepted green — and three `tabular-nums` ages: in state, to accept, open for),
+then a three-column grid (one column under `lg`) of **Refused wakes** (agent,
+reason in red, lane and queue), **Permission cards** (asker, title, age in
+amber) and **Stale claims** (task, holder). Each group is a `rounded-lg` card
+with a caps group head and its count; an empty one says "None". It reads only,
+through `useStalls`, `useAgentRefusals`, `usePermissionCardList(null)` and
+`useStaleClaims`. Ages use its exported `age()`: `41m`, `1h 52m`, `3d`.
+
 ### `<AgentView />`, `<AgentRunLog />` and `<AgentLedger />`
 
 `src/features/agents/components/` — HIVE-116, built.

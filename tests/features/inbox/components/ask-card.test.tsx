@@ -552,6 +552,7 @@ describe('AskCard', () => {
       runsSinceRotate: 0,
       rotateAfter: 50,
       skipsSinceRun: 0,
+      refused: [],
       runs: [],
       live: [],
       lines: [],

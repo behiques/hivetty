@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LedgerSnapshot } from '@shared/ledger-contract';
 
@@ -852,7 +852,57 @@ describe('createToolHandlers — projects and pr (HIVE-173)', () => {
     expect(pr).toHaveBeenCalledWith({ repo: 'acme/the-hive', number: 214 });
     expect(result.isError).toBe(false);
     expect(textOf(result)).toContain('acme/the-hive#214 "feat: a thing" — open; 2 unresolved review thread(s); checks passing');
-    expect(result.structuredContent).toEqual({ pr: record });
+    expect(result.structuredContent).toEqual({ pr: record, ship: null });
+  });
+
+  describe('the ship block (HIVE-411)', () => {
+    const NOW = Date.UTC(2026, 10, 13, 15, 0);
+    const ship = {
+      stage: 'approval',
+      since: NOW - 17 * 60_000,
+      rounds: 1,
+      waitingOn: [{ ask: 'a84', to: 'shipper', state: 'open' as const, since: NOW - 17 * 60_000, cards: [{ id: 'a84', ageMs: 17 * 60_000 }] }],
+    };
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('says what the PR is waiting on in one line, and carries the block', async () => {
+      const handlers = createToolHandlers(stub({ pr: async () => ({ pr: record, ship }) }));
+      const result = await handlers.callTool('pr', { repo: 'acme/the-hive', number: 214 });
+
+      expect(textOf(result)).toContain('ship: approval for 17m, 1 round; waiting on shipper (a84, open): card a84 17m');
+      expect(result.structuredContent).toEqual({ pr: record, ship });
+    });
+
+    it('says the ship line for a PR the sweep does not list', async () => {
+      const notListed = { stage: 'ci', since: NOW - 3 * 60_000, rounds: 0, waitingOn: [] };
+      const handlers = createToolHandlers(stub({ pr: async () => ({ pr: null, reason: 'not in the sweep', ship: notListed }) }));
+      const result = await handlers.callTool('pr', { repo: 'acme/the-hive', number: 9 });
+
+      expect(textOf(result)).toContain('\nship: ci for 3m, 0 rounds');
+      expect(result.structuredContent).toEqual({ pr: null, reason: 'not in the sweep', ship: notListed });
+    });
+
+    it('says a refusal and an unheld PR', async () => {
+      const unheld = { stage: null, since: null, rounds: 0, waitingOn: [{ ask: 'a90', to: 'shipper', state: 'accepted' as const, since: NOW, refused: 'budget', cards: [] }] };
+      const handlers = createToolHandlers(stub({ pr: async () => ({ pr: record, ship: unheld }) }));
+      const result = await handlers.callTool('pr', { repo: 'acme/the-hive', number: 214 });
+
+      expect(textOf(result)).toContain('ship: not held by the shipper, 0 rounds; waiting on shipper (a90, accepted): refused: budget');
+    });
+
+    it('adds no line when the log knows nothing of the PR', async () => {
+      const handlers = createToolHandlers(stub({ pr: async () => ({ pr: record, ship: null }) }));
+      const result = await handlers.callTool('pr', { repo: 'acme/the-hive', number: 214 });
+
+      expect(textOf(result)).not.toContain('ship:');
+      expect(textOf(result).endsWith(record.url)).toBe(true);
+    });
   });
 
   it('reports a missing record with the reason, as an answer and not an error', async () => {
@@ -861,7 +911,7 @@ describe('createToolHandlers — projects and pr (HIVE-173)', () => {
 
     expect(result.isError).toBe(false);
     expect(textOf(result)).toContain('No record of acme/the-hive#9: not in the sweep of 2 repositories');
-    expect(result.structuredContent).toEqual({ pr: null, reason: 'not in the sweep of 2 repositories' });
+    expect(result.structuredContent).toEqual({ pr: null, reason: 'not in the sweep of 2 repositories', ship: null });
   });
 
   it('refuses a lookup without a slug or with a number that is not a positive integer, calling nothing', async () => {

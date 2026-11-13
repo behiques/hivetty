@@ -1438,6 +1438,21 @@ A PR the sweep does not list answers `pr: null` with a reason, which is a real
 answer: the sweep covers PRs the user authored, open or merged in the last day,
 on configured projects only.
 
+**The `ship` block** (HIVE-411). Every answer also carries `ship`: what the PR
+is waiting on, computed in main by `shipStatus` (`electron/main/ledger/ship-status.ts`)
+from the **whole** ledger, not the renderer's tail, and present whether or not the
+sweep lists the PR. `stage` is the shipper's current stop and `since` when that
+visit opened (both `null` when the shipper does not hold it); `rounds` counts the
+visits to `findings`; `waitingOn` lists every owed ask (`open`, `delivered` or
+`accepted`) whose `meta.pr` and `meta.repo` name the PR, each with its `ref`, who
+owes it, its state and since when, the owing agent's `refused` reason when one of
+its lanes has a refused wake, and the permission cards that party has open with
+their ages. `ship: null` means the log knows nothing of the PR. The text answer
+says it in one line (`ship: approval for 17m, 1 round; waiting on shipper (a84,
+open): card a84 17m`). The read is not gated by session: no tool is, and nothing
+in it is private between local sessions. Sessions are told (work-on, goal-on) to
+read it before guessing why a PR is slow.
+
 **The routes.** `PROJECTS_PATH` (`/projects`) reads no body and answers
 synchronously from the config in memory; `PR_PATH` (`/pr`) takes a small JSON
 body, capped at `PR_LOOKUP_MAX_BYTES`, parsed by `parsePrLookup` in
