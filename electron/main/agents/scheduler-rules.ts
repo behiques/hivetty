@@ -112,6 +112,8 @@ export function decide(
   */
   if (entry.from === entry.to && (options?.sameLane ?? true)) return 'ignore';
   if (!WAKING_KINDS.has(entry.kind)) return 'ignore';
+  // An accept (HIVE-410) is a receipt: the asker is free, and nothing in it is theirs to act on.
+  if (entry.meta?.['accepted'] === true) return 'ignore';
 
   return decideForStatus(status);
 }

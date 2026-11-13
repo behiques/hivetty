@@ -18,6 +18,11 @@ const entry = (over: Partial<LedgerEntry> = {}): LedgerEntry => ({
 });
 
 describe('decide', () => {
+  it('ignores an accept: the asker is free and has nothing to act on (HIVE-410)', () => {
+    expect(decide('sleeping', entry({ kind: 'post', meta: { accepted: true } }))).toBe('ignore');
+    expect(decide('sleeping', entry({ kind: 'post', meta: { accepted: false } }))).toBe('wake');
+  });
+
   it('wakes an agent that is not running', () => {
     const resting: AgentStatus[] = ['sleeping', 'asking', 'failed'];
 

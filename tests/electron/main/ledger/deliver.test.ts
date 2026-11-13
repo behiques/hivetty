@@ -228,14 +228,23 @@ describe('createDeliver', () => {
     expect(write).not.toHaveBeenCalled();
   });
 
-  it('does not nudge for an answer that only says accepted (HIVE-408)', () => {
+  it('does not nudge for an accept (HIVE-410)', () => {
     const asked = ledger.append({ from: 'sess-a', to: 'shipper', kind: 'ask', body: 'ship #226' });
     write.mockClear();
 
-    ledger.append({ from: 'shipper', to: 'sess-a', kind: 'answer', thread: asked.ok ? asked.id : '', body: ' Accepted ' });
+    ledger.append({ from: 'shipper', kind: 'post', thread: asked.ok ? asked.id : '', body: 'accepted', meta: { accepted: true } });
     deliver.onIdle('sess-a');
 
     expect(write).not.toHaveBeenCalled();
+  });
+
+  it('nudges for an answer that only says accepted: the key decides, not the body (HIVE-410)', () => {
+    const asked = ledger.append({ from: 'sess-a', to: 'shipper', kind: 'ask', body: 'ship #226' });
+    write.mockClear();
+
+    ledger.append({ from: 'shipper', to: 'sess-a', kind: 'answer', thread: asked.ok ? asked.id : '', body: 'accepted' });
+
+    expect(write).toHaveBeenCalled();
   });
 
   it('delivers the backlog before a newer entry (HIVE-408)', () => {

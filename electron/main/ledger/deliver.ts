@@ -56,12 +56,8 @@ import type { Ledger } from './index';
  */
 const DELIVERABLE: readonly LedgerKind[] = ['ask', 'answer', 'post', 'failed', 'done'];
 
-/**
- * The shipper's intake receipt says nothing the session must act on (HIVE-408).
- * shortcut: matches the body; key on `meta.accepted` once HIVE-410 lands `ledger_accept`.
- */
-const isAcceptance = (entry: LedgerEntry): boolean =>
-  entry.kind === 'answer' && entry.body.trim().toLowerCase() === 'accepted';
+/** An accept (HIVE-410) says nothing the session must act on: the ask it sent is in hand, and still open. */
+const isAcceptance = (entry: LedgerEntry): boolean => entry.meta?.['accepted'] === true;
 
 /** How long after a person's keystroke a session is not typed into (HIVE-408): the renderer's draft report trails the echo by a frame. */
 export const TYPING_HOLD_MS = 2_000;
