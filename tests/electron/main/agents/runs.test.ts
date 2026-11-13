@@ -78,6 +78,7 @@ describe('createRunTracker', () => {
   let handoff: string | undefined;
   /** What a closing run leaves open on its lane (HIVE-354). Set per test. */
   let left: { ask: { id: string; ref?: string } | undefined; claims: string[] };
+  let owed: { ask: { id: string; ref?: string }; rewoken: boolean }[];
   /** Does any run of the closing lane hold an open ask (HIVE-408)? Set per test. */
   let askingOnLane: boolean;
   /** What `onLive` reported, in order (HIVE-408). */
@@ -118,6 +119,7 @@ describe('createRunTracker', () => {
     lastTurn = false;
     handoff = undefined;
     left = { ask: undefined, claims: [] };
+    owed = [];
     askingOnLane = false;
     awake = [];
     promptHash = undefined;
@@ -167,6 +169,7 @@ describe('createRunTracker', () => {
       hasOpenAsk: () => openAskAnywhere,
       handoffFor: () => handoff,
       leftOpen: () => left,
+      owedBy: () => owed,
       openAsksOnLane: (name, lane) => askingOnLane && name === 'a' && lane === 'thread:k1',
       onLive: (live) => awake.push(live),
       newUuid: () => 'uuid-minted',
@@ -2670,6 +2673,79 @@ describe('createRunTracker', () => {
       childInstances[0]?.emitClose(0);
 
       expect(abandoned()).toEqual([]);
+    });
+  });
+
+  describe('a standing or repo lane that ends owing an answer (HIVE-410)', () => {
+    const fromOvermind = () => ledger.filter((item) => item.from === OVERMIND && item.kind !== 'event');
+    const end = (): void => {
+      childInstances[0]?.emitStdout(resultLine());
+      childInstances[0]?.emitClose(0);
+    };
+
+    it('re-wakes the lane once, with a post to the agent on the ask it owes', () => {
+      owed = [{ ask: { id: 'k1', ref: 'a7' }, rewoken: false }];
+
+      tracker.run('a', 'ledger', undefined, { lane: 'repo:a/x', wakes: ['k1'] });
+      end();
+
+      expect(fromOvermind()).toEqual([
+        {
+          from: OVERMIND,
+          to: 'a',
+          kind: 'post',
+          thread: 'k1',
+          body: expect.stringContaining('You owe an answer to a7') as string,
+          meta: { run: 'run-1', agent: 'a', outcome: 'done', rewoke: 'k1' },
+        },
+      ]);
+    });
+
+    it('fails the ask to the asker on the second miss, and releases nothing', () => {
+      owed = [{ ask: { id: 'k1', ref: 'a7' }, rewoken: true }];
+      left = { ask: undefined, claims: ['a/x#1'] };
+
+      tracker.run('a', 'ledger', undefined, { lane: 'repo:a/x', wakes: ['w1'] });
+      end();
+
+      expect(fromOvermind()).toEqual([
+        {
+          from: OVERMIND,
+          kind: 'failed',
+          thread: 'k1',
+          body: 'a run run-1 ended (done) without answering a7, after one re-wake',
+          meta: { run: 'run-1', agent: 'a', outcome: 'done', unanswered: 'k1' },
+        },
+      ]);
+    });
+
+    it('does the same on the standing lane', () => {
+      owed = [{ ask: { id: 'k1' }, rewoken: false }];
+
+      tracker.run('a', 'ledger', undefined, { wakes: ['k1'] });
+      end();
+
+      expect(fromOvermind()[0]).toMatchObject({ kind: 'post', to: 'a', thread: 'k1', meta: { rewoke: 'k1' } });
+    });
+
+    it('leaves the ask alone while the run waits on a question of its own', () => {
+      owed = [{ ask: { id: 'k1' }, rewoken: false }];
+      openAsks = true;
+
+      tracker.run('a', 'ledger', undefined, { lane: 'repo:a/x', wakes: ['k1'] });
+      end();
+
+      expect(fromOvermind()).toEqual([]);
+    });
+
+    it('never re-wakes a thread lane: its ask is failed at once, as before (HIVE-354)', () => {
+      owed = [{ ask: { id: 'k9' }, rewoken: false }];
+      left = { ask: undefined, claims: [] };
+
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:k9', wakes: ['k9'] });
+      end();
+
+      expect(fromOvermind()).toEqual([]);
     });
   });
 

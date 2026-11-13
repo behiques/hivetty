@@ -189,7 +189,9 @@ export interface RunTrackerDeps {
   state: AgentState;
   appendLedger: (entry: {
     from: string;
-    kind: 'event' | 'failed' | 'release';
+    /** Set only on the overmind's re-wake post (HIVE-410), which must reach the agent. */
+    to?: string;
+    kind: 'event' | 'failed' | 'release' | 'post';
     thread?: string;
     body: string;
     meta: Record<string, unknown>;
@@ -211,6 +213,11 @@ export interface RunTrackerDeps {
     run: string,
     lane: string,
   ) => { ask: { id: string; ref?: string } | undefined; claims: string[] };
+  /**
+   * The asks a closing run was woken for and still owes (HIVE-410), from `owedBy` in
+   * `ledger-derive.ts`. Optional so a spec that never ends a run owing one needs none.
+   */
+  owedBy?: (name: string, run: string) => { ask: { id: string; ref?: string }; rewoken: boolean }[];
   /** Did this run leave an ask nobody has answered? */
   openAsksFor: (name: string, run: string) => boolean;
   /**
@@ -624,6 +631,68 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     pushRunLines(name, live, step.lines);
   };
 
+  /**
+   * What a run that has ended still owes, and what main does about it.
+   *
+   * A thread lane (HIVE-354): the ask it exists to answer is failed to the asker at once, and
+   * what the run claimed is released.
+   *
+   * A standing or repo lane (HIVE-410): each ask the run was woken for and neither accepted nor
+   * answered gets one re-wake, a post from the overmind on the ask's thread that the scheduler
+   * routes like any entry. A run that re-wake started and that ends still owing is the second
+   * miss: the ask is failed to the asker. Nothing is released: a repo lane's claims are its
+   * PRs, and they outlive any one run.
+   */
+  const settleOwed = (name: string, run: string, lane: string, outcome: RunOutcome, reason: string | null): void => {
+    const why = reason === null ? outcome : `${outcome}: ${reason}`;
+    const meta = { run, agent: name, outcome, ...(reason === null ? {} : { reason }) };
+
+    if (lane.startsWith('thread:')) {
+      const left = deps.leftOpen?.(name, run, lane);
+      if (left?.ask === undefined) return;
+      const freed = left.claims.length === 0 ? '' : `\nReleased: ${left.claims.join(', ')}`;
+
+      deps.appendLedger({
+        from: OVERMIND,
+        kind: 'failed',
+        thread: left.ask.id,
+        body: `${name} run ${run.slice(0, 8)} ended (${why}) without answering ${left.ask.ref ?? left.ask.id}${freed}`,
+        meta: { ...meta, unanswered: left.ask.id },
+      });
+      for (const task of left.claims) {
+        deps.appendLedger({
+          from: OVERMIND,
+          kind: 'release',
+          body: `released ${task}`,
+          meta: { task, run, agent: name },
+        });
+      }
+      return;
+    }
+
+    for (const { ask, rewoken } of deps.owedBy?.(name, run) ?? []) {
+      const ref = ask.ref ?? ask.id;
+      if (rewoken) {
+        deps.appendLedger({
+          from: OVERMIND,
+          kind: 'failed',
+          thread: ask.id,
+          body: `${name} run ${run.slice(0, 8)} ended (${why}) without answering ${ref}, after one re-wake`,
+          meta: { ...meta, unanswered: ask.id },
+        });
+      } else {
+        deps.appendLedger({
+          from: OVERMIND,
+          to: name,
+          kind: 'post',
+          thread: ask.id,
+          body: `You owe an answer to ${ref}: your run ${run.slice(0, 8)} ended (${why}) without accepting or answering it. Answer it with ledger_answer, or take it with ledger_accept.`,
+          meta: { ...meta, rewoke: ask.id },
+        });
+      }
+    }
+  };
+
   const finalizeRun = (
     name: string,
     info: FinalizeInfo,
@@ -923,35 +992,9 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       current.status !== 'paused' &&
       deps.openAsksOnLane?.(name, info.lane) !== true
     ) {
-      const left = deps.leftOpen?.(name, info.run, info.lane);
-
-      if (left?.ask !== undefined) {
-        const why = reason === null ? outcome : `${outcome}: ${reason}`;
-        const freed = left.claims.length === 0 ? '' : `\nReleased: ${left.claims.join(', ')}`;
-
-        deps.appendLedger({
-          from: OVERMIND,
-          kind: 'failed',
-          thread: left.ask.id,
-          body: `${name} run ${info.run.slice(0, 8)} ended (${why}) without answering ${left.ask.ref ?? left.ask.id}${freed}`,
-          meta: {
-            run: info.run,
-            agent: name,
-            outcome,
-            ...(reason === null ? {} : { reason }),
-            unanswered: left.ask.id,
-          },
-        });
-
-        for (const task of left.claims) {
-          deps.appendLedger({
-            from: OVERMIND,
-            kind: 'release',
-            body: `released ${task}`,
-            meta: { task, run: info.run, agent: name },
-          });
-        }
-      }
+      // The re-wake post may start the agent's next run from the ledger's change listener, while this
+      // finalizer is on the stack: nothing below writes the agent's status, so that is safe (HIVE-410).
+      settleOwed(name, info.run, info.lane, outcome, reason);
     }
 
     /*
