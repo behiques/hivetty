@@ -2121,6 +2121,21 @@ describe('hive-store', () => {
           expect(lastLine()?.text).toContain('asking (a71)');
         });
 
+        it('names no ask beside an agent whose ask was accepted (HIVE-410)', () => {
+          useHiveStore.getState().hydrateAgents([summary({ status: 'sleeping' })]);
+          useHiveStore.getState().hydrateLedger([
+            { id: '20260830-120000-0001', ts: Date.now(), from: 'slack-watcher', to: 'shipper', kind: 'ask', ref: 'a71', body: 'Ship PR #1' },
+            {
+              id: '20260830-120001-0001', ts: Date.now(), from: 'shipper', to: 'slack-watcher', kind: 'post',
+              thread: '20260830-120000-0001', body: 'accepted', meta: { accepted: true },
+            },
+          ]);
+
+          run('agents');
+
+          expect(lastLine()?.text).not.toContain('a71');
+        });
+
         it('says so when there are no agents at all', () => {
           // The demo fleet seeds three; this verb's empty case needs saying.
           useHiveStore.getState().hydrateAgents([]);
