@@ -577,19 +577,30 @@ export function createToolHandlers(
     const to = stringArg(args, 'to');
     if (to === undefined) return failed('ask needs a party to ask');
 
-    const { id, ref } = await client.post({
+    const { id, ref, duplicate } = await client.post({
       to,
       kind: 'ask',
       body,
       ...(Object.keys(meta).length === 0 ? {} : { meta }),
     });
+    const data = { id, ...(ref === undefined ? {} : { ref }) };
+
+    // Already open under the same key (HIVE-410): nothing was written.
+    if (duplicate !== undefined) {
+      return ok(
+        duplicate.mine
+          ? `You already asked ${to} this: ${ref ?? id} is still open. Nothing new was written. End your turn and wait for its answer.`
+          : `${to} already has this ask open as ${ref ?? id}, from ${duplicate.from}. Nothing new was written, and its answer goes to ${duplicate.from}, not to you. Do not wait for it.`,
+        { ...data, duplicate: true },
+      );
+    }
 
     return ok(
       `asked ${to}: ${ref ?? id}. Now end your turn and wait — you will be woken with the answer.`,
       // The same id/ref, as data — HIVE-119 and HIVE-120 both need to answer
       // this thread later, and today that means extracting the ref out of a
       // sentence rather than reading a field.
-      { id, ...(ref === undefined ? {} : { ref }) },
+      data,
     );
   };
 

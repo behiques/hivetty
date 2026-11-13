@@ -370,6 +370,17 @@ describe('the writing tools', () => {
     });
   });
 
+  it('ledger_ask says when the ask was already open, and whether to wait (HIVE-410)', async () => {
+    const mine = stub({ post: vi.fn(async () => ({ id: 'id-1', ref: 'a1', duplicate: { from: 'builder', mine: true } })) });
+    const own = await createToolHandlers(mine).callTool('ledger_ask', { to: 'shipper', body: 'Ship PR #1' });
+    expect(textOf(own)).toBe('You already asked shipper this: a1 is still open. Nothing new was written. End your turn and wait for its answer.');
+
+    const theirs = stub({ post: vi.fn(async () => ({ id: 'id-1', ref: 'a1', duplicate: { from: 'builder', mine: false } })) });
+    const other = await createToolHandlers(theirs).callTool('ledger_ask', { to: 'shipper', body: 'Ship PR #1' });
+    expect(textOf(other)).toBe('shipper already has this ask open as a1, from builder. Nothing new was written, and its answer goes to builder, not to you. Do not wait for it.');
+    expect(other.structuredContent).toEqual({ id: 'id-1', ref: 'a1', duplicate: true });
+  });
+
   it('ledger_ask folds options into meta and reports the ref', async () => {
     const client = stub();
     const result = await createToolHandlers(client).callTool('ledger_ask', {

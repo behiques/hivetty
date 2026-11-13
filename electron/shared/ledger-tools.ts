@@ -80,14 +80,19 @@ const TTL_GUIDANCE =
 const AFTER_GUIDANCE =
   '`after` ("owner/repo#N") holds this ask until that pull request\'s shipper `closed` entry lands: nobody is told of it before then, and it waits up to seven days. Use it to queue the next job in a chain behind the PR it depends on.';
 
-/** The ask's `meta`: the shared fragment plus the three keys only an ask carries. */
+/** What `meta.key` is for (HIVE-410): one open ask per recipient and key. */
+const KEY_GUIDANCE =
+  '`key` (a string) makes this ask unique for its recipient while it is open: a second ask to the same party with the same key writes nothing and returns the first. A ship ask uses "ship:owner/repo#N".';
+
+/** The ask's `meta`: the shared fragment plus the four keys only an ask carries. */
 const askMeta = {
   type: 'object',
-  description: `${META_DESCRIPTION} ${ASK_INTENT_GUIDANCE} ${TTL_GUIDANCE} ${AFTER_GUIDANCE}`,
+  description: `${META_DESCRIPTION} ${ASK_INTENT_GUIDANCE} ${TTL_GUIDANCE} ${AFTER_GUIDANCE} ${KEY_GUIDANCE}`,
   properties: {
     intent: { type: 'string', description: ASK_INTENT_GUIDANCE },
     ttlMs: { type: 'number', description: TTL_GUIDANCE },
     after: { type: 'string', description: AFTER_GUIDANCE },
+    key: { type: 'string', description: KEY_GUIDANCE },
   },
 } as const;
 

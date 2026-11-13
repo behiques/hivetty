@@ -171,7 +171,7 @@ export interface CallToolResult {
  */
 export interface ReceiverClient {
   read(query: LedgerReadQuery): Promise<LedgerSnapshot>;
-  post(request: Omit<LedgerPostRequest, 'from'>): Promise<{ id: string; ref?: string }>;
+  post(request: Omit<LedgerPostRequest, 'from'>): Promise<{ id: string; ref?: string; duplicate?: { from: string; mine: boolean } }>;
   /**
    * Who else is on this machine (HIVE-127).
    *

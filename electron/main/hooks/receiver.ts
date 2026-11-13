@@ -1253,7 +1253,10 @@ export function createReceiver(options: ReceiverOptions): Receiver {
 
     const result = onLedgerPost(caller, request);
     if (!result.ok) return { status: result.status, json: { reason: result.reason } };
-    return { status: 200, json: { id: result.id, ref: result.ref } };
+    return {
+      status: 200,
+      json: { id: result.id, ref: result.ref, ...(result.duplicate === undefined ? {} : { duplicate: result.duplicate }) },
+    };
   }
 
   /**
