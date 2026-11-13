@@ -167,6 +167,17 @@ export function createLedger(options: LedgerOptions): Ledger {
         owed a reply to. `answer()` keeps its own copy and delegates here; the
         check is idempotent, so paying for it twice costs nothing.
       */
+      /*
+        An accept (HIVE-410) takes an ask without closing it. `askStates`, the
+        scheduler and `deliver.ts` all trust a stored `meta.accepted`, so it is
+        held here to an answer's rules, whatever kind carries it: it names an
+        open ask, and only the party asked may write it.
+      */
+      const accepting = request.meta?.['accepted'] === true;
+      if (accepting && request.thread === undefined) {
+        return refuse(400, 'an accept names the ask it accepts: pass thread');
+      }
+
       let thread = request.thread;
       let to = request.to;
       if (thread !== undefined) {
@@ -205,6 +216,15 @@ export function createLedger(options: LedgerOptions): Ledger {
           // Also the answer-to-a-non-ask case: `resolveRef` matches any entry
           // id, and only an ask is ever in `openAsks`.
           return refuse(400, `thread is not open: ${thread}`);
+        }
+
+        if (accepting) {
+          if (ask === undefined || !stillOpen) return refuse(400, `thread is not open: ${thread}`);
+          if (request.from !== ask.to) {
+            return refuse(403, `${thread} was asked of ${ask.to ?? 'everyone'}; ${request.from} cannot accept it`);
+          }
+          // To the asker, so the receipt is not a broadcast every session can read.
+          to = to ?? ask.from;
         }
 
         if (ask !== undefined && CLOSING_KINDS.has(request.kind)) {
