@@ -434,8 +434,9 @@ const segmentMerges = (words: readonly string[]): boolean =>
   words.some(
     (word, i) =>
       (namesGh(word) && ghMerges(words, i)) ||
-      // Text the shell still expands (an arithmetic subscript, a substitution) and that spells a merge.
-      (/[$`]/.test(word) && PR_MERGE.test(word)),
+      // Text the shell still expands (an arithmetic subscript, a substitution) and that spells a merge. Only text
+      // after a `$` or backtick can run there; one that merely follows the merge (a grep pattern's `\``) cannot.
+      (/[$`]/.test(word) && PR_MERGE.test(word.slice(word.search(/[$`]/)))),
   ) || (runsText(words) && words.some((word) => PR_MERGE.test(word)));
 
 /**
