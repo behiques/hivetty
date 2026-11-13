@@ -4032,7 +4032,9 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       },
     })),
 
-  hydrateLedger: (snapshot, closed = [], open = []) =>
+  hydrateLedger: (snapshot, closed = [], open = []) => {
+    // A PR a session handed the shipper is its own; computed before the write, sent after it (`hydratePrs`' shape).
+    const claimed = claimSessionPrs(get(), [...snapshot, ...open]);
     set((state) => {
       // `open`/`ageMs`/`state` are derived at read time and go stale in a mirror.
       const entries = [
@@ -4069,14 +4071,28 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         entries,
       );
 
-      return { ledger: capLedger(merged, closedAsks), closedAsks };
-    }),
+      const entities = rememberSessionPrs(state.entities, claimed);
+      return {
+        ledger: capLedger(merged, closedAsks),
+        closedAsks,
+        ...(entities === state.entities ? {} : { entities }),
+      };
+    });
+    for (const note of claimed) noteSessionPr(note);
+  },
 
   ledgerAppend: (entry) => {
+    const claimed = claimSessionPrs(get(), [entry]);
     set((state) => {
       const closedAsks = withClosed(state.closedAsks, [entry]);
-      return { ledger: capLedger([...state.ledger, entry], closedAsks), closedAsks };
+      const entities = rememberSessionPrs(state.entities, claimed);
+      return {
+        ledger: capLedger([...state.ledger, entry], closedAsks),
+        closedAsks,
+        ...(entities === state.entities ? {} : { entities }),
+      };
     });
+    for (const note of claimed) noteSessionPr(note);
     /*
       An entry naming a PR is the shipper (or a session) reporting a move gh
       made outside this app: marked ready, merged. Sweep now rather than at the
@@ -8765,6 +8781,25 @@ export function resolveSessionPrs(
   }
   const group = (pr: SessionPr) => (pr.state === undefined ? 2 : pr.state === 'merged' ? 1 : 0);
   return found.reverse().sort((a, b) => group(a) - group(b));
+}
+
+/**
+ * What the ledger says sessions opened ({@link prClaimOf}), as one note per
+ * session whose list changes. A claim naming no session (an agent, an id
+ * retention has dropped) is ignored.
+ */
+function claimSessionPrs(state: HiveState, entries: readonly LedgerEntry[]): SessionPrRequest[] {
+  const notes = new Map<string, SessionPrRecord[]>();
+  for (const entry of entries) {
+    const claim = prClaimOf(entry);
+    if (claim === null) continue;
+    const id = currentSessionIn(state, claim.session);
+    const entity = state.entities[id];
+    if (entity === undefined || !isSession(entity)) continue;
+    const next = upsertSessionPr(notes.get(id) ?? entity.prs, claim.pr);
+    if (next !== undefined) notes.set(id, next);
+  }
+  return [...notes].map(([entityId, prs]) => ({ entityId, prs }));
 }
 
 /** Whether a session other than `except` owns the PR at `url`. */

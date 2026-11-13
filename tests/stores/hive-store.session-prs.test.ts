@@ -1,10 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { prClaimOf, resolveSessionPrs, upsertSessionPr } from '@stores/hive-store';
+import { prClaimOf, resolveSessionPrs, upsertSessionPr, useHiveStore } from '@stores/hive-store';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import { SESSION_PRS_MAX, type SessionPrRecord } from '@shared/session-history-contract';
 
 import { prRecord } from '@tests/support/prs';
+
+const noteSessionPr = vi.fn();
+const refreshPrs = vi.fn(() => Promise.resolve());
+
+vi.mock('@lib/session-history', () => ({
+  noteSessionPr: (request: unknown) => noteSessionPr(request),
+  noteSessionTicket: vi.fn(),
+  readSessionHistory: vi.fn(),
+}));
 
 /**
  * A session's PRs as a list it owns (the sess-19 bug): one session can open
@@ -143,5 +152,50 @@ describe('resolveSessionPrs', () => {
 
   it('keeps a branch guess no other session owns', () => {
     expect(resolveSessionPrs('main', 'hivetty-cloud', [], [pr(45)], elsewhere()).map((p) => p.n)).toEqual([45]);
+  });
+});
+
+describe('a ledger claim records the PR as the session\'s own', () => {
+  const initial = useHiveStore.getState();
+  let id: string;
+
+  beforeEach(() => {
+    useHiveStore.setState(initial, true);
+    useHiveStore.setState({ refreshPrs });
+    noteSessionPr.mockClear();
+    id = useHiveStore.getState().spawnSession('hivetty-cloud');
+  });
+
+  const ask = (from: string) =>
+    entry({ from, to: 'shipper', meta: { pr: 45, repo: 'behiques/hivetty-cloud' } });
+
+  it('on a live append, and tells main the whole list', () => {
+    useHiveStore.getState().ledgerAppend(ask(id));
+
+    expect(useHiveStore.getState().entities[id]).toMatchObject({ prs: [pr(45, { owned: true })] });
+    expect(noteSessionPr).toHaveBeenCalledWith({ entityId: id, prs: [pr(45, { owned: true })] });
+  });
+
+  it('on a snapshot hydrate', () => {
+    useHiveStore.getState().hydrateLedger([ask(id)]);
+
+    expect(useHiveStore.getState().entities[id]).toMatchObject({ prs: [pr(45, { owned: true })] });
+    expect(noteSessionPr).toHaveBeenCalledTimes(1);
+  });
+
+  it('says nothing for a claim it already holds', () => {
+    useHiveStore.getState().ledgerAppend(ask(id));
+    noteSessionPr.mockClear();
+    useHiveStore.getState().ledgerAppend({ ...ask(id), id: '20261113-150001-0002' });
+
+    expect(noteSessionPr).not.toHaveBeenCalled();
+  });
+
+  it('ignores a claim naming no session', () => {
+    const before = useHiveStore.getState().entities;
+    useHiveStore.getState().ledgerAppend(ask('shipper'));
+
+    expect(useHiveStore.getState().entities).toBe(before);
+    expect(noteSessionPr).not.toHaveBeenCalled();
   });
 });
