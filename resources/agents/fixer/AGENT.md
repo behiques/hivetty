@@ -58,10 +58,11 @@ rules are yours to keep, and every subagent you dispatch inherits them:
    person's checkout and is never yours. A later entry whose `branch` is
    `refs/heads/<PR branch>` is the builder's linked worktree: work **there**
    after `git -C <that path> pull --ff-only`. Otherwise `hive:worktree`, agent
-   path, **detached**: `git -C <path> worktree add --detach <hive>/work/fixer/<repo-name>-pr<N> origin/<PR branch>`,
-   and push each round as `git -C <that path> push origin HEAD:<PR branch>`.
-   Git allows one worktree per branch and the person may hold it; a detached
-   tree at the branch's tip is how you work on it without touching theirs.
+   path, with `<your working directory>` as `<hive>/work/fixer`, `<repo>` as
+   `<path>` and `<branch>` as the PR branch, pushing each round:
+
+{{include:agent-worktree}}
+
    Publish the path as `meta.worktree` with the PR's checkout as
    `meta.checkout` on the `ledger_post` that opens the round, as the
    `worktree` skill says.
