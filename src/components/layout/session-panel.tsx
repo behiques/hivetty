@@ -50,8 +50,8 @@ interface TabContext {
   /** The session's Jira key, if it works on one (HIVE-202). */
   ticketKey: string | undefined;
   ticket: TicketModel | undefined;
-  /** The session's PR and its Hatchery row (HIVE-209). */
-  sessionPr: SessionPrRow | null;
+  /** The session's PRs, each with its Hatchery row (HIVE-209), the one a single fact names first. */
+  sessionPrs: SessionPrRow[];
   openPlanFile: (file: string) => void;
 }
 
@@ -93,13 +93,13 @@ const TABS: readonly TabSpec[] = [
   },
   {
     id: 'pr',
-    label: () => 'PR',
-    exists: ({ sessionPr }) => sessionPr !== null,
+    label: ({ sessionPrs }) => (sessionPrs.length > 1 ? `PRs ${String(sessionPrs.length)}` : 'PR'),
+    exists: ({ sessionPrs }) => sessionPrs.length > 0,
     Icon: GitPullRequest,
-    fact: ({ sessionPr }) => (sessionPr === null ? 'PR' : prFact(sessionPr.pr, sessionPr.row)),
-    dot: ({ sessionPr }) => sessionPr?.row?.hatch.tone ?? 'muted',
-    body: ({ entity, sessionPr }) =>
-      sessionPr === null ? null : <SessionPrTab key={sessionPr.pr.url} sessionId={entity.id} sessionPr={sessionPr} />,
+    fact: ({ sessionPrs }) => (sessionPrs[0] === undefined ? 'PR' : prFact(sessionPrs[0].pr, sessionPrs[0].row)),
+    dot: ({ sessionPrs }) => sessionPrs[0]?.row?.hatch.tone ?? 'muted',
+    body: ({ entity, sessionPrs }) =>
+      sessionPrs.length === 0 ? null : <SessionPrTab sessionId={entity.id} sessionPrs={sessionPrs} />,
   },
   {
     id: 'files',
@@ -138,7 +138,7 @@ export function SessionPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null>
   const changedCount = useChangedFileCount(mainId);
   const ticketKey = owner !== null && isSession(owner) ? owner.ticket : undefined;
   const ticket = useOpenTicket(ticketKey ?? null);
-  const sessionPr = useSessionPrRows(owner?.id ?? '')[0] ?? null;
+  const sessionPrs = useSessionPrRows(owner?.id ?? '');
   const open = useSessionPanelOpen();
   const tab = useSessionPanelTab();
   const setOpen = useSetSessionPanelOpen();
@@ -166,7 +166,7 @@ export function SessionPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null>
 
   if (owner === null || place === 'home') return null;
 
-  const ctx: TabContext = { entity: owner, mainId, plan, changedCount, ticketKey, ticket, sessionPr, openPlanFile };
+  const ctx: TabContext = { entity: owner, mainId, plan, changedCount, ticketKey, ticket, sessionPrs, openPlanFile };
   const existing = TABS.filter((spec) => spec.exists(ctx));
   const shown = pickTab(
     existing.map((spec) => spec.id),

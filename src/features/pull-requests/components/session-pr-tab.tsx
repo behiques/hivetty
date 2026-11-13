@@ -3,10 +3,11 @@ import { useCallback } from 'react';
 
 import { createPoller } from '@/hooks/create-poller';
 import { useOpenFileAt } from '@/hooks/use-open-file-at';
+import { cn } from '@/lib/utils';
 import { isSession } from '@/types/entity';
 import type { HatcheryRow, SessionPr } from '@/types/pull-request';
 
-import { Flap } from '@features/pull-requests/components/flap';
+import { Flap, FLAP_DOT } from '@features/pull-requests/components/flap';
 import { CheckRow, reviewers, Section } from '@features/pull-requests/components/pr-properties';
 import { checkCount, firstLine, shipperWords, threadLine, threadPlace } from '@features/pull-requests/session-pr';
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
@@ -21,7 +22,7 @@ import {
   useReviewUrls,
   useShipping,
 } from '@stores/hive-store';
-import { usePrPageActions } from '@stores/ui-store';
+import { usePrPageActions, usePrPick, useSetPrPick } from '@stores/ui-store';
 
 /** The tab's detail re-reads once a minute while it is shown; mounting is the first read (PrPage's rule). */
 const useTabPoller = createPoller({ intervalMs: 60_000 });
@@ -190,7 +191,48 @@ function LivePr({ sessionId, row }: { sessionId: string; row: HatcheryRow }) {
  * detail while the tab is shown. A remembered PR has no owner or repo, so it
  * gets its number and link only.
  */
-export function SessionPrTab({ sessionId, sessionPr }: { sessionId: string; sessionPr: SessionPrRow }) {
-  if (sessionPr.row === null) return <Remembered pr={sessionPr.pr} />;
-  return <LivePr sessionId={sessionId} row={sessionPr.row} />;
+/**
+ * A session's PRs (one session can open several). One draws as it always did;
+ * two or more get a chip row above the detail, each chip its number and flap
+ * dot, and the chosen one is remembered per session in `ui-store`.
+ */
+export function SessionPrTab({ sessionId, sessionPrs }: { sessionId: string; sessionPrs: readonly SessionPrRow[] }) {
+  const pick = usePrPick(sessionId);
+  const setPick = useSetPrPick();
+  const shown = sessionPrs.find(({ pr }) => pr.url === pick) ?? sessionPrs[0];
+  if (shown === undefined) return null;
+
+  return (
+    <>
+      {sessionPrs.length < 2 ? null : (
+        <div role="group" aria-label="Pull requests" className="flex flex-wrap gap-1 px-1 pb-2.5">
+          {sessionPrs.map(({ pr, row }) => {
+            const chosen = pr.url === shown.pr.url;
+            return (
+              <button
+                key={pr.url}
+                type="button"
+                aria-pressed={chosen}
+                onClick={() => {
+                  setPick(sessionId, pr.url);
+                }}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-2 py-0.5 text-control tabular-nums',
+                  chosen ? 'bg-active text-ink' : 'text-muted hover:bg-hover',
+                )}
+              >
+                {`#${String(pr.n)}`}
+                <i aria-hidden className={cn('inline-block size-1.5 rounded-full', FLAP_DOT[row?.hatch.tone ?? 'muted'])} />
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {shown.row === null ? (
+        <Remembered key={shown.pr.url} pr={shown.pr} />
+      ) : (
+        <LivePr key={shown.pr.url} sessionId={sessionId} row={shown.row} />
+      )}
+    </>
+  );
 }
