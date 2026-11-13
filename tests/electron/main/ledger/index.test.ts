@@ -1044,5 +1044,21 @@ describe('createLedger', () => {
       expect(accept('shipper', id)).toMatchObject({ ok: false, status: 400 });
       expect(ledger.read({ kind: 'post' }).entries).toEqual([]);
     });
+
+    it('is refused on a held ask: it is owed to nobody until its PR closes', () => {
+      const held = ledger.append({ from: 'sess-a', to: 'shipper', kind: 'ask', body: 'next', meta: { after: 'a/x#3' } });
+      if (!held.ok) throw new Error('setup failed');
+
+      expect(accept('shipper', held.id)).toMatchObject({ ok: false, status: 400 });
+    });
+
+    it('is refused on a closing kind: an answer cannot also leave the ask open', () => {
+      const id = asked();
+
+      expect(
+        ledger.append({ from: 'shipper', kind: 'answer', thread: id, body: 'done', meta: { accepted: true } }),
+      ).toMatchObject({ ok: false, status: 400 });
+      expect(ledger.read({}).openAsks.map((ask) => ask.id)).toEqual([id]);
+    });
   });
 });

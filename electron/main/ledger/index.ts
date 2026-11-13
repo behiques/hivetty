@@ -177,6 +177,9 @@ export function createLedger(options: LedgerOptions): Ledger {
       if (accepting && request.thread === undefined) {
         return refuse(400, 'an accept names the ask it accepts: pass thread');
       }
+      if (accepting && CLOSING_KINDS.has(request.kind)) {
+        return refuse(400, `an accept leaves its ask open; a ${request.kind} closes it`);
+      }
 
       let thread = request.thread;
       let to = request.to;
@@ -210,7 +213,8 @@ export function createLedger(options: LedgerOptions): Ledger {
           same threaded `done` on every wake and spawn a run each time, which is
           headroom the old broadcast behaviour never had.
         */
-        const stillOpen = openAsks(all, now()).some((open) => open.id === canonical);
+        const openAsk = openAsks(all, now()).find((open) => open.id === canonical);
+        const stillOpen = openAsk !== undefined;
 
         if (request.kind === 'answer' && !stillOpen) {
           // Also the answer-to-a-non-ask case: `resolveRef` matches any entry
@@ -219,7 +223,10 @@ export function createLedger(options: LedgerOptions): Ledger {
         }
 
         if (accepting) {
-          if (ask === undefined || !stillOpen) return refuse(400, `thread is not open: ${thread}`);
+          // A held ask is owed to nobody yet; an accept stored now would count the moment it is released.
+          if (ask === undefined || openAsk === undefined || openAsk.state === 'held') {
+            return refuse(400, `thread is not open: ${thread}`);
+          }
           if (request.from !== ask.to) {
             return refuse(403, `${thread} was asked of ${ask.to ?? 'everyone'}; ${request.from} cannot accept it`);
           }
