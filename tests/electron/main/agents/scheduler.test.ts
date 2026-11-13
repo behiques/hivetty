@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createScheduler, triggerFor } from '../../../../electron/main/agents/scheduler';
+import { createScheduler, mootCards, triggerFor } from '../../../../electron/main/agents/scheduler';
 import { createAgentState } from '../../../../electron/main/agents/state';
 import {
   AGENT_PENDING_WAKE_MAX,
@@ -3168,5 +3168,113 @@ describe('createScheduler', () => {
 
       expect(woke).toContainEqual(expect.objectContaining({ name: AGENT, lane: 'repo:behiques/hivetty-cloud' }));
     });
+
+    describe('the watch card closes, and the audit replays', () => {
+      /** The unpicked ask, its re-nudge marker, and the watch card raised 15 minutes later. */
+      const carded = (): { ask: LedgerEntry; card: LedgerEntry } => {
+        const ask = unpicked();
+        const markTs = 1 + RENUDGE_AFTER_MS;
+        const card = entry({ id: '20261113-000000-0004', from: 'overmind', to: 'overmind', kind: 'ask', ref: 'a41', ts: markTs + CARD_AFTER_MS, body: 'not picked up', meta: { watch: 'card', watched: ask.id, options: ['Dismiss'], key: `watch:card:${ask.id}` } });
+        entries.push(
+          entry({ id: '20261113-000000-0003', kind: 'event', from: 'overmind', to: 'sess-1', thread: ask.id, ts: markTs, body: 're-nudge (a40)', meta: { watch: 'renudge', watched: ask.id } }),
+          card,
+        );
+        return { ask, card };
+      };
+
+      it('answers the card moot once its ask is picked up', () => {
+        const { ask, card } = carded();
+        clock = card.ts + 60_000;
+        scheduler = build();
+        scheduler.start();
+        tick();
+        expect(appended.some((request) => request.thread === card.id)).toBe(false);
+
+        appended.length = 0;
+        entries.push(entry({ id: '20261113-000000-0005', kind: 'event', from: 'overmind', to: 'sess-1', ts: clock, body: 'served', meta: { served: ask.id } }));
+        clock += 60_000;
+        tick();
+
+        expect(appended).toContainEqual(expect.objectContaining({ from: 'overmind', kind: 'answer', thread: card.id, meta: { moot: 'a40 was picked up' } }));
+      });
+
+      it('a26 budget hold: one refusal note, and no watchdog step on top of it', () => {
+        refuse = 'budget';
+        scheduler = build();
+        scheduler.start();
+        const ask = entry({ id: '20261113-000000-0001', from: 'sess-0a', to: AGENT, ref: 'a26', ts: 0, body: 'Build it' });
+        entries.push(ask);
+        scheduler.onEntry(ask);
+        settle();
+
+        clock = 60_000;
+        tick();
+        settle();
+        clock = 2 * 60 * 60_000;
+        tick();
+        settle();
+
+        const notes = entries.filter((item) => item.meta?.['refused'] !== undefined);
+        expect(notes).toHaveLength(1);
+        expect(notes[0]).toMatchObject({ from: 'overmind', to: 'sess-0a', thread: ask.id, meta: { refused: 'budget' } });
+        expect(entries.filter((item) => item.meta?.['watch'] !== undefined)).toEqual([]);
+      });
+
+      it('hivetty-cloud#40: one re-wake for a quiet repo lane, and nothing more a minute later', () => {
+        laneMode = 'repo';
+        liveLanes = new Set();
+        schedules.set(AGENT, { wake: { everyMs: 5 * 60_000, on: ['ledger'], check: 'onchange' } as WakeSpec });
+        scheduler = build();
+        const ask = accepted({ repo: 'behiques/hivetty-cloud', pr: 40 }, 'repo:behiques/hivetty-cloud');
+        clock = 5 + 15 * 60_000;
+        scheduler.start();
+        tick();
+        expect(watchWrites()).toEqual([
+          expect.objectContaining({ from: 'overmind', to: AGENT, kind: 'post', thread: ask.id, meta: { watch: 'rewake', watched: ask.id } }),
+        ]);
+
+        settle();
+        clock += 60_000;
+        tick();
+        expect(watchWrites()).toEqual([]);
+      });
+
+      it('card a84: a 15-minute-old permission card gets no watchdog step', () => {
+        entries.push(entry({ id: '20261113-000000-0001', from: 'shipper', to: 'overmind', ref: 'a84', ts: 0, body: 'merge a/x#1?', meta: { kind: 'permission', run: 'r1' } }));
+        clock = 15 * 60_000;
+        scheduler = build();
+        scheduler.start();
+        tick();
+
+        expect(watchWrites()).toEqual([]);
+      });
+    });
+  });
+});
+
+describe('mootCards: the watch card (HIVE-411)', () => {
+  const ask = entry({ id: '20261113-000000-0001', from: AGENT, to: 'sess-1', ref: 'a40', ts: 0 });
+  const log = [
+    ask,
+    entry({ id: '20261113-000000-0002', kind: 'event', from: 'overmind', to: 'sess-1', ts: 1, body: 'nudge written', meta: { delivered: ask.id } }),
+    entry({ id: '20261113-000000-0003', kind: 'event', from: 'overmind', to: 'sess-1', thread: ask.id, ts: 61_001, body: 're-nudge', meta: { watch: 'renudge', watched: ask.id } }),
+    entry({ id: '20261113-000000-0004', kind: 'ask', from: 'overmind', to: 'overmind', ref: 'a41', ts: 961_001, body: 'not picked up', meta: { watch: 'card', watched: ask.id } }),
+  ];
+
+  it('keeps the card while its ask is still unpicked', () => {
+    expect(mootCards(log, 1_000_000)).toEqual([]);
+  });
+
+  it('closes it once the ask was served', () => {
+    const served = entry({ id: '20261113-000000-0005', kind: 'event', from: 'overmind', to: 'sess-1', ts: 970_000, body: 'served', meta: { served: ask.id } });
+    expect(mootCards([...log, served], 1_000_000).map(({ ask: card, reason }) => ({ id: card.id, reason }))).toEqual([
+      { id: '20261113-000000-0004', reason: 'a40 was picked up' },
+    ]);
+  });
+
+  it('ignores a card-shaped ask another party wrote', () => {
+    const forged = entry({ id: '20261113-000000-0006', kind: 'ask', from: 'sess-1', to: 'overmind', ts: 970_000, body: 'x', meta: { watch: 'card', watched: ask.id } });
+    const served = entry({ id: '20261113-000000-0005', kind: 'event', from: 'overmind', to: 'sess-1', ts: 970_000, body: 'served', meta: { served: ask.id } });
+    expect(mootCards([...log, served, forged], 1_000_000).map((item) => item.ask.id)).toEqual(['20261113-000000-0004']);
   });
 });

@@ -19,6 +19,7 @@ import {
 import {
   CLOSING_KINDS,
   afterTarget,
+  askStates,
   laneOfRun,
   expiredAsks,
   isHeld,
@@ -342,7 +343,8 @@ const EXPIRED_KIND = 'expired';
  * Open permission cards nothing is waiting on any more (HIVE-409): the run that asked worked for a job
  * thread that has since closed, or the card's merge names a PR already seen merged (`merged`, ask ids).
  * Answered `moot` by the sweep. That is an answer, so every derivation already treats the card as closed
- * and `Ledger.append` refuses a later grant. Never by time (D7).
+ * and `Ledger.append` refuses a later grant. Never by time (D7). The watchdog's card (HIVE-411) closes the same
+ * way once the ask it watches is no longer open.
  */
 export function mootCards(
   entries: readonly LedgerEntry[],
@@ -351,7 +353,17 @@ export function mootCards(
 ): { ask: LedgerEntry; reason: string }[] {
   const out: { ask: LedgerEntry; reason: string }[] = [];
   const threadPrefix = threadLane('');
+  const stateOf = new Map(askStates(entries, now).map((s) => [s.ask.id, s.state]));
   for (const ask of openAsks(entries, now)) {
+    // The watchdog's card (HIVE-411) is over once the session picks its ask up, or the ask closes.
+    const watched = ask.meta?.['watched'];
+    if (ask.from === OVERMIND && ask.to === OVERMIND && ask.meta?.['watch'] === 'card' && typeof watched === 'string') {
+      if (stateOf.get(watched) !== 'open') {
+        const named = entries.find((item) => item.id === watched);
+        out.push({ ask, reason: `${named?.ref ?? watched} was picked up` });
+      }
+      continue;
+    }
     if (ask.to !== OVERMIND || !isPermissionAsk(ask)) continue;
     const lane = laneOfRun(ask.from, ask.meta?.['run'], entries);
     const target = mergeTarget(ask.meta);
