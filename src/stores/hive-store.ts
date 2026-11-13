@@ -8734,6 +8734,40 @@ export function resolveSessionPr(
 }
 
 /**
+ * A session's pull requests, in the order its PR tab lists them.
+ *
+ * Its own list (`Session.prs`) plus the live branch match when the list does
+ * not hold it yet, each with its live state when the sweep can see it. A PR
+ * another session **owns** is dropped, guess or branch match alike: a branch is
+ * not a session, and two sessions in one checkout share one.
+ * `ownedElsewhere` holds those URLs lower-cased.
+ *
+ * Open first, then merged, then remembered (no state: the sweep cannot see it),
+ * newest first within each. The list is oldest first and the branch match is
+ * newest, so reversing it and sorting stably by group is the whole order.
+ */
+export function resolveSessionPrs(
+  branch: string | undefined,
+  project: string | undefined,
+  prs: readonly PrRecord[],
+  own: readonly SessionPrRecord[] | undefined,
+  ownedElsewhere: ReadonlySet<string>,
+): SessionPr[] {
+  const found: SessionPr[] = (own ?? [])
+    .filter((record) => record.owned === true || !ownedElsewhere.has(record.url.toLowerCase()))
+    .map((record) => {
+      const live = prs.find((pr) => sameUrl(pr.url, record.url));
+      return live === undefined ? { n: record.number, url: record.url } : { n: record.number, state: live.state, url: record.url };
+    });
+  const match = resolveSessionPr(branch, project, prs);
+  if (match !== null && !ownedElsewhere.has(match.url.toLowerCase()) && !found.some((pr) => sameUrl(pr.url, match.url))) {
+    found.push(match);
+  }
+  const group = (pr: SessionPr) => (pr.state === undefined ? 2 : pr.state === 'merged' ? 1 : 0);
+  return found.reverse().sort((a, b) => group(a) - group(b));
+}
+
+/**
  * What a sweep just taught the fleet — one entry per session whose pull
  * request has *changed*, and nothing for the rest.
  *

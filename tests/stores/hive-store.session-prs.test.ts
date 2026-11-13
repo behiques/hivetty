@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { prClaimOf, upsertSessionPr } from '@stores/hive-store';
+import { prClaimOf, resolveSessionPrs, upsertSessionPr } from '@stores/hive-store';
 import type { LedgerEntry } from '@shared/ledger-contract';
 import { SESSION_PRS_MAX, type SessionPrRecord } from '@shared/session-history-contract';
+
+import { prRecord } from '@tests/support/prs';
 
 /**
  * A session's PRs as a list it owns (the sess-19 bug): one session can open
@@ -88,5 +90,58 @@ describe('prClaimOf', () => {
     ['no meta', entry({ to: 'shipper' })],
   ])('ignores %s', (_label, value) => {
     expect(prClaimOf(value)).toBeNull();
+  });
+});
+
+describe('resolveSessionPrs', () => {
+  const live = (number: number, branch: string, state: 'open' | 'draft' | 'merged' = 'open') =>
+    prRecord({
+      number,
+      branch,
+      state,
+      owner: 'behiques',
+      repo: 'hivetty-cloud',
+      url: pr(number).url,
+      updatedAt: `2026-11-13T15:${String(number).padStart(2, '0')}:00Z`,
+    });
+  const elsewhere = (...numbers: number[]) => new Set(numbers.map((n) => pr(n).url.toLowerCase()));
+
+  it("shows nothing for a session in a shared checkout whose branch PR another session owns (sess-17)", () => {
+    expect(
+      resolveSessionPrs('web/console-polish', 'hivetty-cloud', [live(45, 'web/console-polish')], undefined, elsewhere(45)),
+    ).toEqual([]);
+  });
+
+  it('never shows a PR picked up in a shared checkout once another session owns it (sess-19)', () => {
+    expect(
+      resolveSessionPrs('goal/dev-alb-5xx-offhours', 'hivetty-cloud', [live(45, 'web/console-polish')], [pr(45)], elsewhere(45)),
+    ).toEqual([]);
+  });
+
+  it('shows an owned PR whatever branch the session is on now', () => {
+    expect(resolveSessionPrs('main', 'hivetty-cloud', [live(45, 'web/console-polish')], [pr(45, { owned: true })], elsewhere())).toEqual([
+      { n: 45, state: 'open', url: pr(45).url },
+    ]);
+  });
+
+  it('orders open first, then merged, then remembered, newest first within each', () => {
+    const own = [pr(40, { owned: true }), pr(46, { owned: true }), pr(47, { owned: true }), pr(48, { owned: true })];
+    const sweep = [live(46, 'a', 'merged'), live(47, 'b'), live(48, 'c', 'merged')];
+    expect(resolveSessionPrs('main', 'hivetty-cloud', sweep, own, elsewhere()).map((p) => [p.n, p.state])).toEqual([
+      [47, 'open'],
+      [48, 'merged'],
+      [46, 'merged'],
+      [40, undefined],
+    ]);
+  });
+
+  it('adds a live branch match nobody owns and the list does not hold yet, first among the open', () => {
+    const own = [pr(44, { owned: true })];
+    const sweep = [live(44, 'old'), live(49, 'feat/new')];
+    expect(resolveSessionPrs('feat/new', 'hivetty-cloud', sweep, own, elsewhere()).map((p) => p.n)).toEqual([49, 44]);
+  });
+
+  it('keeps a branch guess no other session owns', () => {
+    expect(resolveSessionPrs('main', 'hivetty-cloud', [], [pr(45)], elsewhere()).map((p) => p.n)).toEqual([45]);
   });
 });
