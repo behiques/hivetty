@@ -19,6 +19,7 @@ import {
 import {
   CLOSING_KINDS,
   afterTarget,
+  askStates,
   laneOfRun,
   expiredAsks,
   isHeld,
@@ -28,6 +29,15 @@ import {
   waitingAsks,
 } from '@shared/ledger-derive';
 import { SLACK_COMMAND_KIND, SLACK_SERVER_KEY, SLACK_TRIGGER } from '@shared/slack-contract';
+
+import {
+  QUIET_LANE_FALLBACK_MS,
+  QUIET_LANE_INTERVALS,
+  watchSteps,
+  type LiveRun,
+  type WatchFacts,
+  type WatchStep,
+} from '../ledger/watchdog';
 
 import { MOOT, isPermissionAsk } from './permissions';
 import type { RunStart } from './runs';
@@ -246,6 +256,10 @@ interface SchedulerDeps {
    * `undefined` and its card waits for a person; give the sweep closed PRs if that ever costs time.
    */
   prMerged?: (repo: string, number: number) => Promise<boolean | undefined>;
+  /** Write a session's owed nudges now (HIVE-411): the watchdog's re-nudge. Optional, so every existing harness stands. */
+  flushSession?: (session: string) => void;
+  /** Every live run, every agent (HIVE-411): the watchdog's quiet-run row. Optional, read as none. */
+  liveRuns?: () => readonly LiveRun[];
 }
 
 /** How often the moot sweep asks whether one merge card's PR has merged (HIVE-409). */
@@ -329,7 +343,8 @@ const EXPIRED_KIND = 'expired';
  * Open permission cards nothing is waiting on any more (HIVE-409): the run that asked worked for a job
  * thread that has since closed, or the card's merge names a PR already seen merged (`merged`, ask ids).
  * Answered `moot` by the sweep. That is an answer, so every derivation already treats the card as closed
- * and `Ledger.append` refuses a later grant. Never by time (D7).
+ * and `Ledger.append` refuses a later grant. Never by time (D7). The watchdog's card (HIVE-411) closes the same
+ * way once the ask it watches is no longer open.
  */
 export function mootCards(
   entries: readonly LedgerEntry[],
@@ -338,7 +353,17 @@ export function mootCards(
 ): { ask: LedgerEntry; reason: string }[] {
   const out: { ask: LedgerEntry; reason: string }[] = [];
   const threadPrefix = threadLane('');
+  const stateOf = new Map(askStates(entries, now).map((s) => [s.ask.id, s.state]));
   for (const ask of openAsks(entries, now)) {
+    // The watchdog's card (HIVE-411) is over once the session picks its ask up, or the ask closes.
+    const watched = ask.meta?.['watched'];
+    if (ask.from === OVERMIND && ask.to === OVERMIND && ask.meta?.['watch'] === 'card' && typeof watched === 'string') {
+      if (stateOf.get(watched) !== 'open') {
+        const named = entries.find((item) => item.id === watched);
+        out.push({ ask, reason: `${named?.ref ?? watched} was picked up` });
+      }
+      continue;
+    }
     if (ask.to !== OVERMIND || !isPermissionAsk(ask)) continue;
     const lane = laneOfRun(ask.from, ask.meta?.['run'], entries);
     const target = mergeTarget(ask.meta);
@@ -457,6 +482,68 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     for (const id of mergedCards) if (!open.has(id)) mergedCards.delete(id);
   };
 
+  /** What the watchdog reads besides the log (HIVE-411). */
+  const watchFacts: WatchFacts = {
+    isAgent: (id) => deps.isAgent(id),
+    quietMs: (agent) => {
+      const every = deps.schedules()?.get(agent)?.wake.everyMs;
+      return every === undefined ? QUIET_LANE_FALLBACK_MS : QUIET_LANE_INTERVALS * every;
+    },
+    laneLive: (agent, lane) => deps.laneLive?.(agent, lane) ?? false,
+    liveRuns: () => deps.liveRuns?.() ?? [],
+  };
+
+  /** The one write a watchdog step makes, from the overmind, carrying the step's marker (HIVE-411). */
+  const watchRequest = ({ step, ask, to, run }: WatchStep): LedgerPostRequest => {
+    const ref = ask.ref ?? ask.id;
+    const mark = { watch: step, watched: ask.id };
+    switch (step) {
+      case 'renudge':
+        return { from: OVERMIND, to, kind: 'event', thread: ask.id, body: `re-nudge (${ref})`, meta: mark };
+      case 'card':
+        return {
+          from: OVERMIND,
+          to: OVERMIND,
+          kind: 'ask',
+          body: `${ask.to ?? 'a session'} has not picked up ${ref} from ${ask.from}\n\nNudged twice, 15 minutes apart. Open the session, or answer ${ref} for it.`,
+          meta: { ...mark, options: ['Dismiss'], key: `watch:card:${ask.id}` },
+        };
+      case 'rewake':
+        return {
+          from: OVERMIND,
+          to,
+          kind: 'post',
+          thread: ask.id,
+          body: `${ref} is accepted and its lane has gone quiet: pick it back up, or answer it`,
+          meta: mark,
+        };
+      case 'quiet':
+        return {
+          from: OVERMIND,
+          to,
+          kind: 'post',
+          thread: ask.id,
+          body: `${ask.to ?? 'the agent'} (run ${run ?? '?'}) has written nothing to the ledger for an hour while holding ${ref}`,
+          meta: { ...mark, ...(run === undefined ? {} : { run }) },
+        };
+    }
+  };
+
+  /**
+   * Do one watchdog step (HIVE-411): one write from the overmind carrying the step's marker. A re-nudge then
+   * flushes the session; a re-wake or quiet note is a post on the ask's thread, which the ledger's `onChange`
+   * hands to `onEntry`, and `laneFor` routes to the lane that ask opened. No write, no flush: the next sweep
+   * retries. It never grants, denies, answers a card or kills a run.
+   */
+  const applyWatch = (step: WatchStep): void => {
+    const written = deps.ledger.append(watchRequest(step));
+    if (!written.ok) {
+      console.warn(`[hive] watchdog could not write ${step.step} for ${step.ask.ref ?? step.ask.id}; the next sweep retries`);
+      return;
+    }
+    if (step.step === 'renudge') deps.flushSession?.(step.to);
+  };
+
   /**
    * Retire the asks time has taken, once a minute.
    *
@@ -553,6 +640,9 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       lastPrLookup.delete(ask.id);
     }
     lookUpMerges(entries, now);
+
+    // The watchdog reads the log as the passes above left it (HIVE-411).
+    for (const step of watchSteps(deps.ledger.read().entries, now, watchFacts)) applyWatch(step);
 
     /*
       A closed thread lane is kept a day, so a late question about it can still

@@ -1097,6 +1097,22 @@ describe('createLedger', () => {
       const note = ledger.append({ from: 'builder', to: 'shipper', kind: 'post', body: 'note', meta: { key: 'ship:a/x#1' } });
       expect(note).not.toHaveProperty('duplicate');
     });
+
+    it("takes the watchdog's card, an overmind ask to the overmind, once per key (HIVE-411)", () => {
+      const card = () =>
+        ledger.append({
+          from: OVERMIND,
+          to: OVERMIND,
+          kind: 'ask',
+          body: 'x',
+          meta: { watch: 'card', watched: 'z', options: ['Dismiss'], key: 'watch:card:z' },
+        });
+      const first = card();
+      if (!first.ok) throw new Error(`card refused: ${first.reason}`);
+
+      expect(card()).toMatchObject({ ok: true, id: first.id });
+      expect(ledger.read({ kind: 'ask' }).entries).toHaveLength(1);
+    });
   });
 
   it('keeps an ask held three days across a restart, and releases it when its PR closes (HIVE-410)', () => {

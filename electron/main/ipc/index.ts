@@ -3139,6 +3139,18 @@ export function registerIpcHandlers(
       const reply = await answerPrLookup(github, { repo, number });
       return reply.pr === null ? undefined : reply.pr.state === 'merged';
     },
+    // HIVE-411: the watchdog's re-nudge writes through the session's own gates (live, idle, no draft).
+    flushSession: (session) => deliver.flush(session),
+    // HIVE-411: every live run, for the watchdog's quiet-run row. From the tracker, as `laneLive` is.
+    liveRuns: () =>
+      [...knownAgents].flatMap((agent) =>
+        (runs?.liveRuns(agent) ?? []).map((run) => ({
+          agent,
+          run: run.run,
+          lane: run.lane ?? STANDING_LANE,
+          startedAt: run.startedAt,
+        })),
+      ),
     // A pruned lane's directory goes with its record (HIVE-188).
     removeLaneDir: (name, lane) => {
       try {

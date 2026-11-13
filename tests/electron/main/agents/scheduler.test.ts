@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createScheduler, triggerFor } from '../../../../electron/main/agents/scheduler';
+import { createScheduler, mootCards, triggerFor } from '../../../../electron/main/agents/scheduler';
 import { createAgentState } from '../../../../electron/main/agents/state';
 import {
   AGENT_PENDING_WAKE_MAX,
@@ -15,6 +15,13 @@ import {
   type LedgerPostRequest,
 } from '../../../../electron/shared/ledger-contract';
 import { askStates } from '../../../../electron/shared/ledger-derive';
+import {
+  CARD_AFTER_MS,
+  QUIET_LANE_FALLBACK_MS,
+  QUIET_RUN_MS,
+  RENUDGE_AFTER_MS,
+  type LiveRun,
+} from '../../../../electron/main/ledger/watchdog';
 
 const AGENT = 'pr-reviewer';
 
@@ -80,6 +87,10 @@ describe('createScheduler', () => {
   let removed: string[];
   /** HIVE-267: what the injected licence gate answers. */
   let lapsed: boolean;
+  /** Sessions the watchdog asked delivery to flush (HIVE-411). */
+  let flushed: string[];
+  /** Every live run, as the tracker would answer (HIVE-411). */
+  let live: LiveRun[];
   /** HIVE-409: what the injected PR-merged lookup answers. */
   let prMergedFn: ReturnType<typeof vi.fn<(repo: string, n: number) => Promise<boolean | undefined>>>;
 
@@ -138,6 +149,10 @@ describe('createScheduler', () => {
       now: () => clock,
       lapsed: () => lapsed,
       prMerged: (repo, n) => prMergedFn(repo, n),
+      flushSession: (id) => {
+        flushed.push(id);
+      },
+      liveRuns: () => live,
       setIntervalFn: ((handler: () => void) => {
         const id = nextTimerId;
         nextTimerId += 1;
@@ -173,6 +188,8 @@ describe('createScheduler', () => {
     reenter = false;
     removed = [];
     lapsed = false;
+    flushed = [];
+    live = [];
     prMergedFn = vi.fn(async (_repo: string, _n: number) => undefined as boolean | undefined);
     state = createAgentState({ path: '/dev/null/agents.json', debounceMs: 1 });
     state.patch(AGENT, { status: 'sleeping' });
@@ -3003,5 +3020,261 @@ describe('createScheduler', () => {
 
       expect(state.read(AGENT).pendingWake).toEqual([{ kind: 'post', id: 'w1', from: 'overmind' }]);
     });
+  });
+
+  describe('watchdog (HIVE-411)', () => {
+    /** An ask from the agent to a session, nudged at ts 1 and never served. */
+    const unpicked = (): LedgerEntry => {
+      const ask = entry({ id: '20261113-000000-0001', from: AGENT, to: 'sess-1', ref: 'a40', ts: 0 });
+      entries.push(ask, entry({ id: '20261113-000000-0002', kind: 'event', from: 'overmind', to: 'sess-1', ts: 1, body: 'nudge written', meta: { delivered: ask.id } }));
+      return ask;
+    };
+
+    /** sess-0a asked the agent; run r1 was woken for it and accepted it at ts 5. */
+    const accepted = (meta: Record<string, unknown> = {}, lane?: string): LedgerEntry => {
+      const ask = entry({ id: '20261113-000000-0001', from: 'sess-0a', to: AGENT, ref: 'a50', ts: 0, meta });
+      entries.push(
+        ask,
+        entry({ id: '20261113-000000-0002', from: AGENT, to: undefined, kind: 'event', ts: 1, body: 'run.started — ledger', meta: { run: 'r1', wakes: [ask.id], ...(lane === undefined ? {} : { lane }) } }),
+        entry({ id: '20261113-000000-0003', from: AGENT, to: 'sess-0a', kind: 'post', thread: ask.id, ts: 5, body: 'accepted', meta: { accepted: true, run: 'r1' } }),
+      );
+      return ask;
+    };
+
+    const watchWrites = (): LedgerPostRequest[] => appended.filter((request) => request.meta?.['watch'] !== undefined);
+
+    /** Land what the sweep appended in the log it reads next, as the real ledger would. */
+    const settle = (): void => {
+      for (const request of appended.splice(0)) {
+        entries.push(entry({ ...request, id: `20261113-000100-${String(entries.length).padStart(4, '0')}`, ts: clock }) as LedgerEntry);
+      }
+    };
+
+    it('re-nudges once across sweeps, and retries after a failed write', () => {
+      unpicked();
+      clock = 1 + RENUDGE_AFTER_MS;
+      appendOk = false;
+      scheduler = build();
+      scheduler.start();
+      tick();
+      expect(flushed).toEqual([]);
+      appended.length = 0; // a refused write never reached the log
+
+      appendOk = true;
+      clock += 60_000;
+      tick();
+      settle();
+      clock += 60_000;
+      tick();
+
+      expect(flushed).toEqual(['sess-1']);
+      expect(watchWrites()).toEqual([]);
+    });
+
+    it('re-nudges: writes the marker on the ask’s thread, then flushes the session', () => {
+      const ask = unpicked();
+      clock = 1 + RENUDGE_AFTER_MS;
+      scheduler = build();
+      scheduler.start();
+      tick();
+
+      expect(appended).toContainEqual(expect.objectContaining({ from: 'overmind', to: 'sess-1', kind: 'event', thread: ask.id, meta: { watch: 'renudge', watched: ask.id } }));
+      expect(flushed).toEqual(['sess-1']);
+    });
+
+    it('does not flush when the marker could not be written', () => {
+      unpicked();
+      clock = 1 + RENUDGE_AFTER_MS;
+      appendOk = false;
+      scheduler = build();
+      scheduler.start();
+      tick();
+
+      expect(watchWrites()).toHaveLength(1);
+      expect(flushed).toEqual([]);
+    });
+
+    it('raises the card as an overmind ask with a key and a Dismiss option', () => {
+      const ask = unpicked();
+      const markTs = 1 + RENUDGE_AFTER_MS;
+      entries.push(entry({ id: '20261113-000000-0003', kind: 'event', from: 'overmind', to: 'sess-1', thread: ask.id, ts: markTs, body: 're-nudge (a40)', meta: { watch: 'renudge', watched: ask.id } }));
+      clock = markTs + CARD_AFTER_MS;
+      scheduler = build();
+      scheduler.start();
+      tick();
+
+      expect(appended).toContainEqual(expect.objectContaining({
+        from: 'overmind', to: 'overmind', kind: 'ask',
+        meta: expect.objectContaining({ watch: 'card', watched: ask.id, options: ['Dismiss'], key: `watch:card:${ask.id}` }),
+      }));
+      expect(flushed).toEqual([]);
+    });
+
+    it('re-wakes: posts to the agent on the ask’s thread', () => {
+      const ask = accepted();
+      schedules.set(AGENT, { wake: { everyMs: 5 * 60_000, on: ['ledger'], check: 'onchange' } as WakeSpec });
+      liveLanes = new Set();
+      clock = 5 + 15 * 60_000;
+      scheduler = build();
+      scheduler.start();
+      tick();
+
+      expect(appended).toContainEqual(expect.objectContaining({ from: 'overmind', to: AGENT, kind: 'post', thread: ask.id, meta: { watch: 'rewake', watched: ask.id } }));
+    });
+
+    it('uses 30 minutes for an agent with no interval', () => {
+      const ask = accepted();
+      liveLanes = new Set();
+      clock = 5 + 15 * 60_000;
+      scheduler = build();
+      scheduler.start();
+      tick();
+      expect(watchWrites()).toEqual([]);
+
+      clock = 5 + QUIET_LANE_FALLBACK_MS;
+      tick();
+      expect(watchWrites()).toEqual([
+        expect.objectContaining({ from: 'overmind', to: AGENT, kind: 'post', thread: ask.id, meta: { watch: 'rewake', watched: ask.id } }),
+      ]);
+    });
+
+    it('tells the asker about a silent run', () => {
+      const ask = accepted();
+      live = [{ agent: AGENT, run: 'r1', lane: 'standing', startedAt: 0 }];
+      liveLanes = new Set(['standing']);
+      clock = QUIET_RUN_MS + 10;
+      scheduler = build();
+      scheduler.start();
+      tick();
+
+      expect(appended).toContainEqual(expect.objectContaining({ from: 'overmind', to: 'sess-0a', kind: 'post', thread: ask.id, meta: { watch: 'quiet', watched: ask.id, run: 'r1' } }));
+      expect(watchWrites()).toHaveLength(1);
+    });
+
+    it('routes the re-wake post to the repo lane the ask opened, with no interval tick', () => {
+      laneMode = 'repo';
+      liveLanes = new Set();
+      scheduler = build();
+      const ask = accepted({ repo: 'behiques/hivetty-cloud', pr: 40 }, 'repo:behiques/hivetty-cloud');
+      const post = entry({
+        id: '20261113-000000-0004', ts: 5 + QUIET_LANE_FALLBACK_MS,
+        from: 'overmind', to: AGENT, kind: 'post', thread: ask.id,
+        body: 'a50 is accepted and its lane has gone quiet: pick it back up, or answer it',
+        meta: { watch: 'rewake', watched: ask.id },
+      });
+      entries.push(post);
+
+      scheduler.onEntry(post);
+
+      expect(woke).toContainEqual(expect.objectContaining({ name: AGENT, lane: 'repo:behiques/hivetty-cloud' }));
+    });
+
+    describe('the watch card closes, and the audit replays', () => {
+      /** The unpicked ask, its re-nudge marker, and the watch card raised 15 minutes later. */
+      const carded = (): { ask: LedgerEntry; card: LedgerEntry } => {
+        const ask = unpicked();
+        const markTs = 1 + RENUDGE_AFTER_MS;
+        const card = entry({ id: '20261113-000000-0004', from: 'overmind', to: 'overmind', kind: 'ask', ref: 'a41', ts: markTs + CARD_AFTER_MS, body: 'not picked up', meta: { watch: 'card', watched: ask.id, options: ['Dismiss'], key: `watch:card:${ask.id}` } });
+        entries.push(
+          entry({ id: '20261113-000000-0003', kind: 'event', from: 'overmind', to: 'sess-1', thread: ask.id, ts: markTs, body: 're-nudge (a40)', meta: { watch: 'renudge', watched: ask.id } }),
+          card,
+        );
+        return { ask, card };
+      };
+
+      it('answers the card moot once its ask is picked up', () => {
+        const { ask, card } = carded();
+        clock = card.ts + 60_000;
+        scheduler = build();
+        scheduler.start();
+        tick();
+        expect(appended.some((request) => request.thread === card.id)).toBe(false);
+
+        appended.length = 0;
+        entries.push(entry({ id: '20261113-000000-0005', kind: 'event', from: 'overmind', to: 'sess-1', ts: clock, body: 'served', meta: { served: ask.id } }));
+        clock += 60_000;
+        tick();
+
+        expect(appended).toContainEqual(expect.objectContaining({ from: 'overmind', kind: 'answer', thread: card.id, meta: { moot: 'a40 was picked up' } }));
+      });
+
+      it('a26 budget hold: one refusal note, and no watchdog step on top of it', () => {
+        refuse = 'budget';
+        scheduler = build();
+        scheduler.start();
+        const ask = entry({ id: '20261113-000000-0001', from: 'sess-0a', to: AGENT, ref: 'a26', ts: 0, body: 'Build it' });
+        entries.push(ask);
+        scheduler.onEntry(ask);
+        settle();
+
+        clock = 60_000;
+        tick();
+        settle();
+        clock = 2 * 60 * 60_000;
+        tick();
+        settle();
+
+        const notes = entries.filter((item) => item.meta?.['refused'] !== undefined);
+        expect(notes).toHaveLength(1);
+        expect(notes[0]).toMatchObject({ from: 'overmind', to: 'sess-0a', thread: ask.id, meta: { refused: 'budget' } });
+        expect(entries.filter((item) => item.meta?.['watch'] !== undefined)).toEqual([]);
+      });
+
+      it('hivetty-cloud#40: one re-wake for a quiet repo lane, and nothing more a minute later', () => {
+        laneMode = 'repo';
+        liveLanes = new Set();
+        schedules.set(AGENT, { wake: { everyMs: 5 * 60_000, on: ['ledger'], check: 'onchange' } as WakeSpec });
+        scheduler = build();
+        const ask = accepted({ repo: 'behiques/hivetty-cloud', pr: 40 }, 'repo:behiques/hivetty-cloud');
+        clock = 5 + 15 * 60_000;
+        scheduler.start();
+        tick();
+        expect(watchWrites()).toEqual([
+          expect.objectContaining({ from: 'overmind', to: AGENT, kind: 'post', thread: ask.id, meta: { watch: 'rewake', watched: ask.id } }),
+        ]);
+
+        settle();
+        clock += 60_000;
+        tick();
+        expect(watchWrites()).toEqual([]);
+      });
+
+      it('card a84: a 15-minute-old permission card gets no watchdog step', () => {
+        entries.push(entry({ id: '20261113-000000-0001', from: 'shipper', to: 'overmind', ref: 'a84', ts: 0, body: 'merge a/x#1?', meta: { kind: 'permission', run: 'r1' } }));
+        clock = 15 * 60_000;
+        scheduler = build();
+        scheduler.start();
+        tick();
+
+        expect(watchWrites()).toEqual([]);
+      });
+    });
+  });
+});
+
+describe('mootCards: the watch card (HIVE-411)', () => {
+  const ask = entry({ id: '20261113-000000-0001', from: AGENT, to: 'sess-1', ref: 'a40', ts: 0 });
+  const log = [
+    ask,
+    entry({ id: '20261113-000000-0002', kind: 'event', from: 'overmind', to: 'sess-1', ts: 1, body: 'nudge written', meta: { delivered: ask.id } }),
+    entry({ id: '20261113-000000-0003', kind: 'event', from: 'overmind', to: 'sess-1', thread: ask.id, ts: 61_001, body: 're-nudge', meta: { watch: 'renudge', watched: ask.id } }),
+    entry({ id: '20261113-000000-0004', kind: 'ask', from: 'overmind', to: 'overmind', ref: 'a41', ts: 961_001, body: 'not picked up', meta: { watch: 'card', watched: ask.id } }),
+  ];
+
+  it('keeps the card while its ask is still unpicked', () => {
+    expect(mootCards(log, 1_000_000)).toEqual([]);
+  });
+
+  it('closes it once the ask was served', () => {
+    const served = entry({ id: '20261113-000000-0005', kind: 'event', from: 'overmind', to: 'sess-1', ts: 970_000, body: 'served', meta: { served: ask.id } });
+    expect(mootCards([...log, served], 1_000_000).map(({ ask: card, reason }) => ({ id: card.id, reason }))).toEqual([
+      { id: '20261113-000000-0004', reason: 'a40 was picked up' },
+    ]);
+  });
+
+  it('ignores a card-shaped ask another party wrote', () => {
+    const forged = entry({ id: '20261113-000000-0006', kind: 'ask', from: 'sess-1', to: 'overmind', ts: 970_000, body: 'x', meta: { watch: 'card', watched: ask.id } });
+    const served = entry({ id: '20261113-000000-0005', kind: 'event', from: 'overmind', to: 'sess-1', ts: 970_000, body: 'served', meta: { served: ask.id } });
+    expect(mootCards([...log, served, forged], 1_000_000).map((item) => item.ask.id)).toEqual(['20261113-000000-0004']);
   });
 });

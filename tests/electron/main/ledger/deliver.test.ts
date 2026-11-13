@@ -887,4 +887,80 @@ describe('createDeliver', () => {
       expect(receipts()).toHaveLength(1);
     });
   });
+
+  /*
+    HIVE-411: the watchdog re-nudges a session that never picked an ask up by
+    writing an overmind marker naming it, then calling `flush`. Only main's
+    marker, newer than the newest receipt, makes the ask owed again.
+  */
+  describe('a renudge marker (HIVE-411)', () => {
+    const renudge = (askId: string, from: string = OVERMIND) =>
+      ledger.append({
+        from,
+        to: 'sess-a',
+        kind: 'event',
+        thread: askId,
+        body: 're-nudge',
+        meta: { watch: 'renudge', watched: askId },
+      });
+
+    it('makes a receipted ask owed again: flush writes its marker once more and receipts it', () => {
+      const result = ask('sess-a');
+      if (!result.ok) throw new Error('ask refused');
+      expect(write).toHaveBeenCalledTimes(1);
+
+      clock += 60_000;
+      renudge(result.id);
+      // The clock stays put: the receipt this flush writes shares the marker's ms, as the sweep's does.
+      deliver.flush('sess-a');
+
+      expect(write).toHaveBeenCalledTimes(2);
+      expect(lastWrite()).toBe(`📒 ${result.ref}\r`);
+      expect(receipts()).toHaveLength(2);
+
+      // The second receipt settles it: the next flush writes nothing.
+      deliver.flush('sess-a');
+      expect(write).toHaveBeenCalledTimes(2);
+    });
+
+    it('writes nothing when a receipt already follows the marker', () => {
+      idle.delete('sess-a');
+      const result = ask('sess-a');
+      if (!result.ok) throw new Error('ask refused');
+      clock += 60_000;
+      renudge(result.id);
+      clock += 1_000;
+      ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'event', body: 'nudge written', meta: { delivered: result.id } });
+      idle.add('sess-a');
+
+      deliver.flush('sess-a');
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('ignores a marker another party wrote', () => {
+      const result = ask('sess-a');
+      if (!result.ok) throw new Error('ask refused');
+      clock += 60_000;
+      renudge(result.id, 'sess-a');
+      deliver.flush('sess-a');
+
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not backfill an old failed entry the re-opened ask had been told after', () => {
+      idle.delete('sess-a');
+      // A pre-HIVE-408 `failed` that never got a receipt, then an ask told after it.
+      ledger.append({ from: 'builder', to: 'sess-a', kind: 'failed', body: 'old failure' });
+      const result = ask('sess-a');
+      if (!result.ok) throw new Error('ask refused');
+      ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'event', body: 'nudge written', meta: { delivered: result.id } });
+      idle.add('sess-a');
+      clock += 60_000;
+      renudge(result.id);
+
+      deliver.flush('sess-a');
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(lastWrite()).toBe(`📒 ${result.ref}\r`);
+    });
+  });
 });

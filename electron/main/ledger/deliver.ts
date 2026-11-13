@@ -88,6 +88,8 @@ interface DeliverOptions {
 }
 
 export interface Deliver {
+  /** Write what this session is owed now, if it is live, idle and clear (HIVE-411: the watchdog's re-nudge). */
+  flush(entityId: string): void;
   /** One entry landed, from any party. */
   onEntry(entry: LedgerEntry): void;
   /** A session reached an empty prompt with nothing running behind it. */
@@ -211,22 +213,36 @@ export function createDeliver({
     // ledger refuses as "thread is not open".
     const open = new Set(openAsks.map((ask) => ask.id));
 
-    const delivered = new Set<string>();
+    const receipt = new Map<string, number>();
+    const renudged = new Map<string, number>();
     for (const entry of entries) {
       const id = entry.meta?.delivered;
-      if (typeof id === 'string') delivered.add(id);
+      if (typeof id === 'string') receipt.set(id, Math.max(receipt.get(id) ?? 0, entry.ts));
+      const watched = entry.meta?.['watched'];
+      // Only main's marker re-opens a delivery (HIVE-411): `meta` is a rider any party can write.
+      if (entry.from === OVERMIND && entry.meta?.['watch'] === 'renudge' && typeof watched === 'string') {
+        renudged.set(watched, Math.max(renudged.get(watched) ?? 0, entry.ts));
+      }
     }
+    /*
+      Told, and not re-opened by a re-nudge since (HIVE-411). A marker and a
+      receipt in the same millisecond settle the entry (`<=`) rather than
+      re-nudging it forever: the watchdog writes its marker and flushes in one
+      tick, so the receipt that answers it usually shares the marker's `ts`.
+    */
+    const delivered = new Set([...receipt].filter(([id, at]) => (renudged.get(id) ?? -1) <= at).map(([id]) => id));
 
     /*
       Where in this log the newest entry this session was told sits. Delivery
       keeps ledger order, so a `failed` or `done` behind it went unreceipted
       because the build that wrote the receipt did not deliver those kinds
       (before HIVE-408), not because it is owed: backfilling them would put every
-      stale one on one line at the first idle after the upgrade.
+      stale one on one line at the first idle after the upgrade. Read from every
+      receipt, re-opened or not (HIVE-411): a re-nudge does not move it back.
     */
     let toldUpTo = -1;
     entries.forEach((entry, index) => {
-      if (delivered.has(entry.id)) toldUpTo = index;
+      if (receipt.has(entry.id)) toldUpTo = index;
     });
 
     const owed = entries.filter(
@@ -365,6 +381,8 @@ export function createDeliver({
   }
 
   return {
+    flush,
+
     onEntry(entry) {
       /*
         A `closed` entry may release held asks (retro C). Their sessions flush
