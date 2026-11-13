@@ -965,9 +965,9 @@ the single sentence "socket probe reporting in" and end your turn.
  * `tools:` pins exactly the read-only set every other probe in this file
  * pins, and no `Bash` — the one thing its body asks it to do. The instruction
  * says nothing about permission, retrying, or the ledger: the preamble
- * (`preamble.ts`) already covers all three ("a denied permission means wait,
- * not retry" / "if you were woken because a permission ask was answered,
- * retry that one call exactly once"), and this scenario exists to prove that
+ * (`preamble.ts`, run contract 2f and 11) already covers all three ("a denied
+ * call ends the turn" / "a permission you asked for was answered: retry that
+ * one call exactly once"), and this scenario exists to prove that
  * prose actually holds against a real model, not to repeat it in the body.
  *
  * `marker` is a path outside every agent's own working directory — this

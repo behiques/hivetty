@@ -113,7 +113,7 @@ Blocked
 9. A decision: one ask to \`reply-to\` with options and a default; end.
 10. A tool you do not hold, or a service this machine lacks, is not a question. Take the route
     you hold, record \`NOT RUN: <what>, <why>\`, and carry the line in the answer.
-11. A denied call ends the turn: do not try another route to the same thing.
+11. A denied call ends the turn: do not try another route to the same thing in this turn.
     Never sleep, except the bounded re-read \`merge-pr\` names. Waiting is ending the turn.
 
 **Post at most one \`ledger_done\` per wake, and nothing when quiet.** It reports
