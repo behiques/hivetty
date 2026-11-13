@@ -241,6 +241,8 @@ interface UiState {
   agentPage: AgentPage | null;
   /** Where the page's agent last sat in the panel, `-1` when opened from outside it (`openRowIndex`). */
   agentPageAt: number;
+  /** The Agents stage shows the stall panel instead of an agent (HIVE-411). View state, not persisted. */
+  stallsShown: boolean;
   /**
    * The PR the PRs place last opened (HIVE-205). The page shows it while it is
    * still in the list; the opening rule (`features/pull-requests/open-pr.ts`)
@@ -352,6 +354,8 @@ interface UiState {
   rememberAgentPage: (name: string, at: number) => void;
   setAgentPageView: (view: AgentPageView) => void;
   closeAgentPage: () => void;
+  /** Show the stall panel on the Agents stage (HIVE-411); opening or moving to another agent hides it. */
+  showStalls: () => void;
   /** Open a PR's page (HIVE-205): the PRs place, its panel, Comments; dismisses the overlays and keeps the tab; forgets the Checks tab's shown push and job (HIVE-206), the Files tab's file and filter (HIVE-207), and the Timeline's focus (HIVE-208). */
   openPrPage: (ref: PrPageRef) => void;
   /** The PR the PRs stage is showing, and where it sits in the Hatchery; another PR forgets what `openPrPage` does. */
@@ -455,6 +459,7 @@ const initialUiState = {
   agentsFolded: { summons: false, morphing: false, burrowed: false } as Record<AgentGroupKey, boolean>,
   agentPage: null as AgentPage | null,
   agentPageAt: -1,
+  stallsShown: false,
   prPage: null as PrPageRef | null,
   prPageAt: -1,
   prTab: 'conversation' as PrTab,
@@ -750,6 +755,7 @@ export const useUiStore = create<UiState>()((set) => ({
     set((state) => ({
       agentPage: { name, view },
       agentPageAt: -1,
+      stallsShown: false,
       place: 'agents',
       picker: false,
       settings: false,
@@ -764,11 +770,12 @@ export const useUiStore = create<UiState>()((set) => ({
         ? state.agentPageAt === at
           ? state
           : { agentPageAt: at }
-        : { agentPage: { name, view: 'activity' }, agentPageAt: at },
+        : { agentPage: { name, view: 'activity' }, agentPageAt: at, stallsShown: false },
     ),
   setAgentPageView: (view) =>
     set((state) => (state.agentPage === null ? {} : { agentPage: { ...state.agentPage, view } })),
   closeAgentPage: () => set({ agentPage: null }),
+  showStalls: () => set({ stallsShown: true, place: 'agents' }),
   openPrPage: (ref) =>
     set((state) => ({
       ...freshPr(ref, -1),
@@ -902,6 +909,8 @@ export const useToggleAgentGroup = () => useUiStore((state) => state.toggleAgent
 /** The Agents place's open page and its actions (HIVE-204). */
 export const useAgentPage = () => useUiStore((state) => state.agentPage);
 export const useAgentPageAt = () => useUiStore((state) => state.agentPageAt);
+export const useStallsShown = () => useUiStore((state) => state.stallsShown);
+export const useShowStalls = () => useUiStore((state) => state.showStalls);
 export const useRememberAgentPage = () => useUiStore((state) => state.rememberAgentPage);
 export const useAgentPageActions = () =>
   useUiStore(

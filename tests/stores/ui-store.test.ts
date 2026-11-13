@@ -721,6 +721,23 @@ describe('ui-store — the agent page (HIVE-204)', () => {
     expect(useUiStore.getState().agentPage).toBeNull();
   });
 
+  it('shows the stalls on the Agents place, and an opened agent hides them (HIVE-411)', () => {
+    expect(useUiStore.getState().stallsShown).toBe(false);
+    useUiStore.getState().showStalls();
+    expect(useUiStore.getState()).toMatchObject({ stallsShown: true, place: 'agents' });
+    useUiStore.getState().openAgentPage('builder', 'activity');
+    expect(useUiStore.getState().stallsShown).toBe(false);
+  });
+
+  it('keeps the stalls through a remember of the shown agent, and hides them for another (HIVE-411)', () => {
+    useUiStore.getState().rememberAgentPage('builder', 2);
+    useUiStore.getState().showStalls();
+    useUiStore.getState().rememberAgentPage('builder', 2);
+    expect(useUiStore.getState().stallsShown).toBe(true);
+    useUiStore.getState().rememberAgentPage('shipper', 3);
+    expect(useUiStore.getState().stallsShown).toBe(false);
+  });
+
   it('openAgentPage opens the Agents place on the asked view and dismisses overlays', () => {
     useUiStore.getState().openSettings('agents');
     useUiStore.getState().openAgentPage('acr', 'definition');
