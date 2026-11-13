@@ -1050,8 +1050,8 @@ export function openAsksOnLane(entries: readonly LedgerEntry[], agent: string, l
 /**
  * What a closing run leaves behind it (HIVE-354): the ask its thread lane
  * exists to answer, while that ask is still open, and every task the agent
- * still holds by a claim this run wrote. A standing or repo lane names no ask:
- * its wake queue is cleared at flush, so nothing records which ask it owed.
+ * still holds by a claim this run wrote. A standing or repo lane names no ask;
+ * `owedBy` reads what such a run owed from `meta.wakes`.
  */
 export function leftOpen(
   entries: readonly LedgerEntry[],
@@ -1073,6 +1073,68 @@ export function leftOpen(
     .map(([task]) => task);
 
   return { ask, claims: held };
+}
+
+/** An ask a run was woken for and still owes (HIVE-410), and whether main already re-woke its lane for it. */
+export interface OwedAsk {
+  ask: OpenAsk;
+  rewoken: boolean;
+}
+
+/**
+ * What a run on a standing or repo lane still owes when it ends (HIVE-410):
+ * each ask its `run.started` lists in `meta.wakes`, directly or through the
+ * overmind's re-wake post for it, that is addressed to the agent and is
+ * neither accepted nor closed. `rewoken` says the overmind has already spent
+ * the one re-wake such an ask gets. Only main's own marker counts, for
+ * `expiredAsks`' reason.
+ */
+export function owedBy(entries: readonly LedgerEntry[], agent: string, run: string, now: number): OwedAsk[] {
+  const started = entries.find(
+    (item) =>
+      item.kind === 'event' &&
+      item.from === agent &&
+      item.meta?.['run'] === run &&
+      item.body.startsWith('run.started'),
+  );
+  const wakes = started?.meta?.['wakes'];
+  if (!Array.isArray(wakes)) return [];
+  const woken = new Set((wakes as readonly unknown[]).filter((id): id is string => typeof id === 'string'));
+
+  const rewoke = new Set<string>();
+  const named = new Set<string>();
+  for (const item of entries) {
+    if (item.kind === 'ask' && woken.has(item.id)) named.add(item.id);
+    const id = item.meta?.['rewoke'];
+    if (typeof id !== 'string' || item.from !== OVERMIND) continue;
+    rewoke.add(id);
+    if (woken.has(item.id)) named.add(id);
+  }
+
+  return openAsks(entries, now)
+    .filter((ask) => named.has(ask.id) && ask.to === agent && (ask.state === 'open' || ask.state === 'delivered'))
+    .map((ask) => ({ ask, rewoken: rewoke.has(ask.id) }));
+}
+
+/** The runs the log shows started and never ended (HIVE-410): the app quit or crashed under them. */
+export function unfinishedRuns(entries: readonly LedgerEntry[]): { agent: string; run: string; lane: string }[] {
+  const ended = new Set<string>();
+  for (const item of entries) {
+    const run = item.meta?.['run'];
+    if (item.kind === 'event' && typeof run === 'string' && item.body.startsWith('run.ended')) {
+      ended.add(`${item.from} ${run}`);
+    }
+  }
+
+  const out: { agent: string; run: string; lane: string }[] = [];
+  for (const item of entries) {
+    const run = item.meta?.['run'];
+    if (item.kind !== 'event' || typeof run !== 'string' || !item.body.startsWith('run.started')) continue;
+    if (ended.has(`${item.from} ${run}`)) continue;
+    const lane = item.meta?.['lane'];
+    out.push({ agent: item.from, run, lane: typeof lane === 'string' && lane !== '' ? lane : STANDING_LANE });
+  }
+  return out;
 }
 
 /**
