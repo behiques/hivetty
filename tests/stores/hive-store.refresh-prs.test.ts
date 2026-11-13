@@ -393,6 +393,45 @@ describe('refreshPrs', () => {
       });
     });
 
+    /**
+     * A branch is not a session (the sess-17 bug): two sessions in one checkout
+     * share its branch, and the sweep cannot tell which opened the PR on it.
+     * It guesses for neither; the opener's own receipt (its hooks, its ask to
+     * the shipper) is what records it.
+     */
+    it('learns nothing when two sessions share the branch in one checkout', async () => {
+      const a = withSession({ cwd: '/repo' });
+      const b = withSession({ cwd: '/repo' });
+      readPullRequests.mockResolvedValue(ok());
+
+      await useHiveStore.getState().refreshPrs();
+
+      expect(useHiveStore.getState().entities[a]).not.toHaveProperty('prs');
+      expect(useHiveStore.getState().entities[b]).not.toHaveProperty('prs');
+      expect(noteSessionPr).not.toHaveBeenCalled();
+    });
+
+    it('still learns for a session alone on the branch in its checkout', async () => {
+      const a = withSession({ cwd: '/repo/.worktrees/hero' });
+      withSession({ cwd: '/repo' });
+      readPullRequests.mockResolvedValue(ok());
+
+      await useHiveStore.getState().refreshPrs();
+
+      expect(useHiveStore.getState().entities[a]).toMatchObject({ prs: [{ number: 482 }] });
+      expect(noteSessionPr).toHaveBeenCalledTimes(2);
+    });
+
+    it('never files a PR another session owns', async () => {
+      withSession({ branch: 'other', cwd: '/elsewhere', prs: [{ number: 482, repo: 'nova-web', url: 'https://github.com/acme/nova-web/pull/482', owned: true }] });
+      const b = withSession({ cwd: '/repo' });
+      readPullRequests.mockResolvedValue(ok());
+
+      await useHiveStore.getState().refreshPrs();
+
+      expect(useHiveStore.getState().entities[b]).not.toHaveProperty('prs');
+    });
+
     it('leaves a session on another branch alone', async () => {
       const id = withSession({ branch: 'main' });
       readPullRequests.mockResolvedValue(ok());

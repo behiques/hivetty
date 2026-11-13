@@ -8767,6 +8767,18 @@ export function resolveSessionPrs(
   return found.reverse().sort((a, b) => group(a) - group(b));
 }
 
+/** Whether a session other than `except` owns the PR at `url`. */
+function ownedBy(state: HiveState, url: string, except: string): boolean {
+  return state.order.some((id) => {
+    const entity = id === except ? undefined : state.entities[id];
+    return (
+      entity !== undefined &&
+      isSession(entity) &&
+      (entity.prs ?? []).some((pr) => pr.owned === true && sameUrl(pr.url, url))
+    );
+  });
+}
+
 /**
  * What a sweep just taught the fleet — one entry per session whose pull
  * request has *changed*, and nothing for the rest.
@@ -8812,6 +8824,18 @@ function learnSessionPrs(
     */
     const live = resolveSessionPr(entity.branch, entity.project, prs);
     if (live === null) continue;
+
+    /*
+      A branch is not a session. Another session on this branch in this
+      checkout could as well have opened it, so the sweep guesses for neither,
+      and a PR another session owns is never guessed onto this one. The
+      opener's own receipt records it (`prClaimOf`).
+    */
+    const shared = state.order.some((other) => {
+      const peer = other === id ? undefined : state.entities[other];
+      return peer !== undefined && isSession(peer) && peer.branch === entity.branch && peer.cwd === entity.cwd;
+    });
+    if (shared || ownedBy(state, live.url, id)) continue;
 
     /*
       **GitHub's repository name, not the project id**, which is what
