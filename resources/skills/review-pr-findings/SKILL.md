@@ -42,8 +42,7 @@ Confirm `gh pr view <N> --repo <owner>/<repo> --json headRefName` matches
 | `gh api graphql` | `-F owner=<owner> -F name=<repo>` |
 | `git` | `-C <workspace>` |
 
-Record all three as literals and substitute them textually. Shell state does
-not survive a call; `--repo ""` resolves from cwd without erroring.
+{{include:literal-target}}
 
 ## Step 1: gather everything in one pass
 

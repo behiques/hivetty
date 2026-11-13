@@ -11,6 +11,7 @@ import { DEFAULT_ENV_ARG, isSessionEnvDenied } from '@shared/config-contract';
 import type { HarnessId } from '@shared/harness-contract';
 import { HOOK_ENV_GRANTS, HOOK_ENV_RECEIVER_URL } from '@shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '@shared/ledger-tools';
+import { fillIncludes } from '@shared/skill-fragments';
 
 import { createPathMap } from '../container/path-map';
 import type { HarnessAdapter } from '../harness/port';
@@ -301,7 +302,7 @@ export function systemPromptFor(
     write in the position their own instructions occupy — and make an
     app-owned sentence the final thing the model reads.
   */
-  return `${preamble.trimEnd()}\n\n${AUTONOMY_CLAUSE[def.autonomy]}\n\n---\n\n${def.body.trim()}\n`;
+  return `${preamble.trimEnd()}\n\n${AUTONOMY_CLAUSE[def.autonomy]}\n\n---\n\n${fillIncludes(def.body).trim()}\n`;
 }
 
 /**

@@ -5,6 +5,7 @@ import { codexAdapter } from '../../../../electron/main/harness/codex';
 import { copilotAdapter } from '../../../../electron/main/harness/copilot';
 import type { HarnessAdapter, HeadlessSpec } from '../../../../electron/main/harness/port';
 import type { AgentDefinition } from '../../../../electron/shared/agent-contract';
+import { FRAGMENTS } from '../../../../electron/shared/skill-fragments';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '../../../../electron/shared/ledger-tools';
 import { matches } from '../../../../electron/shared/permission-rules';
@@ -447,6 +448,12 @@ describe('wakePrompt', () => {
 });
 
 describe('systemPromptFor', () => {
+  it('expands an include in the definition body', () => {
+    const text = systemPromptFor('PREAMBLE', def({ body: 'before\n{{include:agent-worktree}}\nafter' }));
+    expect(text).toContain(FRAGMENTS['agent-worktree']);
+    expect(text).not.toContain('{{include:');
+  });
+
   it('puts the app-owned preamble above the definition body', () => {
     const text = systemPromptFor('PREAMBLE', def());
 

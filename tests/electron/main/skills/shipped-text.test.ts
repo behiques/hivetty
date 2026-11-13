@@ -4,6 +4,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { fillIncludes } from '../../../../electron/shared/skill-fragments';
+
 const read = (path: string): string => readFileSync(join(process.cwd(), 'resources', path), 'utf8');
 const ship = () => read('skills/ship/SKILL.md');
 const mergePr = () => read('skills/merge-pr/SKILL.md');
@@ -15,10 +17,10 @@ describe('shipped text agrees (HIVE-413)', () => {
     expect(words(ship())).toBeLessThanOrEqual(1300);
   });
   it('carries closes-ticket in the intake, the row and the Done rule', () => {
-    expect(ship()).toMatch(/closes-ticket: yes \| no/);
+    expect(fillIncludes(ship())).toMatch(/closes-ticket: yes \| no/);
     expect(ship()).toMatch(/"closesTicket": true/);
     expect(mergePr()).toMatch(/closes-ticket: no/);
-    expect(agent('builder')).toMatch(/closes-ticket/);
+    expect(fillIncludes(agent('builder'))).toMatch(/closes-ticket/);
     expect(agent('shipper')).toMatch(/closes-ticket|closesTicket/);
   });
   it('claims before it accepts, in both shipper files', () => {
@@ -55,5 +57,22 @@ describe('shipped text agrees (HIVE-413)', () => {
   });
   it('no stale shell claims in the shipper', () => {
     expect(agent('shipper')).not.toMatch(/a shell this fence does not give you|beyond the fallback above/);
+  });
+});
+
+describe('one copy of each shared rule (HIVE-413 PR 2)', () => {
+  const uses = (text: string, name: string) => text.includes(`{{include:${name}}}`);
+  it('ship and the builder include the intake; neither restates it', () => {
+    for (const text of [ship(), agent('builder')]) {
+      expect(uses(text, 'ship-intake')).toBe(true);
+      expect(text).not.toMatch(/key-confirmed: yes \| no/);
+    }
+  });
+  it('the fixer and ship include the agent worktree recipe', () => {
+    expect(uses(agent('fixer'), 'agent-worktree')).toBe(true);
+    expect(uses(ship(), 'agent-worktree')).toBe(true);
+  });
+  it('ship, merge-pr and review-pr-findings include literal-target', () => {
+    for (const text of [ship(), mergePr(), read('skills/review-pr-findings/SKILL.md')]) expect(uses(text, 'literal-target')).toBe(true);
   });
 });

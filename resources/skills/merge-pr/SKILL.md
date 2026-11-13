@@ -30,8 +30,7 @@ arguments at all means cwd is a candidate to verify (below), never an answer.
    `^[A-Za-z]+-[0-9]+$` is a supplied key. Two or more distinct keys is P0
    (below). Record the literal for the report.
 
-Record repo, number, workspace and key as literals and substitute them
-textually from here on.
+{{include:literal-target}}
 
 ## Step 1: checks
 

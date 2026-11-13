@@ -81,7 +81,7 @@ rules are yours to keep, and every implementer you dispatch inherits them:
 7. `ledger_answer` the original ask with the PR URL, then `ledger_release`
    the claim. Both before anything that ends the turn.
 8. `ship: yes` → `ledger_ask to: shipper` last, with the whole intake shape
-   from the `ship` skill: `Ship PR #<N> on <owner>/<repo>`, `repo: <the
+   below: `Ship PR #<N> on <owner>/<repo>`, `repo: <the
    project checkout path>`, `worktree: <your worktree>`, `ticket:`,
    `key-confirmed:` echoed from the job, `closes-ticket: <from the build ask;
    yes when absent>`, `reply-to:` echoed from the job,
@@ -92,6 +92,8 @@ rules are yours to keep, and every implementer you dispatch inherits them:
    merges or leaves its hands, wakes you once, and the intent tells you it is
    over.
    `ship: no` → the answer in step 7 was the end.
+
+{{include:ship-intake}}
 
 ## When you must stop and ask
 

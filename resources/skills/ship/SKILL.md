@@ -17,23 +17,7 @@ the run contract. It sequences `pr-review` (`acr`), `review-pr-findings`
 
 ## Intake
 
-```
-ledger_ask
-  to: shipper
-  body: |
-    Ship PR #214 on behiques/hivetty
-    repo: /abs/path/to/checkout
-    worktree: /abs/path/or/none        (an agent worktree merge-pr may remove)
-    ticket: HIVE-123 | none
-    key-confirmed: yes | no            (yes only when the key came from work-on's arguments)
-    closes-ticket: yes | no            (no on every PR of a split but the last)
-    reply-to: <$HIVE_SESSION_ID, sess-…> | overmind
-  meta: { pr: 214, repo: "behiques/hivetty", ticket: "HIVE-123", stage: "intake",
-          key: "ship:behiques/hivetty#214" }
-```
-
-An intake without the `closes-ticket` line reads `yes`. A write to `reply-to`
-refused `unknown party` goes to the ask's `from`, which becomes `replyTo`.
+{{include:ship-intake}}
 
 Intake order: `ledger_claim <owner>/<repo>#<N>`, then `ledger_accept <ask id>`,
 then write the row, before any other row's work:
@@ -59,6 +43,8 @@ self-addressed `ledger_ask to: shipper` carrying `meta.repo`, no `key`.
 
 Every `gh` command carries `--repo <owner>/<repo>`, every `git` command `-C
 <path>`.
+
+{{include:literal-target}}
 
 ## Stages
 
@@ -114,12 +100,16 @@ names. `blocked`, or any other shape → a stuck row.
 
 1. `gh api repos/<owner>/<repo>/compare/<base>...<headRef> --jq .behind_by`
    is `0`: no workspace, no sync, next stage.
-2. The workspace is the row's `worktree`, else `<path>`. On the head ref with
-   an empty `git -C <workspace> status --porcelain`: sync there.
+2. The workspace is the row's `worktree`, else `<path>`. On the head ref, or
+   the row's own detached `worktree`, with an empty `git -C <workspace> status
+   --porcelain`: sync there.
 3. Otherwise, at `<path>` (the person's checkout): the `git -C <path>
-   worktree list --porcelain` tree on `refs/heads/<headRef>`, or a new `git -C
-   <path> worktree add <your working directory>/pr<N> <headRef>`, becomes the
-   row's `worktree`. A refused add, or a dirty or off-branch `worktree`, is stuck.
+   worktree list --porcelain` tree on `refs/heads/<headRef>`, or a new one
+   (`<repo>` is `<path>`, `<branch>` is `<headRef>`), becomes the row's
+   `worktree`. A refused add, or a dirty `worktree`, is stuck.
+
+{{include:agent-worktree}}
+
 4. `git -C <workspace> fetch origin`, then `git -C <workspace> merge --ff-only
    origin/<headRef>`, one call each; refused is a stuck row.
 5. `git -C <workspace> merge origin/<base>` and one push; conflicts as merge-pr 2.6.
