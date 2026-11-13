@@ -88,7 +88,21 @@ vi.mock('../../../../electron/main/licence', async (importOriginal) => ({
 const passedThrough = vi.hoisted(() => ({
   scheduler: undefined as { lapsed?: () => boolean } | undefined,
   sessions: undefined as { lapsed?: () => boolean } | undefined,
+  /** The MCP runtime boot built; its `start()` is memoised, so awaiting it awaits boot's (HIVE-410). */
+  mcp: undefined as { start: () => Promise<void> } | undefined,
 }));
+
+vi.mock('../../../../electron/main/mcp', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../../electron/main/mcp')>();
+  return {
+    ...real,
+    createMcpRuntime: (options: Parameters<typeof real.createMcpRuntime>[0]) => {
+      const runtime = real.createMcpRuntime(options);
+      passedThrough.mcp = runtime;
+      return runtime;
+    },
+  };
+});
 
 vi.mock('../../../../electron/main/agents/scheduler', async (importOriginal) => {
   const real = await importOriginal<typeof import('../../../../electron/main/agents/scheduler')>();
@@ -186,6 +200,8 @@ vi.mock('../../../../electron/main/config/index', () => ({
 // ---------------------------------------------------------------------------
 
 let listed: AgentsSnapshot = { agents: [], agentsRoot: '/tmp/.hive/agents' };
+/** Holds `agents.list()` back while set, to order it against boot (HIVE-410). */
+let listGate: Promise<void> | undefined;
 let onAgentsChanged: (() => void) | undefined;
 const registryClose = vi.fn();
 
@@ -194,7 +210,7 @@ vi.mock('../../../../electron/main/agents', () => ({
     runtimeOptions = options;
 
     return {
-      list: () => Promise.resolve(listed),
+      list: () => (listGate ?? Promise.resolve()).then(() => listed),
       read: vi.fn(),
       write: vi.fn(),
       remove: vi.fn(),
@@ -259,6 +275,7 @@ const trackerRun = vi.fn(() => ({ started: true as const, run: 'run-1' }));
 const trackerKill = vi.fn(() => true);
 const trackerKillAll = vi.fn();
 const trackerCloseAll = vi.fn();
+const trackerSettleLost = vi.fn();
 const trackerSignalAll = vi.fn();
 let liveRuns: string[] = [];
 /** What `liveRuns(name)` answers, for whichever name is asked (HIVE-128). */
@@ -272,7 +289,7 @@ vi.mock('../../../../electron/main/agents/runs', () => ({
       kill: trackerKill,
       noteTurnEnded: vi.fn(),
       killAll: trackerKillAll,
-      settleLost: vi.fn(),
+      settleLost: trackerSettleLost,
       closeAll: trackerCloseAll,
       live: () => liveRuns,
       liveRuns: (_name: string) => liveRunSummaries,
@@ -361,6 +378,7 @@ beforeEach(async () => {
   };
   trackerDeps = undefined;
   runtimeOptions = undefined;
+  listGate = undefined;
   capturedKnowsParty = undefined;
   onAgentsChanged = undefined;
   vi.clearAllMocks();
@@ -1395,5 +1413,34 @@ describe('the licence suspender (HIVE-267)', () => {
     const host = { lapsed: true, paused: { sessions: 0, agents: 0 } };
     expect(send).toHaveBeenCalledWith('server:licence-changed', host);
     await expect(invoke(CH.serverLicence, undefined)).resolves.toEqual(host);
+  });
+});
+
+describe('runs the last launch left unfinished (HIVE-410)', () => {
+  it('are settled only once the first agent listing has landed, so their run.ended is not refused', async () => {
+    // Let the shared setup's own boot finish first: its `.finally` reaches the module's tracker.
+    await passedThrough.mcp?.start();
+    await settle();
+    resetIpcHandlers();
+    vi.clearAllMocks();
+    let open: () => void = () => {};
+    listGate = new Promise((resolve) => {
+      open = resolve;
+    });
+    let knownAtSettle: boolean | undefined;
+    trackerSettleLost.mockImplementation(() => {
+      knownAtSettle = capturedKnowsParty?.('slack-watcher');
+    });
+
+    registerIpcHandlers();
+    // Boot's MCP write has landed and its `.finally` has run; the listing has not.
+    await passedThrough.mcp?.start();
+    await settle();
+    expect(trackerSettleLost).not.toHaveBeenCalled();
+
+    open();
+    await settle();
+    expect(trackerSettleLost).toHaveBeenCalledTimes(1);
+    expect(knownAtSettle).toBe(true);
   });
 });

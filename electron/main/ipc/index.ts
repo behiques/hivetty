@@ -2773,7 +2773,8 @@ export function registerIpcHandlers(
     fanOut.emit(CH.agentsChanged, undefined);
   });
 
-  void refreshKnownAgents();
+  // Kept for boot's lost-run pass below, which must not run before the party set exists (HIVE-410).
+  const firstListing = refreshKnownAgents();
 
   /*
     The MCP config runtime (HIVE-112). Written once, its content depends only
@@ -3335,8 +3336,13 @@ export function registerIpcHandlers(
     })
     .finally(() => {
       scheduler?.start();
-      // After `start()`, so the re-wake a lost run earns is routed as it is written (HIVE-410).
-      runs?.settleLost(unfinishedRuns(ledger.read({}).entries));
+      /*
+        Runs the last launch left unfinished (HIVE-410). After `start()`, so the re-wake a lost
+        run earns is routed as it is written; and after the first folder listing, or `knowsParty`
+        refuses the agent's `run.ended` and the run looks unfinished at every launch. The
+        listing never rejects.
+      */
+      void firstListing.then(() => runs?.settleLost(unfinishedRuns(ledger.read({}).entries)));
       slackBridge?.sync();
     });
 
