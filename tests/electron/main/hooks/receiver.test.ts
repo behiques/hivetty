@@ -3082,6 +3082,9 @@ describe('the projects and pr routes (HIVE-173)', () => {
     updatedAt: '2026-09-11T10:00:00Z',
     mergedAt: null,
     mine: true,
+    reviewDecision: null,
+    head: '',
+    mergeable: 'UNKNOWN' as const,
   };
 
   let receiver: Receiver;

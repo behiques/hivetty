@@ -26,13 +26,19 @@ export type GhPrState = 'open' | 'approved' | 'draft' | 'merged';
 /** What CI is doing. `passing` also covers a repo with no checks at all. */
 export type GhPrChecks = 'passing' | 'running' | 'failing';
 
+/** GitHub's `PullRequestReviewDecision`, as GitHub spells it; `null` when no review is required (HIVE-412). */
+export type GhReviewDecision = 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED';
+
+/** GitHub's `MergeableState`, as GitHub spells it. `UNKNOWN` while GitHub is still computing it (HIVE-412). */
+export type GhMergeable = 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
+
 /**
  * One pull request, as this app is willing to carry it across IPC.
  *
- * Every field is one a surface renders or resolves against. GitHub's PR payload
- * also carries the author's avatar, the body, the diff stats and a merge-state
- * enum; none of it crosses, because `gh.ts`'s rule is that only mapped, named
- * fields do.
+ * Every field is one a surface renders, resolves against or a wake diffs
+ * (HIVE-412). GitHub's PR payload also carries the author's avatar, the body and
+ * the diff stats; none of it crosses, because `gh.ts`'s rule is that only
+ * mapped, named fields do.
  */
 export interface PrRecord {
   number: number;
@@ -59,6 +65,12 @@ export interface PrRecord {
    * payload's `viewer`. Only a PR of yours can ask for you (SUMMONS).
    */
   mine: boolean;
+  /** The review decision (HIVE-412). The PR watch diffs it; the renderer ignores it. */
+  reviewDecision: GhReviewDecision | null;
+  /** `headRefOid`, the head commit's sha; `''` when GitHub sent none (HIVE-412). */
+  head: string;
+  /** Whether GitHub can merge it as it stands (HIVE-412). */
+  mergeable: GhMergeable;
 }
 
 /**

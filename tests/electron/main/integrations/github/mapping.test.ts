@@ -30,6 +30,9 @@ import {
 /** `2026-08-09T12:00:00Z`, as epoch ms. The "now" every case is relative to. */
 const NOW = Date.parse('2026-08-09T12:00:00Z');
 
+/** A head commit sha, forty hex characters. */
+const SHA = '0123456789abcdef0123456789abcdef01234567';
+
 const node = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
   number: 482,
   title: 'Hero: semantic token refactor',
@@ -38,6 +41,8 @@ const node = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
   state: 'OPEN',
   reviewDecision: null,
   headRefName: 'feat/hero-refresh',
+  headRefOid: SHA,
+  mergeable: 'MERGEABLE',
   updatedAt: '2026-08-09T11:00:00Z',
   mergedAt: null,
   author: { login: 'octocat' },
@@ -180,6 +185,22 @@ describe('toPrRecord', () => {
       updatedAt: '2026-08-09T11:00:00Z',
       mergedAt: null,
       mine: false,
+      reviewDecision: null,
+      head: SHA,
+      mergeable: 'MERGEABLE',
+    });
+  });
+
+  it('reads the review decision, head and mergeable state, and defaults what GitHub left out (HIVE-412)', () => {
+    expect(toPrRecord(node({ reviewDecision: 'CHANGES_REQUESTED', mergeable: 'CONFLICTING' }))).toMatchObject({
+      reviewDecision: 'CHANGES_REQUESTED',
+      head: SHA,
+      mergeable: 'CONFLICTING',
+    });
+    expect(toPrRecord(node({ reviewDecision: 'SOMETHING_NEW', headRefOid: null, mergeable: undefined }))).toMatchObject({
+      reviewDecision: null,
+      head: '',
+      mergeable: 'UNKNOWN',
     });
   });
 

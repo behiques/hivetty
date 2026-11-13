@@ -23,6 +23,9 @@ export function prRecord(overrides: Partial<PrRecord> = {}): PrRecord {
     updatedAt: '2026-08-09T12:00:00Z',
     mergedAt: null,
     mine: true,
+    reviewDecision: null,
+    head: '',
+    mergeable: 'UNKNOWN' as const,
     ...overrides,
   };
 }

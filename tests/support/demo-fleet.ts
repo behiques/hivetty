@@ -488,6 +488,9 @@ export function createDemoFleet(): DemoFleet {
         updatedAt: '2026-08-09T14:37:00Z',
         mergedAt: null,
         mine: true,
+        reviewDecision: null,
+        head: '',
+        mergeable: 'UNKNOWN' as const,
       },
       {
         number: 219,
@@ -502,6 +505,9 @@ export function createDemoFleet(): DemoFleet {
         updatedAt: '2026-08-09T14:20:00Z',
         mergedAt: null,
         mine: true,
+        reviewDecision: null,
+        head: '',
+        mergeable: 'UNKNOWN' as const,
       },
       {
         number: 495,
@@ -516,6 +522,9 @@ export function createDemoFleet(): DemoFleet {
         updatedAt: '2026-08-09T13:58:00Z',
         mergedAt: null,
         mine: true,
+        reviewDecision: null,
+        head: '',
+        mergeable: 'UNKNOWN' as const,
       },
       {
         number: 31,
@@ -530,6 +539,9 @@ export function createDemoFleet(): DemoFleet {
         updatedAt: '2026-08-09T09:14:00Z',
         mergedAt: '2026-08-09T09:14:00Z',
         mine: true,
+        reviewDecision: null,
+        head: '',
+        mergeable: 'UNKNOWN' as const,
       },
       {
         number: 77,
@@ -544,6 +556,9 @@ export function createDemoFleet(): DemoFleet {
         updatedAt: '2026-08-09T11:02:00Z',
         mergedAt: '2026-08-09T11:02:00Z',
         mine: true,
+        reviewDecision: null,
+        head: '',
+        mergeable: 'UNKNOWN' as const,
       },
     ],
     orchLines: [

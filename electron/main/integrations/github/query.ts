@@ -99,6 +99,8 @@ const PR_PARTS = `fragment PrParts on PullRequest {
   state
   reviewDecision
   headRefName
+  headRefOid
+  mergeable
   updatedAt
   mergedAt
   author { login }
