@@ -50,6 +50,7 @@ import {
   parseJiraTransitionByName,
   parseSetSessionPluginRequest,
 } from '../../../electron/shared/guards';
+import { SESSION_PRS_MAX } from '../../../electron/shared/session-history-contract';
 
 const validSpawn = { sessionId: 'sess-1', projectId: 'proj-1', cols: 80, rows: 24 };
 
@@ -1015,11 +1016,26 @@ describe('parseSessionPrRequest', () => {
     url: 'https://github.com/demo/nova-web/pull/118',
   };
 
-  it('accepts a well-formed note', () => {
-    expect(parseSessionPrRequest({ entityId: 'sess-1', pr })).toEqual({
+  it('accepts a well-formed list, owned flag included', () => {
+    const owned = { ...pr, number: 119, url: 'https://github.com/demo/nova-web/pull/119', owned: true };
+    expect(parseSessionPrRequest({ entityId: 'sess-1', prs: [pr, owned] })).toEqual({
       entityId: 'sess-1',
-      pr,
+      prs: [pr, owned],
     });
+    expect(parseSessionPrRequest({ entityId: 'sess-1', prs: [] })).toEqual({ entityId: 'sess-1', prs: [] });
+  });
+
+  it('refuses a list that is not an array, or longer than the cap', () => {
+    expect(() => parseSessionPrRequest({ entityId: 'sess-1', prs: pr })).toThrow(IpcValidationError);
+    expect(() =>
+      parseSessionPrRequest({ entityId: 'sess-1', prs: Array.from({ length: SESSION_PRS_MAX + 1 }, () => pr) }),
+    ).toThrow(IpcValidationError);
+  });
+
+  it('refuses owned that is anything but true', () => {
+    expect(() => parseSessionPrRequest({ entityId: 'sess-1', prs: [{ ...pr, owned: false }] })).toThrow(
+      IpcValidationError,
+    );
   });
 
   it.each([
@@ -1030,7 +1046,7 @@ describe('parseSessionPrRequest', () => {
     ['not a url at all', 'nova-web#118'],
     ['not a string', 118],
   ])('refuses %s', (_label, url) => {
-    expect(() => parseSessionPrRequest({ entityId: 'sess-1', pr: { ...pr, url } })).toThrow(
+    expect(() => parseSessionPrRequest({ entityId: 'sess-1', prs: [{ ...pr, url }] })).toThrow(
       IpcValidationError,
     );
   });
@@ -1043,7 +1059,7 @@ describe('parseSessionPrRequest', () => {
     ['not a number', '118'],
   ])('refuses a PR number that is %s', (_label, number) => {
     expect(() =>
-      parseSessionPrRequest({ entityId: 'sess-1', pr: { ...pr, number } }),
+      parseSessionPrRequest({ entityId: 'sess-1', prs: [{ ...pr, number }] }),
     ).toThrow(IpcValidationError);
   });
 
@@ -1052,15 +1068,15 @@ describe('parseSessionPrRequest', () => {
       IpcValidationError,
     );
     expect(() =>
-      parseSessionPrRequest({ entityId: 'sess-1', pr: { number: 1, repo: 'p' } }),
+      parseSessionPrRequest({ entityId: 'sess-1', prs: [{ number: 1, repo: 'p' }] }),
     ).toThrow(IpcValidationError);
     expect(() =>
-      parseSessionPrRequest({ entityId: 'sess-1', pr, extra: 1 }),
+      parseSessionPrRequest({ entityId: 'sess-1', prs: [pr], extra: 1 }),
     ).toThrow(IpcValidationError);
     expect(() =>
-      parseSessionPrRequest({ entityId: 'sess-1', pr: { ...pr, state: 'open' } }),
+      parseSessionPrRequest({ entityId: 'sess-1', prs: [{ ...pr, state: 'open' }] }),
     ).toThrow(IpcValidationError);
-    expect(() => parseSessionPrRequest({ entityId: '../x', pr })).toThrow(
+    expect(() => parseSessionPrRequest({ entityId: '../x', prs: [pr] })).toThrow(
       IpcValidationError,
     );
   });
@@ -1069,7 +1085,7 @@ describe('parseSessionPrRequest', () => {
     expect(() =>
       parseSessionPrRequest(
         JSON.parse(
-          '{"entityId":"sess-1","pr":{"number":1,"repo":"p","url":"https://x/1","__proto__":{"x":1}}}',
+          '{"entityId":"sess-1","prs":[{"number":1,"repo":"p","url":"https://x/1","__proto__":{"x":1}}]}',
         ),
       ),
     ).toThrow(IpcValidationError);

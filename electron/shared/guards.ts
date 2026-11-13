@@ -124,9 +124,10 @@ import {
   SESSION_NAME_MAX,
   isSendableSessionName,
 } from './session-contract';
-import type {
-  SessionNoteRequest,
-  SessionPrRequest,
+import {
+  SESSION_PRS_MAX,
+  type SessionNoteRequest,
+  type SessionPrRequest,
 } from './session-history-contract';
 import { SHIPPED_KINDS } from './shipped-contract';
 import type { ShippedRequest } from './shipped-contract';
@@ -587,16 +588,24 @@ function assertHttpsUrl(value: unknown, label: string): string {
  * rendered, and it never reaches a path or a command line.
  */
 export function parseSessionPrRequest(input: unknown): SessionPrRequest {
-  const raw = assertShape(input, ['entityId', 'pr'], 'sessionPr');
-  const pr = assertShape(raw.pr, ['number', 'repo', 'url'], 'sessionPr.pr');
+  const raw = assertShape(input, ['entityId', 'prs'], 'sessionPr');
+  if (!Array.isArray(raw.prs) || raw.prs.length > SESSION_PRS_MAX) {
+    return fail(`sessionPr.prs: expected a list of at most ${String(SESSION_PRS_MAX)}`);
+  }
 
   return {
     entityId: assertId(raw.entityId, 'sessionPr.entityId'),
-    pr: {
-      number: assertPrNumber(pr.number, 'sessionPr.pr.number'),
-      repo: assertText(pr.repo, 'sessionPr.pr.repo'),
-      url: assertHttpsUrl(pr.url, 'sessionPr.pr.url'),
-    },
+    prs: raw.prs.map((item: unknown, index) => {
+      const label = `sessionPr.prs[${String(index)}]`;
+      const pr = assertShape(item, ['number', 'repo', 'url'], label, ['owned']);
+      if (pr.owned !== undefined && pr.owned !== true) return fail(`${label}.owned: expected true`);
+      return {
+        number: assertPrNumber(pr.number, `${label}.number`),
+        repo: assertText(pr.repo, `${label}.repo`),
+        url: assertHttpsUrl(pr.url, `${label}.url`),
+        ...(pr.owned === true ? { owned: true as const } : {}),
+      };
+    }),
   };
 }
 

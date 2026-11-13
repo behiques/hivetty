@@ -205,10 +205,11 @@ describe('session:pr', () => {
   const send = (payload: unknown) =>
     handlers.get(CH.sessionPr)!(trustedEvent, payload);
 
-  it('records the pull request against a session main knows about', () => {
-    send({ entityId: 'old-01', pr });
+  it('records the PR list against a session main knows about', () => {
+    const prs = [pr, { ...pr, number: 119, url: 'https://github.com/demo/nova-web/pull/119', owned: true }];
+    send({ entityId: 'old-01', prs });
 
-    expect(historyRecord).toHaveBeenCalledWith('old-01', { pr });
+    expect(historyRecord).toHaveBeenCalledWith('old-01', { prs });
   });
 
   /**
@@ -218,7 +219,7 @@ describe('session:pr', () => {
    * GitHub's answer.
    */
   it('refuses a note for an entity it has no record of', () => {
-    send({ entityId: 'never-ran', pr });
+    send({ entityId: 'never-ran', prs: [pr] });
 
     expect(historyRecord).not.toHaveBeenCalled();
   });
@@ -226,9 +227,9 @@ describe('session:pr', () => {
   it('rejects a payload that is not a pull request', () => {
     // `url` is the one field on this bridge that later becomes an `href`.
     expect(() =>
-      send({ entityId: 'old-01', pr: { ...pr, url: 'javascript:alert(1)' } }),
+      send({ entityId: 'old-01', prs: [{ ...pr, url: 'javascript:alert(1)' }] }),
     ).toThrow();
-    expect(() => send({ entityId: 'old-01', pr: { ...pr, number: 0 } })).toThrow();
+    expect(() => send({ entityId: 'old-01', prs: [{ ...pr, number: 0 }] })).toThrow();
     expect(() => send({ entityId: 'old-01' })).toThrow();
     expect(historyRecord).not.toHaveBeenCalled();
   });

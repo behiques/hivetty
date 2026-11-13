@@ -3781,7 +3781,7 @@ export function registerIpcHandlers(
   handle(CH.sessionPr, (_event, raw: unknown): void => {
     const request = parseSessionPrRequest(raw);
     if (!history?.all().some((record) => record.id === request.entityId)) return;
-    history.record(request.entityId, { pr: request.pr });
+    history.record(request.entityId, { prs: request.prs });
   });
 
   /*
