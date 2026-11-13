@@ -209,8 +209,9 @@ export function createPlans({
     const at =
       last !== undefined && (noted || (last.read === read.text && !last.noted)) ? last.at : restored?.at || now();
     const current = plans.get(entityId);
-    // The text counts as shown only once the panel takes it: a file turned
-    // away by rank must still be offered after the plan ahead of it finishes.
+    // The text counts as shown only once the panel takes it: a file turned away (by rank, a build, or an
+    // unfinished earlier part) is kept without `text`, so its next read offers it again. Nothing re-offers it
+    // on its own when the plan ahead of it finishes: no auto-advance.
     // A builder is working another plan: this file is held for a later build,
     // not shown over the one in progress (HIVE-359, the 16:55 case).
     // Only while its builder is alive: a build silent for STALE_BUILD_MS holds nothing.
