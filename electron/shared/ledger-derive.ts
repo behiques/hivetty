@@ -1050,8 +1050,8 @@ export function openAsksOnLane(entries: readonly LedgerEntry[], agent: string, l
 /**
  * What a closing run leaves behind it (HIVE-354): the ask its thread lane
  * exists to answer, while that ask is still open, and every task the agent
- * still holds by a claim this run wrote. A standing or repo lane names no ask:
- * its wake queue is cleared at flush, so nothing records which ask it owed.
+ * still holds by a claim this run wrote. A standing or repo lane names no ask;
+ * `owedBy` reads what such a run owed from `meta.wakes`.
  */
 export function leftOpen(
   entries: readonly LedgerEntry[],
@@ -1073,6 +1073,119 @@ export function leftOpen(
     .map(([task]) => task);
 
   return { ask, claims: held };
+}
+
+/** An ask a run was woken for and still owes (HIVE-410), and whether main already re-woke its lane for it. */
+export interface OwedAsk {
+  ask: OpenAsk;
+  rewoken: boolean;
+}
+
+/**
+ * What a run on a standing or repo lane still owes when it ends (HIVE-410):
+ * each ask its `run.started` lists in `meta.wakes`, directly or through the
+ * overmind's re-wake post for it, that is addressed to the agent and is
+ * neither accepted nor closed. `rewoken` says the overmind has already spent
+ * the one re-wake such an ask gets. Only main's own marker counts, for
+ * `expiredAsks`' reason.
+ */
+export function owedBy(entries: readonly LedgerEntry[], agent: string, run: string, now: number): OwedAsk[] {
+  const started = entries.find(
+    (item) =>
+      item.kind === 'event' &&
+      item.from === agent &&
+      item.meta?.['run'] === run &&
+      item.body.startsWith('run.started'),
+  );
+  const wakes = started?.meta?.['wakes'];
+  if (!Array.isArray(wakes)) return [];
+  const woken = new Set((wakes as readonly unknown[]).filter((id): id is string => typeof id === 'string'));
+
+  const rewoke = new Set<string>();
+  const named = new Set<string>();
+  for (const item of entries) {
+    if (item.kind === 'ask' && woken.has(item.id)) named.add(item.id);
+    const id = item.meta?.['rewoke'];
+    if (typeof id !== 'string' || item.from !== OVERMIND) continue;
+    rewoke.add(id);
+    if (woken.has(item.id)) named.add(id);
+  }
+
+  return openAsks(entries, now)
+    .filter((ask) => named.has(ask.id) && ask.to === agent && (ask.state === 'open' || ask.state === 'delivered'))
+    .map((ask) => ({ ask, rewoken: rewoke.has(ask.id) }));
+}
+
+/** The runs the log shows started and never ended (HIVE-410): the app quit or crashed under them. */
+export function unfinishedRuns(entries: readonly LedgerEntry[]): { agent: string; run: string; lane: string }[] {
+  const ended = new Set<string>();
+  for (const item of entries) {
+    const run = item.meta?.['run'];
+    if (item.kind === 'event' && typeof run === 'string' && item.body.startsWith('run.ended')) {
+      ended.add(`${item.from} ${run}`);
+    }
+  }
+
+  const out: { agent: string; run: string; lane: string }[] = [];
+  for (const item of entries) {
+    const run = item.meta?.['run'];
+    if (item.kind !== 'event' || typeof run !== 'string' || !item.body.startsWith('run.started')) continue;
+    if (ended.has(`${item.from} ${run}`)) continue;
+    const lane = item.meta?.['lane'];
+    out.push({ agent: item.from, run, lane: typeof lane === 'string' && lane !== '' ? lane : STANDING_LANE });
+  }
+  return out;
+}
+
+/** The `meta` keys whose value names another entry: main's markers for an ask. */
+const NAMING_KEYS = ['expired', 'released', 'served', 'rewoke', 'redirected', 'delivered'] as const;
+
+/**
+ * Of `older`, the entries a restart must not lose (HIVE-410), judged against
+ * the whole log `all`: each ask still owed (at that age only a held or an
+ * accepted one can be) and each claim never released, with everything that
+ * names them: their thread, main's markers for them, and the `run.started` and
+ * `run.ended` of the runs that wrote them. A lane is read from the first; the
+ * second keeps an old run from looking unfinished at every start.
+ */
+export function carriedOver(
+  older: readonly LedgerEntry[],
+  all: readonly LedgerEntry[],
+  now: number,
+): LedgerEntry[] {
+  const live = new Set<string>();
+  for (const { ask, state } of askStates(all, now)) {
+    if (state === 'held' || state === 'open' || state === 'delivered' || state === 'accepted') live.add(ask.id);
+  }
+
+  const held = new Map<string, LedgerEntry>();
+  for (const item of all) {
+    const task = taskOf(item);
+    if (task === undefined) continue;
+    if (item.kind === 'claim') held.set(task, item);
+    else if (item.kind === 'release') held.delete(task);
+  }
+  for (const claim of held.values()) live.add(claim.id);
+
+  const names = (item: LedgerEntry): boolean =>
+    live.has(item.id) ||
+    (item.thread !== undefined && live.has(item.thread)) ||
+    NAMING_KEYS.some((key) => {
+      const id = item.meta?.[key];
+      return typeof id === 'string' && live.has(id);
+    });
+
+  const runs = new Set<string>();
+  for (const item of older) {
+    const run = item.meta?.['run'];
+    if (names(item) && typeof run === 'string') runs.add(`${item.from} ${run}`);
+  }
+  const marksRun = (item: LedgerEntry): boolean =>
+    item.kind === 'event' &&
+    (item.body.startsWith('run.started') || item.body.startsWith('run.ended')) &&
+    runs.has(`${item.from} ${String(item.meta?.['run'])}`);
+
+  return older.filter((item) => names(item) || marksRun(item));
 }
 
 /**

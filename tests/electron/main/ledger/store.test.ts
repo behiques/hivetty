@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -303,5 +303,31 @@ describe('ledger store', () => {
     store.append({ from: 'sess-a', kind: 'post', body: 'two' });
 
     expect(seen).toEqual(['20260828-141530-0001']);
+  });
+
+  it('carries a three-day-old held ask and an unreleased claim over a restart, and nothing else that old (HIVE-410)', () => {
+    const ts = new Date(2026, 7, 25, 9).getTime();
+    const line = (over: Record<string, unknown>): string =>
+      JSON.stringify({ ts, from: 'sess-a', kind: 'post', body: 'b', ...over });
+    writeFileSync(
+      join(dir, '2026-08-25.jsonl'),
+      `${[
+        line({ id: '20260825-090000-0001', kind: 'ask', to: 'builder', ref: 'a1', meta: { after: 'a/x#3' } }),
+        line({ id: '20260825-090000-0002', kind: 'claim', from: 'shipper', meta: { task: 'a/x#1' } }),
+        line({ id: '20260825-090000-0003', body: 'an old note' }),
+      ].join('\n')}\n`,
+    );
+    writeFileSync(join(dir, '2026-08-20.jsonl'), `${line({ id: '20260820-090000-0001', kind: 'claim', from: 'shipper', meta: { task: 'a/x#9' } })}\n`);
+
+    const reopened = createLedgerStore({ dir, now: () => clock });
+
+    // Eight days back is past the window: the older claim is not read at all.
+    expect(reopened.all().map((item) => item.id)).toEqual(['20260825-090000-0001', '20260825-090000-0002']);
+  });
+
+  it('creates a day-file only its owner can read (HIVE-410)', () => {
+    store.append({ from: 'sess-a', kind: 'post', body: 'hello' });
+
+    expect(statSync(join(dir, '2026-08-28.jsonl')).mode & 0o777).toBe(0o600);
   });
 });

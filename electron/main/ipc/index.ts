@@ -166,7 +166,7 @@ import type {
   JiraUser,
 } from '@shared/jira-contract';
 import { LEDGER_DIR, OVERMIND } from '@shared/ledger-contract';
-import { closedAskThreads, delegatesOf, leftOpen, openAsksOnLane, waitingAsks } from '@shared/ledger-derive';
+import { closedAskThreads, delegatesOf, leftOpen, openAsksOnLane, owedBy, unfinishedRuns, waitingAsks } from '@shared/ledger-derive';
 import {
   isThisMachineAction,
   type NotificationAction,
@@ -2773,7 +2773,8 @@ export function registerIpcHandlers(
     fanOut.emit(CH.agentsChanged, undefined);
   });
 
-  void refreshKnownAgents();
+  // Kept for boot's lost-run pass below, which must not run before the party set exists (HIVE-410).
+  const firstListing = refreshKnownAgents();
 
   /*
     The MCP config runtime (HIVE-112). Written once, its content depends only
@@ -3067,6 +3068,8 @@ export function registerIpcHandlers(
     hasOpenAsk,
     handoffFor,
     leftOpen: (name, run, lane) => leftOpen(ledger.read({}).entries, name, run, lane, Date.now()),
+    owedBy: (name, run) => owedBy(ledger.read({}).entries, name, run, Date.now()),
+    unfinishedRuns: () => unfinishedRuns(ledger.read({}).entries),
     openAsksOnLane: (name, lane) => openAsksOnLane(ledger.read({}).entries, name, lane, Date.now()),
     newUuid,
     pushStatus: pushAgentStatus,
@@ -3334,6 +3337,17 @@ export function registerIpcHandlers(
     })
     .finally(() => {
       scheduler?.start();
+      /*
+        Runs the last launch left unfinished (HIVE-410). After `start()`, so the re-wake a lost
+        run earns is routed as it is written; and after the first folder listing, or `knowsParty`
+        refuses the agent's `run.ended` and the run looks unfinished at every launch. The
+        listing never rejects; a throw in the pass itself is said, not left unhandled in main.
+      */
+      void firstListing
+        .then(() => runs?.settleLost())
+        .catch((cause: unknown) => {
+          console.warn('[hive] could not settle the runs the last launch left unfinished', cause);
+        });
       slackBridge?.sync();
     });
 

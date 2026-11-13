@@ -433,6 +433,26 @@ export function createLedger(options: LedgerOptions): Ledger {
         to = OVERMIND;
       }
 
+      /*
+        One open ask per `(to, meta.key)` (HIVE-410). Five of seventy PRs were
+        handed to the shipper twice in the audit week; a ship ask carries
+        `ship:<owner>/<repo>#<n>`, and the second one returns the first.
+        Nothing is written, so nobody is woken twice. Matched against every
+        ask still owed, accepted included, and free again once it closes.
+      */
+      const key = request.kind === 'ask' ? request.meta?.['key'] : undefined;
+      if (typeof key === 'string' && key !== '' && to !== undefined) {
+        const first = openAsks(store.all(), now()).find((open) => open.to === to && open.meta?.['key'] === key);
+        if (first !== undefined) {
+          return {
+            ok: true,
+            id: first.id,
+            ...(first.ref === undefined ? {} : { ref: first.ref }),
+            duplicate: { from: first.from, mine: first.from === request.from },
+          };
+        }
+      }
+
       let stored: LedgerEntry;
       try {
         stored = store.append({

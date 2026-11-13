@@ -1061,4 +1061,59 @@ describe('createLedger', () => {
       expect(ledger.read({}).openAsks.map((ask) => ask.id)).toEqual([id]);
     });
   });
+
+  describe('an ask with a key (HIVE-410)', () => {
+    const ship = (from: string) =>
+      ledger.append({ from, to: 'shipper', kind: 'ask', body: 'Ship PR #1', meta: { key: 'ship:a/x#1' } });
+
+    it('is written once: a second one returns the first, and says whose it is', () => {
+      const first = ship('builder');
+      if (!first.ok) throw new Error('setup failed');
+
+      expect(ship('builder')).toEqual({ ok: true, id: first.id, ref: first.ref, duplicate: { from: 'builder', mine: true } });
+      expect(ship('sess-a')).toEqual({ ok: true, id: first.id, ref: first.ref, duplicate: { from: 'builder', mine: false } });
+      expect(ledger.read({ kind: 'ask' }).entries).toHaveLength(1);
+    });
+
+    it('still matches while the first is accepted, and is free again once it closes', () => {
+      const first = ship('builder');
+      if (!first.ok) throw new Error('setup failed');
+      ledger.append({ from: 'shipper', kind: 'post', thread: first.id, body: 'accepted', meta: { accepted: true } });
+      expect(ship('builder')).toMatchObject({ id: first.id, duplicate: { mine: true } });
+
+      ledger.append({ from: 'shipper', kind: 'answer', thread: first.id, body: 'PR #1 merged' });
+      const again = ship('builder');
+      expect(again).toMatchObject({ ok: true });
+      expect(again.ok && again.id).not.toBe(first.id);
+      expect(again).not.toHaveProperty('duplicate');
+    });
+
+    it('matches on the recipient too, and ignores a key on anything but an ask', () => {
+      const first = ship('builder');
+      if (!first.ok) throw new Error('setup failed');
+
+      const other = ledger.append({ from: 'builder', to: 'fixer', kind: 'ask', body: 'fix', meta: { key: 'ship:a/x#1' } });
+      expect(other).not.toHaveProperty('duplicate');
+      const note = ledger.append({ from: 'builder', to: 'shipper', kind: 'post', body: 'note', meta: { key: 'ship:a/x#1' } });
+      expect(note).not.toHaveProperty('duplicate');
+    });
+  });
+
+  it('keeps an ask held three days across a restart, and releases it when its PR closes (HIVE-410)', () => {
+    const ts = AT - 3 * 24 * 60 * 60 * 1_000;
+    const at = new Date(ts);
+    const day = `${String(at.getFullYear())}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+    // Shaped like a real id, so it sorts before today's entries as a real one would.
+    const id = `${day.replaceAll('-', '')}-090000-0001`;
+    writeFileSync(
+      join(dir, `${day}.jsonl`),
+      `${JSON.stringify({ id, ts, from: 'sess-a', to: 'builder', kind: 'ask', ref: 'a1', body: 'Build B', meta: { after: 'a/x#3' } })}\n`,
+    );
+
+    const reopened = createLedger({ dir, now: () => clock, knowsParty: () => true });
+    expect(reopened.read({}).openAsks.map((ask) => [ask.id, ask.state])).toEqual([[id, 'held']]);
+
+    reopened.append({ from: 'shipper', kind: 'post', body: 'PR #3 merged', meta: { pr: 3, repo: 'a/x', stage: 'closed' } });
+    expect(reopened.read({}).openAsks.map((ask) => [ask.id, ask.state])).toEqual([[id, 'open']]);
+  });
 });

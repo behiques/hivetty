@@ -2353,6 +2353,19 @@ describe('the token binds to one session (HIVE-112)', () => {
   it('is deterministic: the same receiver and id yield the same token twice', () => {
     expect(receiver.tokenFor('sess-a')).toBe(receiver.tokenFor('sess-a'));
   });
+
+  it('tells a second ask with the same key that nothing was written (HIVE-410)', async () => {
+    const target = ROUTES.find((route) => route.name === '/ledger')?.url(receiver) ?? '';
+    const body = { to: 'sess-b', kind: 'ask', body: 'Ship PR #1', meta: { key: 'ship:a/x#1' } };
+    const post = async () =>
+      (await (await send(target, receiver.tokenFor('sess-a'), 'sess-a', body)).json()) as Record<string, unknown>;
+
+    const first = await post();
+    const second = await post();
+
+    expect(first).not.toHaveProperty('duplicate');
+    expect(second).toEqual({ ...first, duplicate: { from: 'sess-a', mine: true } });
+  });
 });
 
 describe('hook receiver tokens', () => {

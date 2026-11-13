@@ -33,13 +33,19 @@ ledger_ask
     ticket: HIVE-123 | none
     key-confirmed: yes | no            (yes only when the key came from work-on's arguments)
     reply-to: <$HIVE_SESSION_ID, sess-…> | overmind
-  meta: { pr: 214, repo: "behiques/hivetty", ticket: "HIVE-123", stage: "intake" }
+  meta: { pr: 214, repo: "behiques/hivetty", ticket: "HIVE-123", stage: "intake",
+          key: "ship:behiques/hivetty#214" }
 ```
 
 `reply-to` is a party name: the asker's `$HIVE_SESSION_ID`, never a Claude
 session UUID. A write to a name no party answers to is refused `unknown
 party`; on that refusal the row's `replyTo` becomes the intake ask's `from`
 and the write is sent again.
+
+`key` is `ship:<owner>/<repo>#<N>`. While a ship ask for that PR is open, a
+second one writes nothing and comes back naming the first (HIVE-410): if the
+first was yours, wait for its answer; if it was someone else's, the PR is
+already in hand and the answer is theirs, so do not wait.
 
 The shipper takes the ask with `ledger_accept <the ask's id>` at once. Nobody is
 woken, the asker is free, and the ask stays open in the shipper's name until the
@@ -83,7 +89,7 @@ one checkout from colliding.
   app could not match to a claim, and your ten-minute clock. For the first,
   answer with the open claims (`ledger_read`, `claims`) and ask which
   repository, or, when the ask names one, hand it over with a self-addressed
-  `ledger_ask to: shipper` carrying `meta.repo` and the original words, and
+  `ledger_ask to: shipper` carrying `meta.repo` and the original words and no `key`, and
   answer the original ask "handed to <owner>/<repo>". If the standing
   directory's `prs.json` still holds rows from before lanes, hand each one over
   the same way, with its row in the body, then remove it and write the file.

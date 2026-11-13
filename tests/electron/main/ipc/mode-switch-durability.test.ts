@@ -151,6 +151,7 @@ vi.mock('../../../../electron/main/agents/runs', () => ({
       run: () => ({ started: false, refused: 'unknown', reason: 'inert' }),
       kill: () => false,
       noteTurnEnded: () => {},
+      settleLost: vi.fn(),
       killAll: () => {},
       closeAll: () => {
         deps.state.patch('probe', { sessionUuid: MID_RUN_UUID, status: 'sleeping' });

@@ -145,7 +145,13 @@ export interface LedgerAnswerRequest {
  * — IPC and the receiver — and both need the reason as text a model can read.
  */
 export type LedgerResult =
-  | { ok: true; id: string; ref?: string }
+  | {
+      ok: true;
+      id: string;
+      ref?: string;
+      /** The ask was already open under the same `(to, meta.key)` (HIVE-410): nothing was written, and `id` is the first one's. */
+      duplicate?: { from: string; mine: boolean };
+    }
   | { ok: false; status: number; reason: string };
 
 export const LEDGER_BODY_MAX = 16 * 1024;

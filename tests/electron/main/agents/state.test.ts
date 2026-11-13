@@ -1,4 +1,4 @@
-import { copyFile, mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile, rm, stat, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -375,6 +375,16 @@ describe('createAgentState', () => {
     }, 2);
 
     expect(state.read('drone').runs[0]?.sessionUuid).toBe('9f3c1e2a');
+  });
+
+  it('writes agents.json for its owner only, and tightens one that was not (HIVE-410)', async () => {
+    await writeFile(path, '{}\n', { mode: 0o644 });
+    const state = createAgentState({ path });
+
+    state.patch('a', { status: 'sleeping' });
+    state.flush();
+
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
 });
 

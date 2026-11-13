@@ -3430,7 +3430,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
         const state = get();
         const now = Date.now();
-        const open = openAsks(state.ledger, now);
+        const open = waitingAsks(openAsks(state.ledger, now));
         const rows = state.agentOrder.flatMap((id) => {
           const entity = state.entities[id];
 

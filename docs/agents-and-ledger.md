@@ -386,6 +386,15 @@ the intent in the context the answer's marker carries, whole.
 (HIVE-408), the way `ledger_answer` already did; an unknown or ambiguous ref
 reads as nothing, as before.
 
+An ask may carry `meta.key`. While an ask to the same party with the same key
+is still owed, `Ledger.append` writes nothing for a second one and returns the
+first with `duplicate: { from, mine }`; `ledger_ask` tells the caller whether
+to wait. A ship ask uses `ship:<owner>/<repo>#<n>`.
+
+At start the store loads yesterday and today whole and, from the six days
+before, only what `carriedOver` keeps: asks still owed, claims never released,
+and what names them. Day-files and `agents.json` are written `0600`.
+
 ### An ask to a session that is gone (HIVE-167)
 
 A builder asks the session that planned its work first, because that session
@@ -902,9 +911,20 @@ still holds by a claim that run wrote (`leftOpen` in `ledger-derive.ts`). The
 overmind is a party to every thread, so the `failed` is addressed to the asker,
 wakes or nudges it, and closes the lane. Nothing else would: a lane's ask is no
 longer in any wake queue once its run started, and boot flushes only persisted
-queues. A paused agent is skipped; resuming it is the person's call. Standing
-and repo lanes keep the day-long expiry above, because their queue is cleared
-at flush and nothing records which ask a run owed (HIVE-354).
+queues. A paused agent is skipped; resuming it is the person's call.
+
+A standing or repo lane has the same contract, one step softer (HIVE-410).
+`run.started` records in `meta.wakes` which entries the run was woken for, and
+`owedBy` reads from it the asks the run still owes when it ends: addressed to
+the agent, neither accepted nor closed. Each gets one re-wake, an overmind
+`post` on the ask's thread with `meta.rewoke`, which the scheduler routes like
+any entry. A run that re-wake started and that ends still owing is the second
+miss: the overmind writes the same `failed`, and the asker is woken. Nothing is
+released, because a repo lane's claims are its PRs. A re-wake written while the
+app was closing is routed by `scheduler.start()`, and a run the last launch
+left with no `run.ended` gets one from main (`reason: lost`) and its lane's
+contract, once (`RunTracker.settleLost`, after the first agent listing so the
+agent is a known party).
 
 ### Notifications
 
@@ -1192,11 +1212,12 @@ builds its own request paths from `@shared/ledger-contract`'s
 it `url` would make every ledger call 404). None of the host's tools accepts a
 `from` argument, so a model calling them has no way to name a session other
 than its own — that is a property of the **MCP tool surface**, reading
-identity out of the environment the app itself controls, not a transport-level
-guarantee: the receiver's per-launch token is shared by every session it
-spawns, so a model with shell access could still `curl` the
-receiver directly using another session's header value. Closing that is
-tracked separately, not attempted here. If any of the three is missing — the
+identity out of the environment the app itself controls. The transport holds
+the same line: the receiver derives one token per identity (`tokenFor` in
+`hooks/receiver.ts`, an HMAC of the launch secret over the session id), and
+checks the presented token against the one derived for the `x-hive-session`
+header, so a session's token does not pass for another session's header
+value. If any of the three is missing — the
 process was started outside HiveTTY, or by hand in a plain terminal —
 `createHandlers` still lists all sixteen tools (so
 `/mcp` shows a connected server, not a broken one) but every *call* answers
@@ -1206,7 +1227,7 @@ server refusing to start.
 The host reaches the ledger the same way a session's hooks do: **both
 receiver routes are POST**, and the host's `ReceiverClient` (`client.ts`)
 calls them with the same two headers the hook path uses
-(`x-hive-session`, `x-hive-token`) and the same per-launch token.
+(`x-hive-session`, `x-hive-token`) and the session's own token.
 
 **The ten ledger tools, one ledger kind each:** `ledger_post` → `post`,
 `ledger_ask` → `ask`, `ledger_answer` → `answer`, `ledger_accept` → a threaded

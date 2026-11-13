@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import {
@@ -200,11 +200,9 @@ export function createAgentState(options: AgentStateOptions): AgentState {
 
     try {
       mkdirSync(dirname(options.path), { recursive: true });
-      writeFileSync(
-        options.path,
-        `${JSON.stringify(agents, null, 2)}\n`,
-        'utf8',
-      );
+      writeFileSync(options.path, `${JSON.stringify(agents, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+      // `mode` only applies to a new file, and this one is never new on an existing install (HIVE-410).
+      chmodSync(options.path, 0o600);
     } catch {
       // A failed write is the next write's problem. Throwing here would take
       // down a run that has otherwise succeeded.
