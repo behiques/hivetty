@@ -79,6 +79,7 @@ describe('createRunTracker', () => {
   /** What a closing run leaves open on its lane (HIVE-354). Set per test. */
   let left: { ask: { id: string; ref?: string } | undefined; claims: string[] };
   let owed: { ask: { id: string; ref?: string }; rewoken: boolean }[];
+  let unfinished: { agent: string; run: string; lane: string }[];
   /** Does any run of the closing lane hold an open ask (HIVE-408)? Set per test. */
   let askingOnLane: boolean;
   /** What `onLive` reported, in order (HIVE-408). */
@@ -120,6 +121,7 @@ describe('createRunTracker', () => {
     handoff = undefined;
     left = { ask: undefined, claims: [] };
     owed = [];
+    unfinished = [];
     askingOnLane = false;
     awake = [];
     promptHash = undefined;
@@ -170,6 +172,7 @@ describe('createRunTracker', () => {
       handoffFor: () => handoff,
       leftOpen: () => left,
       owedBy: () => owed,
+      unfinishedRuns: () => unfinished,
       openAsksOnLane: (name, lane) => askingOnLane && name === 'a' && lane === 'thread:k1',
       onLive: (live) => awake.push(live),
       newUuid: () => 'uuid-minted',
@@ -2750,6 +2753,16 @@ describe('createRunTracker', () => {
   });
 
   describe('a run the log shows started and never ended (HIVE-410)', () => {
+    it('reads them off the log itself when it is given no list', () => {
+      unfinished = [{ agent: 'a', run: 'r-old', lane: 'standing' }];
+
+      tracker.settleLost();
+
+      expect(ledger).toEqual([
+        { from: 'a', kind: 'event', body: 'run.ended — failed', meta: { run: 'r-old', outcome: 'failed', reason: 'lost' } },
+      ]);
+    });
+
     it("is ended as lost, and its lane's re-wake is written once", () => {
       owed = [{ ask: { id: 'k1', ref: 'a7' }, rewoken: false }];
 

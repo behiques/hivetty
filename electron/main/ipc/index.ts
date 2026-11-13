@@ -3069,6 +3069,7 @@ export function registerIpcHandlers(
     handoffFor,
     leftOpen: (name, run, lane) => leftOpen(ledger.read({}).entries, name, run, lane, Date.now()),
     owedBy: (name, run) => owedBy(ledger.read({}).entries, name, run, Date.now()),
+    unfinishedRuns: () => unfinishedRuns(ledger.read({}).entries),
     openAsksOnLane: (name, lane) => openAsksOnLane(ledger.read({}).entries, name, lane, Date.now()),
     newUuid,
     pushStatus: pushAgentStatus,
@@ -3340,9 +3341,13 @@ export function registerIpcHandlers(
         Runs the last launch left unfinished (HIVE-410). After `start()`, so the re-wake a lost
         run earns is routed as it is written; and after the first folder listing, or `knowsParty`
         refuses the agent's `run.ended` and the run looks unfinished at every launch. The
-        listing never rejects.
+        listing never rejects; a throw in the pass itself is said, not left unhandled in main.
       */
-      void firstListing.then(() => runs?.settleLost(unfinishedRuns(ledger.read({}).entries)));
+      void firstListing
+        .then(() => runs?.settleLost())
+        .catch((cause: unknown) => {
+          console.warn('[hive] could not settle the runs the last launch left unfinished', cause);
+        });
       slackBridge?.sync();
     });
 

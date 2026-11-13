@@ -207,6 +207,27 @@ vi.mock('../../../../electron/main/agents/scheduler', () => ({
   }),
 }));
 
+/**
+ * The run tracker, real except for boot's lost-run pass (HIVE-410).
+ *
+ * `settleLost` runs behind the same unmocked `mcp.start()` write as the
+ * scheduler above, plus the first agent listing, and it reads the ledger mock.
+ * Left real, it lands inside whichever case is running, counting as a read
+ * that case asserts on, or reading a ledger that case made throw or hang.
+ * `tests/electron/main/agents/runs.test.ts` owns its behaviour, and
+ * `agent-channels.test.ts` owns the boot ordering.
+ */
+vi.mock('../../../../electron/main/agents/runs', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../../electron/main/agents/runs')>();
+  return {
+    ...real,
+    createRunTracker: (deps: Parameters<typeof real.createRunTracker>[0]) => ({
+      ...real.createRunTracker(deps),
+      settleLost: () => {},
+    }),
+  };
+});
+
 // The whole snapshot, so no getter reading a field this fixture forgot can
 // throw into a swallowing catch (HIVE-139).
 const snapshot = emptySnapshot('/tmp/config.json', '/bin/zsh');

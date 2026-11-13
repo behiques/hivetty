@@ -218,6 +218,11 @@ export interface RunTrackerDeps {
    * `ledger-derive.ts`. Optional so a spec that never ends a run owing one needs none.
    */
   owedBy?: (name: string, run: string) => { ask: { id: string; ref?: string }; rewoken: boolean }[];
+  /**
+   * The runs the log shows started and never ended (HIVE-410), from `unfinishedRuns` in
+   * `ledger-derive.ts`: what {@link RunTracker.settleLost} reads when it is given no list.
+   */
+  unfinishedRuns?: () => readonly { agent: string; run: string; lane: string }[];
   /** Did this run leave an ask nobody has answered? */
   openAsksFor: (name: string, run: string) => boolean;
   /**
@@ -348,9 +353,10 @@ export interface RunTracker {
   /**
    * Settle runs the log shows started and never ended (HIVE-410): the last launch quit or
    * crashed under them. Each gets the `run.ended` it never wrote, which is also what keeps the
-   * next start from finding it again, and its lane's run-end contract is applied once.
+   * next start from finding it again, and its lane's run-end contract is applied once. With no
+   * list, it reads them from the `unfinishedRuns` dep.
    */
-  settleLost(lost: readonly { agent: string; run: string; lane: string }[]): void;
+  settleLost(lost?: readonly { agent: string; run: string; lane: string }[]): void;
   /** The names with at least one run in flight. */
   live(): string[];
   /** What this agent has in flight, in the order it started (HIVE-128). */
@@ -1662,7 +1668,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       }
     },
 
-    settleLost(lost) {
+    settleLost(lost = deps.unfinishedRuns?.() ?? []) {
       for (const { agent, run, lane } of lost) {
         // A run this launch started is not lost; its own close settles it.
         if (liveOf(agent).some((live) => live.run === run)) continue;
