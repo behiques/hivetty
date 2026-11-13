@@ -14,6 +14,7 @@ import {
   type LedgerEntry,
   type LedgerPostRequest,
 } from '../../../../electron/shared/ledger-contract';
+import { askStates } from '../../../../electron/shared/ledger-derive';
 
 const AGENT = 'pr-reviewer';
 
@@ -2693,6 +2694,55 @@ describe('createScheduler', () => {
       scheduler = build();
       schedules.set(AGENT, { wake: { everyMs: 600_000, on: ['ledger'], check: 'onchange' } as WakeSpec });
       scheduler.start();
+    });
+
+    const accepted = (): void => {
+      state.patchLane(AGENT, 'repo:a/x', { runsSinceRotate: 0 });
+      entries.push(
+        entry({ id: 'k1', from: 'sess-1', kind: 'ask', body: 'Ship PR #1 on a/x', meta: { repo: 'a/x', pr: 1 } }),
+        entry({ id: 's1', from: AGENT, to: undefined, kind: 'event', body: 'run.started — ledger', meta: { run: 'r1', lane: 'repo:a/x', wakes: ['k1'] } }),
+        entry({ id: 'k2', from: AGENT, to: 'sess-1', kind: 'post', thread: 'k1', body: 'accepted', meta: { accepted: true, run: 'r1' } }),
+        entry({ id: 'e1', from: AGENT, to: undefined, kind: 'event', body: 'run.ended — done', meta: { run: 'r1', outcome: 'done' } }),
+      );
+    };
+    const card = (): LedgerEntry =>
+      entry({ id: 'p1', from: AGENT, to: 'overmind', kind: 'ask', body: 'undo ready on a/x#1?', meta: { run: 'r1', kind: 'permission' } });
+
+    it('ticks a lane that accepted an ask and holds no claim, and the ask stays accepted (HIVE-410)', () => {
+      accepted();
+
+      tick();
+      clock = 600_000;
+      tick();
+
+      expect(askStates(entries, clock).find((item) => item.ask.id === 'k1')?.state).toBe('accepted');
+      expect(woke).toContainEqual({ name: AGENT, trigger: 'interval', lane: 'repo:a/x' });
+    });
+
+    it('does not tick a lane whose one accepted ask waits on its own permission card (HIVE-410)', () => {
+      accepted();
+      entries.push(card());
+
+      tick();
+      clock = 600_000;
+      tick();
+
+      expect(woke.some((w) => w.lane === 'repo:a/x')).toBe(false);
+      expect(state.lane(AGENT, 'repo:a/x').nextRunAt).toBe(1_200_000);
+    });
+
+    it('ticks again once that card was closed as moot (HIVE-410)', () => {
+      accepted();
+      entries.push(
+        card(),
+        entry({ id: 'm1', from: 'overmind', to: AGENT, kind: 'answer', thread: 'p1', body: 'moot', meta: { moot: 'a/x#1 merged' } }),
+      );
+
+      tick();
+      clock = 600_000;
+      tick();
+
+      expect(woke).toContainEqual({ name: AGENT, trigger: 'interval', lane: 'repo:a/x' });
     });
 
     it('ticks a repo lane that holds a claim, and leaves an idle one without a clock', () => {

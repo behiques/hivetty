@@ -31,6 +31,7 @@ import { SLACK_COMMAND_KIND, SLACK_SERVER_KEY, SLACK_TRIGGER } from '@shared/sla
 import { MOOT, isPermissionAsk } from './permissions';
 import type { RunStart } from './runs';
 import {
+  acceptedLanes,
   decide,
   decideForEvent,
   decideForStatus,
@@ -901,7 +902,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     /*
       Repo lanes keep their own clock while they hold work (HIVE-186, spec §4).
       The standing lane's loop above is unchanged; a thread lane never ticks.
-      A lane with no open claim has no clock, and a stale one is cleared.
+      A lane with no open claim and no accepted ask has no clock, and a stale one is cleared.
     */
     for (const [name, schedule] of listed) {
       if (deps.laneOf?.(name) !== 'repo' || schedule.wake.everyMs === undefined) continue;
@@ -913,6 +914,9 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       if (schedule.wake.quiet !== undefined && inQuiet(minuteOfDay(now), schedule.wake.quiet)) continue;
 
       const holding = laneClaims(name, entries);
+      // An accepted ask is work too (HIVE-410): the claim comes later in the wake, or never if the run died.
+      const accepted = acceptedLanes(name, entries, now);
+      const work = (key: string): number => Math.max(holding.get(key) ?? 0, accepted.get(key) ?? 0);
       const cardOnLane = (agentName: string, key: string): boolean =>
         openAsks(entries, now).some(
           (ask) => isPermissionAsk(ask) && ask.from === agentName && laneOfRun(agentName, ask.meta?.['run'], entries) === key,
@@ -921,7 +925,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       for (const [key, lane] of Object.entries(agent.lanes ?? {})) {
         if (!key.startsWith('repo:')) continue;
 
-        if (!holding.has(key)) {
+        if (work(key) === 0) {
           if (lane.nextRunAt !== undefined) deps.state.patchLane(name, key, { nextRunAt: undefined });
           continue;
         }
@@ -944,8 +948,9 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         /*
           Its one PR waits on the person's card (HIVE-408): the answer wakes the lane, and an interval
           wake would find nothing to do. A lane holding another PR keeps ticking for that one.
+          Kept on purpose for an accepted ask as well (HIVE-410); the watchdog wakes such a lane (HIVE-411).
         */
-        if (holding.get(key) === 1 && cardOnLane(name, key)) continue;
+        if (work(key) === 1 && cardOnLane(name, key)) continue;
         deps.run(name, INTERVAL_TRIGGER, undefined, { lane: key });
       }
     }

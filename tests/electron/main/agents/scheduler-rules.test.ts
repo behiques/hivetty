@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 
-import { decide, decideForEvent, laneClaims, laneFor } from '../../../../electron/main/agents/scheduler-rules';
+import { acceptedLanes, decide, decideForEvent, laneClaims, laneFor } from '../../../../electron/main/agents/scheduler-rules';
 import type { AgentStatus } from '../../../../electron/shared/agent-contract';
 import type { LedgerEntry } from '../../../../electron/shared/ledger-contract';
 
@@ -260,5 +260,24 @@ describe('laneClaims (HIVE-186)', () => {
       e({ id: 'c2', meta: { task: 'a/x#2', run: 'r1' } }),
     ];
     expect(laneClaims('shipper', log).get('repo:a/x')).toBe(2);
+  });
+});
+
+describe('acceptedLanes (HIVE-410)', () => {
+  const e = (over: Partial<LedgerEntry>): LedgerEntry => ({ id: 'x', ts: 0, from: 'shipper', kind: 'post', body: 'b', ...over });
+
+  it("counts the open asks an agent accepted, by the accepting run's lane", () => {
+    const log = [
+      e({ id: 'k1', from: 'sess-1', to: 'shipper', kind: 'ask' }),
+      e({ id: 'k2', from: 'sess-1', to: 'shipper', kind: 'ask' }),
+      e({ id: 'k3', from: 'sess-1', to: 'builder', kind: 'ask' }),
+      e({ id: 's1', kind: 'event', body: 'run.started — ledger', meta: { run: 'r1', lane: 'repo:a/x', wakes: ['k1', 'k2'] } }),
+      e({ id: 'p1', to: 'sess-1', thread: 'k1', meta: { accepted: true, run: 'r1' } }),
+      e({ id: 'p2', to: 'sess-1', thread: 'k2', meta: { accepted: true, run: 'r1' } }),
+      e({ id: 'n2', to: 'sess-1', kind: 'answer', thread: 'k2' }),
+    ];
+
+    expect(acceptedLanes('shipper', log, 1_000)).toEqual(new Map([['repo:a/x', 1]]));
+    expect(acceptedLanes('builder', log, 1_000)).toEqual(new Map());
   });
 });
