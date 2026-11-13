@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LedgerSnapshot } from '@shared/ledger-contract';
 
 import { ReceiverError, type ReceiverClient } from '@shared/mcp-contract';
-import { adfBlocksToText, createToolHandlers, JIRA_TEXT_MAX } from '@shared/mcp-tools';
+import { adfBlocksToText, createCursorStore, createToolHandlers, JIRA_TEXT_MAX } from '@shared/mcp-tools';
 
 const emptySnapshot: LedgerSnapshot = { entries: [], openAsks: [], claims: {} };
 
@@ -233,6 +233,22 @@ describe('ledger_read', () => {
     await handlers.callTool('ledger_read', {});
 
     expect(client.read).toHaveBeenLastCalledWith({ limit: 50 });
+  });
+
+  it('starts the first plain read after a seeded cursor (HIVE-412)', async () => {
+    const client = stub({ read: vi.fn(async () => ({ entries: [], openAsks: [], claims: {} })) });
+
+    await createToolHandlers(client, [], createCursorStore('e7')).callTool('ledger_read', {});
+
+    expect(client.read).toHaveBeenCalledWith({ since: 'e7' });
+  });
+
+  it('reads an empty seed as no cursor (HIVE-412)', async () => {
+    const client = stub({ read: vi.fn(async () => ({ entries: [], openAsks: [], claims: {} })) });
+
+    await createToolHandlers(client, [], createCursorStore('')).callTool('ledger_read', {});
+
+    expect(client.read).toHaveBeenCalledWith({ limit: 50 });
   });
 
   it('lets an explicit since override the cursor', async () => {

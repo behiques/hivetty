@@ -134,6 +134,9 @@ export const HOOK_ENV_RUN_KIND = 'HIVE_RUN_KIND';
 /** The process's run token, sent as {@link HOOK_HEADER_RUN_TOKEN} (HIVE-184). */
 export const HOOK_ENV_RUN_TOKEN = 'HIVE_RUN_TOKEN';
 
+/** Where a run's first plain `ledger_read` starts (HIVE-412): its lane's cursor, an entry id. Empty is none. */
+export const HOOK_ENV_LEDGER_SINCE = 'HIVE_LEDGER_SINCE';
+
 /**
  * The environment variable carrying a session's grants, as a JSON array of
  * rule strings the `approve` tool matches calls against (HIVE-119).

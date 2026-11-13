@@ -88,14 +88,14 @@ export interface CursorStore {
   set(id: string): void;
 }
 
-/** A store with the stdio host's lifetime: this closure, and no longer. */
-export const createCursorStore = (): CursorStore => {
+/** A store with the stdio host's lifetime: this closure, and no longer. `initial` seeds it (HIVE-412); empty is none. */
+export const createCursorStore = (initial?: string): CursorStore => {
   /**
    * Deliberately **not** persisted: a cursor that survived a restart would mean
    * a session that came back after a crash silently skipped whatever arrived
-   * while it was down.
+   * while it was down. A seed is main's lane cursor, handed over at spawn.
    */
-  let cursor: string | undefined;
+  let cursor: string | undefined = initial === '' ? undefined : initial;
   return {
     get: () => cursor,
     set: (id: string) => {
