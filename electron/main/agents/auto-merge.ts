@@ -168,11 +168,16 @@ export function createAutoMergeGrants(deps: AutoMergeDeps): AutoMergeGrants {
  * Nothing for the first load (`before` is `null`, and a boot is not a
  * change), for a project that was not there before, or when no agent named
  * {@link AUTO_MERGE_AGENT} exists to read it.
+ *
+ * `repos` is `Github.resolveProjects`' answer (HIVE-412). A project it places
+ * gets `meta.repo`, so the post reaches that repository's lane, and a body that
+ * names the merge tool; one it cannot place keeps the path and lands on standing.
  */
 export function autoMergeNotices(
   before: ConfigSnapshot | null,
   after: ConfigSnapshot,
   hasShipper: boolean,
+  repos: ReadonlyMap<string, RepoRef>,
 ): LedgerPostRequest[] {
   if (before === null || !hasShipper) return [];
 
@@ -184,14 +189,34 @@ export function autoMergeNotices(
     const prior = was.get(project.id);
     if (prior === undefined || prior === on) continue;
 
+    const ref = repos.get(project.id);
+    const slug =
+      ref !== undefined && SAFE_SEGMENT.test(ref.owner) && SAFE_SEGMENT.test(ref.name)
+        ? `${ref.owner}/${ref.name}`
+        : undefined;
+    const turned = `Auto-merge turned ${on ? 'on' : 'off'} for ${project.name}`;
+    let body =
+      `${turned} (${project.path ?? 'no path'})\n` +
+      `Re-run approval for every row whose path is ${project.path ?? 'this project'} in this wake.`;
+    if (slug !== undefined) {
+      const grant = on
+        ? `is granted for ${slug}#* without a card`
+        : `is no longer granted for ${slug}#*: merges go back to a card`;
+      body = `${turned} (${slug}). \`${PR_MERGE_TOOL_NAME}\` ${grant}.\nRe-run approval for every row in ${slug} in this wake.`;
+    }
+
     posts.push({
       from: OVERMIND,
       to: AUTO_MERGE_AGENT,
       kind: 'post',
-      body:
-        `Auto-merge turned ${on ? 'on' : 'off'} for ${project.name} (${project.path ?? 'no path'})\n` +
-        `Re-run approval for every row whose path is ${project.path ?? 'this project'} in this wake.`,
-      meta: { kind: 'auto-merge', project: project.id, path: project.path, autoMerge: on },
+      body,
+      meta: {
+        kind: 'auto-merge',
+        project: project.id,
+        path: project.path,
+        autoMerge: on,
+        ...(slug === undefined ? {} : { repo: slug }),
+      },
     });
   }
 
