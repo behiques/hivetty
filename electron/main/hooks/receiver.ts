@@ -423,8 +423,8 @@ export interface Receiver {
    * for it exactly as before.
    */
   readonly grants: {
-    /** `owner` is the agent the run belongs to; a caller that is not it gets `[]`. */
-    set(run: string, owner: string, grants: readonly string[]): void;
+    /** `owner` is the agent the run belongs to; a caller that is not it gets `[]`. `since` seeds its read cursor (HIVE-412). */
+    set(run: string, owner: string, grants: readonly string[], since?: string): void;
     delete(run: string): void;
   };
   /** The URL hooks should POST to, or `null` before a successful start. */
@@ -720,7 +720,7 @@ export function createReceiver(options: ReceiverOptions): Receiver {
    * every run id ever minted, and a run that crashed before `close()` cleared
    * it must not hold a slot forever.
    */
-  const runGrants = new Map<string, { owner: string; grants: readonly string[] }>();
+  const runGrants = new Map<string, { owner: string; grants: readonly string[]; since?: string }>();
   const RUN_GRANTS_MAX = 256;
 
   /**
@@ -1463,9 +1463,29 @@ export function createReceiver(options: ReceiverOptions): Receiver {
   ): RpcHandlers {
     const caller = headers[HOOK_HEADER_SESSION] as string;
 
-    let store = mcpCursors.get(caller);
+    /*
+      By run id **and** owner. A run id is not a secret — it is on every hook
+      payload and every ledger entry the run writes — so a lookup by id alone
+      would let any authenticated caller present a sibling run's id and
+      inherit its one-shot grants. The caller's identity is what `reject`
+      already authenticated; the registration says which agent it was minted
+      for; the two must agree.
+    */
+    const header = headers[HOOK_HEADER_RUN];
+    const run = typeof header === 'string' && header !== '' ? header : undefined;
+    const registered = run === undefined ? undefined : runGrants.get(run);
+    const mine = registered !== undefined && registered.owner === caller ? registered : undefined;
+    const grants = mine?.grants ?? [];
+
+    /*
+      A registered run keeps its own cursor, seeded from its lane's (HIVE-412): two lanes of one agent are
+      one caller, and one shared cursor let a lane's drain hide entries from the other. Anyone else keys
+      on the caller, as before.
+    */
+    const key = mine === undefined || run === undefined ? caller : `${caller} ${run}`;
+    let store = mcpCursors.get(key);
     if (store === undefined) {
-      store = createCursorStore();
+      store = createCursorStore(mine?.since);
       /*
         Bounded, because the key space is not: an agent name is a legal caller
         and definitions come and go. Insertion-ordered, so the oldest key is the
@@ -1476,23 +1496,11 @@ export function createReceiver(options: ReceiverOptions): Receiver {
         const oldest = mcpCursors.keys().next();
         if (!oldest.done) mcpCursors.delete(oldest.value);
       }
-      mcpCursors.set(caller, store);
+      mcpCursors.set(key, store);
     }
 
-    /*
-      By run id **and** owner. A run id is not a secret — it is on every hook
-      payload and every ledger entry the run writes — so a lookup by id alone
-      would let any authenticated caller present a sibling run's id and
-      inherit its one-shot grants. The caller's identity is what `reject`
-      already authenticated; the registration says which agent it was minted
-      for; the two must agree.
-    */
-    const run = headers[HOOK_HEADER_RUN];
-    const registered = typeof run === 'string' && run !== '' ? runGrants.get(run) : undefined;
-    const grants = registered !== undefined && registered.owner === caller ? registered.grants : [];
-
     // A run's header marks an agent lane, which never finishes a session (HIVE-368).
-    const lane = typeof run === 'string' && run !== '' ? 'agent' : 'session';
+    const lane = run === undefined ? 'session' : 'agent';
     return createToolHandlers(clientFor(headers), grants, store, lane);
   }
 
@@ -1796,15 +1804,17 @@ export function createReceiver(options: ReceiverOptions): Receiver {
     runToken,
 
     grants: {
-      set(run, owner, grants) {
+      set(run, owner, grants, since) {
         if (runGrants.size >= RUN_GRANTS_MAX && !runGrants.has(run)) {
           const oldest = runGrants.keys().next();
 
           if (!oldest.done) runGrants.delete(oldest.value);
         }
-        runGrants.set(run, { owner, grants: [...grants] });
+        runGrants.set(run, { owner, grants: [...grants], ...(since === undefined ? {} : { since }) });
       },
       delete(run) {
+        const registered = runGrants.get(run);
+        if (registered !== undefined) mcpCursors.delete(`${registered.owner} ${run}`);
         runGrants.delete(run);
       },
     },
