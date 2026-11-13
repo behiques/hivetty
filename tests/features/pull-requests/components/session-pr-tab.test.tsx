@@ -212,10 +212,51 @@ describe('SessionPrTab review and threads (HIVE-209)', () => {
 describe('SessionPrTab with several PRs', () => {
   const remembered = { pr: { n: 298, url: 'https://github.com/a/b/pull/298' }, row: null };
 
-  it('draws no picker for one PR', () => {
-    stage();
-    render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
-    expect(screen.queryByRole('group', { name: 'Pull requests' })).toBeNull();
+  describe('the chip says where the shipper has it (HIVE-411)', () => {
+    const NOW = Date.UTC(2026, 10, 13, 15, 0);
+    const chip = () => screen.getByRole('button', { name: /^#313/ });
+    const slug = `${row.pr.owner}/${row.pr.repo}`;
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+
+    it('draws the chip row for one PR, with the stage and how long it has been there', () => {
+      stage();
+      act(() =>
+        useHiveStore.setState({
+          ledger: [{ id: '20261113-144300-0001', ts: NOW - 17 * 60_000, from: 'shipper', kind: 'post', body: 'approval', meta: { pr: 313, repo: slug, stage: 'approval' } }],
+        }),
+      );
+      render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
+      expect(screen.getByRole('group', { name: 'Pull requests' })).toContainElement(chip());
+      expect(chip()).toHaveTextContent('#313');
+      expect(chip()).toHaveTextContent('approval · 17m');
+    });
+
+    it('says merged once the PR row is merged', () => {
+      stage();
+      const merged = { ...live, row: { ...row, pr: { ...row.pr, state: 'merged' as const } } };
+      render(<SessionPrTab sessionId="s1" sessionPrs={[merged]} />);
+      expect(chip()).toHaveTextContent('merged');
+    });
+
+    it('says handed over when a ship ask names the PR and no stage has landed', () => {
+      stage();
+      act(() =>
+        useHiveStore.setState({
+          ledger: [{ id: '20261113-145900-0001', ts: NOW - 60_000, from: 's1', to: 'shipper', kind: 'ask', ref: 'a9', body: 'Ship PR #313', meta: { pr: 313, repo: slug, key: `ship:${slug}#313` } }],
+        }),
+      );
+      render(<SessionPrTab sessionId="s1" sessionPrs={[live]} />);
+      expect(chip()).toHaveTextContent('handed over');
+    });
+
+    it('a remembered PR shows its number only', () => {
+      stage();
+      render(<SessionPrTab sessionId="s1" sessionPrs={[{ pr: { n: 298, url: 'https://github.com/a/b/pull/298' }, row: null }]} />);
+      expect(screen.getByRole('button', { name: '#298' })).toHaveTextContent(/^#298$/);
+    });
   });
 
   it('draws a chip per PR, the first chosen, and a chip click shows that PR', () => {

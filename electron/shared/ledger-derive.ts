@@ -386,6 +386,20 @@ const namesPr = (meta: Record<string, unknown> | undefined, slug: string, n: num
 };
 
 /**
+ * Whether the shipper owes an ask naming one PR (HIVE-411): handed over, whether or not a stage has
+ * been posted yet. Owed is `open`, `delivered` or `accepted`. Pure.
+ */
+export function shipAsked(entries: readonly LedgerEntry[], slug: string, n: number, now: number): boolean {
+  if (slug === '') return false;
+  return askStates(entries, now).some(
+    (s) =>
+      s.ask.to === 'shipper' &&
+      (s.state === 'open' || s.state === 'delivered' || s.state === 'accepted') &&
+      namesPr(s.ask.meta, slug, n),
+  );
+}
+
+/**
  * Whether an open ask to you names one PR (HIVE-215, the hatch rule's rule 2).
  *
  * "To you" is the caller's `toMe`: the overmind, or a session id in the fleet.

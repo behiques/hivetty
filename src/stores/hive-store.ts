@@ -181,6 +181,7 @@ import {
   prEvents,
   prOpener,
   reviewUrls,
+  shipAsked,
   shipStage,
   shipTrack,
   staleClaims,
@@ -9441,6 +9442,12 @@ export const useMergeAsk = (slug: string, n: number): OpenAsk | undefined => {
 export const useShipTrack = (slug: string, n: number): ShipTrack => {
   const entries = useHiveStore((state) => state.ledger);
   return useMemo(() => shipTrack(entries, slug, n, Date.now()), [entries, slug, n]);
+};
+
+/** Whether the shipper owes an ask naming this PR (HIVE-411): the chip's "handed over" before a stage lands. */
+export const useShipAsked = (slug: string, n: number): boolean => {
+  const entries = useHiveStore((state) => state.ledger);
+  return useMemo(() => shipAsked(entries, slug, n, Date.now()), [entries, slug, n]);
 };
 
 /**

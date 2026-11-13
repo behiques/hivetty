@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 
 import { createPoller } from '@/hooks/create-poller';
 import { useOpenFileAt } from '@/hooks/use-open-file-at';
+import { ageLabel } from '@/lib/ledger/console-rows';
 import { cn } from '@/lib/utils';
 import { isSession } from '@/types/entity';
 import type { HatcheryRow, SessionPr } from '@/types/pull-request';
@@ -20,7 +21,9 @@ import {
   useLoadPrDetail,
   usePrDetail,
   useReviewUrls,
+  useShipAsked,
   useShipping,
+  useShipTrack,
 } from '@stores/hive-store';
 import { usePrPageActions, usePrPick, useSetPrPick } from '@stores/ui-store';
 
@@ -191,10 +194,50 @@ function LivePr({ sessionId, row }: { sessionId: string; row: HatcheryRow }) {
  * detail while the tab is shown. A remembered PR has no owner or repo, so it
  * gets its number and link only.
  */
+/** The word a chip says after its dot (HIVE-411), and its tone. */
+function chipWord(merged: boolean, stage: string | null, sinceMs: number | null, handed: boolean): { word: string; tone: string } | null {
+  if (merged) return { word: 'merged', tone: 'text-brand' };
+  if (stage !== null) {
+    const word = sinceMs === null ? stage : `${stage} · ${ageLabel(sinceMs)}`;
+    return { word, tone: stage === 'approval' || stage === 'merge' ? 'text-amber-text' : 'text-muted' };
+  }
+  return handed ? { word: 'handed over', tone: 'text-muted' } : null;
+}
+
+/** One PR's chip (HIVE-411): its number, flap dot and where the shipper has it. A remembered PR has its number only. */
+function PrChip({ pr, row, chosen, onPick }: SessionPrRow & { chosen: boolean; onPick: () => void }) {
+  const slug = row === null ? '' : `${row.pr.owner}/${row.pr.repo}`;
+  const track = useShipTrack(slug, pr.n);
+  const handed = useShipAsked(slug, pr.n);
+  const open = track.visits.find((visit) => visit.to === null);
+  const said = chipWord(
+    row?.pr.state === 'merged',
+    track.current?.stage ?? null,
+    open === undefined ? null : Date.now() - open.from,
+    handed,
+  );
+  return (
+    <button
+      type="button"
+      aria-pressed={chosen}
+      onClick={onPick}
+      className={cn(
+        'flex items-center gap-1.5 rounded-md px-2 py-0.5 text-control tabular-nums',
+        chosen ? 'bg-active text-ink' : 'text-muted hover:bg-hover',
+      )}
+    >
+      {`#${String(pr.n)}`}
+      {row === null ? null : (
+        <i aria-hidden className={cn('inline-block size-1.5 rounded-full', FLAP_DOT[row.hatch.tone])} />
+      )}
+      {said === null ? null : <span className={cn('text-micro', said.tone)}>{said.word}</span>}
+    </button>
+  );
+}
+
 /**
- * A session's PRs (one session can open several). One draws as it always did;
- * two or more get a chip row above the detail, each chip its number and flap
- * dot, and the chosen one is remembered per session in `ui-store`.
+ * A session's PRs (one session can open several), each a chip above the detail saying where the
+ * shipper has it (HIVE-411); the chosen one is remembered per session in `ui-store`.
  */
 export function SessionPrTab({ sessionId, sessionPrs }: { sessionId: string; sessionPrs: readonly SessionPrRow[] }) {
   const pick = usePrPick(sessionId);
@@ -204,28 +247,19 @@ export function SessionPrTab({ sessionId, sessionPrs }: { sessionId: string; ses
 
   return (
     <>
-      {sessionPrs.length < 2 ? null : (
+      {sessionPrs.length < 1 ? null : (
         <div role="group" aria-label="Pull requests" className="flex flex-wrap gap-1 px-1 pb-2.5">
-          {sessionPrs.map(({ pr, row }) => {
-            const chosen = pr.url === shown.pr.url;
-            return (
-              <button
-                key={pr.url}
-                type="button"
-                aria-pressed={chosen}
-                onClick={() => {
-                  setPick(sessionId, pr.url);
-                }}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-md px-2 py-0.5 text-control tabular-nums',
-                  chosen ? 'bg-active text-ink' : 'text-muted hover:bg-hover',
-                )}
-              >
-                {`#${String(pr.n)}`}
-                <i aria-hidden className={cn('inline-block size-1.5 rounded-full', FLAP_DOT[row?.hatch.tone ?? 'muted'])} />
-              </button>
-            );
-          })}
+          {sessionPrs.map(({ pr, row }) => (
+            <PrChip
+              key={pr.url}
+              pr={pr}
+              row={row}
+              chosen={pr.url === shown.pr.url}
+              onPick={() => {
+                setPick(sessionId, pr.url);
+              }}
+            />
+          ))}
         </div>
       )}
       {shown.row === null ? (

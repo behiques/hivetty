@@ -38,6 +38,7 @@ import {
   repoAskerOf,
   prOpener,
   resolveRef,
+  shipAsked,
   staleClaims,
   reviewUrls,
   SHIP_STOPS,
@@ -1450,5 +1451,18 @@ describe('staleClaims (HIVE-411)', () => {
     const owed: LedgerEntry = { id: '20261110-000002-0001', ts: 2, from: 'sess-0a', to: 'builder', kind: 'ask', ref: 'a1', body: 'build' };
     const accept: LedgerEntry = { id: '20261110-000003-0001', ts: 3, from: 'builder', to: 'sess-0a', kind: 'post', thread: owed.id, body: 'ok', meta: { accepted: true } };
     expect(staleClaims([claim('20261110-000000-0003', 0, 'builder', 'HIVE-1'), owed, accept], 2 * DAY)).toEqual([]);
+  });
+});
+
+describe('shipAsked (HIVE-411)', () => {
+  const ask: LedgerEntry = { id: '20261113-100000-0009', ts: 100, from: 'sess-a', to: 'shipper', kind: 'ask', ref: 'a9', body: 'Ship', meta: { pr: 313, repo: 'Acme/Server' } };
+
+  it('is true while the shipper owes an ask naming the PR, and false once it is answered or names another', () => {
+    expect(shipAsked([ask], 'acme/server', 313, 200)).toBe(true);
+    expect(shipAsked([ask], 'acme/server', 314, 200)).toBe(false);
+    expect(shipAsked([ask], '', 313, 200)).toBe(false);
+    const answered: LedgerEntry = { id: '20261113-100001-0009', ts: 150, from: 'shipper', to: 'sess-a', kind: 'answer', thread: ask.id, body: 'merged' };
+    expect(shipAsked([ask, answered], 'acme/server', 313, 200)).toBe(false);
+    expect(shipAsked([{ ...ask, to: 'fixer' }], 'acme/server', 313, 200)).toBe(false);
   });
 });
