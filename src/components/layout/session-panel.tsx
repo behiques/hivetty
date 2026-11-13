@@ -37,7 +37,7 @@ import {
   useChangedFileCount,
   useOpenTicket,
   usePlan,
-  useSessionPrRow,
+  useSessionPrRows,
 } from '@stores/hive-store';
 import { usePlace } from '@stores/ui-store';
 
@@ -138,7 +138,7 @@ export function SessionPanel({ rowRef }: { rowRef: RefObject<HTMLElement | null>
   const changedCount = useChangedFileCount(mainId);
   const ticketKey = owner !== null && isSession(owner) ? owner.ticket : undefined;
   const ticket = useOpenTicket(ticketKey ?? null);
-  const sessionPr = useSessionPrRow(owner?.id ?? '');
+  const sessionPr = useSessionPrRows(owner?.id ?? '')[0] ?? null;
   const open = useSessionPanelOpen();
   const tab = useSessionPanelTab();
   const setOpen = useSetSessionPanelOpen();

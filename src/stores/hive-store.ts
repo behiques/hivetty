@@ -8697,39 +8697,20 @@ export function resolveSessionPr(
   branch: string | undefined,
   project: string | undefined,
   prs: readonly PrRecord[],
-  /**
-   * The PR this session was last seen to own, if the live list cannot answer.
-   *
-   * Consulted **only** when the branch match finds nothing, never as a tie
-   * break, because a live record is strictly better information: it is current,
-   * it carries a state, and it is about the branch the session is on *now*.
-   *
-   * It is offered without a state, which is what marks the answer as a memory —
-   * see {@link SessionPr.state}. It is what fills the column for the ordinary
-   * case the live match cannot reach: a session that raised a PR, saw it merged
-   * more than a day ago, and has since had its worktree torn down so its branch
-   * reads `main` again.
-   */
-  remembered?: SessionPrRecord,
 ): SessionPr | null {
-  const fallback: SessionPr | null =
-    remembered === undefined
-      ? null
-      : { n: remembered.number, url: remembered.url };
-
   /*
     An unobserved branch matches nothing — the same guard `sessionForPr` states
     for the same reason (HIVE-78). The empty string is excluded too: it is what
     `branchLabel` already treats as absent, and a `''` here would be a value
     that compares equal to nothing while looking like it could.
 
-    An unobserved branch falls through to the memory rather than to `null`: a
-    row whose branch nobody ever read is exactly the row that most needs one.
+    The live answer only: a session's own list (`resolveSessionPrs`) is what
+    answers once the branch has moved on.
   */
-  if (branch === undefined || branch === '') return fallback;
+  if (branch === undefined || branch === '') return null;
 
   const candidates = prs.filter((pr) => pr.branch === branch);
-  if (candidates.length === 0) return fallback;
+  if (candidates.length === 0) return null;
 
   const sameProject =
     project === undefined
@@ -8852,11 +8833,6 @@ function learnSessionPrs(
     const entity = state.entities[id];
     if (!entity || !isSession(entity)) continue;
 
-    /*
-      Resolved without the fallback: this is asking what the *live* list says,
-      and passing the memory in would make a row that already has one resolve
-      to itself and compare equal forever — correct, but only by accident.
-    */
     const live = resolveSessionPr(entity.branch, entity.project, prs);
     if (live === null) continue;
 
@@ -9617,7 +9593,8 @@ export const usePrFlapCounts = (): FlapCount[] => {
 };
 
 /**
- * One row's pull request, resolved from the live list (HIVE-100).
+ * A row's pull requests (HIVE-100): its own list, each read live when the
+ * sweep can see it, in {@link resolveSessionPrs}' order.
  *
  * Takes an id rather than a branch so it can be called before the caller has
  * narrowed its entity: the fleet row bails out on a missing or non-session
@@ -9631,24 +9608,46 @@ export const usePrFlapCounts = (): FlapCount[] => {
  * than they do. A status flip therefore re-renders the row without re-resolving
  * its PR.
  */
-export const useSessionPr = (id: string): SessionPr | null => {
+export const useSessionPrs = (id: string): SessionPr[] => {
   const prs = useHiveStore((state) => state.prs);
   const entity = useHiveStore((state) => state.entities[id]);
+  /*
+    The PRs other sessions own, as one string so an unrelated entity change
+    (a status flip, a rename) compares equal and costs this row nothing.
+  */
+  const ownedElsewhere = useHiveStore((state) => ownedElsewhereKey(state, id));
 
   const session = entity !== undefined && isSession(entity) ? entity : undefined;
+  const known = session !== undefined;
   const branch = session?.branch;
   const project = session?.project;
-  /*
-    A third memo input, and it changes about as often as the other two: it is
-    written once per session by the sweep that first resolves a PR for it, and
-    then never again unless the answer genuinely changes.
-  */
-  const remembered = session?.prs?.at(-1);
+  // Written only when a source learns something new, so it changes about as often as the two strings above.
+  const own = session?.prs;
 
   return useMemo(
-    () => resolveSessionPr(branch, project, prs, remembered),
-    [branch, project, prs, remembered],
+    () =>
+      known
+        ? resolveSessionPrs(branch, project, prs, own, new Set(ownedElsewhere === '' ? [] : ownedElsewhere.split('\n')))
+        : [],
+    [known, branch, project, prs, own, ownedElsewhere],
   );
+};
+
+/** Lower-cased URLs of PRs owned by sessions other than `id`, sorted and joined by newline. */
+function ownedElsewhereKey(state: HiveState, id: string): string {
+  const urls: string[] = [];
+  for (const other of state.order) {
+    const entity = other === id ? undefined : state.entities[other];
+    if (entity === undefined || !isSession(entity)) continue;
+    for (const pr of entity.prs ?? []) if (pr.owned === true) urls.push(pr.url.toLowerCase());
+  }
+  return urls.sort().join('\n');
+}
+
+/** The first of {@link useSessionPrs}: the one PR a single cell (the fleet's PR column, the header) shows. */
+export const useSessionPr = (id: string): SessionPr | null => {
+  const prs = useSessionPrs(id);
+  return prs[0] ?? null;
 };
 
 /** A session's PR and, when the sweep can see it, its Hatchery row (HIVE-209). */
@@ -9659,17 +9658,17 @@ export interface SessionPrRow {
 }
 
 /**
- * The session panel's PR tab and strip dot read this (HIVE-209): `useSessionPr`
- * for which PR, `useHatchery` for its flap. Matched by URL, which is unique
- * across repos where the number is not.
+ * The session panel's PR tab and strip dot read this (HIVE-209): every PR
+ * {@link useSessionPrs} lists, each with its Hatchery row for its flap. Matched
+ * by URL, which is unique across repos where the number is not.
  */
-export const useSessionPrRow = (id: string): SessionPrRow | null => {
-  const pr = useSessionPr(id);
+export const useSessionPrRows = (id: string): SessionPrRow[] => {
+  const prs = useSessionPrs(id);
   const rows = useHatchery();
 
   return useMemo(
-    () => (pr === null ? null : { pr, row: rows.find((row) => row.pr.url === pr.url) ?? null }),
-    [pr, rows],
+    () => prs.map((pr) => ({ pr, row: rows.find((row) => sameUrl(row.pr.url, pr.url)) ?? null })),
+    [prs, rows],
   );
 };
 

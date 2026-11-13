@@ -67,7 +67,7 @@ import {
   usePrNeedsYouCount,
   usePrFlapCounts,
   useSessionPr,
-  useSessionPrRow,
+  useSessionPrRows,
   useTicketTransitions,
   useOpenTicket,
   useTicketEvents,
@@ -2930,37 +2930,60 @@ describe('the Checks selectors (HIVE-206)', () => {
   });
 });
 
-describe('useSessionPrRow (HIVE-209)', () => {
+describe('useSessionPrRows (HIVE-209)', () => {
   beforeEach(() => {
     useHiveStore.getState().reset();
     seedDemoFleet();
   });
 
-  it("pairs the session's PR with its Hatchery row", () => {
-    const { result } = renderHook(() => useSessionPrRow('hero-refresh'));
-    expect(result.current?.pr.n).toBe(482);
-    expect(result.current?.row?.pr.url).toBe('https://github.com/demo/nova-web/pull/482');
-    expect(result.current?.row?.hatch.flap).toBeDefined();
-  });
-
-  it('is null with no PR, and a remembered PR has no row', () => {
-    act(() => useHiveStore.setState({ prs: [] }));
-    const { result, rerender } = renderHook(() => useSessionPrRow('hero-refresh'));
-    expect(result.current).toBeNull();
-
+  const withPrs = (id: string, fields: Record<string, unknown>) =>
     act(() =>
       useHiveStore.setState((state) => ({
-        entities: {
-          ...state.entities,
-          'hero-refresh': {
-            ...state.entities['hero-refresh'],
-            prs: [{ number: 118, url: 'https://github.com/demo/nova-web/pull/118' }],
-          } as never,
-        },
+        entities: { ...state.entities, [id]: { ...state.entities[id], ...fields } as never },
       })),
     );
+
+  it("pairs the session's PR with its Hatchery row", () => {
+    const { result } = renderHook(() => useSessionPrRows('hero-refresh'));
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0]?.pr.n).toBe(482);
+    expect(result.current[0]?.row?.pr.url).toBe('https://github.com/demo/nova-web/pull/482');
+    expect(result.current[0]?.row?.hatch.flap).toBeDefined();
+  });
+
+  it('is empty with no PR, and a remembered PR has no row', () => {
+    act(() => useHiveStore.setState({ prs: [] }));
+    const { result, rerender } = renderHook(() => useSessionPrRows('hero-refresh'));
+    expect(result.current).toEqual([]);
+
+    withPrs('hero-refresh', { prs: [{ number: 118, repo: 'nova-web', url: 'https://github.com/demo/nova-web/pull/118' }] });
     rerender();
-    expect(result.current).toEqual({ pr: { n: 118, url: 'https://github.com/demo/nova-web/pull/118' }, row: null });
+    expect(result.current).toEqual([{ pr: { n: 118, url: 'https://github.com/demo/nova-web/pull/118' }, row: null }]);
+  });
+
+  it('lists every PR a session owns, the live one first', () => {
+    withPrs('hero-refresh', {
+      branch: 'main',
+      prs: [
+        { number: 118, repo: 'nova-web', url: 'https://github.com/demo/nova-web/pull/118', owned: true },
+        { number: 482, repo: 'nova-web', url: 'https://github.com/demo/nova-web/pull/482', owned: true },
+      ],
+    });
+    const { result } = renderHook(() => useSessionPrRows('hero-refresh'));
+    expect(result.current.map(({ pr, row }) => [pr.n, row !== null])).toEqual([
+      [482, true],
+      [118, false],
+    ]);
+  });
+
+  it("shows nothing for a session sharing a branch whose PR another session owns (sess-17)", () => {
+    withPrs('lead-form', {
+      branch: 'other',
+      prs: [{ number: 482, repo: 'nova-web', url: 'https://github.com/demo/nova-web/pull/482', owned: true }],
+    });
+    const { result } = renderHook(() => useSessionPrRows('hero-refresh'));
+    expect(result.current).toEqual([]);
+    expect(renderHook(() => useSessionPr('hero-refresh')).result.current).toBeNull();
   });
 
   it('matches by URL, so the same number in another repo is not this row', () => {
@@ -2972,13 +2995,20 @@ describe('useSessionPrRow (HIVE-209)', () => {
         ],
       })),
     );
-    const { result } = renderHook(() => useSessionPrRow('hero-refresh'));
-    expect(result.current?.row?.pr.repo).toBe('nova-web');
+    const { result } = renderHook(() => useSessionPrRows('hero-refresh'));
+    expect(result.current[0]?.row?.pr.repo).toBe('nova-web');
   });
 
-  it('is null for an id that is not a session', () => {
-    const { result } = renderHook(() => useSessionPrRow('nope'));
-    expect(result.current).toBeNull();
+  it('is empty for an id that is not a session', () => {
+    const { result } = renderHook(() => useSessionPrRows('nope'));
+    expect(result.current).toEqual([]);
+  });
+
+  it('keeps its identity across an unrelated entity change', () => {
+    const { result } = renderHook(() => useSessionPrRows('hero-refresh'));
+    const first = result.current;
+    withPrs('lead-form', { name: 'renamed' });
+    expect(result.current).toBe(first);
   });
 });
 
