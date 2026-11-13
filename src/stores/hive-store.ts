@@ -111,6 +111,7 @@ import { BRIDGE_ERROR } from '@lib/utils';
 import {
   SESSION_ID_PREFIX_PATTERN,
   type AgentLinesPush,
+  type AgentRefusal,
   type AgentRunResult,
   type AgentsSnapshot,
   type AgentStatus,
@@ -165,6 +166,7 @@ import {
 import {
   afterTarget,
   agentSiteFor,
+  askStates,
   asksMeAbout,
   buildProgressFor,
   closedAskThreads,
@@ -181,10 +183,12 @@ import {
   reviewUrls,
   shipStage,
   shipTrack,
+  staleClaims,
   thread,
   waitingAsks,
   type Delegate,
   type ShipTrack,
+  type StaleClaim,
   wholeNumberOf,
 } from '@shared/ledger-derive';
 import type { SessionMetrics } from '@shared/metrics-contract';
@@ -9229,14 +9233,105 @@ export const useSummons = (onStage: string | null): Summons => {
 
 /** Open permission cards in the Summons queue, and the oldest one's time (HIVE-409): the pill's card segment. */
 export const usePermissionCards = (onStage: string | null): { count: number; oldestTs: number | null } => {
+  const cards = usePermissionCardList(onStage);
+  return useMemo(
+    () => ({ count: cards.length, oldestTs: cards[0]?.createdAt ?? null }),
+    [cards],
+  );
+};
+
+/** The open permission cards themselves, oldest first (HIVE-411): `usePermissionCards`' filter, per card. */
+export const usePermissionCardList = (onStage: string | null): HiveNotification[] => {
   const { asks } = useSummons(onStage);
+  return useMemo(
+    () => asks.filter((notif) => notif.kind === 'agent.permission').sort((a, b) => a.createdAt - b.createdAt),
+    [asks],
+  );
+};
+
+/** Owed asks older than this, not yet accepted, count on the Stalls row (HIVE-411). */
+export const STALL_ASK_MS = 15 * 60_000;
+
+/** One owed ask on the stall panel (HIVE-411), with its three ages. */
+export interface StallAsk {
+  id: string;
+  ref: string;
+  /** The ask's first line. */
+  body: string;
+  from: string;
+  owes: string;
+  state: 'open' | 'delivered' | 'accepted';
+  inStateMs: number;
+  /** `null` until the party asked accepts it. */
+  toAcceptMs: number | null;
+  openMs: number;
+}
+
+/** Every owed ask in the tail with its state and three ages, oldest first (HIVE-411). From `askStates`, never `waitingAsks`, which drops accepted asks. */
+export const useStalls = (): StallAsk[] => {
+  const entries = useHiveStore((state) => state.ledger);
   return useMemo(() => {
-    const cards = asks.filter((notif) => notif.kind === 'agent.permission');
-    return {
-      count: cards.length,
-      oldestTs: cards.length === 0 ? null : Math.min(...cards.map((notif) => notif.createdAt)),
-    };
-  }, [asks]);
+    const now = Date.now();
+    return askStates(entries, now)
+      .filter(
+        (s): s is typeof s & { state: StallAsk['state']; owes: string } =>
+          (s.state === 'open' || s.state === 'delivered' || s.state === 'accepted') && s.owes !== undefined,
+      )
+      .map((s) => ({
+        id: s.ask.id,
+        ref: s.ask.ref ?? s.ask.id,
+        body: s.ask.body.split('\n')[0] ?? '',
+        from: s.ask.from,
+        owes: s.owes,
+        state: s.state,
+        inStateMs: now - s.since,
+        toAcceptMs: s.acceptedAt === undefined ? null : s.acceptedAt - s.ask.ts,
+        openMs: now - s.ask.ts,
+      }))
+      .sort((a, b) => b.openMs - a.openMs);
+  }, [entries]);
+};
+
+/** Claims nobody is working (HIVE-411), from the tail. */
+export const useStaleClaims = (): StaleClaim[] => {
+  const entries = useHiveStore((state) => state.ledger);
+  return useMemo(() => staleClaims(entries, Date.now()), [entries]);
+};
+
+/** Every agent lane whose last wake was refused (HIVE-411), in rail order. */
+export const useAgentRefusals = (): { agent: string; refusal: AgentRefusal }[] => {
+  // A flat name/list tuple so `useShallow` compares equal across unrelated writes, as `useAgentsByGroup` does.
+  const pairs = useHiveStore(
+    useShallow((state) =>
+      state.agentOrder.flatMap((id) => {
+        const entity = state.entities[id];
+        if (entity === undefined || !isAgent(entity) || entity.refused.length === 0) return [];
+        return [id, entity.refused] as const;
+      }),
+    ),
+  );
+  return useMemo(() => {
+    const out: { agent: string; refusal: AgentRefusal }[] = [];
+    for (let i = 0; i < pairs.length; i += 2) {
+      const agent = pairs[i] as string;
+      for (const refusal of pairs[i + 1] as AgentRefusal[]) out.push({ agent, refusal });
+    }
+    return out;
+  }, [pairs]);
+};
+
+/** The Stalls row's count (HIVE-411): every refused wake, open card and stale claim, and owed asks not accepted within {@link STALL_ASK_MS}. */
+export const useStallCount = (): number => {
+  const refusals = useAgentRefusals();
+  const cards = usePermissionCardList(null);
+  const stale = useStaleClaims();
+  const stalls = useStalls();
+  return (
+    refusals.length +
+    cards.length +
+    stale.length +
+    stalls.filter((s) => s.state !== 'accepted' && s.openMs >= STALL_ASK_MS).length
+  );
 };
 
 /**
