@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CARD_AFTER_MS,
+  QUIET_RUN_MS,
   RENUDGE_AFTER_MS,
   watchSteps,
   type WatchFacts,
@@ -123,5 +124,42 @@ describe('watchSteps: rewake (HIVE-411)', () => {
     const { ask, log, acceptTs } = accepted();
     const mark = e({ ts: acceptTs + quiet, from: 'overmind', to: 'shipper', kind: 'post', thread: ask.id, body: 're-wake', meta: { watch: 'rewake', watched: ask.id } });
     expect(watchSteps([...log, mark], acceptTs + 10 * quiet, facts({ quietMs: () => quiet }))).toEqual([]);
+  });
+});
+
+describe('watchSteps: quiet (HIVE-411)', () => {
+  /** sess-3f asked the builder; run r9 was woken for it at T0 and accepted it. */
+  const building = () => {
+    const ask = e({ ts: T0, from: 'sess-3f', to: 'builder', kind: 'ask', ref: 'a31', body: 'Build HIVE-404' });
+    const started = e({ ts: T0 + 10, from: 'builder', kind: 'event', body: 'run.started', meta: { run: 'r9', wakes: [ask.id] } });
+    const accept = e({ ts: T0 + 20, from: 'builder', to: 'sess-3f', kind: 'post', thread: ask.id, body: 'accepted', meta: { accepted: true, run: 'r9' } });
+    return { ask, log: [ask, started, accept] };
+  };
+  const live = [{ agent: 'builder', run: 'r9', lane: 'standing', startedAt: T0 + 10 }];
+  // The lane is live, so the rewake row stays out of these.
+  const f = () => facts({ liveRuns: () => live, laneLive: () => true });
+
+  it('tells the asker when the run has written nothing for an hour', () => {
+    const { ask, log } = building();
+    expect(watchSteps(log, T0 + 20 + QUIET_RUN_MS - 1, f())).toEqual([]);
+    expect(watchSteps(log, T0 + 20 + QUIET_RUN_MS, f())).toEqual([{ step: 'quiet', ask, to: 'sess-3f', run: 'r9' }]);
+  });
+
+  it('counts any entry the run wrote, on any thread', () => {
+    const { log } = building();
+    const progress = e({ ts: T0 + 50 * 60_000, from: 'builder', kind: 'post', body: 'task 3 done', meta: { run: 'r9', task: 3 } });
+    expect(watchSteps([...log, progress], T0 + 20 + QUIET_RUN_MS, f())).toEqual([]);
+  });
+
+  it('says it once per run', () => {
+    const { ask, log } = building();
+    const mark = e({ ts: T0 + QUIET_RUN_MS + 20, from: 'overmind', to: 'sess-3f', kind: 'post', thread: ask.id, body: 'quiet', meta: { watch: 'quiet', watched: ask.id, run: 'r9' } });
+    expect(watchSteps([...log, mark], T0 + 3 * QUIET_RUN_MS, f())).toEqual([]);
+  });
+
+  it('says nothing for a run that serves no owed ask', () => {
+    const { log } = building();
+    const idle = [{ agent: 'reviewer', run: 'r2', lane: 'standing', startedAt: T0 }];
+    expect(watchSteps(log, T0 + 3 * QUIET_RUN_MS, facts({ liveRuns: () => idle, laneLive: () => true }))).toEqual([]);
   });
 });

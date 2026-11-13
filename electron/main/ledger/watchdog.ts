@@ -9,7 +9,7 @@
  */
 import { STANDING_LANE } from '@shared/agent-contract';
 import { OVERMIND, type LedgerEntry } from '@shared/ledger-contract';
-import { askStates } from '@shared/ledger-derive';
+import { askStates, type AskState, type AskStateName } from '@shared/ledger-derive';
 
 /** A session nudged this long ago, with its context never served, is nudged again. */
 export const RENUDGE_AFTER_MS = 60_000;
@@ -49,6 +49,9 @@ export interface WatchStep {
   run?: string;
 }
 
+/** The states in which an ask is still owed by the party asked. */
+const OWED: ReadonlySet<AskStateName> = new Set(['open', 'delivered', 'accepted']);
+
 const markKey = (step: string, watched: string, run?: string): string => `${step} ${watched} ${run ?? ''}`;
 
 /** Every watchdog marker main wrote, by key, with when. Only the overmind's count: `meta` is a rider anyone can write. */
@@ -87,6 +90,35 @@ function newestOnThread(entries: readonly LedgerEntry[]): Map<string, number> {
   return out;
 }
 
+/** Per run (`<agent> <run>`): its newest entry's time, and the ids its `run.started` was woken for. */
+function runFacts(entries: readonly LedgerEntry[]): { newest: Map<string, number>; wakes: Map<string, Set<string>> } {
+  const newest = new Map<string, number>();
+  const wakes = new Map<string, Set<string>>();
+  for (const entry of entries) {
+    const run = entry.meta?.['run'];
+    if (typeof run !== 'string') continue;
+    const key = `${entry.from} ${run}`;
+    newest.set(key, Math.max(newest.get(key) ?? 0, entry.ts));
+    const woken = entry.meta?.['wakes'];
+    if (entry.kind === 'event' && entry.body.startsWith('run.started') && Array.isArray(woken)) {
+      wakes.set(key, new Set((woken as readonly unknown[]).filter((id): id is string => typeof id === 'string')));
+    }
+  }
+  return { newest, wakes };
+}
+
+/** The run named on each ask's accept, by ask id: only the party asked can accept. */
+function acceptRuns(entries: readonly LedgerEntry[], states: readonly AskState[]): Map<string, string> {
+  const to = new Map(states.map((s) => [s.ask.id, s.ask.to]));
+  const out = new Map<string, string>();
+  for (const entry of entries) {
+    const run = entry.meta?.['run'];
+    if (entry.thread === undefined || entry.meta?.['accepted'] !== true || typeof run !== 'string') continue;
+    if (to.get(entry.thread) === entry.from && !out.has(entry.thread)) out.set(entry.thread, run);
+  }
+  return out;
+}
+
 export function watchSteps(entries: readonly LedgerEntry[], now: number, facts: WatchFacts): WatchStep[] {
   const states = askStates(entries, now);
   const marked = marks(entries);
@@ -114,6 +146,22 @@ export function watchSteps(entries: readonly LedgerEntry[], now: number, facts: 
       if (now - receipt >= RENUDGE_AFTER_MS) out.push({ step: 'renudge', ask, to });
     } else if (now - renudged >= CARD_AFTER_MS && !marked.has(markKey('card', ask.id))) {
       out.push({ step: 'card', ask, to: OVERMIND });
+    }
+  }
+
+  // A live run that has written nothing for an hour: tell whoever is waiting on it.
+  const runs = runFacts(entries);
+  const accepted = acceptRuns(entries, states);
+  for (const live of facts.liveRuns()) {
+    const key = `${live.agent} ${live.run}`;
+    const last = Math.max(live.startedAt, runs.newest.get(key) ?? 0);
+    if (now - live.startedAt < QUIET_RUN_MS || now - last < QUIET_RUN_MS) continue;
+    const woken = runs.wakes.get(key);
+    for (const { ask, state, owes } of states) {
+      if (!OWED.has(state) || owes !== live.agent) continue;
+      if (woken?.has(ask.id) !== true && accepted.get(ask.id) !== live.run) continue;
+      if (marked.has(markKey('quiet', ask.id, live.run))) continue;
+      out.push({ step: 'quiet', ask, to: ask.from, run: live.run });
     }
   }
 
