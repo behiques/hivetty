@@ -5674,6 +5674,7 @@ describe('the ledger slice', () => {
       expect(kept.map((found) => found.id)).toEqual(['a0', 'p00000', 'p00001', 'p00002']);
       // The derived fields stay with the snapshot; the mirror holds plain entries.
       expect(kept[0]).not.toHaveProperty('ageMs');
+      expect(kept[0]).not.toHaveProperty('state');
     });
   });
 

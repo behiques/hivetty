@@ -4030,8 +4030,11 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
 
   hydrateLedger: (snapshot, closed = [], open = []) =>
     set((state) => {
-      // `open`/`ageMs` are derived at read time and go stale in a mirror.
-      const entries = [...snapshot, ...open.map(({ open: _open, ageMs: _ageMs, ...ask }) => ask)];
+      // `open`/`ageMs`/`state` are derived at read time and go stale in a mirror.
+      const entries = [
+        ...snapshot,
+        ...open.map(({ open: _open, ageMs: _ageMs, state: _state, ...ask }) => ask),
+      ];
       /**
        * Union, not replacement — `hydrateNotifs`' reason, with one difference
        * that makes it sharper.
