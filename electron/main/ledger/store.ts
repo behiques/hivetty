@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { LEDGER_KINDS, type LedgerEntry } from '@shared/ledger-contract';
-import { nextRef } from '@shared/ledger-derive';
+import { carriedOver, nextRef } from '@shared/ledger-derive';
 
 /**
  * The one writer (HIVE-111).
@@ -88,16 +88,13 @@ const secondOf = (ms: number): string => {
   );
 };
 
-/**
- * The previous calendar day, by date-component arithmetic rather than a fixed
- * 24h subtraction — a DST spring-forward day is only 23 real hours, so
- * subtracting exact milliseconds can land one calendar day too early and
- * silently drop yesterday's entries (still-open asks included) from load.
- */
-const yesterdayOf = (ms: number): string => {
+/** How many day-files before yesterday are read for what is still live (HIVE-410): a held or accepted ask lasts seven days. */
+const OLDER_DAYS = 6;
+
+/** The calendar day `days` before `ms`, built from local date parts so a DST change cannot skip or repeat one. */
+const dayBefore = (ms: number, days: number): string => {
   const at = new Date(ms);
-  const prev = new Date(at.getFullYear(), at.getMonth(), at.getDate() - 1);
-  return dayOf(prev.getTime());
+  return dayOf(new Date(at.getFullYear(), at.getMonth(), at.getDate() - days).getTime());
 };
 
 export function createLedgerStore(options: LedgerStoreOptions): LedgerStore {
@@ -120,7 +117,8 @@ export function createLedgerStore(options: LedgerStoreOptions): LedgerStore {
 
   const fileFor = (ms: number): string => join(dir, `${dayOf(ms)}.jsonl`);
 
-  const load = (day: string): void => {
+  const read = (day: string): LedgerEntry[] => {
+    const found: LedgerEntry[] = [];
     const path = join(dir, `${day}.jsonl`);
     let raw: string;
     try {
@@ -147,7 +145,7 @@ export function createLedgerStore(options: LedgerStoreOptions): LedgerStore {
             ' with what is already in that file',
         );
       }
-      return;
+      return found;
     }
     let skipped = 0;
     for (const line of raw.split('\n')) {
@@ -170,7 +168,7 @@ export function createLedgerStore(options: LedgerStoreOptions): LedgerStore {
         skipped += 1;
         continue;
       }
-      entries.push(parsed);
+      found.push(parsed);
     }
     /*
       Said out loud, once per file. `malformed()` is the programmatic record,
@@ -186,11 +184,19 @@ export function createLedgerStore(options: LedgerStoreOptions): LedgerStore {
           ' the entries around them loaded normally',
       );
     }
+    return found;
   };
 
   const at = now();
-  load(yesterdayOf(at));
-  load(dayOf(at));
+  /*
+    Yesterday and today whole; from the six days before, only what is still
+    live (HIVE-410). A held or an accepted ask lasts seven days and a claim
+    until it is released, and a restart used to forget both after two.
+  */
+  const older: LedgerEntry[] = [];
+  for (let back = OLDER_DAYS + 1; back >= 2; back -= 1) older.push(...read(dayBefore(at, back)));
+  const recent = [...read(dayBefore(at, 1)), ...read(dayOf(at))];
+  entries.push(...carriedOver(older, [...older, ...recent], at), ...recent);
   entries.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
   /*

@@ -1098,4 +1098,22 @@ describe('createLedger', () => {
       expect(note).not.toHaveProperty('duplicate');
     });
   });
+
+  it('keeps an ask held three days across a restart, and releases it when its PR closes (HIVE-410)', () => {
+    const ts = AT - 3 * 24 * 60 * 60 * 1_000;
+    const at = new Date(ts);
+    const day = `${String(at.getFullYear())}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+    // Shaped like a real id, so it sorts before today's entries as a real one would.
+    const id = `${day.replaceAll('-', '')}-090000-0001`;
+    writeFileSync(
+      join(dir, `${day}.jsonl`),
+      `${JSON.stringify({ id, ts, from: 'sess-a', to: 'builder', kind: 'ask', ref: 'a1', body: 'Build B', meta: { after: 'a/x#3' } })}\n`,
+    );
+
+    const reopened = createLedger({ dir, now: () => clock, knowsParty: () => true });
+    expect(reopened.read({}).openAsks.map((ask) => [ask.id, ask.state])).toEqual([[id, 'held']]);
+
+    reopened.append({ from: 'shipper', kind: 'post', body: 'PR #3 merged', meta: { pr: 3, repo: 'a/x', stage: 'closed' } });
+    expect(reopened.read({}).openAsks.map((ask) => [ask.id, ask.state])).toEqual([[id, 'open']]);
+  });
 });
