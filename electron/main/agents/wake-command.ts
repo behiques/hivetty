@@ -222,8 +222,11 @@ type BuildWakeCommand = (
   name: string,
   trigger: string,
   extra?: string,
-  /** `budgetUsd` lays the day's last room over `budget_usd` for this one wake (HIVE-408). */
-  options?: { kind?: RunKind; lane?: string; budgetUsd?: number },
+  /**
+   * `budgetUsd` lays the day's last room over `budget_usd` for this one wake (HIVE-408). `delivered` is
+   * the block of woken entries `wakeEntries` rendered (HIVE-412).
+   */
+  options?: { kind?: RunKind; lane?: string; budgetUsd?: number; delivered?: string },
 ) => WakeInvocation | { problem: string; waitFor?: HarnessId };
 
 const describe = (cause: unknown): string =>
@@ -600,6 +603,7 @@ export function createWakeCommand(deps: WakeCommandDeps): BuildWakeCommand {
         // The lane sentence in the prompt (HIVE-188). A task run is no lane's.
         ...(lane === STANDING_LANE || task ? {} : { lane }),
         kind,
+        ...(options?.delivered === undefined ? {} : { delivered: options.delivered }),
         paths: {
           settings: containerSettings ?? settings,
           pluginDir: deps.pluginDir(adapter.id),
