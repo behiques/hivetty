@@ -1,5 +1,9 @@
 import { ASK_INTENT_GUIDANCE } from '../../shared/ledger-tools';
 
+/** What a handoff holds (HIVE-412): state, never the skills or instructions the next session loads itself. */
+export const HANDOFF_RULE =
+  'Call `ledger_handoff` with state only: what you hold, open thread ids and refs, loose ends, preferences this user has shown. Never restate a skill or your instructions; your next session loads both itself.';
+
 /**
  * The app-owned half of every agent's system prompt (HIVE-115).
  *
@@ -26,10 +30,6 @@ import { ASK_INTENT_GUIDANCE } from '../../shared/ledger-tools';
  * cannot drift — except `ASK_INTENT_GUIDANCE`, which is one constant
  * interpolated into both (HIVE-135).
  */
-/** What a handoff holds (HIVE-412): state, never the skills or instructions the next session loads itself. */
-export const HANDOFF_RULE =
-  'Call `ledger_handoff` with state only: what you hold, open thread ids and refs, loose ends, preferences this user has shown. Never restate a skill or your instructions; your next session loads both itself.';
-
 export const AGENT_PREAMBLE = `You are a background agent in HiveTTY. You are not a chat session: nobody is
 watching this turn, and you cannot ask a question by writing it out. One wake is
 one turn, and it ends when you stop.
