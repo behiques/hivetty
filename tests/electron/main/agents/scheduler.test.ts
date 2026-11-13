@@ -77,6 +77,8 @@ describe('createScheduler', () => {
   let listed: boolean;
   /** Names pushed to the renderer, in order. */
   let pushed: string[];
+  /** How many entries the standing queue held at each push, in order (HIVE-411). */
+  let queuedAtPush: number[];
   /** What `laneOf` answers (HIVE-186). Undefined: a pre-lane agent. */
   let laneMode: 'thread' | 'repo' | undefined;
   /** Lanes the fake tracker reports live. Null: omit `laneLive`, the pre-lane harness. */
@@ -138,7 +140,10 @@ describe('createScheduler', () => {
       },
       ...(liveLanes === null ? {} : { laneLive: (_name: string, lane: string) => liveLanes?.has(lane) === true }),
       schedules: () => (listed ? schedules : undefined),
-      pushStatus: (name) => pushed.push(name),
+      pushStatus: (name) => {
+        pushed.push(name);
+        queuedAtPush.push((state.read(name).pendingWake ?? []).length);
+      },
       ledger: {
         read: () => ({ entries }),
         append: (request) => {
@@ -183,6 +188,7 @@ describe('createScheduler', () => {
     parallel = 1;
     listed = true;
     pushed = [];
+    queuedAtPush = [];
     laneMode = undefined;
     liveLanes = null;
     reenter = false;
@@ -825,6 +831,20 @@ describe('createScheduler', () => {
 
       expect(state.read(AGENT).refused).toMatchObject({ reason: 'budget' });
       expect(pushed).toContain(AGENT);
+    });
+
+    it('pushes only once the refused entry is back in the queue, so the panel never reads queued: 0 (HIVE-411)', () => {
+      refuse = 'budget';
+      entries = [asked];
+      scheduler.start();
+      queuedAtPush = [];
+      // The route path: refused on arrival, then queued.
+      scheduler.onEntry(asked);
+      // The flush path: the queue is cleared for the wake, refused, then restored.
+      tick();
+
+      expect(queuedAtPush.length).toBeGreaterThanOrEqual(2);
+      expect(queuedAtPush.every((n) => n === 1)).toBe(true);
     });
 
     it('does not repeat a note the log already holds', () => {

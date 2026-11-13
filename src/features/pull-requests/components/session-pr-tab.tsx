@@ -188,12 +188,6 @@ function LivePr({ sessionId, row }: { sessionId: string; row: HatcheryRow }) {
   );
 }
 
-/**
- * The session panel's PR tab (HIVE-209): the PR this session made, its checks
- * by name, who holds it and its open threads, read through HIVE-205's per-PR
- * detail while the tab is shown. A remembered PR has no owner or repo, so it
- * gets its number and link only.
- */
 /** The word a chip says after its dot (HIVE-411), and its tone. */
 function chipWord(merged: boolean, stage: string | null, sinceMs: number | null, handed: boolean): { word: string; tone: string } | null {
   if (merged) return { word: 'merged', tone: 'text-brand' };
@@ -236,6 +230,11 @@ function PrChip({ pr, row, chosen, onPick }: SessionPrRow & { chosen: boolean; o
 }
 
 /**
+ * The session panel's PR tab (HIVE-209): the PR this session made, its checks
+ * by name, who holds it and its open threads, read through HIVE-205's per-PR
+ * detail while the tab is shown. A remembered PR has no owner or repo, so it
+ * gets its number and link only.
+ *
  * A session's PRs (one session can open several), each a chip above the detail saying where the
  * shipper has it (HIVE-411); the chosen one is remembered per session in `ui-store`.
  */

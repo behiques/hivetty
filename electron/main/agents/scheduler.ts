@@ -1135,8 +1135,8 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   const tellRefused = (name: string, lane: string, items: readonly PendingWakeEntry[], started: RunStart): void => {
     if (started.started) return;
     deps.state.patchLane(name, lane, { refused: { reason: started.refused, at: deps.now() } });
-    // The stall panel shows the refusal as it lands (HIVE-411).
-    deps.pushStatus(name);
+    // The status push for the stall panel (HIVE-411) is the caller's, after the entries are queued again:
+    // pushed from here, the panel would read `queued: 0` for a refusal with entries waiting.
     if (!TOLD.has(started.refused)) return;
 
     const asks = items.filter((item) => item.kind === 'ask' && !told.has(`${item.id} ${started.refused}`));
@@ -1252,6 +1252,8 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     const since = queueOf(name, lane);
 
     setQueue(name, lane, [...back, ...since].slice(0, AGENT_PENDING_WAKE_MAX));
+    // The stall panel shows the refusal with its queue in place (HIVE-411).
+    deps.pushStatus(name);
 
     return !saturated;
   };
@@ -1398,6 +1400,10 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       const started = runOnLane(name, trigger, describeEntry(item), lane, wakesOf([item]));
       if (started.started) return;
       tellRefused(name, lane, [item], started);
+      enqueue(name, item, lane);
+      // The stall panel shows the refusal with its queue in place (HIVE-411).
+      deps.pushStatus(name);
+      return;
     }
 
     enqueue(name, item, lane);

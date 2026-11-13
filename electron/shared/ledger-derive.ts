@@ -264,9 +264,10 @@ export interface StaleClaim {
 }
 
 /**
- * Claims nobody is working (HIVE-411): a day old, the holder silent for a day, and owing no ask
- * (`open`, `delivered` or `accepted`). "No live lane" is read from the log: a live run that quiet
- * is the watchdog's `quiet` row. Pure.
+ * Claims nobody is working (HIVE-411): a day old, the holder silent for a day, owing no ask
+ * (`open`, `delivered` or `accepted`), and waiting on none it made (those, or `held` behind a PR):
+ * a shipper that handed a PR on is waiting, not stalled. "No live lane" is read from the log: a
+ * live run that quiet is the watchdog's `quiet` row. Pure.
  */
 export function staleClaims(entries: readonly LedgerEntry[], now: number): StaleClaim[] {
   const held = new Map<string, LedgerEntry>();
@@ -278,15 +279,19 @@ export function staleClaims(entries: readonly LedgerEntry[], now: number): Stale
     if (entry.kind === 'claim') held.set(task, entry);
     else if (entry.kind === 'release') held.delete(task);
   }
+  const states = askStates(entries, now);
   const owing = new Set(
-    askStates(entries, now)
-      .filter((s) => s.state === 'open' || s.state === 'delivered' || s.state === 'accepted')
-      .map((s) => s.owes),
+    states.filter((s) => s.state === 'open' || s.state === 'delivered' || s.state === 'accepted').map((s) => s.owes),
+  );
+  const waiting = new Set(
+    states
+      .filter((s) => s.state === 'open' || s.state === 'delivered' || s.state === 'accepted' || s.state === 'held')
+      .map((s) => s.ask.from),
   );
   const out: StaleClaim[] = [];
   for (const [task, claim] of held) {
     if (now - claim.ts < STALE_CLAIM_MS || now - (heard.get(claim.from) ?? 0) < STALE_CLAIM_MS) continue;
-    if (owing.has(claim.from)) continue;
+    if (owing.has(claim.from) || waiting.has(claim.from)) continue;
     out.push({ task, holder: claim.from, since: claim.ts });
   }
   return out;
