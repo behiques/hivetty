@@ -916,6 +916,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       const holding = laneClaims(name, entries);
       // An accepted ask is work too (HIVE-410): the claim comes later in the wake, or never if the run died.
       const accepted = acceptedLanes(name, entries, now);
+      // shortcut: max() cannot tell a claim and an accepted ask on different PRs apart, so a card on one can silence the other; key both by repo#pr if HIVE-411's watchdog does not cover it.
       const work = (key: string): number => Math.max(holding.get(key) ?? 0, accepted.get(key) ?? 0);
       const cardOnLane = (agentName: string, key: string): boolean =>
         openAsks(entries, now).some(
