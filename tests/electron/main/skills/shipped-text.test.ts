@@ -130,4 +130,20 @@ describe('the session skills (HIVE-415)', () => {
     const steps = workOn().slice(workOn().indexOf('**5. Dispatch.**'));
     expect(steps.indexOf('{{tool:projects}}')).toBeLessThan(steps.indexOf('ledger_ask\n  to: builder'));
   });
+  const goalOn = () => read('skills/goal-on/SKILL.md');
+  it('goal-on always uses a worktree and includes the intake', () => {
+    expect(goalOn()).not.toMatch(/workspace: current|workspace:|intake shape from/);
+    expect(goalOn()).toContain('{{include:ship-intake}}');
+    expect(goalOn()).toMatch(/invoke \{\{skill:verify\}\} \(the Skill tool\)/);
+  });
+  it('goal-on resumes from the brief, keeps gates in the foreground and edits the brief with Edit', () => {
+    const one = (text: string) => text.replace(/\s+/g, ' ');
+    expect(one(goalOn())).toContain(
+      "Any turn that starts without this skill's text above it (a compaction, a resume): read the brief, then continue from the first unticked Outcome item.",
+    );
+    expect(one(goalOn())).toContain('Run the gates in the foreground. Never end a turn while a gate is running in the background: the hook will block and spend a turn.');
+    expect(one(goalOn())).toContain('Edit the brief with `Edit`, never `Write`: the verifier stamps it between your turns.');
+    expect(one(goalOn())).toContain('A reply that changes the brief is not approval. Amend, present the change, wait.');
+    expect(one(goalOn())).toContain('One goal per session. When the shipper has the PR, run `/done`. A follow-up is a new session.');
+  });
 });

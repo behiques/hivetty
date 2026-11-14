@@ -97,9 +97,8 @@ cli_session:               # written by the verifier, never by you
 last_verified:             # written by the verifier, never by you
 done_at:                   # written by the verifier with DONE, never by you
 branch: goal/<slug>        # code route
-workspace: current         # code route: current | worktree
 repo: /abs/path            # code route, REQUIRED when the work is not in this cwd
-worktree: /abs/path        # code route, when workspace is worktree
+worktree: /abs/path        # code route: the worktree Route code step 2 made
 plan: /abs/path            # code route: the plan file; every step must be ticked for DONE
 ---
 
@@ -146,16 +145,18 @@ only stop.
    option first. The last chance; an unasked question is a guess that burns
    budget.
 6. **Route.** `artifact` for research, documents, Jira updates, throwaway
-   scripts; `code` for changes meant to merge. Mixed is `code`. Code decides
-   `workspace: current` (an interactive foreground session) or `worktree`
-   (background, `claude agents`, or an isolation guard; when unsure,
-   `worktree`).
+   scripts; `code` for changes meant to merge. Mixed is `code`. The code
+   route always works in its own worktree, never the shared checkout.
 7. **Write the brief with `status: PENDING-APPROVAL`, present the five
    sections, END TURN.** `PENDING-APPROVAL` is what lets the gate exist: an
    `ACTIVE` brief with an unmet Outcome is what "keep working" looks like to
-   the verifier.
+   the verifier. A reply that changes the brief is not approval. Amend,
+   present the change, wait.
 
 ## Phase 2 (autonomous)
+
+Any turn that starts without this skill's text above it (a compaction, a
+resume): read the brief, then continue from the first unticked Outcome item.
 
 **First act: flip to `ACTIVE` and confirm `last_verified` is present.** Phase
 1 ended on a turn boundary, so the floor has run once and stamped it. Missing
@@ -164,7 +165,9 @@ holding yourself to the brief and setting the terminal status yourself at the
 end. Check the filename first; it is the one cause you can fix.
 
 Record evidence as you go under `## Verification evidence`. Absent evidence is
-unmet.
+unmet. Run the gates in the foreground. Never end a turn while a gate is
+running in the background: the hook will block and spend a turn. Edit the
+brief with `Edit`, never `Write`: the verifier stamps it between your turns.
 
 **Route artifact.** Do the work, verify it (open the file, run the script,
 read the ticket back), append the evidence, tick the items. The verifier
@@ -172,11 +175,10 @@ writes `DONE`.
 
 **Route code.**
 
-1. `git fetch origin`. `workspace: current` needs a clean tree; dirty →
-   `status: NEEDS-DECISION`, ask.
-2. `{{skill:worktree}}` (or, for `current`, `git checkout -b goal/<slug>
-   origin/<default>`). Record `branch:`, `repo:` and `worktree:` as absolute
-   paths: the verifier's PR check runs `gh` from `worktree:` or `repo:`.
+1. `git fetch origin`. Never branch, commit or stash in the shared checkout.
+2. `{{skill:worktree}}` on `goal/<slug>`, always. Record `branch:`, `repo:` and
+   `worktree:` as absolute paths: the verifier's PR check runs `gh` from
+   `worktree:` or `repo:`.
 3. Plan, always: the plan file is what HiveTTY's plan panel reads, and a
    terminal session has no task tools to fall back on. Big enough to plan?
    `{{skill:plan}}` straight from the brief (no brainstorm: the brief is the
@@ -188,7 +190,8 @@ writes `DONE`.
    reads a plan file only from under the session's own cwd. Record its
    absolute path as the brief's `plan:`: the verifier holds `DONE` until
    every step in it is ticked, so a finished goal never leaves the panel at 0/N.
-4. `{{skill:verify}}`: the repository's gates, a browser drive for any UI surface.
+4. invoke {{skill:verify}} (the Skill tool): the repository's gates, a browser
+   drive for any UI surface. Do not run the gate from memory.
 5. Append the output. Push. `gh pr create --draft`. Record the PR URL in
    the evidence and **tick both files now**: the brief's Outcome items and
    any plan step still open. `ledger_ask` ends the turn, so anything written
@@ -196,14 +199,20 @@ writes `DONE`.
    unticked boxes in between. **Do not write `status: DONE` yourself.** The
    verifier writes it once the boxes in both files, the evidence and a real
    PR on `branch:` agree.
-6. `{{tool:agents}}` lists `shipper`: `ledger_ask to: shipper` with the
-   intake shape from `ship`, `reply-to: $HIVE_SESSION_ID` (this session's
-   `sess-…` party name, also the brief's `session:`), `ticket: none`. It
-   does not: say the draft PR is ready and stop; the tail is the person's.
+6. `{{tool:agents}}` lists `shipper`: `ledger_ask to: shipper` with
+   `reply-to: $HIVE_SESSION_ID` (this session's `sess-…` party name, also the
+   brief's `session:`), `ticket: none`, `key-confirmed: no`:
+
+{{include:ship-intake}}
+
+   It does not: say the draft PR is ready and stop; the tail is the person's.
 
 The goal is met at draft PR raised, plus the shipper woken when there is one.
 A `goal/<slug>` branch carries no key, and the shipper's Jira steps skip;
 that is correct.
+
+One goal per session. When the shipper has the PR, run `/done`. A follow-up
+is a new session.
 
 When the person asks about a PR or a build, call `{{tool:pr}}` first and read its `ship` block. Never infer a
 stall from `gh pr view` or from a thread you can only partly read, and never post a rescue ask on an inferred cause.
@@ -247,5 +256,7 @@ terminal status, one cheap read per turn end. A new session starts clean.
 - A brief under any other name than `<$HIVE_SESSION_ID>.md`.
 - `turn_budget` above 8 without raising the harness cap.
 - Waiting for the merge. The shipper owns it.
+- A code-route goal in the shared checkout. Every one goes through
+  `{{skill:worktree}}`.
 - Re-invoking `goal-on` while a goal is active rewrites the brief (and on
   Claude Code registers another verifier). Amend the brief instead.
