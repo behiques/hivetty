@@ -256,6 +256,7 @@ describe('wakeCommand', () => {
     expect(JSON.parse(env['HIVE_GRANTS']!)).toEqual([
       ...HIVE_STANDING_GRANTS,
       'ToolSearch',
+      'Workflow',
       'Read',
       'Grep',
     ]);
@@ -266,6 +267,7 @@ describe('wakeCommand', () => {
     expect(JSON.parse(withOnce.env['HIVE_GRANTS']!)).toEqual([
       ...HIVE_STANDING_GRANTS,
       'ToolSearch',
+      'Workflow',
       'Read',
       'Bash',
     ]);
@@ -274,6 +276,7 @@ describe('wakeCommand', () => {
     expect(JSON.parse(next.env['HIVE_GRANTS']!)).toEqual([
       ...HIVE_STANDING_GRANTS,
       'ToolSearch',
+      'Workflow',
       'Read',
     ]);
   });
@@ -303,6 +306,18 @@ describe('wakeCommand', () => {
     expect(grants(claudeCodeAdapter)).toContain('ToolSearch');
     expect(grants(copilotAdapter)).toContain('ToolSearch');
     expect(grants(codexAdapter)).not.toContain('ToolSearch');
+  });
+
+  it('grants Workflow on Claude Code alone, the one CLI that has it (HIVE-414)', () => {
+    const grants = (adapter: HarnessAdapter) =>
+      JSON.parse(
+        build({ adapter, def: def({ tools: ['Read'] }), paths: { ...paths, cliHome: '/h/cli/copilot' } }).env[
+          'HIVE_GRANTS'
+        ]!,
+      ) as string[];
+    expect(grants(claudeCodeAdapter)).toContain('Workflow');
+    expect(grants(copilotAdapter)).not.toContain('Workflow');
+    expect(grants(codexAdapter)).not.toContain('Workflow');
   });
 
   it('carries a last-turn prompt onto the command line', () => {

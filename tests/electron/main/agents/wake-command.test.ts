@@ -1152,12 +1152,15 @@ describe('the CLI a wake runs on (HIVE-340)', () => {
     const carried = JSON.parse(built.env[HOOK_ENV_GRANTS]!) as string[];
     const asked = express.mock.calls[0]![0] as string[];
 
-    // `ToolSearch` is carried but never asked about; everything else, including the one-shot grant, is.
-    expect(carried).toContain('ToolSearch');
-    expect(asked).not.toContain('ToolSearch');
+    // The fence's own grants (`ToolSearch`, `Workflow`) are carried but never asked about; everything
+    // else, including the one-shot grant, is.
+    for (const own of ['ToolSearch', 'Workflow']) {
+      expect(carried).toContain(own);
+      expect(asked).not.toContain(own);
+    }
     expect(asked).toContain('literal:Bash:git push');
     expect(asked).toEqual(expect.arrayContaining([...HIVE_STANDING_GRANTS]));
-    expect(asked).toHaveLength(carried.length - 1);
+    expect(asked).toHaveLength(carried.length - 2);
   });
 
   it('refuses a run no CLI can fence, naming tools and never their arguments', () => {
