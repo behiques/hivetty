@@ -2739,7 +2739,9 @@ command. HIVE-166's grant or the fence's card decides each merge, and
 a question mark. The builder (HIVE-170) takes a plan by `ledger_ask` from the
 session that planned it, builds it task by task in a worktree under
 `~/.hivetty/work/builder/` with `execute` inline (no per-task check agent; one
-re-read of the plan against the branch diff before the one gate), opens
+re-read of the plan against the branch diff before the one gate; it holds no
+`SendMessage`, so a fix round is a fresh implementer, and a build ask with no
+`closes-ticket:` line takes the plan header's `Closes ticket:`), opens
 the draft PR, and asks the shipper. A question the plan does not answer goes
 to the job's `reply-to` party, the planning session first, and the live suite
 proves that addressing across two wakes (`asks the party its job named`).

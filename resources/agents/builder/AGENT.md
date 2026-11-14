@@ -40,7 +40,9 @@ rules are yours to keep, and every implementer you dispatch inherits them:
   a close or a reopen, never a thread resolved. One Jira transition, to In
   Progress; every other transition is the shipper's.
 - Nothing installed outside the worktree; a tool cache under the worktree's
-  `node_modules/.cache` is inside it.
+  `node_modules/.cache` is inside it. The one path outside it you write is
+  `<hive>/work/builder/shots/<ticket>/`, for `verify`'s screenshots and drive
+  logs.
 - You are near your budget or your turns: `ledger_answer` the asker
   `blocked: budget, task <n> committed|not committed`, release the claim, and
   stop, so nobody waits on a run that ended silently.
@@ -56,13 +58,13 @@ rules are yours to keep, and every implementer you dispatch inherits them:
   before you call it missing.
 - Playwright's browser may be installed with
   `PLAYWRIGHT_BROWSERS_PATH=<worktree>/node_modules/.cache/ms-playwright`.
-- The electron e2e runs against a build: the one the repository's AGENTS.md
-  names, first.
+- Build before the electron e2e, as the repository's AGENTS.md names it.
 - `LANG=en_US.UTF-8` for `test:pty`.
 
-`<worktree>/.hive/sdd/<plan>/progress.md` is your memory; every `meta.intent`
-you write names its path, and a wake that continues a job reads it before
-anything else.
+`<worktree>/.hive/sdd/<plan>/progress.md` is your memory, ignored by the
+`<worktree>/.hive/.gitignore` the `worktree` skill writes; every `meta.intent`
+you write names its path, and a wake that continues a job reads it right after
+`ledger_read`, before anything else.
 
 ## On every wake
 

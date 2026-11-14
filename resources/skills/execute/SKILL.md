@@ -22,11 +22,13 @@ once it ships, or by the person until then).
    of a batch. Read the plan critically first: a gap that stops you is raised
    now, not at task six.
 2. `ledger_claim <ticket or plan slug>`, unless the caller already holds it
-   (the builder claims before it invokes this skill). Progress lines go to
-   `<repo>/.hive/sdd/<plan-basename>/progress.md`, one line per task and one
-   per ruling: `Ruling: <what>; <why>; <cost if wrong>`. Make sure
-   `<repo>/.hive/.gitignore` exists with the single line `*` before the first
-   commit; `brainstorm` writes it, but not every path runs brainstorm, and a
+   (the builder claims before it invokes this skill). `<worktree>` is the
+   tree you build in: the builder's worktree, or the session's checkout.
+   Progress lines go to `<worktree>/.hive/sdd/<plan>/progress.md` (`<plan>`
+   is the plan's file name without `.md`), one line per task and one per
+   ruling: `Ruling: <what>; <why>; <cost if wrong>`. Make sure
+   `<worktree>/.hive/.gitignore` exists with the single line `*` before the
+   first commit; `brainstorm` writes it, but not every path runs brainstorm, and a
    per-task `git add` would otherwise sweep the progress file into the PR.
 3. Pre-flight conflict scan: one row per pair of tasks that share a file or
    an interface, and one per task's own consistency. Rulings, never questions.
