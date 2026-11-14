@@ -193,7 +193,8 @@ export interface SessionsOptions {
    * A session ended, however it ended (HIVE-167): `ptyExit`, `ptyLost` and
    * `/done` all pass through the same funnel, and this fires from it. Not on
    * a restart, which passes through the funnel too but is not an ending. The
-   * one consumer re-addresses the asks that were waiting on that terminal.
+   * consumer re-addresses the asks that were waiting on that terminal and
+   * releases the claims it held (HIVE-415).
    */
   onEnded?: (entityId: string) => void;
   /**
