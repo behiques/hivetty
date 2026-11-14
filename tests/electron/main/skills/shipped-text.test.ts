@@ -100,3 +100,34 @@ describe('one copy of each shared rule (HIVE-413 PR 2)', () => {
     for (const text of [tdd, execute]) expect(text).not.toContain('NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST');
   });
 });
+
+describe('the session skills (HIVE-415)', () => {
+  const workOn = () => read('skills/work-on/SKILL.md');
+  it('work-on names jira-tracker, stops only when a decision is needed, and has no timer', () => {
+    expect(workOn()).not.toMatch(/jira-writer|Two stops|30 minutes/);
+    expect(workOn()).toMatch(/jira-tracker/);
+    expect(workOn()).toMatch(/only when the reconciliation needs a decision/);
+  });
+  it('work-on answers operational builder questions and reports failed, blocked and refused', () => {
+    expect(workOn()).toMatch(/An operational question \(a missing service, a tool, a path, which gate runs where\) is yours/);
+    expect(workOn()).toMatch(/`failed:` or `blocked:`/);
+    expect(workOn()).toMatch(/never re-post the ask unchanged/);
+    expect(workOn()).toMatch(/meta\.refused/);
+  });
+  it('work-on build ask carries absolute paths and every new field', () => {
+    for (const field of ['base:', 'pr-title:', 'verify:', 'env:', 'part:', 'closes-ticket:', 'overlaps:'])
+      expect(workOn()).toContain(`    ${field}`);
+    expect(workOn()).toMatch(/plan: \/abs\/path\/to\/checkout\/\.hive\/plans\//);
+    expect(workOn()).toMatch(/gh pr list --state open/);
+  });
+  it('work-on includes the intake, checks before it asks, and keeps a state file', () => {
+    expect(workOn()).toContain('{{include:ship-intake}}');
+    expect(workOn()).not.toMatch(/see\s+`ship`\s+for the intake/);
+    expect(workOn()).toMatch(/\.hive\/plans\/<slug>\.state\.md/);
+    expect(workOn()).toMatch(/Load \{\{skill:verify\}\} now \(in Claude Code, call the Skill tool\); do not run the gate from memory\./);
+    expect(workOn()).toMatch(/UI not driven/);
+    expect(workOn()).toMatch(/is written to that ticket as an UPDATED SPECS comment in the same\s+turn, before planning/);
+    const steps = workOn().slice(workOn().indexOf('**5. Dispatch.**'));
+    expect(steps.indexOf('{{tool:projects}}')).toBeLessThan(steps.indexOf('ledger_ask\n  to: builder'));
+  });
+});
