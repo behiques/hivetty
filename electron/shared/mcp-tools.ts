@@ -185,8 +185,14 @@ export function createToolHandlers(
       default bound. The bound only exists for the very first read of a process:
       without it, a session opened against a months-old ledger would be handed
       all of it at once.
+
+      The cursor bounds only the undirected drain it belongs to. A targeted
+      lookup is asking for something specific — above all `ledger_read
+      { thread }`, which the wake block's cut pointer names — and a cursor
+      seeded at spawn (HIVE-412) would otherwise hide every entry of that
+      thread older than the wake, the very history it was called for.
     */
-    const cursor = cursorStore.get();
+    const cursor = isTargetedLookup ? undefined : cursorStore.get();
     if (since !== undefined) query.since = since;
     else if (cursor !== undefined) query.since = cursor;
     if (limit !== undefined) query.limit = limit;

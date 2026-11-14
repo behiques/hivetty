@@ -1438,13 +1438,15 @@ over a plugin as the delivery mechanism.
 
 **The read cursor lives for the process, not the ledger.** `createToolHandlers`
 (`tools.ts`) closes over one `cursor` variable — the id of the newest entry the
-host has handed back — and defaults `since` to it on every `ledger_read` that
-doesn't name its own. It is deliberately never persisted: since `claude`
+host has handed back — and defaults `since` to it on the plain `ledger_read`
+drain only. A targeted read (`thread`, `kind`, `to`, `from`, `since` or
+`limit` named) ignores it, so `ledger_read { thread }` returns the thread's
+history rather than just what arrived since the cursor. It is deliberately never persisted: since `claude`
 starts one host per session and keeps it for that session's life, the cursor's
 life is exactly the session's life, and a cursor that survived a restart would
 mean a session coming back after a crash silently skipped whatever arrived
 while it was down. The bound (`LEDGER_READ_DEFAULT_LIMIT`, 50) only applies
-when there is no cursor yet and no explicit `since`.
+when no cursor bounds the read and there is no explicit `since` or `limit`.
 
 **An agent run's cursor starts at its lane's (HIVE-412).** Each lane keeps
 `cursor` in `LaneState`: the newest ledger id when its last run's child started.

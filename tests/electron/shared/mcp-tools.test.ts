@@ -251,6 +251,29 @@ describe('ledger_read', () => {
     expect(client.read).toHaveBeenCalledWith({ limit: 50 });
   });
 
+  it('does not bound a thread read by a seeded cursor, so the thread history comes back (HIVE-412)', async () => {
+    const client = stub({ read: vi.fn(async () => ({ entries: [], openAsks: [], claims: {} })) });
+
+    await createToolHandlers(client, [], createCursorStore('e7')).callTool('ledger_read', { thread: 'a1' });
+
+    expect(client.read).toHaveBeenCalledWith({ thread: 'a1', limit: 50 });
+  });
+
+  it('does not bound any targeted read by an established cursor (HIVE-412)', async () => {
+    const snapshot: LedgerSnapshot = {
+      entries: [{ id: 'e3', ts: 3, from: 'overmind', kind: 'post', body: 'three' }],
+      openAsks: [],
+      claims: {},
+    };
+    const client = stub({ read: vi.fn(async () => snapshot) });
+    const handlers = createToolHandlers(client);
+
+    await handlers.callTool('ledger_read', {}); // establishes the cursor at e3
+    await handlers.callTool('ledger_read', { kind: 'ask' });
+
+    expect(client.read).toHaveBeenLastCalledWith({ kind: 'ask', limit: 50 });
+  });
+
   it('lets an explicit since override the cursor', async () => {
     const client = stub();
     const handlers = createToolHandlers(client);
