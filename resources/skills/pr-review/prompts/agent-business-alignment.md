@@ -12,6 +12,7 @@ You will be given:
 1. The PR diff
 2. Jira context — `{ status: "ok", summary, description, acceptanceCriteria }`, `{ status: "no_ticket" }`, or `{ status: "fetch_failed", ticketKey, failureReason }`
 3. The PR title and description
+4. `SPEC`, `PLAN`, `NOTES`: the spec, the plan and the builder's notes, each a path or `none`. Read each one given. The spec and plan say what was intended: a finding that the code does what the spec asked is not a finding, and a gap between the spec and the code is. A path that does not exist or cannot be read: say so in one line and review without it; it never fails the review.
 
 ## Part 1: Ticket scope (only if Jira context status is "ok")
 

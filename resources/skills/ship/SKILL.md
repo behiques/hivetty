@@ -9,9 +9,8 @@ description: >-
 
 # Ship
 
-A state machine the shipper advances one wake at a time; the ledger (HiveTTY
-posts when a PR you hold moves on GitHub) and a thirty-minute clock wake it.
-Nothing sleeps inside a turn except merge-pr's bounded `UNKNOWN` re-read.
+A state machine the shipper advances one wake at a time, woken by the ledger
+and a thirty-minute clock. Nothing sleeps inside a turn except merge-pr's bounded `UNKNOWN` re-read.
 Claim, answer, release, denial and expiry follow the run contract. It sequences
 `pr-review` (`acr`), `review-pr-findings` (`fixer`) and `merge-pr`.
 
@@ -25,13 +24,14 @@ then write the row, before any other row's work:
 ```json
 { "pr": 214, "repo": "behiques/hivetty", "path": "/abs/path", "worktree": null,
   "ticket": "HIVE-123", "keyConfirmed": true, "closesTicket": true, "replyTo": "sess-…",
-  "ask": "20261113-101500-0001", "asker": "builder",
-  "stage": "intake", "waitingOn": null, "since": null, "rounds": 0 }
+  "ask": "20261113-101500-0001", "asker": "builder", "spec": null, "plan": null, "notes": null,
+  "stage": "intake", "waitingOn": null, "since": null, "rounds": 0, "askHead": null,
+  "fixerHead": null, "gatedHead": null }
 ```
 
-`since` is where findings are gathered from: `null` (the whole PR), then each
-`clean` answer's `gathered` time, never now. Every way a row leaves answers its
-`ask`.
+`spec`, `plan`, `notes`: the intake's paths, `none` as `null`. `since` is
+where findings are gathered from: `null` (the whole PR), then each `clean`
+answer's `gathered` time, never now. Every way a row leaves answers its `ask`.
 
 ## Lanes
 
@@ -49,9 +49,9 @@ Every `gh` command carries `--repo <owner>/<repo>`, every `git` command `-C
 ## Stages
 
 On a stage change: write `prs.json`, one `ledger_post` with `meta: { pr,
-repo, stage }`, and fall through in the same wake. A row stops only where it waits: CI pending, or `waitingOn` naming
-`acr`, `fixer` or `reply-to`. A row that stops this wake gets one `ledger_post`
-naming the stage and what it waits on. The write that records an answer
+repo, stage }`, and fall through in the same wake. A row stops only where it
+waits (CI pending, or `waitingOn` naming `acr`, `fixer` or `reply-to`), with
+one `ledger_post` naming the stage and what it waits on. The write that records an answer
 clears `waitingOn`. Write `prs.json` whenever a field
 changes, and before any `ledger_ask`, which ends the wake. One merge per wake
 does not end the wake while a row sits at `intake`: run that row to its acr
@@ -65,11 +65,10 @@ An overmind `meta.kind: auto-merge` post re-runs `approval` for rows in its
 `meta.repo` (without one, rows on its `meta.path`); a row at `merge` without
 consent goes back to `approval`.
 
-An overmind post with `meta.changed` means a PR you hold moved on GitHub
-(HiveTTY sweeps every minute while you hold one: `owner/repo#N changed: checks
-running → passing`, with `meta.repo`, `meta.pr` and the facets in
-`meta.changed`: `state`, `checks`, `reviewDecision`, `findings`, `head`,
-`mergeable`). Re-run that row's stage check in this wake.
+An overmind post with `meta.changed` (`owner/repo#N changed: checks running →
+passing`; facets `state`, `checks`, `reviewDecision`, `findings`, `head`,
+`mergeable`) means the PR at `meta.repo`, `meta.pr` moved on GitHub: re-run
+that row's stage check in this wake.
 
 **Pending-fix check**, first at `findings`, `approval` and `merge`:
 `ledger_read { limit: 0 }`; `claims["<owner>/<repo>#<N> findings"]` held by
@@ -78,8 +77,8 @@ anyone stops the row, with no ask.
 | Stage | This wake | Advance when |
 | --- | --- | --- |
 | `intake` | Claim, accept, row; `gh pr view <N> --repo <owner>/<repo> --json state,isDraft,headRefName`; force draft with `gh pr ready <N> --repo <owner>/<repo> --undo` | → `self-review` |
-| `self-review` | `{{tool:agents}}` lists `acr`: `waitingOn: acr`, then `ledger_ask to: acr` "https://github.com/<owner>/<repo>/pull/<N> --self". No `acr`: ask `reply-to`, options `[reviewed elsewhere, skip the self review]` | findings → `fix-self`; none → `ready` |
-| `fix-self` | `fixer` listed: `waitingOn: fixer`, `ledger_ask to: fixer` with `<owner>/<repo>#<N>`, `path`, `reply-to` and the findings verbatim. No fixer: ask `reply-to`, options `[fixed, park them]` | the fixer's answer (below); fixed → `ready` |
+| `self-review` | `{{tool:agents}}` lists `acr`: `waitingOn: acr`, then the acr ask (below). No `acr`: ask `reply-to`, options `[reviewed elsewhere, skip the self review]` | acr's answer (below) |
+| `fix-self` | `fixer` listed: `waitingOn: fixer`, `ledger_ask to: fixer` (below). No fixer: ask `reply-to`, options `[fixed, park them]` | the fixer's answer (below); fixed → `ready` |
 | `ready` | `gh pr ready <N> --repo <owner>/<repo>`; only if `keyConfirmed` and the ticket is before In Review: `{{tool:jira_transition}} { key, status: "In Review" }` (or the `jira-tracker` skill) | → `ci` |
 | `ci` | see below | green → `findings`; red → `ledger_ask to: fixer` with the failing checks |
 | `findings` | Pending-fix check; `{{tool:pr}} { repo: "<owner>/<repo>", number: <N> }`: unresolved threads are a finding. The gather, `gh pr view <N> --repo <owner>/<repo> --json reviews,comments,latestReviews,statusCheckRollup`, newer than `since`: every review with a body, any state; a bodyless `COMMENTED` or `CHANGES_REQUESTED` review as "inline review <id> by <author>"; a bodyless `APPROVED` carries nothing and is left out, as is a bodyless review whose author posted a `<!-- hive-fixer` comment on this PR; every PR-level comment; red checks. Leave out `<!-- hive-fixer` comments, ids they name, LGTM-only bodies. An approval asking for a change is a finding. Any → `ledger_ask to: fixer`, each with author and `id` | `clean`, nothing newer → `approval` |
@@ -91,8 +90,20 @@ anyone stops the row, with no ask.
 
 `meta: { result: "clean" | "blocked" | "blocked-on", rounds, gathered, head, pr, repo }`.
 Read `meta.result`, never the body. `clean` → `since = gathered`, `rounds += 1`,
-next stage. `blocked-on` → the fixer ask again, with `meta.after` the PR it
+next stage. Every fixer ask sets `askHead` to the PR head; a `head` other than
+it → `fixerHead = head`. `blocked-on` → the fixer ask again, with `meta.after` the PR it
 names. `blocked`, or any other shape → a stuck row.
+
+### self-review and fix-self
+
+1. acr ask: `<pr url> --self`, then `SPEC=<spec> PLAN=<plan> NOTES=<notes>`,
+   each only when the row holds a path.
+2. Read acr's `meta`, never the body: `findings + borderline + verified_minor`
+   above 0 → `fix-self`; all 0 → `ready` (`borderline`: confidence 60-74).
+3. Fixer ask: `<owner>/<repo>#<N>`, `path`, `reply-to`, acr's `meta.report`.
+   Findings, borderline and verified-minor all go to the fixer in one ask; the
+   fixer takes a verified-minor when the fix is under about 20 lines and
+   answers the rest.
 
 ### ci
 
@@ -102,6 +113,10 @@ names. `blocked`, or any other shape → a stuck row.
 2. While `false` and `gh pr diff <N> --repo <owner>/<repo> --name-only` lists
    nothing under `.github/workflows/`, skip `gh pr checks`: green.
 3. Otherwise `gh pr checks <N> --repo <owner>/<repo>`; exit 8 is pending.
+4. Green, `prCi` false, head `fixerHead` and not `gatedHead`: `gatedHead =
+   head`, `waitingOn: fixer`, ask the fixer to run the repository's full gate
+   once in the PR worktree; `clean` → green, else stuck. Remove this step once
+   HIVE-417 adds a `pull_request` workflow.
 
 ### sync (inside approval and merge)
 
@@ -129,8 +144,7 @@ names. `blocked`, or any other shape → a stuck row.
    - (a) `APPROVED`, or `{{tool:projects}}` shows this checkout's project with
      `autoMerge: true` → `merge`.
    - (b) `reviewDecision` and `reviewRequests` both empty → `merge`. Without
-     `autoMerge` the merge stops at the permission fence, and the app posts the
-     permission card's note to the asker.
+     `autoMerge` the merge stops at the permission fence; the app tells the asker.
    - (c) `REVIEW_REQUIRED`, `CHANGES_REQUESTED`, or a requested review: once,
      `waitingOn: "reply-to"`, ask "PR #N waits on a review", options `[merge
      now, wait for review, hand back]`, no `merge now` when the decision blocks.

@@ -12,6 +12,7 @@ ticket asks for and what is still left. Judge nothing here.
 
 1. The PR title, description and branch name. In self mode with no PR, you get
    the branch name and its commit subjects.
+2. `SKILL_DIR`: the pr-review skill's own folder, for route 3.
 
 ## Your Task
 
@@ -32,16 +33,16 @@ ticket asks for and what is still left. Judge nothing here.
       `jira issue` and use a tool whose name reads as "get issue" (Atlassian's
       `getJiraIssue`). Pass each parameter as a direct field, never as a
       serialised JSON string.
-   3. **The `jira-writer` plugin, if it is installed.** Resolve its launcher, then
-      call it:
+   3. **The `jira-tracker` skill's script, if the skill is installed.** It sits
+      beside this skill's folder; `SKILL_DIR` is in your dispatch.
       ```bash
-      JW=$(command -v jira-writer || ls -td ~/.claude/plugins/cache/*/jira-writer/*/bin/jira-writer 2>/dev/null | head -1)
-      [ -n "$JW" ] && "$JW" get_issue <KEY>
+      JT="$SKILL_DIR/../jira-tracker/scripts/jira-api-wrapper.sh"
+      [ -f "$JT" ] && bash "$JT" get_issue <KEY>
       ```
-      It prints `{ "api": "rest" | "mcp", "data": { … } }`. It reads
-      `JIRA_DOMAIN`, `JIRA_EMAIL` and `JIRA_API_KEY` from the environment and
-      falls back to the Atlassian MCP on its own. A non-zero exit, or output
-      that is not that JSON, is a failed route.
+      Success prints `{"api":"rest","data":{...}}`, where `data` is Jira's
+      issue body. A missing script, a non-zero exit, `"api":"mcp_fallback"`,
+      `"api":"error"`, or output that is not that JSON is a failed route; name
+      what it said in `failureReason`.
 3. **Extract the scope** from whichever route answered:
    - `summary` and `status`
    - `acceptanceCriteria`: a custom field if the site has one, otherwise the
@@ -59,8 +60,8 @@ own validation.
 
 ```json
 { "status": "no_ticket" }
-{ "status": "ok", "ticketKey": "HIVE-123", "route": "atlassian-mcp" | "jira-writer" | "hive", "summary": "...", "ticketStatus": "In Progress", "acceptanceCriteria": ["..."], "description": "...", "subtasks": [ { "key": "HIVE-124", "summary": "...", "status": "Done" } ], "parent": "HIVE-110", "otherKeys": [] }
-{ "status": "fetch_failed", "ticketKey": "HIVE-123", "failureReason": "no Atlassian MCP; jira-writer: JIRA_API_KEY not set; no hive jira tool" }
+{ "status": "ok", "ticketKey": "HIVE-123", "route": "atlassian-mcp" | "jira-tracker" | "hive", "summary": "...", "ticketStatus": "In Progress", "acceptanceCriteria": ["..."], "description": "...", "subtasks": [ { "key": "HIVE-124", "summary": "...", "status": "Done" } ], "parent": "HIVE-110", "otherKeys": [] }
+{ "status": "fetch_failed", "ticketKey": "HIVE-123", "failureReason": "no Atlassian MCP; jira-tracker: not installed; no hive jira tool" }
 ```
 
 **Never collapse a failed fetch into `no_ticket`.** A key was found, so the

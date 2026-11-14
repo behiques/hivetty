@@ -2794,8 +2794,18 @@ judgment call goes to the ask's `reply-to` party with options.
 It claims `<owner>/<repo>#<N> findings`, a key of its own, because the shipper
 holds `<owner>/<repo>#<N>` for the life of the PR. The shipper itself
 asks `acr` with a PR link and `--self`, the one job shape acr accepts with no
-project, and `acr` answers it with `ledger_answer` because the asker is an
-agent. `tests/resources/agents/shipped-agents.test.ts` parses every shipped definition against
+project, plus `SPEC=`, `PLAN=` and `NOTES=` when the intake carried them
+(HIVE-416: the builder fills `spec:`, `plan:` and `notes:`, its
+`progress.md`). `acr` answers it with `ledger_answer` because the asker is an
+agent, and the shipper branches on its `meta`: `findings + borderline +
+verified_minor` above 0 goes to the fixer, all in one ask. `--self <pr>`
+reviews the PR head, never a checkout's working tree; the verifier returns
+`confidence` and `severity` separately, 60-74 is the one borderline band, and a
+self review keeps confirmed `minor` findings in a "verified, minor" list. Self
+mode is tiered like review mode, with a `deep` tier for a diff over 1,000 lines
+or a risk-surface path. Until HIVE-417 adds a `pull_request` workflow, the
+shipper's `ci` stage asks the fixer to run the full gate once on a head the
+fixer pushed. `tests/resources/agents/shipped-agents.test.ts` parses every shipped definition against
 the shipped skills, so a definition the registry would refuse fails here.
 
 ### Run contract (HIVE-413)

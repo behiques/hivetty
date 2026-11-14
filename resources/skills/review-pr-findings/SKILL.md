@@ -67,8 +67,9 @@ your replies, and each names the review or comment it answers (Step 5). A review
 or comment already named by a marker is answered; skip it, so a later round
 never replies twice.
 
-## Step 2: the ledger file
+## Step 2: findings notes
 
+The findings notes live at
 `~/.hivetty/work/fixer/ledgers/<owner>-<repo>-pr<N>.md`, the same path from a
 session, so there is one place per PR. One row per finding: `finding → round
 first seen → verdict → action → resolution`. Read it before assessing
@@ -79,16 +80,23 @@ push. It is removed by the run that answers `clean`, and by nobody else; a
 
 ## Step 3: adversarial assessment
 
-For each new finding, one subagent, the session's model, never downgraded:
-steelman the finding with a concrete failure scenario, then try to refute it
-against the code. Verdict `VALID | INVALID | NEEDS-USER-DECISION`. Batch small
-related findings; run independent ones in parallel, in one response.
+Assess each finding yourself: steelman it with a concrete failure, then try to
+refute it in the code. Dispatch a subagent only for a block finding, or before
+you answer INVALID. Such a subagent takes one finding and runs on the
+session's model, never downgraded; independent ones go in parallel, in one
+response. Verdict `VALID | INVALID | NEEDS-USER-DECISION`.
+
+A self review's verified-minor items come with its findings: take a
+verified-minor when the fix is under about 20 lines and answer the rest, as
+you would a nit you choose not to take. Its borderline items are findings to
+assess like any other.
 
 `NEEDS-USER-DECISION` (an architecture trade-off, a scope question): in a
 session, present it with a recommendation. As the fixer, `ledger_ask` the
 `reply-to` party the ask named (the overmind when it named none) with the
 finding quoted, `options` when the choice is closed, and `meta.intent` naming
-the PR and the finding; END TURN. The answer wakes you here.
+the PR and the finding. Finish Steps 4 to 6 for every other finding and push
+before asking; the ask is the last call of the turn. The answer wakes you here.
 
 ## Step 4: act
 
@@ -122,7 +130,7 @@ the reviewer's order. Open the comment with the marker
 `<!-- hive-fixer answers: <id> -->`, the `id` from `gh pr view --json
 reviews,comments`, on its own first line; the marker is what tells a reply from
 the reviewer's own words when the reviewer is the PR author, and what survives
-the ledger file. The end-of-round summary comment opens with
+the findings notes. The end-of-round summary comment opens with
 `<!-- hive-fixer summary -->`.
 
 ## Step 6: verify, push once, loop
@@ -130,8 +138,8 @@ the ledger file. The end-of-round summary comment opens with
 `{{skill:verify}}`: scoped lint, targeted tests, type-check, build only when the
 change makes build-only errors likely, and a real browser drive for any UI
 surface. Commit every fix of the round, then **one push**, then the Step 5
-replies. Re-run Step 1. When CI is green, no thread is open and every ledger
-row that has a target has a reply, post one short summary comment (what was
+replies. Re-run Step 1. When CI is green, no thread is open and every row of the
+findings notes that has a target has a reply, post one short summary comment (what was
 fixed, what was rejected and why) and report.
 
 ## Step 7: report
@@ -143,7 +151,7 @@ fixed, what was rejected and why) and report.
   posted after it is read on its next wake and not lost to the answer's
   own timestamp. The claim the fixer took on arrival:
   clean or `blocked-on`: answer, then release. `blocked`: answer, keep the claim.
-  When clean, remove the ledger file and the worktree if it was the fixer's
+  When clean, remove the findings notes and the worktree if it was the fixer's
   own.
 - **In a session:** the same two lines, in chat.
 
@@ -156,7 +164,7 @@ shipper's merge gate holds on any unresolved thread and on this run's
 - A fix without a recorded verdict.
 - A finding with no reply, a fixed one included.
 - Skipping a review body because it approved, or because it has no thread.
-- Re-fixing a finding the ledger already holds.
+- Re-fixing a finding the findings notes already hold.
 - "The bot is probably right."
 - The whole suite instead of the touched paths.
 - A UI fix "verified" on green tests alone.

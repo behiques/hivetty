@@ -14,7 +14,12 @@ const words = (text: string) => text.replace(/^---[\s\S]*?\n---\n/, '').split(/\
 
 describe('shipped text agrees (HIVE-413)', () => {
   it('ship is short enough to follow', () => {
-    expect(words(ship())).toBeLessThanOrEqual(1300);
+    // HIVE-416: the limit is on the stage table plus its numbered steps (about 1,200 words);
+    // the whole file is held under 1,400 so the prose around them cannot grow unseen.
+    const body = ship().replace(/^---[\s\S]*?\n---\n/, '');
+    const steps = body.slice(body.indexOf('| Stage |'), body.indexOf('## A stuck row'));
+    expect(words(steps)).toBeLessThanOrEqual(1200);
+    expect(words(ship())).toBeLessThanOrEqual(1400);
   });
   it('carries closes-ticket in the intake, the row and the Done rule', () => {
     expect(fillIncludes(ship())).toMatch(/closes-ticket: yes \| no/);
@@ -177,5 +182,97 @@ describe('the session skills (HIVE-415)', () => {
       expect(parse).toContain(`\`${field}\``);
     expect(builder.replace(/\s+/g, ' ')).toMatch(/`after #N` reads as origin\/<default>/);
     expect(builder.replace(/\s+/g, ' ')).toMatch(/`pr-title` when the ask gives one/);
+  });
+});
+
+describe('the review path (HIVE-416)', () => {
+  const one = (text: string) => text.replace(/\s+/g, ' ');
+  const scorer = () => read('skills/pr-review/prompts/confidence-scorer.md');
+  it('the verifier returns confidence and severity, never one score', () => {
+    expect(scorer()).not.toMatch(/"score"/);
+    expect(scorer()).toMatch(/"confidence": <number 0-100>, "severity": "block" \| "should_fix" \| "minor"/);
+    expect(one(scorer())).toContain(
+      'A reproduced bypass of a security, licence or consent check is block however obscure the input.',
+    );
+    expect(one(scorer())).toContain('How often it happens belongs here, never in confidence.');
+    expect(one(scorer())).toMatch(/75 or above only when you read the source and can name the input, state or timing that triggers it/);
+  });
+  const prReview = () => read('skills/pr-review/SKILL.md');
+  it('pr-review keeps verified minor findings and has one borderline band', () => {
+    expect(prReview()).not.toMatch(/60–79|60-79|always the full tier|keep editing|`command -v acr` succeeds \| ACR \|/);
+    expect(one(prReview())).toContain(
+      'Drop anything with confidence below 60. Confidence 60-74 is borderline. Confidence 75 or above is a finding at the verifier\'s severity; in self mode `minor` findings come back in their own list, "verified, minor", and are never dropped. Self mode has no reader to tire: the caller is a fixer.',
+    );
+    expect(prReview()).toMatch(/"verified_minor": 0/);
+    expect(prReview()).toMatch(/"tier": "docs" \| "small" \| "full" \| "deep"/);
+    expect(prReview()).toMatch(/"context": \{ "spec":/);
+    expect(prReview()).toMatch(/`ACR_CLI`/);
+  });
+  it('pr-review tiers self mode too, with a deep tier for size and risk', () => {
+    const text = one(prReview());
+    expect(text).toMatch(/\*\*The tier\*\*, in both modes/);
+    expect(text).toMatch(/\*\*deep\*\* when `RISK`, or `LINES` over 1,000/);
+    expect(text).toMatch(/auth, token, credential, secret, permission, licen\[cs\]e, payment/);
+    expect(text).toMatch(/one per top-level directory in `DIRS`, at most 4/);
+  });
+  it('pr-review reviews the PR head for --self <pr> and takes SPEC, PLAN and NOTES', () => {
+    const text = one(prReview());
+    expect(text).toMatch(/`--self <pr>` reviews the PR head/);
+    expect(text).toMatch(/never fall back to a working tree/);
+    expect(text).toContain('`SPEC=<abs path> PLAN=<abs path> NOTES=<abs path>`');
+    expect(text).toContain('the last thing the skill writes');
+    expect(text).toMatch(/The bug scan and its per-directory scans are one reviewer here and in step 5/);
+    expect(text).toMatch(/When `DIRS` has one group the slice is the whole diff: dispatch no per-directory scan/);
+    expect(text).toMatch(/In self mode the outcome is `findings` when any finding, verified-minor or borderline item survives/);
+    for (const name of ['bug-scan', 'business-alignment', 'user-pov', 'state-lifecycle'])
+      expect(read(`skills/pr-review/prompts/agent-${name}.md`)).toMatch(/`SPEC`, `PLAN`, `NOTES`/);
+  });
+  it('prefetch-ticket reads through the jira-tracker script, and no skill names jira-writer', () => {
+    const prefetch = read('skills/pr-review/prompts/prefetch-ticket.md');
+    expect(prefetch).toContain('bash "$JT" get_issue <KEY>');
+    expect(prefetch).toContain('JT="$SKILL_DIR/../jira-tracker/scripts/jira-api-wrapper.sh"');
+    expect(prReview()).toMatch(/Ticket alignment also gets `SKILL_DIR=<this skill's base directory>`/);
+    expect(prefetch).toMatch(/"route": "atlassian-mcp" \| "jira-tracker" \| "hive"/);
+    expect(prefetch).not.toMatch(/jira-writer/);
+  });
+  it('acr reports borderline and verified_minor in meta and passes the context through', () => {
+    const acr = agent('acr');
+    expect(acr).toContain('borderline: <counts.borderline>');
+    expect(acr).toContain('verified_minor: <counts.verified_minor>');
+    expect(acr).toMatch(/--self <pr url> \[SPEC=<path>\] \[PLAN=<path>\] \[NOTES=<path>\] REPO=<path>/);
+    expect(one(acr)).not.toMatch(/looks through the project's worktrees|reviews your work on the branch/);
+  });
+  it('ship passes the context to acr, branches on its meta, and gates fixer heads once', () => {
+    const text = one(ship());
+    expect(text).toContain('`<pr url> --self`, then `SPEC=<spec> PLAN=<plan> NOTES=<notes>`, each only when the row holds a path');
+    expect(text).toMatch(/Read acr's `meta`, never the body/);
+    expect(text).toMatch(/`findings \+ borderline \+ verified_minor` above 0 → `fix-self`; all 0 → `ready`/);
+    expect(text).toContain('the fixer takes a verified-minor when the fix is under about 20 lines and answers the rest');
+    expect(text).toMatch(/findings, borderline and verified-minor all go to the fixer in one ask/i);
+    expect(text).toMatch(/"spec": null, "plan": null, "notes": null/);
+    expect(text).toMatch(/`gatedHead`/);
+    expect(text).toMatch(/Remove this step once HIVE-417 adds a `pull_request` workflow/);
+    expect(text).toMatch(/confidence 60-74/);
+  });
+  it('review-pr-findings assesses inline, dispatches only for block or INVALID, and keeps findings notes', () => {
+    const text = read('skills/review-pr-findings/SKILL.md');
+    expect(text).not.toMatch(/ledger file|ledger row|the ledger already/);
+    expect(text).toMatch(/## Step 2: findings notes/);
+    expect(one(text)).toContain(
+      'Assess each finding yourself: steelman it with a concrete failure, then try to refute it in the code. Dispatch a subagent only for a block finding, or before you answer INVALID.',
+    );
+    expect(one(text)).toContain('Finish Steps 4 to 6 for every other finding and push before asking; the ask is the last call of the turn.');
+    expect(one(text)).toContain('take a verified-minor when the fix is under about 20 lines and answer the rest');
+  });
+  it('the fixer agent and merge-pr call them findings notes too', () => {
+    for (const text of [agent('fixer'), mergePr()]) {
+      expect(text).not.toMatch(/findings\s+ledger/);
+      expect(text).toMatch(/findings\s+notes/);
+    }
+  });
+  it('the builder fills spec, plan and notes in the intake', () => {
+    const step8 = agent('builder').slice(agent('builder').indexOf('8. `ship: yes`'));
+    expect(one(step8)).toMatch(/`spec:` and `plan:` from the job \(`none` when the job had none\), `notes:` your `progress\.md`/);
+    expect(fillIncludes(agent('builder'))).toMatch(/notes: \/abs\/path \| none/);
   });
 });

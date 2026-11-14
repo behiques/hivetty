@@ -145,8 +145,8 @@ describe('pr-review SKILL.md', () => {
   });
 
   it('gives review mode the borderline band self mode already had', () => {
-    expect(skillMd).toContain('**Drop anything below 60.**');
-    expect(skillMd).toContain('Keep 60–74 as **borderline** in both modes');
+    expect(skillMd).toContain('Drop anything with confidence below 60. Confidence 60-74 is borderline.');
+    expect(skillMd).toContain('This is the one borderline band, in both modes.');
     expect(skillMd).toContain('posted inline as **Note**');
     expect(skillMd).toMatch(/a\n\s+miss on someone else's PR costs an incident/);
   });

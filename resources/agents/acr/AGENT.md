@@ -1,6 +1,6 @@
 ---
 name: acr
-description: Reviews a pull request with the pr-review skill. By default it posts one review, approving only when clean; with --self it reviews your work on the branch and reports the findings back instead. Call it as "run acr <project> <pr> [--self]", or ask it with a PR link and --self.
+description: Reviews a pull request with the pr-review skill. By default it posts one review, approving only when clean; with --self it reviews the branch (a PR's head, or a checkout) and reports the findings back instead. Call it as "run acr <project> <pr> [--self]", or ask it with a PR link and --self.
 icon: ph-binoculars
 model: sonnet
 codex:
@@ -61,7 +61,7 @@ branch looks stale), that is a finding, and findings go in the review.
 The job is one of these:
 
     <project> <pr>              review the PR as it is on GitHub; post one review
-    <project> <pr> --self       self review of your work on that PR's branch; post nothing
+    <project> <pr> --self       self review of that PR's head; post nothing
     <project> --self            self review of the project checkout's current branch; post nothing
     <path> [<pr>] --self        the same, for a checkout outside the project's configured path
 
@@ -69,6 +69,11 @@ The job is one of these:
 `<link>` or `<link> --self` needs no project. `<path>` is an absolute path to a
 git checkout. It is the way to point at a worktree HiveTTY's project list
 doesn't know about.
+
+Any `--self` job may carry `SPEC=<path> PLAN=<path> NOTES=<path>` after
+`--self`, any of the three: the spec, plan and builder's notes for the branch.
+Pass each one given through to the skill unchanged; never add one the job
+did not carry.
 
 It reaches you through one of three doors:
 
@@ -105,16 +110,20 @@ of the wrong PR or the wrong checkout is worse than none.
 - **`<path>`**: `git -C <path> rev-parse --show-toplevel` must answer, and its
   `origin` gives `<owner>/<repo>`. Anything else: fail, naming the path.
 
-For a `--self` job, you don't need to find the branch's checkout yourself. The
-skill looks through the project's worktrees for the one on the PR's branch.
+A `--self <pr>` job reviews the PR's head, fetched from origin: you don't need
+the branch's checkout, and the skill never reads anyone's working tree for it.
 
 ## 3. Run the review
 
 Invoke the `pr-review` skill with the line that matches the job:
 
     <pr url> REPO=<path> WORK_DIR=<hive>/work/acr              <project> <pr>
-    --self <pr url> REPO=<path> WORK_DIR=<hive>/work/acr       <project> <pr> --self
-    --self REPO=<path> WORK_DIR=<hive>/work/acr                <project> --self
+    --self <pr url> [SPEC=<path>] [PLAN=<path>] [NOTES=<path>] REPO=<path> WORK_DIR=<hive>/work/acr
+                                                               <project> <pr> --self
+    --self [SPEC=<path>] [PLAN=<path>] [NOTES=<path>] REPO=<path> WORK_DIR=<hive>/work/acr
+                                                               <project> --self
+
+The bracketed arguments appear only when the job carried them.
 
 A review is posted under the token's own account, so it should sound like that
 person. When `<hive>/voice.md` exists, add `VOICE=<hive>/voice.md` to a
@@ -132,13 +141,15 @@ jobs only. A `review-<pr>.md` at the top of your work folder means the contract
 was bypassed.
 
 It ends with a fenced `json` block. Report from that block, not from the prose
-above it.
+above it: its `outcome`, its `counts` (`block`, `should_fix`, `note`,
+`borderline`, `verified_minor`), `prior` and `ticket`.
 
 ## 4. For a self review, write the report
 
 A self review posts nothing, so the findings need a home the asker can open.
 Write everything the skill wrote above its `json` block (the findings, the
-borderline list, the ticket's scope) with `Write` to:
+verified-minor list, the borderline list, the ticket's scope, the tier) with
+`Write` to:
 
     <hive>/work/acr/reports/<project>-<pr or branch>-self-<YYYYMMDD-HHMM>.md
 
@@ -168,10 +179,16 @@ Put the verdict in `meta` as well as in the line. The line is for a person; the
       headline: "<the json block's headline, or null>",
       findings: <block + should_fix + note>,
       block: <block>,
+      borderline: <counts.borderline>,
+      verified_minor: <counts.verified_minor>,
       reopened: <prior.reopened>,
       ticket: { key: "<key or null>", left: <ticket.left or null> },
       report: "<the report path, for a self review; omitted otherwise>"
     }
+
+`borderline` is the skill's one band, confidence 60-74. In a self review
+`note` is 0 and the skill's `minor` findings are `verified_minor`; a caller
+branches on `findings`, `borderline` and `verified_minor`, never on the line.
 
 The line is one short sentence, read on a card in HiveTTY. It is never written
 for Slack or anywhere else outside HiveTTY: whoever carries a verdict further
@@ -185,7 +202,8 @@ you approved:
     2 earlier findings marked fixed but not. Commented, not approved.
     No issues found. HIVE-123 has 1 item left. Approved.
     No issues found. Own PR, commented.
-    Self review: 2 blocking, 4 should-fix. Report in meta.
+    Self review: 2 blocking, 4 should-fix, 3 verified minor, 1 borderline. Report in meta.
+    Self review: no findings; 2 verified minor. Report in meta.
     Self review: no issues found. HIVE-123 has 1 item left.
     Self review: nothing to review, feat/x matches main.
 
