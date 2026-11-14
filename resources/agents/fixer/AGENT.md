@@ -11,6 +11,7 @@ copilot:
 wake:
   on: [ledger]
 skills: [review-pr-findings, tdd, debug, verify, worktree]
+asks_from: [shipper, sess-*]
 tools: [Read, Edit, Write, Grep, Glob, Bash, Agent, SendMessage, Skill, TodoWrite, ToolSearch, ReportFindings]
 autonomy: act
 lane: thread

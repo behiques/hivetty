@@ -1003,3 +1003,23 @@ Wait to be asked.
     });
   });
 });
+
+describe('the shipped asks_from lists (HIVE-412)', () => {
+  const shipped = (name: string) => readFileSync(join(process.cwd(), 'resources/agents', name, 'AGENT.md'), 'utf8');
+  const asksOf = (name: string) => readFrontmatter(shipped(name))?.fields.get('asks_from')?.value;
+
+  it('lets sessions and the builder hand the shipper a PR, and the shipper or a session hand the fixer one', () => {
+    expect(asksOf('shipper')).toBe('[sess-*, builder]');
+    expect(asksOf('fixer')).toBe('[shipper, sess-*]');
+  });
+
+  it('leaves acr and the builder open', () => {
+    expect(asksOf('acr')).toBeUndefined();
+    expect(asksOf('builder')).toBeUndefined();
+  });
+
+  it('tells acr to act on the ask its wake delivers', () => {
+    expect(shipped('acr')).toContain('act on the ask your wake prompt delivers');
+    expect(shipped('acr')).not.toContain('take\nthe oldest open ask');
+  });
+});
