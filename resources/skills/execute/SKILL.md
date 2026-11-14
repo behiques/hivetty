@@ -31,10 +31,14 @@ once it ships, or by the person until then).
 
 ## Mode: inline (default)
 
-You are the implementer. For each task, in order:
+You are the implementer. The loop every task's code goes through:
 
-1. Failing test, run it, read the failure.
-2. Minimal code, run it, read the pass.
+{{include:tdd-loop}}
+
+For each task, in order:
+
+1. Failing test, run it, read the failure (RED).
+2. Minimal code, run it, read the pass (GREEN).
 3. Scoped lint and type-check on the touched paths.
 4. Commit with the task's name.
 5. `risk: yes` → one reviewer subagent on that task's diff

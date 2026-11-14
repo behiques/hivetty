@@ -75,4 +75,11 @@ describe('one copy of each shared rule (HIVE-413 PR 2)', () => {
   it('ship, merge-pr and review-pr-findings include literal-target', () => {
     for (const text of [ship(), mergePr(), read('skills/review-pr-findings/SKILL.md')]) expect(uses(text, 'literal-target')).toBe(true);
   });
+  it('tdd and execute share the tdd-loop, and tdd restates no loop of its own (HIVE-414)', () => {
+    const tdd = read('skills/tdd/SKILL.md');
+    const execute = read('skills/execute/SKILL.md');
+    expect(uses(tdd, 'tdd-loop')).toBe(true);
+    expect(uses(execute, 'tdd-loop')).toBe(true);
+    for (const text of [tdd, execute]) expect(text).not.toContain('NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST');
+  });
 });

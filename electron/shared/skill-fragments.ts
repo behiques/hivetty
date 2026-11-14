@@ -1,5 +1,5 @@
 /**
- * Rules more than one skill or agent definition states, written once (HIVE-413). Pure and
+ * Rules more than one skill or agent definition states, written once (HIVE-413; tdd-loop HIVE-414). Pure and
  * import-free: the plugin renderer, the agent prompt builder and the Settings preview all read it.
  * No placeholders inside, so a skill and an agent prompt receive the same words.
  */
@@ -32,6 +32,41 @@ Push as \`git -C <that path> push origin HEAD:<branch>\`. Git allows one worktre
 key are written out in every command and substituted textually, never re-derived from \`pwd\` or
 a shell variable. Shell state does not survive a call; \`--repo ""\` resolves from cwd without
 erroring.`,
+  'tdd-loop': `**The law.**
+
+\`\`\`
+NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
+\`\`\`
+
+Wrote the code first? Delete it. Not "keep as reference", not "adapt while
+writing the test". Delete, then implement fresh from the test. Exceptions
+need the person's word: a throwaway spike, generated code, configuration.
+
+**RED.** One test, one behaviour, a name that says what should happen, real
+code rather than a mock wherever the real thing can be constructed. Run it.
+Read the failure: it must fail because the behaviour is missing, not because
+of a typo in the test.
+
+**GREEN.** The least code that passes. Not the code you expect to need later.
+Run it. Read the pass, and confirm nothing else went red.
+
+**REFACTOR.** With everything green, and only then. Run again.
+
+Three tests the happy path never writes:
+
+- An injectable seam gets one test that runs the real default.
+- State keyed by an id gets a switch-the-id test and a failed-call test.
+- A predicate that refuses commands gets a table test from the evasion list:
+  line continuation, quoting, a redirect or operator touching the token,
+  every refspec spelling, every API spelling of the same act.
+
+| Thought | Reality |
+| --- | --- |
+| "I'll add the test after" | Then it tests what you wrote, not what was needed. |
+| "It's a one-liner" | One-liners have the highest ratio of confident to correct. |
+| "The test would just duplicate the code" | Then the test is wrong, not unnecessary. |
+| "I watched it fail in my head" | Run it. |
+| "Just this once" | That is the rationalisation. Delete, start over. |`,
 };
 
 export const INCLUDE = /\{\{include:([a-z0-9-]+)\}\}/g;
