@@ -124,6 +124,8 @@ export type RunStart =
       refused: QueueableRefusal | 'invalid';
       reason?: string;
       cli?: HarnessId;
+      /** A budget refusal that a live run's close ends, not midnight (HIVE-412). */
+      hold?: true;
     };
 
 export interface RunTrackerDeps {
@@ -1291,6 +1293,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
             started: false,
             refused: 'budget',
             reason: `${name} is out of today's budget for now: ${spentText} spent and $${reserved.toFixed(2)} held by live runs, of ${dailyText}.`,
+            // Nothing live holds money when under a cent is left: that is a spent day in all but name (HIVE-412).
+            ...(reserved > 0 ? { hold: true as const } : {}),
           };
         }
         // Any room left starts the run, holding no more than that room (HIVE-408).

@@ -2478,6 +2478,34 @@ describe('createRunTracker', () => {
       expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:D' })).toMatchObject({ started: true });
     });
 
+    it('marks a refusal a hold while live runs hold the room, and not once the day is spent (HIVE-412)', () => {
+      parallel = 3;
+      limits = { budgetUsd: 3, dailyUsd: 5 };
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:A' });
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:B' }); // starts on the $2 left
+
+      expect(tracker.run('a', 'ledger', undefined, { lane: 'thread:C' })).toMatchObject({
+        started: false,
+        refused: 'budget',
+        hold: true,
+      });
+
+      endRun(0, 5); // the first run spent the whole day
+
+      const spentDay = tracker.run('a', 'ledger', undefined, { lane: 'thread:D' });
+      expect(spentDay).toMatchObject({ started: false, refused: 'budget' });
+      expect(spentDay).not.toHaveProperty('hold');
+    });
+
+    it('does not call under a cent left with nothing live a hold: no run close will free it (HIVE-412)', () => {
+      limits = { budgetUsd: 3, dailyUsd: 5 };
+      spent(4.9993);
+
+      const refused = tracker.run('a', 'ledger');
+      expect(refused).toMatchObject({ started: false, refused: 'budget' });
+      expect(refused).not.toHaveProperty('hold');
+    });
+
     it('refuses a ledger wake once the day is spent — it used to run', () => {
       limits = { dailyUsd: 5 };
       spent(5);
