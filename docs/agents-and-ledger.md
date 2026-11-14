@@ -1752,8 +1752,10 @@ once by the overmind on the ask's thread:
 `<agent> does not take asks from <from>; it takes them from <list> and overmind.`
 The overmind and the agent itself are always admitted (a standing lane hands
 work to a lane with a self-addressed ask). A threaded ask passes only on a
-thread the agent is a party to (the entry it names was written by or addressed
-to the agent); answers and posts always pass.
+thread the agent is a party to: the entry it names was written by the agent or
+the overmind, or was addressed to the agent by a sender the list admits. An
+unlisted sender cannot open a thread on its own refused ask and follow up on
+it. Answers and posts always pass.
 Absent means any party; `[]` means only the overmind and itself. An unknown name
 is accepted, since peers come and go; a wildcard other than `sess-*` is a parse
 problem. The shipper ships `[sess-*, builder]` and the fixer `[shipper, sess-*]`;

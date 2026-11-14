@@ -258,9 +258,10 @@ export function acceptedLanes(agent: string, entries: readonly LedgerEntry[], no
 /**
  * Why an agent will not take this entry as new work (HIVE-412), or `undefined` when it may. Only an ask
  * is filtered: the list is who may *start* work. A threaded ask passes only on a thread the agent is a
- * party to (the entry it names was written by or addressed to the agent), since the ledger accepts a
- * thread naming any entry. The overmind (D3) and the agent itself (a lane's self-addressed hand-over)
- * are always admitted.
+ * party to, since the ledger accepts a thread naming any entry: the entry it names was written by the
+ * agent or the overmind, or was addressed to the agent by a sender the list admits. "Addressed to" alone
+ * is the sender's own claim, so an unlisted sender cannot root a thread on its own refused ask. The
+ * overmind (D3) and the agent itself (a lane's self-addressed hand-over) are always admitted.
  */
 export function askRefusal(
   agent: string,
@@ -269,15 +270,17 @@ export function askRefusal(
   entries: readonly LedgerEntry[],
 ): string | undefined {
   if (asksFrom === undefined || entry.kind !== 'ask') return undefined;
+  const admits = (from: string): boolean =>
+    from === OVERMIND ||
+    from === agent ||
+    asksFrom.some((party) => party === from || (party === ASKS_FROM_SESSIONS && from.startsWith('sess-')));
   if (entry.thread !== undefined) {
     const root = entries.find((item) => item.id === entry.thread);
-    if (root !== undefined && (root.from === agent || root.to === agent)) return undefined;
+    if (root !== undefined && (root.from === agent || root.from === OVERMIND || (root.to === agent && admits(root.from)))) {
+      return undefined;
+    }
   }
-  if (entry.from === OVERMIND || entry.from === agent) return undefined;
-  const admitted = asksFrom.some(
-    (party) => party === entry.from || (party === ASKS_FROM_SESSIONS && entry.from.startsWith('sess-')),
-  );
-  if (admitted) return undefined;
+  if (admits(entry.from)) return undefined;
   const list = asksFrom.length === 0 ? '' : `${asksFrom.join(', ')} and `;
   return `${agent} does not take asks from ${entry.from}; it takes them from ${list}${OVERMIND}.`;
 }
