@@ -264,6 +264,12 @@ describe('the review path (HIVE-416)', () => {
     expect(one(text)).toContain('Finish Steps 4 to 6 for every other finding and push before asking; the ask is the last call of the turn.');
     expect(one(text)).toContain('take a verified-minor when the fix is under about 20 lines and answer the rest');
   });
+  it('the fixer agent and merge-pr call them findings notes too', () => {
+    for (const text of [agent('fixer'), mergePr()]) {
+      expect(text).not.toMatch(/findings\s+ledger/);
+      expect(text).toMatch(/findings\s+notes/);
+    }
+  });
   it('the builder fills spec, plan and notes in the intake', () => {
     const step8 = agent('builder').slice(agent('builder').indexOf('8. `ship: yes`'));
     expect(one(step8)).toMatch(/`spec:` and `plan:` from the job \(`none` when the job had none\), `notes:` your `progress\.md`/);

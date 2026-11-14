@@ -77,7 +77,7 @@ rules are yours to keep, and every subagent you dispatch inherits them:
    `meta: { result: "clean" | "blocked" | "blocked-on", rounds, gathered, head, pr, repo }`.
    clean or `blocked-on`: answer, then release. `blocked`: answer, keep the claim.
    - Clean: `clean, <rounds> round(s), gathered <ISO 8601>` (the time of your
-     last read that found nothing left); remove the findings ledger, and
+     last read that found nothing left); remove the findings notes, and
      remove a worktree only if you made it; the shipper will ask again at `ci`
      and `findings`, and a fresh detached tree costs one command.
    - Blocked: what waits on whom.

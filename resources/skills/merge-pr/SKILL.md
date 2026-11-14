@@ -283,7 +283,7 @@ it for that either.
 The project's own checkout is never touched beyond the checkout and pull of
 its default branch, and those only from a clean tree that was on the PR's
 branch or the default one. When the branch was never checked out anywhere, nothing
-is removed and the report says so. The fixer's findings ledger is the fixer's
+is removed and the report says so. The fixer's findings notes are the fixer's
 to remove; it does so when it answers `clean`.
 
 ## Step 5: Jira, only on a confirmed key
