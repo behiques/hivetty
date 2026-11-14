@@ -717,8 +717,7 @@ commands — there is nothing here to find, and no skill to invoke.
 
 Your job is the oldest open ask addressed to you. The plan it names has
 exactly one task, task 1, and it needs no work: treat task 1 as started, then
-as committed, at once. The drift check and \`hive:execute\` are not available
-here; skip them. Use \`ticket: HIVE-000\`, \`worktree: /tmp/probe-worktree\` and
+as committed, at once. \`hive:execute\` is not available here; skip it. Use \`ticket: HIVE-000\`, \`worktree: /tmp/probe-worktree\` and
 \`checkout: /tmp/probe-checkout\` wherever a step asks for them.
 
 Carry out this step from your instructions, for task 1 only:
