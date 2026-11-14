@@ -170,4 +170,12 @@ describe('the session skills (HIVE-415)', () => {
     expect(one).toMatch(/never a `node_modules` symlink, which leaves the tree dirty and the shipper will not merge/);
     expect(one).toMatch(/run each `git` command alone, not chained with `&&` or `;`: the isolation guard refuses compound commands/);
   });
+  it('the builder reads every field work-on writes into the build ask', () => {
+    const builder = agent('builder');
+    const parse = builder.slice(builder.indexOf('1. `ledger_read`'), builder.indexOf('2. `ledger_claim'));
+    for (const field of ['base', 'pr-title', 'verify', 'env', 'part', 'overlaps', 'closes-ticket'])
+      expect(parse).toContain(`\`${field}\``);
+    expect(builder.replace(/\s+/g, ' ')).toMatch(/`after #N` reads as origin\/<default>/);
+    expect(builder.replace(/\s+/g, ' ')).toMatch(/`pr-title` when the ask gives one/);
+  });
 });

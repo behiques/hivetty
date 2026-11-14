@@ -72,17 +72,23 @@ you write names its path, and a wake that continues a job reads it right after
    Your state file is `<worktree>/.hive/sdd/<plan>/progress.md`. An `answer`
    to one of your asks continues that job at the step recorded in its
    `meta.intent`. A new `ask` is a new job: parse `repo`, `ticket`, `branch`,
-   `plan`, `spec`, `ship`, `key-confirmed`, `closes-ticket`, `reply-to` from
-   its body. An ask with no `closes-ticket` line takes the plan header's
-   `Closes ticket:`, and `yes` when the plan has none either. `<slug>` below
-   is `<branch>` with its `feat/` or `goal/` prefix dropped.
+   `base`, `pr-title`, `plan`, `spec`, `verify`, `env`, `part`,
+   `closes-ticket`, `overlaps`, `ship`, `key-confirmed`, `reply-to` from its
+   body. An ask with no `closes-ticket` line takes the plan header's
+   `Closes ticket:`, and `yes` when the plan has none either. `verify` and
+   `env` from the ask win over the plan header's `Verification:` and
+   `Environment:` when both are present; the answer's `Env:` says which was
+   used. `overlaps` names sibling work on the same files: read it before the
+   first task and keep to the plan's files. `<slug>` below is `<branch>` with
+   its `feat/` or `goal/` prefix dropped.
 2. `ledger_claim <ticket, or the plan's file name when there is none>`. Held
    by another party: release at once, answer "held by <holder>", end (run
    contract 5). `execute`
    sees the claim you hold and does not claim again.
 3. `hive:worktree`, agent path: `<hive>/work/builder/<repo-name>-<slug>` on
-   `<branch>` off the fetched default branch, where `<hive>` is what `pwd`
-   answers minus `/work/builder`. When a ticket is named:
+   `<branch>` off `base` when the ask gives one, else the fetched default
+   branch; `after #N` reads as origin/<default>, which by then holds #N.
+   `<hive>` is what `pwd` answers minus `/work/builder`. When a ticket is named:
    `mcp__hive__jira_transition { key, status: "In Progress", from: "To Do",
    assignToMe: true }`; `from` is what leaves a ticket already past To Do
    alone, and the tool refuses a backwards move on its own. Never move a
@@ -100,7 +106,8 @@ you write names its path, and a wake that continues a job reads it right after
    Not `ledger_failed`: that raises a card and reaches nobody who asked.
 6. `git -C <worktree> push -u origin <branch>`, then from the worktree
    `gh pr create --draft --repo <owner>/<repo> --head <branch>` with the plan's
-   summary as the body and the ticket key in the title. Keep the PR URL.
+   summary as the body, and as the title `pr-title` when the ask gives one,
+   else the ticket key and the plan's title. Keep the PR URL.
 7. `ledger_answer` the original ask, then `ledger_release` the claim. Both
    before anything that ends the turn. The answer's shape: the first line is
    the status and the PR URL; then `Gates:` (each command, its last line, the
