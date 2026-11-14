@@ -190,7 +190,8 @@ stall from `gh pr view` or from a thread you can only partly read, and never pos
    unassigned, take your `accountId` from `lookup_user "$JIRA_EMAIL"` and call
    `update_issue <KEY> '{"assignee":{"accountId":"<id>"}}'`.
 3. `{{skill:execute}}`.
-4. Load {{skill:verify}} now (in Claude Code, call the Skill tool); do not run the gate from memory.
+4. Load {{skill:verify}} now (in Claude Code, call the Skill tool); do not run
+   the gate from memory.
    The full gate runs on the exact tree you will push: lint, type-check, the
    unit suite, and e2e or a browser drive when the change has a UI surface.
 5. `git push -u origin <branch>`.

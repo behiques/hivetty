@@ -190,8 +190,8 @@ writes `DONE`.
    reads a plan file only from under the session's own cwd. Record its
    absolute path as the brief's `plan:`: the verifier holds `DONE` until
    every step in it is ticked, so a finished goal never leaves the panel at 0/N.
-4. invoke {{skill:verify}} (the Skill tool): the repository's gates, a browser
-   drive for any UI surface. Do not run the gate from memory.
+4. invoke {{skill:verify}} (in Claude Code, the Skill tool): the repository's
+   gates, a browser drive for any UI surface. Do not run the gate from memory.
 5. Append the output. Push. `gh pr create --draft`. Record the PR URL in
    the evidence and **tick both files now**: the brief's Outcome items and
    any plan step still open. `ledger_ask` ends the turn, so anything written

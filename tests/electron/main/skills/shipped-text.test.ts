@@ -124,7 +124,7 @@ describe('the session skills (HIVE-415)', () => {
     expect(workOn()).toContain('{{include:ship-intake}}');
     expect(workOn()).not.toMatch(/see\s+`ship`\s+for the intake/);
     expect(workOn()).toMatch(/\.hive\/plans\/<slug>\.state\.md/);
-    expect(workOn()).toMatch(/Load \{\{skill:verify\}\} now \(in Claude Code, call the Skill tool\); do not run the gate from memory\./);
+    expect(workOn()).toMatch(/Load \{\{skill:verify\}\} now \(in Claude Code, call the Skill tool\); do not run\s+the gate from memory\./);
     expect(workOn()).toMatch(/UI not driven/);
     expect(workOn()).toMatch(/is written to that ticket as an UPDATED SPECS comment in the same\s+turn, before planning/);
     const steps = workOn().slice(workOn().indexOf('**5. Dispatch.**'));
@@ -134,7 +134,7 @@ describe('the session skills (HIVE-415)', () => {
   it('goal-on always uses a worktree and includes the intake', () => {
     expect(goalOn()).not.toMatch(/workspace: current|workspace:|intake shape from/);
     expect(goalOn()).toContain('{{include:ship-intake}}');
-    expect(goalOn()).toMatch(/invoke \{\{skill:verify\}\} \(the Skill tool\)/);
+    expect(goalOn()).toMatch(/invoke \{\{skill:verify\}\} \(in Claude Code, the Skill tool\)/);
   });
   it('goal-on resumes from the brief, keeps gates in the foreground and edits the brief with Edit', () => {
     const one = (text: string) => text.replace(/\s+/g, ' ');

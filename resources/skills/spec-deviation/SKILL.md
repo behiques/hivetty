@@ -52,8 +52,8 @@ branch.
 
 ## Formatting
 
-ADF through the `jira-tracker` skill: the `code` mark is exclusive, and a fence needs a
-language tag. `gh` bodies through `--body-file - <<'EOF'`, backticks plain.
+ADF through the `jira-tracker` skill: the `code` mark is exclusive, and a
+fence needs a language tag. `gh` bodies through `--body-file - <<'EOF'`, backticks plain.
 
 ## Red flags
 

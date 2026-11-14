@@ -77,8 +77,9 @@ git -C "$REPO" worktree add --detach "$WT" "origin/<branch>"
 git -C "$WT" push origin HEAD:<branch>      # after each round's commits
 ```
 
-Then, for an agent worktree under your own working directory, new or reused, write
-`$WT/.hive/.gitignore` containing the single line `*` if it is not there.
+Then, for an agent worktree under your own working directory, new or reused,
+write `$WT/.hive/.gitignore` containing the single line `*` if it is not
+there.
 Never in a worktree that is not yours. `.hive/` is HiveTTY's
 working folder (plans, specs, a builder's progress notes). Ignored from the
 start, it never shows as untracked, and `merge-pr`'s teardown removes the
