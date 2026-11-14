@@ -1405,7 +1405,8 @@ Jira on the same server; those are `HIVE_CONSENT_TOOLS`, and an agent lists
 them in `tools:` or its call becomes a card.
 `ToolSearch` is granted just as unconditionally, which matters here: MCP tool
 schemas are deferred, so without it an agent could not reach even a granted
-tool.
+tool. On Claude Code, `Workflow` is granted the same way (HIVE-414), so any
+agent can orchestrate subagents without naming it in `tools:`.
 
 **What this unlocks with no console change.** An agent that finds work it is
 not for looks up who is, addresses the ask, and — because `wake.on: [ledger]`
@@ -2241,6 +2242,16 @@ still checked by the fence the moment it is actually called, so granting it
 widens nothing an agent can do. This was found by `pnpm test:agent`, not by
 any unit test — nothing in a mocked child process can show a real `claude`
 binary refusing to call a tool it cannot yet describe.
+
+**`Workflow` is granted unconditionally on Claude Code** (HIVE-414), beside
+`ToolSearch` in `claudeFence.grants`: every Claude Code agent, shipped or made
+by the person, can run a workflow without a `tools:` entry or a card. Agent
+runs set `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` and a workflow runs its agents
+in the background, so the grant was proven by a live probe first
+(`runs the Workflow tool on the standing grant`, `pnpm test:agent`): before
+the grant the fence raised a card, after it the workflow's agent ran and its
+word reached the answer. Every tool a workflow's agents call is still fenced.
+Codex and Copilot have no Workflow tool and grant nothing new.
 
 Under `-p`, `Notification` and `PermissionRequest` hooks do not fire and the
 status line does not run — there is no footer to write to and no human
