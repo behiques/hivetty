@@ -254,6 +254,16 @@ describe('the review path (HIVE-416)', () => {
     expect(text).toMatch(/Remove this step once HIVE-417 adds a `pull_request` workflow/);
     expect(text).toMatch(/confidence 60-74/);
   });
+  it('review-pr-findings assesses inline, dispatches only for block or INVALID, and keeps findings notes', () => {
+    const text = read('skills/review-pr-findings/SKILL.md');
+    expect(text).not.toMatch(/ledger file|ledger row|the ledger already/);
+    expect(text).toMatch(/## Step 2: findings notes/);
+    expect(one(text)).toContain(
+      'Assess each finding yourself: steelman it with a concrete failure, then try to refute it in the code. Dispatch a subagent only for a block finding, or before you answer INVALID.',
+    );
+    expect(one(text)).toContain('Finish Steps 4 to 6 for every other finding and push before asking; the ask is the last call of the turn.');
+    expect(one(text)).toContain('take a verified-minor when the fix is under about 20 lines and answer the rest');
+  });
   it('the builder fills spec, plan and notes in the intake', () => {
     const step8 = agent('builder').slice(agent('builder').indexOf('8. `ship: yes`'));
     expect(one(step8)).toMatch(/`spec:` and `plan:` from the job \(`none` when the job had none\), `notes:` your `progress\.md`/);
