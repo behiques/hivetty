@@ -256,16 +256,23 @@ export function acceptedLanes(agent: string, entries: readonly LedgerEntry[], no
 }
 
 /**
- * Why an agent will not take this entry as new work (HIVE-412), or `undefined` when it may. Only a new
- * ask is filtered: the list is who may *start* work, so a thread entry always passes. The overmind (D3)
- * and the agent itself (a lane's self-addressed hand-over) are always admitted.
+ * Why an agent will not take this entry as new work (HIVE-412), or `undefined` when it may. Only an ask
+ * is filtered: the list is who may *start* work. A threaded ask passes only on a thread the agent is a
+ * party to (the entry it names was written by or addressed to the agent), since the ledger accepts a
+ * thread naming any entry. The overmind (D3) and the agent itself (a lane's self-addressed hand-over)
+ * are always admitted.
  */
 export function askRefusal(
   agent: string,
   asksFrom: readonly string[] | undefined,
   entry: Pick<LedgerEntry, 'kind' | 'from' | 'thread'>,
+  entries: readonly LedgerEntry[],
 ): string | undefined {
-  if (asksFrom === undefined || entry.kind !== 'ask' || entry.thread !== undefined) return undefined;
+  if (asksFrom === undefined || entry.kind !== 'ask') return undefined;
+  if (entry.thread !== undefined) {
+    const root = entries.find((item) => item.id === entry.thread);
+    if (root !== undefined && (root.from === agent || root.to === agent)) return undefined;
+  }
   if (entry.from === OVERMIND || entry.from === agent) return undefined;
   const admitted = asksFrom.some(
     (party) => party === entry.from || (party === ASKS_FROM_SESSIONS && entry.from.startsWith('sess-')),

@@ -1436,7 +1436,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
    */
   const deliver = (to: string, item: LedgerEntry, entries: readonly LedgerEntry[]): void => {
     // A sender `asks_from:` does not name is answered at once, on the path a lane refusal takes (HIVE-412).
-    const refused = askRefusal(to, deps.asksFrom?.(to), item);
+    const refused = askRefusal(to, deps.asksFrom?.(to), item, entries);
     const routed = refused === undefined ? laneFor(deps.laneOf?.(to), item, entries) : { refuse: refused };
 
     if ('refuse' in routed) {

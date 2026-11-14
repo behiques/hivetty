@@ -1747,11 +1747,13 @@ The Mechanism column is Claude Code's (the adapter's `headless.ts`); every CLI's
 ### `asks_from:` — who may start work (HIVE-412)
 
 A list of party ids, plus `sess-*` for any terminal session. In `deliver`,
-before `laneFor`, a new ask (no thread) from a sender the list does not name is
-answered at once by the overmind on the ask's thread:
+before `laneFor`, an ask from a sender the list does not name is answered at
+once by the overmind on the ask's thread:
 `<agent> does not take asks from <from>; it takes them from <list> and overmind.`
 The overmind and the agent itself are always admitted (a standing lane hands
-work to a lane with a self-addressed ask); thread entries are never filtered.
+work to a lane with a self-addressed ask). A threaded ask passes only on a
+thread the agent is a party to (the entry it names was written by or addressed
+to the agent); answers and posts always pass.
 Absent means any party; `[]` means only the overmind and itself. An unknown name
 is accepted, since peers come and go; a wildcard other than `sess-*` is a parse
 problem. The shipper ships `[sess-*, builder]` and the fixer `[shipper, sess-*]`;
