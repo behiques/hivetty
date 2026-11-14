@@ -154,4 +154,20 @@ describe('the session skills (HIVE-415)', () => {
     expect(brainstorm()).toMatch(/No question in a batch depends on another question in the same batch/);
     expect(brainstorm()).toContain('{{skill:tdd}}');
   });
+  it('spec-deviation writes through jira-tracker, session only, with one confirmation', () => {
+    const text = read('skills/spec-deviation/SKILL.md');
+    expect(text.replace(/\s+/g, ' ')).toMatch(/With HiveTTY's Jira tools loaded, never probe for the retired Jira writer skill\./);
+    expect(text).not.toMatch(/jira-writer/);
+    expect(text).toMatch(/jira-tracker/);
+    expect(text.replace(/\s+/g, ' ')).toMatch(/Session only, never an agent\./);
+    expect(text.replace(/\s+/g, ' ')).toMatch(/One confirmation covers the ticket and its downstream edits together/);
+  });
+  it('worktree puts an agent tree under its own working directory and installs from the lockfile', () => {
+    const text = read('skills/worktree/SKILL.md');
+    const one = text.replace(/\s+/g, ' ');
+    expect(text).not.toMatch(/\.hivetty\/work/);
+    expect(one).toMatch(/hivetty: `pnpm install --frozen-lockfile --offline`/);
+    expect(one).toMatch(/never a `node_modules` symlink, which leaves the tree dirty and the shipper will not merge/);
+    expect(one).toMatch(/run each `git` command alone, not chained with `&&` or `;`: the isolation guard refuses compound commands/);
+  });
 });

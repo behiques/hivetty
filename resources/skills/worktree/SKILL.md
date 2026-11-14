@@ -35,7 +35,8 @@ branch over.
    ```
 
    The shipper finds the PR by branch name; a branch named `worktree-…` is one
-   nobody will look for.
+   nobody will look for. Inside it, run each `git` command alone, not chained
+   with `&&` or `;`: the isolation guard refuses compound commands.
 2. Without the tool, fall back to git. `.worktrees/` must be ignored before
    anything lands in it:
 
@@ -44,10 +45,12 @@ branch over.
    git -C "$REPO" worktree add "$REPO/.worktrees/<slug>" -b "<branch>" "origin/$DEFAULT"
    ```
 
-3. Install dependencies the way the repository does (`pnpm install`,
-   `npm ci`, whichever its lockfile says), then run the cheapest static check
-   it has and confirm it is green. A red baseline is not yours to fix and not
-   yours to build on; report it.
+3. Install dependencies the way the repository's lockfile says: from the
+   lockfile, offline when the store has it (hivetty: `pnpm install
+   --frozen-lockfile --offline`); never a `node_modules` symlink, which leaves
+   the tree dirty and the shipper will not merge. Then run the cheapest static
+   check it has and confirm it is green. A red baseline is not yours to fix
+   and not yours to build on; report it.
 
 ## As an agent (builder, fixer)
 
@@ -55,10 +58,11 @@ Agents have no `EnterWorktree` and must never write inside the project's
 tree. Git allows one worktree per branch, so look first: `git -C "$REPO"
 worktree list --porcelain`. A branch already checked out somewhere (the
 builder's worktree, before `merge-pr` removes it) is worked on **there**,
-never duplicated. Otherwise the worktree lives in your own working directory:
+never duplicated. Otherwise the worktree lives under your own working
+directory, at the path your job names when it names one:
 
 ```bash
-WT="$HOME/.hivetty/work/<agent>/<repo-name>-<slug>"
+WT="<your working directory>/<repo-name>-<slug>"
 git -C "$REPO" worktree add "$WT" -b "<branch>" "origin/$DEFAULT"
 ```
 
@@ -73,7 +77,7 @@ git -C "$REPO" worktree add --detach "$WT" "origin/<branch>"
 git -C "$WT" push origin HEAD:<branch>      # after each round's commits
 ```
 
-Then, for an agent worktree under `$HOME/.hivetty/work/`, new or reused, write
+Then, for an agent worktree under your own working directory, new or reused, write
 `$WT/.hive/.gitignore` containing the single line `*` if it is not there.
 Never in a worktree that is not yours. `.hive/` is HiveTTY's
 working folder (plans, specs, a builder's progress notes). Ignored from the
