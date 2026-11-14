@@ -14,7 +14,12 @@ const words = (text: string) => text.replace(/^---[\s\S]*?\n---\n/, '').split(/\
 
 describe('shipped text agrees (HIVE-413)', () => {
   it('ship is short enough to follow', () => {
-    expect(words(ship())).toBeLessThanOrEqual(1300);
+    // HIVE-416: the limit is on the stage table plus its numbered steps (about 1,200 words);
+    // the whole file is held under 1,400 so the prose around them cannot grow unseen.
+    const body = ship().replace(/^---[\s\S]*?\n---\n/, '');
+    const steps = body.slice(body.indexOf('| Stage |'), body.indexOf('## A stuck row'));
+    expect(words(steps)).toBeLessThanOrEqual(1200);
+    expect(words(ship())).toBeLessThanOrEqual(1400);
   });
   it('carries closes-ticket in the intake, the row and the Done rule', () => {
     expect(fillIncludes(ship())).toMatch(/closes-ticket: yes \| no/);
@@ -236,6 +241,18 @@ describe('the review path (HIVE-416)', () => {
     expect(acr).toContain('verified_minor: <counts.verified_minor>');
     expect(acr).toMatch(/--self <pr url> \[SPEC=<path>\] \[PLAN=<path>\] \[NOTES=<path>\] REPO=<path>/);
     expect(one(acr)).not.toMatch(/looks through the project's worktrees|reviews your work on the branch/);
+  });
+  it('ship passes the context to acr, branches on its meta, and gates fixer heads once', () => {
+    const text = one(ship());
+    expect(text).toContain('`<pr url> --self`, then `SPEC=<spec> PLAN=<plan> NOTES=<notes>`, each only when the row holds a path');
+    expect(text).toMatch(/Read acr's `meta`, never the body/);
+    expect(text).toMatch(/`findings \+ borderline \+ verified_minor` above 0 → `fix-self`; all 0 → `ready`/);
+    expect(text).toContain('the fixer takes a verified-minor when the fix is under about 20 lines and answers the rest');
+    expect(text).toMatch(/findings, borderline and verified-minor all go to the fixer in one ask/i);
+    expect(text).toMatch(/"spec": null, "plan": null, "notes": null/);
+    expect(text).toMatch(/`gatedHead`/);
+    expect(text).toMatch(/Remove this step once HIVE-417 adds a `pull_request` workflow/);
+    expect(text).toMatch(/confidence 60-74/);
   });
   it('the builder fills spec, plan and notes in the intake', () => {
     const step8 = agent('builder').slice(agent('builder').indexOf('8. `ship: yes`'));
