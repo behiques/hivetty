@@ -51,7 +51,7 @@ Every `gh` command carries `--repo <owner>/<repo>`, every `git` command `-C
 On a stage change: write `prs.json`, one `ledger_post` with `meta: { pr,
 repo, stage }`, and fall through in the same wake. A row stops only where it
 waits (CI pending, or `waitingOn` naming `acr`, `fixer` or `reply-to`), with
-one `ledger_post` naming what it waits on. The write that records an answer
+one `ledger_post` naming the stage and what it waits on. The write that records an answer
 clears `waitingOn`. Write `prs.json` whenever a field
 changes, and before any `ledger_ask`, which ends the wake. One merge per wake
 does not end the wake while a row sits at `intake`: run that row to its acr
@@ -67,8 +67,8 @@ consent goes back to `approval`.
 
 An overmind post with `meta.changed` (`owner/repo#N changed: checks running →
 passing`; facets `state`, `checks`, `reviewDecision`, `findings`, `head`,
-`mergeable`) means a PR you hold moved on GitHub: re-run that row's stage check
-in this wake.
+`mergeable`) means the PR at `meta.repo`, `meta.pr` moved on GitHub: re-run
+that row's stage check in this wake.
 
 **Pending-fix check**, first at `findings`, `approval` and `merge`:
 `ledger_read { limit: 0 }`; `claims["<owner>/<repo>#<N> findings"]` held by
