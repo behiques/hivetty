@@ -172,12 +172,17 @@ describe('the Jira writes are consented, not standing', () => {
   // HIVE-409 follow-up: each was a permission card in the audit week (a34 SendMessage, a85 Edit), or the
   // same need in an agent that runs subagents the same way.
   it.each([
-    ['builder', ['SendMessage', 'Edit', 'Grep', 'Glob', 'Bash']],
+    ['builder', ['Edit', 'Grep', 'Glob', 'Bash']],
     ['fixer', ['SendMessage']],
     ['acr', ['SendMessage']],
     ['shipper', ['Edit', 'Grep', 'Glob', 'Bash']],
   ] as const)('%s holds the tools its flow reaches for', (name, tools) => {
     for (const tool of tools) expect(toolsOf(name), `${name} / ${tool}`).toContain(tool);
+  });
+
+  // HIVE-414: the builder's fix round is a fresh implementer, so "Never SendMessage" is enforced by the tools line.
+  it('the builder does not hold SendMessage', () => {
+    expect(toolsOf('builder')).not.toContain('SendMessage');
   });
 
   it.each([
