@@ -205,7 +205,9 @@ The last two rows are one dispatch each, with the two prompt files joined in
 order. The first file collects what the second needs: the earlier feedback, or
 the ticket. That keeps everything in a single wave; nothing waits on a separate
 fetch. Prior findings writes the feedback to `$RUN_DIR/feedback.json` for the
-verifier. Ticket alignment returns the ticket's status alongside its findings. Persisted
+verifier. Ticket alignment also gets `SKILL_DIR=<this skill's base directory>`
+after the preamble, where its prefetch finds the `jira-tracker` script, and
+returns the ticket's status alongside its findings. Persisted
 state returns its findings with a `stateTable`, working evidence that is never
 posted.
 

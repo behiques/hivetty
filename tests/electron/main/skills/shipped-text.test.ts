@@ -222,4 +222,12 @@ describe('the review path (HIVE-416)', () => {
     for (const name of ['bug-scan', 'business-alignment', 'user-pov', 'state-lifecycle'])
       expect(read(`skills/pr-review/prompts/agent-${name}.md`)).toMatch(/`SPEC`, `PLAN`, `NOTES`/);
   });
+  it('prefetch-ticket reads through the jira-tracker script, and no skill names jira-writer', () => {
+    const prefetch = read('skills/pr-review/prompts/prefetch-ticket.md');
+    expect(prefetch).toContain('bash "$JT" get_issue <KEY>');
+    expect(prefetch).toContain('JT="$SKILL_DIR/../jira-tracker/scripts/jira-api-wrapper.sh"');
+    expect(prReview()).toMatch(/Ticket alignment also gets `SKILL_DIR=<this skill's base directory>`/);
+    expect(prefetch).toMatch(/"route": "atlassian-mcp" \| "jira-tracker" \| "hive"/);
+    expect(prefetch).not.toMatch(/jira-writer/);
+  });
 });
