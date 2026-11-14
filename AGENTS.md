@@ -58,7 +58,7 @@ This is **HiveTTY Pro**, a commercial, proprietary app by Behiques Consulting LL
 | `pnpm test:hooks` · `:statusline` · `:skills` · `:codex-plugin` · … (one script per `tests/live/*-conformance.test.ts`) | Live conformance suites against a real `claude`, `codex` or `copilot`, Docker, or the built app (some need a `desktop:build` first). Each is skipped, not failed, when its CLI or credentials are absent; read the test file for what it proves |
 | `pnpm verify:boundaries` | Proves every architecture fence still fires |
 
-The gate, for `hive:verify`, under Node from `.nvmrc`: `pnpm lint`, `pnpm type-check`, `pnpm test` (`pnpm exec vitest run <spec>` for one), `pnpm test:e2e` when behaviour moved or several files did (`pnpm desktop:build` first), a live suite when its subject moved.
+The gate, for `hive:verify`, under Node from `.nvmrc`: `pnpm lint`, `pnpm type-check`, `pnpm test` (`pnpm exec vitest run <spec>` for one), `pnpm test:e2e` when behaviour moved or several files did (`pnpm desktop:build` first), a live suite when its subject moved. The shell is zsh: quote every glob (`--include='*.ts'`). Node is pinned by `.nvmrc`; run `nvm use` once per shell.
 **`pnpm lint` and `pnpm type-check` must both pass before any task is considered
 done.** Neither is optional, and no rule may be disabled inline to make a task pass.
 
@@ -90,11 +90,12 @@ implementation hours inside the review chain. These rules follow from both:
   hours of HIVE-144 against 7.4 for the implementation itself.
 - **Ship's self review is the one whole-branch review**, and the one place the
   deep multi-dimension pass belongs.
-- **Re-split when the plan is wrong about size.** Tasks are builder minutes,
-  about five per TDD task. Two consecutive tasks at twice their estimate: every
-  remaining estimate is wrong, so re-split before the next dispatch. HIVE-144's
-  task 2 came back at forty minutes, its mean was fifty-one, its worst a hundred
-  and four, and nothing re-sized.
+- **A slow task means check the machine first.** Tasks measure a median of about 1 builder minute, nine in ten under 3.
+  Past 10 minutes, a timed-out command or a cut-off reply: check the machine (`execute`); re-split only when the
+  machine is clean and two tasks in a row passed 10 minutes.
+- **The shared checkout stays on the default branch.** Never branch, commit, stash or `git checkout --` in the shared
+  checkout. Any change meant to merge starts with `hive:worktree`, with or without a ticket.
+- **A scope moved between tickets is recorded on both tickets before planning.**
 - **A thirteen-point ticket is more than one PR.** HIVE-144 shipped 100 files and
   15,698 insertions on one branch, a diff no whole-branch review can hold. Split
   it in the plan, not at the merge.
@@ -102,7 +103,7 @@ implementation hours inside the review chain. These rules follow from both:
   questions; the recommended option goes first. Never one question per turn.
 - **Never sleep-poll a subagent.** Its task notification is the wake-up; a
   `sleep N; git log` loop overshoots by up to its own length every time.
-- **The tail runs unattended.** After the reconciliation go-ahead, the flow
+- **The tail runs unattended.** After the design approval, the flow
   pushes, opens the draft PR and asks the shipper in the same turn; a project's
   `autoMerge` flag (Settings › Projects) skips the shipper's approval wait, else it is a card.
 - **A failing e2e spec is re-run alone before it counts as red.** Playwright is
@@ -242,7 +243,8 @@ Fixtures live in `tests/support/`; nothing under `src/` seeds the stores.
 - `tests/` **mirrors** `src/`. A test for `src/features/inbox/components/x.tsx`
   lives at `tests/features/inbox/components/x.test.tsx`. No exceptions — the mirror
   is what makes "is this covered?" answerable by path.
-- **80% coverage** on all four metrics. The gate fails the build; CI runs it.
+- **80% coverage** on all four metrics. No pull-request workflow runs it yet (HIVE-417): `hive:verify` runs it in the
+  build, and the fixer when the shipper asks.
 - Stores are plain functions and the highest-value target: every action gets a
   test against a fresh store (`tests/stores/hive-store.test.ts`).
 - Timer-based behaviour uses **fake timers**, never real waits.

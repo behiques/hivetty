@@ -407,7 +407,10 @@ with `meta.redirectedFrom` naming who it was for; the card captions it. At
 **session end** (not on a restart, which passes through the same funnel and is
 not an ending), `settleExit` fires `onEnded`, and main re-surfaces every ask
 still open on that terminal as an overmind `event` on the ask's own thread
-(`meta.redirected`), once per ask with the log as the dedup. The notifier
+(`meta.redirected`), once per ask with the log as the dedup. The same moment
+releases every claim the session still holds (HIVE-415, `session-ended.ts`):
+one overmind `release` per task, `meta.releasedFrom` naming the session, with
+`claims()` as the dedup, so a claim since taken by another party stays. The notifier
 raises the **ask's own card, keyed on the ask's id**, presented as the ask
 would have been had it been addressed to the overmind, so the answer goes into
 the original thread and wakes the asker, and the mark-read, dismiss and expiry
@@ -1525,8 +1528,8 @@ standing grants every agent holds.
 Three tools (HIVE-174), and a fourth (HIVE-216), over the Jira integration the Work tab already uses,
 through the token the app holds. An agent, or a container, reads and writes
 tickets with nothing on its PATH and no Atlassian credential in its
-environment; the skills prefer them and fall back to `jira-writer` where they
-are absent.
+environment; the skills prefer them and fall back to the `jira-tracker` skill's
+scripts where they are absent.
 
 `jira_get { key }` answers the issue (`JiraIssue`), its description and parent
 (`JiraIssueDetail`, a new read on the integration: its own field list, so the

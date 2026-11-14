@@ -307,6 +307,7 @@ import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
 import { prOpenedEntry } from '../ledger/pr-opened';
 import { createPermissionReminder } from '../ledger/reminders';
+import { releaseClaimsOf } from '../ledger/session-ended';
 import { shipStatus } from '../ledger/ship-status';
 import { ACCOUNT_CALLS, hostLicence, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
 import { cliEntitled } from '../licence/entitled';
@@ -3414,8 +3415,12 @@ export function registerIpcHandlers(
       // Claude can come up believing it is 80×24; a SIGWINCH now makes it look.
       sessions?.refresh(entityId);
     },
+    // HIVE-415: whatever it claimed is released for the next party (first: it never throws).
     // HIVE-167: the asks that were waiting on this terminal go to the inbox.
-    onEnded: (entityId) => redirectOpenAsks(entityId),
+    onEnded: (entityId) => {
+      releaseClaimsOf(ledger, entityId);
+      redirectOpenAsks(entityId);
+    },
     /*
       A resumed session's plan is back (HIVE-201 follow-up): the day's build
       progress goes onto it from the ledger, the same replay `notify` makes on

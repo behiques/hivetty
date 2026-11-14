@@ -100,3 +100,82 @@ describe('one copy of each shared rule (HIVE-413 PR 2)', () => {
     for (const text of [tdd, execute]) expect(text).not.toContain('NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST');
   });
 });
+
+describe('the session skills (HIVE-415)', () => {
+  const workOn = () => read('skills/work-on/SKILL.md');
+  it('work-on names jira-tracker, stops only when a decision is needed, and has no timer', () => {
+    expect(workOn()).not.toMatch(/jira-writer|Two stops|30 minutes/);
+    expect(workOn()).toMatch(/jira-tracker/);
+    expect(workOn()).toMatch(/only when the reconciliation needs a decision/);
+  });
+  it('work-on answers operational builder questions and reports failed, blocked and refused', () => {
+    expect(workOn()).toMatch(/An operational question \(a missing service, a tool, a path, which gate runs where\) is yours/);
+    expect(workOn()).toMatch(/`failed:` or `blocked:`/);
+    expect(workOn()).toMatch(/never re-post the ask unchanged/);
+    expect(workOn()).toMatch(/meta\.refused/);
+  });
+  it('work-on build ask carries absolute paths and every new field', () => {
+    for (const field of ['base:', 'pr-title:', 'verify:', 'env:', 'part:', 'closes-ticket:', 'overlaps:'])
+      expect(workOn()).toContain(`    ${field}`);
+    expect(workOn()).toMatch(/plan: \/abs\/path\/to\/checkout\/\.hive\/plans\//);
+    expect(workOn()).toMatch(/gh pr list --state open/);
+  });
+  it('work-on includes the intake, checks before it asks, and keeps a state file', () => {
+    expect(workOn()).toContain('{{include:ship-intake}}');
+    expect(workOn()).not.toMatch(/see\s+`ship`\s+for the intake/);
+    expect(workOn()).toMatch(/\.hive\/plans\/<slug>\.state\.md/);
+    expect(workOn()).toMatch(/Load \{\{skill:verify\}\} now \(in Claude Code, call the Skill tool\); do not run\s+the gate from memory\./);
+    expect(workOn()).toMatch(/UI not driven/);
+    expect(workOn()).toMatch(/is written to that ticket as an UPDATED SPECS comment in the same\s+turn, before planning/);
+    const steps = workOn().slice(workOn().indexOf('**5. Dispatch.**'));
+    expect(steps.indexOf('{{tool:projects}}')).toBeLessThan(steps.indexOf('ledger_ask\n  to: builder'));
+  });
+  const goalOn = () => read('skills/goal-on/SKILL.md');
+  it('goal-on always uses a worktree and includes the intake', () => {
+    expect(goalOn()).not.toMatch(/workspace: current|workspace:|intake shape from/);
+    expect(goalOn()).toContain('{{include:ship-intake}}');
+    expect(goalOn()).toMatch(/invoke \{\{skill:verify\}\} \(in Claude Code, the Skill tool\)/);
+  });
+  it('goal-on resumes from the brief, keeps gates in the foreground and edits the brief with Edit', () => {
+    const one = (text: string) => text.replace(/\s+/g, ' ');
+    expect(one(goalOn())).toContain(
+      "Any turn that starts without this skill's text above it (a compaction, a resume): read the brief, then continue from the first unticked Outcome item.",
+    );
+    expect(one(goalOn())).toContain('Run the gates in the foreground. Never end a turn while a gate is running in the background: the hook will block and spend a turn.');
+    expect(one(goalOn())).toContain('Edit the brief with `Edit`, never `Write`: the verifier stamps it between your turns.');
+    expect(one(goalOn())).toContain('A reply that changes the brief is not approval. Amend, present the change, wait.');
+    expect(one(goalOn())).toContain('One goal per session. When the shipper has the PR, run `/done`. A follow-up is a new session.');
+  });
+  const brainstorm = () => read('skills/brainstorm/SKILL.md').replace(/\s+/g, ' ');
+  it('brainstorm reviews a bounded risk-surface change, mocks inside the shell and builds the sibling first', () => {
+    expect(brainstorm()).toMatch(/If the change touches a risk surface \(the `\{\{skill:plan\}\}` list: auth, a credential, a token, a wire format, concurrency, money, a security predicate\), dispatch one task-reviewer/);
+    expect(brainstorm()).toMatch(/inside the existing shell, at real widths and with real values/);
+    expect(brainstorm()).toMatch(/the recommended option is "build the sibling first"/);
+    expect(brainstorm()).toMatch(/No question in a batch depends on another question in the same batch/);
+    expect(brainstorm()).toContain('{{skill:tdd}}');
+  });
+  it('spec-deviation writes through jira-tracker, session only, with one confirmation', () => {
+    const text = read('skills/spec-deviation/SKILL.md');
+    expect(text.replace(/\s+/g, ' ')).toMatch(/With HiveTTY's Jira tools loaded, never probe for the retired Jira writer skill\./);
+    expect(text).not.toMatch(/jira-writer/);
+    expect(text).toMatch(/jira-tracker/);
+    expect(text.replace(/\s+/g, ' ')).toMatch(/Session only, never an agent\./);
+    expect(text.replace(/\s+/g, ' ')).toMatch(/One confirmation covers the ticket and its downstream edits together/);
+  });
+  it('worktree puts an agent tree under its own working directory and installs from the lockfile', () => {
+    const text = read('skills/worktree/SKILL.md');
+    const one = text.replace(/\s+/g, ' ');
+    expect(text).not.toMatch(/\.hivetty\/work/);
+    expect(one).toMatch(/hivetty: `pnpm install --frozen-lockfile --offline`/);
+    expect(one).toMatch(/never a `node_modules` symlink, which leaves the tree dirty and the shipper will not merge/);
+    expect(one).toMatch(/run each `git` command alone, not chained with `&&` or `;`: the isolation guard refuses compound commands/);
+  });
+  it('the builder reads every field work-on writes into the build ask', () => {
+    const builder = agent('builder');
+    const parse = builder.slice(builder.indexOf('1. `ledger_read`'), builder.indexOf('2. `ledger_claim'));
+    for (const field of ['base', 'pr-title', 'verify', 'env', 'part', 'overlaps', 'closes-ticket'])
+      expect(parse).toContain(`\`${field}\``);
+    expect(builder.replace(/\s+/g, ' ')).toMatch(/`after #N` reads as origin\/<default>/);
+    expect(builder.replace(/\s+/g, ' ')).toMatch(/`pr-title` when the ask gives one/);
+  });
+});

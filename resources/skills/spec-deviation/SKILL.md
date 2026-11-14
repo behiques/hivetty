@@ -5,7 +5,7 @@ description: >-
   the plan diverged from the ticket, or the user says "update the ticket with the deviation", "add
   UPDATED SPECS", or "update the downstream tickets". Writes the deviation into the PR body, appends
   UPDATED SPECS to the ticket, and proposes edits to the downstream tickets for confirmation before
-  writing them.
+  writing them. Session only, never an agent.
 ---
 
 # Spec deviation
@@ -19,8 +19,11 @@ discovers a deviation mid-build it does not run this skill; it asks its
 `reply-to` party with the statement and continues on the answer, and the
 person runs `{{skill:spec-deviation}}` when the tickets should be updated.
 
-Every Jira write goes through `jira-writer` (the Atlassian MCP tools when it
-is not installed); never raw REST. Workspace-agnostic: nothing here touches a
+Every Jira write goes through the `jira-tracker` skill: with HiveTTY's Jira
+tools loaded, `{{tool:jira_comment}}` for a plain comment and the skill's
+scripts for the description append; the Atlassian MCP tools only when neither
+is there; never raw REST. With HiveTTY's Jira tools loaded, never probe for
+the retired Jira writer skill. Workspace-agnostic: nothing here touches a
 branch.
 
 ## Steps
@@ -33,21 +36,24 @@ branch.
    repos/<owner>/<repo>/pulls/<N> -X PATCH --input -` (`gh pr edit` needs
    token scopes a `gh` login may not hold; the API call does not).
 3. **The ticket.** Append a section titled `UPDATED SPECS` with the statement,
-   the date and the PR link: `jira-writer update_issue <KEY> '{}' --desc-file
-   <file> --append`. Never rewrite the original description.
+   the date and the PR link: the `jira-tracker` skill's `update_issue <KEY> '{}'
+   --desc-file <file> --append`. Never rewrite the original description.
+   Prepare it here; it is written in step 4, with the downstream edits.
 4. **Downstream.** Fetch the Epic's not-Done stories and every issue linked to
    this one. In Jira's API `inwardIssue` is the blocker and `outwardIssue` the
    blocked, the reverse of how it reads; check against the rendered ticket.
    One subagent, a cheaper model, reads the candidates and flags which rely on
-   the changed assumption. **Present the list and the proposed edits, and
-   wait for confirmation before writing.** Then apply the same `UPDATED SPECS`
-   append to each confirmed ticket.
+   the changed assumption. **Present this ticket's append and the downstream
+   list with its proposed edits together, and wait for confirmation before
+   writing any of them.** One confirmation covers the ticket and its
+   downstream edits together. Then write this ticket's `UPDATED SPECS` and
+   the same append to each confirmed downstream ticket.
 5. **Report.** The statement, and every ticket and PR updated, with links.
 
 ## Formatting
 
-ADF through jira-writer: the `code` mark is exclusive, and a fence needs a
-language tag. `gh` bodies through `--body-file - <<'EOF'`, backticks plain.
+ADF through the `jira-tracker` skill: the `code` mark is exclusive, and a
+fence needs a language tag. `gh` bodies through `--body-file - <<'EOF'`, backticks plain.
 
 ## Red flags
 
