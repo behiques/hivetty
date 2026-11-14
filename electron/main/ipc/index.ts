@@ -301,6 +301,7 @@ import {
   type SubscribableAgent,
 } from '../integrations/slack/subscriptions';
 import { createSlackTokens } from '../integrations/slack/tokens';
+import { keepAwake } from '../keep-awake';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
@@ -3001,18 +3002,12 @@ export function registerIpcHandlers(
     } satisfies AgentStatusPush);
   };
 
-  /** The blocker held while any agent run is live (HIVE-408). Server mode's own is separate. */
-  let runBlocker: number | null = null;
+  /** Keeps the Mac awake while any agent run is live (HIVE-408). Server mode's own blocker is separate. */
+  let runAwake: ((live: boolean) => void) | undefined;
 
   runs = createRunTracker({
-    onLive: (live) => {
-      // shortcut: one blocker for every agent run, not per run; enough while runs are the only reason.
-      if (live && runBlocker === null) runBlocker = powerSaveBlocker.start('prevent-app-suspension');
-      else if (!live && runBlocker !== null) {
-        powerSaveBlocker.stop(runBlocker);
-        runBlocker = null;
-      }
-    },
+    // Built on first use: the ipc suites' `electron` mocks have no `powerSaveBlocker`, and reading a missing export throws.
+    onLive: (live) => (runAwake ??= keepAwake(powerSaveBlocker))(live),
     /*
       `spawn` is injected rather than imported by `runs.ts`, which is what lets
       that module's tests drive a recording fake without a real process. The

@@ -311,34 +311,63 @@ describe('acceptedLanes (HIVE-410)', () => {
 
 describe('askRefusal (HIVE-412)', () => {
   it('lets any party start work when the agent names no asks_from', () => {
-    expect(askRefusal(AGENT, undefined, entry({ from: 'acr' }))).toBeUndefined();
+    expect(askRefusal(AGENT, undefined, entry({ from: 'acr' }), [])).toBeUndefined();
   });
 
   it('refuses a new ask from a party the list does not name, naming who may ask', () => {
-    expect(askRefusal(AGENT, ['sess-*', 'builder'], entry({ from: 'acr' }))).toBe(
+    expect(askRefusal(AGENT, ['sess-*', 'builder'], entry({ from: 'acr' }), [])).toBe(
       'pr-reviewer does not take asks from acr; it takes them from sess-*, builder and overmind.',
     );
   });
 
   it('admits a listed party, and any session under sess-*', () => {
-    expect(askRefusal(AGENT, ['sess-*', 'builder'], entry({ from: 'builder' }))).toBeUndefined();
-    expect(askRefusal(AGENT, ['sess-*'], entry({ from: 'sess-3f2' }))).toBeUndefined();
-    expect(askRefusal(AGENT, ['builder'], entry({ from: 'sess-3f2' }))).toBeDefined();
+    expect(askRefusal(AGENT, ['sess-*', 'builder'], entry({ from: 'builder' }), [])).toBeUndefined();
+    expect(askRefusal(AGENT, ['sess-*'], entry({ from: 'sess-3f2' }), [])).toBeUndefined();
+    expect(askRefusal(AGENT, ['builder'], entry({ from: 'sess-3f2' }), [])).toBeDefined();
   });
 
   it('always admits the overmind and the agent itself', () => {
-    expect(askRefusal(AGENT, [], entry({ from: 'overmind' }))).toBeUndefined();
-    expect(askRefusal(AGENT, [], entry({ from: AGENT }))).toBeUndefined();
+    expect(askRefusal(AGENT, [], entry({ from: 'overmind' }), [])).toBeUndefined();
+    expect(askRefusal(AGENT, [], entry({ from: AGENT }), [])).toBeUndefined();
   });
 
-  it('never filters a thread entry or anything but an ask', () => {
-    expect(askRefusal(AGENT, [], entry({ from: 'acr', thread: 'k1' }))).toBeUndefined();
-    expect(askRefusal(AGENT, [], entry({ from: 'acr', kind: 'answer', thread: 'k1' }))).toBeUndefined();
-    expect(askRefusal(AGENT, [], entry({ from: 'acr', kind: 'post' }))).toBeUndefined();
+  it('never filters an answer or a post', () => {
+    expect(askRefusal(AGENT, [], entry({ from: 'acr', kind: 'answer', thread: 'k1' }), [])).toBeUndefined();
+    expect(askRefusal(AGENT, [], entry({ from: 'acr', kind: 'post' }), [])).toBeUndefined();
+  });
+
+  it('admits a threaded ask on a thread the agent or the overmind opened', () => {
+    const mine = entry({ id: 'k1', from: AGENT, to: 'acr', kind: 'ask' });
+    const overminds = entry({ id: 'k4', from: 'overmind', to: 'builder', kind: 'ask' });
+
+    expect(askRefusal(AGENT, [], entry({ from: 'acr', thread: 'k1' }), [mine, overminds])).toBeUndefined();
+    expect(askRefusal(AGENT, [], entry({ from: 'acr', thread: 'k4' }), [mine, overminds])).toBeUndefined();
+  });
+
+  it('admits a threaded ask on a thread opened to the agent by a party the list admits', () => {
+    const toMe = entry({ id: 'k2', from: 'sess-1', to: AGENT, kind: 'ask' });
+
+    expect(askRefusal(AGENT, ['sess-*'], entry({ from: 'acr', thread: 'k2' }), [toMe])).toBeUndefined();
+  });
+
+  it('filters a threaded ask on a thread its unlisted sender opened to the agent itself', () => {
+    const selfRooted = entry({ id: 'k5', from: 'acr', to: AGENT, kind: 'ask' });
+
+    expect(askRefusal(AGENT, ['sess-*'], entry({ from: 'acr', thread: 'k5' }), [selfRooted])).toBe(
+      'pr-reviewer does not take asks from acr; it takes them from sess-* and overmind.',
+    );
+  });
+
+  it('filters a threaded ask on a thread the agent is not a party to, or one the log does not hold', () => {
+    const theirs = entry({ id: 'k3', from: 'sess-1', to: 'builder', kind: 'ask' });
+    const refusal = 'pr-reviewer does not take asks from acr; it takes them from overmind.';
+
+    expect(askRefusal(AGENT, [], entry({ from: 'acr', thread: 'k3' }), [theirs])).toBe(refusal);
+    expect(askRefusal(AGENT, [], entry({ from: 'acr', thread: 'gone' }), [theirs])).toBe(refusal);
   });
 
   it('names only the overmind when the list is empty', () => {
-    expect(askRefusal(AGENT, [], entry({ from: 'acr' }))).toBe(
+    expect(askRefusal(AGENT, [], entry({ from: 'acr' }), [])).toBe(
       'pr-reviewer does not take asks from acr; it takes them from overmind.',
     );
   });

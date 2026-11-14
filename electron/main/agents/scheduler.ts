@@ -845,10 +845,11 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       const schedule = listed.get(name);
 
       /*
-        A repo agent's standing lane only routes (HIVE-408): its work is on its repo lanes, which keep
-        their own clock below. Ledger wakes still reach it.
+        A repo agent's standing lane only routes (HIVE-408): its interval work is on its repo lanes, which keep
+        their own clock below. A calendar-only one has no repo-lane clock, so its `wake.at` times wake the
+        standing lane (HIVE-412). Ledger wakes still reach it.
       */
-      if (deps.laneOf?.(name) === 'repo') {
+      if (deps.laneOf?.(name) === 'repo' && schedule?.wake.everyMs !== undefined) {
         arm(name, agent.nextRunAt, undefined);
         continue;
       }
@@ -1132,7 +1133,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   /** Refusals the asker is told about: the ones that do not end on their own (HIVE-408). */
   const TOLD: ReadonlySet<string> = new Set(['budget', 'cli', 'invalid']);
   /**
-   * `<ask id> <reason>` told this session, beside the log's own record, so a retry each minute says it once.
+   * `<ask id> <reason>[ hold]` told this session, beside the log's own record, so a retry each minute says it once.
    * shortcut: never pruned; one short string per refused ask per reason, cleared by an app restart. Prune on ask close if it ever shows.
    */
   const told = new Set<string>();
@@ -1149,19 +1150,24 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     // pushed from here, the panel would read `queued: 0` for a refusal with entries waiting.
     if (!TOLD.has(started.refused)) return;
 
-    const asks = items.filter((item) => item.kind === 'ask' && !told.has(`${item.id} ${started.refused}`));
+    // A hold ends when a live run does, a spent day at midnight: a hold then a spent day is two notes (HIVE-412).
+    const hold = started.hold === true;
+    const tag = hold ? `${started.refused} hold` : started.refused;
+    const asks = items.filter((item) => item.kind === 'ask' && !told.has(`${item.id} ${tag}`));
     if (asks.length === 0) return;
 
     const log = deps.ledger.read().entries;
     for (const item of asks) {
-      const key = `${item.id} ${started.refused}`;
+      const key = `${item.id} ${tag}`;
       told.add(key);
-      if (log.some((e) => e.thread === item.id && e.meta?.['refused'] === started.refused)) continue;
+      if (log.some((e) => e.thread === item.id && e.meta?.['refused'] === started.refused && (e.meta?.['hold'] === true) === hold)) {
+        continue;
+      }
 
       const ref = item.ref ?? item.id;
       const body =
         started.refused === 'budget'
-          ? `${name} is out of budget until midnight; ${ref} is queued`
+          ? `${name} is out of budget until ${hold ? 'a live run ends' : 'midnight'}; ${ref} is queued`
           : `${name} cannot wake: ${started.reason ?? started.refused}; ${ref} is queued`;
       const written = deps.ledger.append({
         from: OVERMIND,
@@ -1169,7 +1175,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         kind: 'post',
         thread: item.id,
         body,
-        meta: { refused: started.refused, agent: name },
+        meta: { refused: started.refused, agent: name, ...(hold ? { hold: true } : {}) },
       });
       if (!written.ok) {
         told.delete(key);
@@ -1430,7 +1436,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
    */
   const deliver = (to: string, item: LedgerEntry, entries: readonly LedgerEntry[]): void => {
     // A sender `asks_from:` does not name is answered at once, on the path a lane refusal takes (HIVE-412).
-    const refused = askRefusal(to, deps.asksFrom?.(to), item);
+    const refused = askRefusal(to, deps.asksFrom?.(to), item, entries);
     const routed = refused === undefined ? laneFor(deps.laneOf?.(to), item, entries) : { refuse: refused };
 
     if ('refuse' in routed) {

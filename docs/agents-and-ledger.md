@@ -561,10 +561,13 @@ main log once per reason; the queue waits for the next minute.
 **The asker is told, since HIVE-408.** A refusal that does not end on its own
 (`budget`, `cli`, `invalid`) on a wake an `ask` caused posts one note on that
 ask's thread, from the overmind to the asker: "<agent> is out of budget until
-midnight; a26 is queued", or "<agent> cannot wake: <reason>; a26 is queued". It
-is a `post`, not an `answer`, so the ask stays open and the queued wake still
-answers it. One note per ask per reason, deduped from the log, so a restart does
-not repeat it. The lane records the reason as `refused` until a run starts on it.
+a live run ends; a26 is queued" while live runs hold the rest of the day's
+budget (`meta.hold: true`, since HIVE-412), "<agent> is out of budget until
+midnight; a26 is queued" when the day is spent, or "<agent> cannot wake:
+<reason>; a26 is queued". It is a `post`, not an `answer`, so the ask stays
+open and the queued wake still answers it. One note per ask per reason and
+hold, deduped from the log, so a restart does not repeat it and a hold followed
+by a spent day says both. The lane records the reason as `refused` until a run starts on it.
 
 `stop()` sets a flag that every entry point honours, not just the interval. Both
 teardowns call it **before** `RunTracker.closeAll`, which finalizes each live run
@@ -612,7 +615,9 @@ the reason. A thread lane closes when its opening ask is answered, done,
 failed or expired, and later entries in that thread go to standing. Each lane
 has its own queue: a run close drains standing first, then the other lanes, and
 stops at the first `saturated`. A repo lane ticks on `wake.every` while it
-holds an open claim, and has no clock otherwise. Two limits remain. The
+holds an open claim, and has no clock otherwise; the agent's standing lane
+then has no interval clock either. A repo agent with only `wake.at` has no
+repo-lane clock, so its times wake the standing lane (HIVE-412). Two limits remain. The
 `onchange` watermark and the Next tile read the standing lane's `lastRunAt`,
 and the standing tick still skips while the agent's rollup is not `sleeping`
 or `failed`. Both err toward a late or an extra standing wake, never a lost
@@ -1742,11 +1747,15 @@ The Mechanism column is Claude Code's (the adapter's `headless.ts`); every CLI's
 ### `asks_from:` — who may start work (HIVE-412)
 
 A list of party ids, plus `sess-*` for any terminal session. In `deliver`,
-before `laneFor`, a new ask (no thread) from a sender the list does not name is
-answered at once by the overmind on the ask's thread:
+before `laneFor`, an ask from a sender the list does not name is answered at
+once by the overmind on the ask's thread:
 `<agent> does not take asks from <from>; it takes them from <list> and overmind.`
 The overmind and the agent itself are always admitted (a standing lane hands
-work to a lane with a self-addressed ask); thread entries are never filtered.
+work to a lane with a self-addressed ask). A threaded ask passes only on a
+thread the agent is a party to: the entry it names was written by the agent or
+the overmind, or was addressed to the agent by a sender the list admits. An
+unlisted sender cannot open a thread on its own refused ask and follow up on
+it. Answers and posts always pass.
 Absent means any party; `[]` means only the overmind and itself. An unknown name
 is accepted, since peers come and go; a wildcard other than `sess-*` is a parse
 problem. The shipper ships `[sess-*, builder]` and the fixer `[shipper, sess-*]`;
