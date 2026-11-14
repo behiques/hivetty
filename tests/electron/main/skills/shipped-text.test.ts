@@ -179,3 +179,17 @@ describe('the session skills (HIVE-415)', () => {
     expect(builder.replace(/\s+/g, ' ')).toMatch(/`pr-title` when the ask gives one/);
   });
 });
+
+describe('the review path (HIVE-416)', () => {
+  const one = (text: string) => text.replace(/\s+/g, ' ');
+  const scorer = () => read('skills/pr-review/prompts/confidence-scorer.md');
+  it('the verifier returns confidence and severity, never one score', () => {
+    expect(scorer()).not.toMatch(/"score"/);
+    expect(scorer()).toMatch(/"confidence": <number 0-100>, "severity": "block" \| "should_fix" \| "minor"/);
+    expect(one(scorer())).toContain(
+      'A reproduced bypass of a security, licence or consent check is block however obscure the input.',
+    );
+    expect(one(scorer())).toContain('How often it happens belongs here, never in confidence.');
+    expect(one(scorer())).toMatch(/75 or above only when you read the source and can name the input, state or timing that triggers it/);
+  });
+});
