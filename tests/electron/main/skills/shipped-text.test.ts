@@ -216,6 +216,9 @@ describe('the review path (HIVE-416)', () => {
     expect(text).toMatch(/never fall back to a working tree/);
     expect(text).toContain('`SPEC=<abs path> PLAN=<abs path> NOTES=<abs path>`');
     expect(text).toContain('the last thing the skill writes');
+    expect(text).toMatch(/The bug scan and its per-directory scans are one reviewer here and in step 5/);
+    expect(text).toMatch(/When `DIRS` has one group the slice is the whole diff: dispatch no per-directory scan/);
+    expect(text).toMatch(/In self mode the outcome is `findings` when any finding, verified-minor or borderline item survives/);
     for (const name of ['bug-scan', 'business-alignment', 'user-pov', 'state-lifecycle'])
       expect(read(`skills/pr-review/prompts/agent-${name}.md`)).toMatch(/`SPEC`, `PLAN`, `NOTES`/);
   });

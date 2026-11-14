@@ -87,8 +87,8 @@ diff, and prints one JSON line:
   `--self <pr>`. With plain `--self` the head is the snapshot. The diff is then
   the whole branch, every commit since it left `main`, plus uncommitted and
   untracked work. It is never only the uncommitted part.
-- `workspaceHead` is the commit your checkout sits on (in review mode, the PR
-  head). `changedFiles` counts the files changed from `baseSha` to that commit,
+- `workspaceHead` is the commit the checkout sits on (in review mode and with
+  `--self <pr>`, the PR head). `changedFiles` counts the files changed from `baseSha` to that commit,
   nothing left out, so it equals the PR's own `changedFiles`. `uncommittedFiles`
   counts what the snapshot adds on top.
 
@@ -130,7 +130,7 @@ agent dispatched only to find out it has nothing to do is pure cost.
 | `UI` | any changed path ends in `.tsx .jsx .vue .svelte .css .scss .html` | user POV |
 | `RUNTIME` | any changed path is source code (`.ts .js .py .go .rb .java .cs .rs .kt .swift .php` and the like) that is not a test (`test/`, `tests/`, `__tests__/`, `*.test.*`, `*.spec.*`) | performance |
 | `ACR_CLI` | `command -v acr` succeeds | the ACR reviewer |
-| `TICKET_KEY` | a `[A-Z][A-Z0-9]+-\d+` token in the PR title, the branch, or the description (in self mode: the branch and its commit subjects) | ticket alignment |
+| `TICKET_KEY` | a `[A-Z][A-Z0-9]+-\d+` token in the PR title, the branch, or the description (with plain `--self`: the branch and its commit subjects) | ticket alignment |
 | `FEEDBACK` | a PR exists and any of these is non-zero: `gh api "repos/$SLUG/pulls/$PR/reviews?per_page=1" --jq length`, the same for `pulls/$PR/comments` and `issues/$PR/comments` | prior findings |
 | `STATE` | read the diff: a changed line reads, compares, branches on or writes a stored status, state, phase or enum value (a database column, a stored record, a queue message, a checkpoint, cursor or watermark), or changes a scheduled job, worker, queue consumer, lease, lock or retry loop that writes one. When unsure, true | persisted state |
 | `FIX_COMMITS` | a PR exists: the commits made after its first review (below). Otherwise `none` | bug scan, persisted state, the verifier |
@@ -194,9 +194,11 @@ runs at once.
 | Ticket alignment | `prefetch-ticket.md` then `agent-business-alignment.md` | sonnet | `TICKET_KEY`, any tier |
 
 A per-directory bug scan reads its slice, written before the wave with
-`git -C "$REVIEW_DIR" diff <baseSha>...<head> -- <dir>/ > "$RUN_DIR/review-<dir>.diff"`
-(the root group: the root's changed files by name), and its preamble's
-`DIFF_PATH` names that file. One bug scan over a 1,500-line diff returns about
+`git -C "$REVIEW_DIR" diff --find-renames <baseSha>...<head> -- <dir>/ > "$RUN_DIR/review-<dir>.diff"`
+(the root group: the root's changed files by name, into `review-root.diff`),
+and its preamble's `DIFF_PATH` names that file. When `DIRS` has one group the
+slice is the whole diff: dispatch no per-directory scan. Outside the deep tier
+the row is not listed in `skipped`. One bug scan over a 1,500-line diff returns about
 seven candidates; four over its slices return what the diff holds.
 
 The last two rows are one dispatch each, with the two prompt files joined in
@@ -211,7 +213,7 @@ For each dispatch, put the prompt text first, followed by this preamble:
 
 ```
 MODE=review|self   REVIEW_DIR=<abs path>   OWNER/NAME=<slug>   PR=<n or none>   BASE_REF=<base>   BASE_SHA=<sha>   RUN_DIR=<abs path>
-PR title and description: <verbatim, or the branch's commit subjects in self mode>
+PR title and description: <verbatim, or the branch's commit subjects with plain --self and no PR>
 DIFF_PATH=<RUN_DIR>/review.diff — scope your scan to this diff; read any file in REVIEW_DIR to cite or trace.
 FIX_COMMITS=<space-separated shas, or none> — code pushed in reply to earlier review.
 SPEC=<abs path or none>   PLAN=<abs path or none>   NOTES=<abs path or none> — read each one given. The spec and plan say what was
@@ -288,7 +290,9 @@ line into Stage 4: "Ticket `KEY` could not be read — scope not checked
    confidence, and never withhold an approval. A false alarm costs a minute
    to dismiss, and a
    miss on someone else's PR costs an incident, not a review round.
-   Borderline and verified-minor findings still go through steps 3 and 4.
+   Borderline findings still go through steps 3 and 4. A verified-minor
+   finding is dropped there only when it lacks an exact file, line and
+   snippet; being small is what its list is for.
 3. **Must-exclude.** Drop:
    - nitpicks with no realistic trigger
    - anything without an exact file, line and snippet
@@ -303,7 +307,9 @@ line into Stage 4: "Ticket `KEY` could not be read — scope not checked
 6. **Severity** is the verifier's: `block` is **Block**, `should_fix` is
    **Should Fix**, and `minor` is **Note** in review mode and the verified-minor
    list in self mode. Promote a finding one tier when two or more reviewers
-   raised it independently; a promoted `minor` is a Should Fix.
+   raised it independently; a promoted `minor` is a Should Fix. The bug scan
+   and its per-directory scans are one reviewer here and in step 5: the same
+   prompt over overlapping diffs is not independent agreement.
 
 No findings at all: skip the verifier. A prior finding keeps its `priorStatus`
 and `priorUrl` through all of this. The ticket's `scope` is not a finding, so it
@@ -369,8 +375,13 @@ calling agent then reports as its own instructions say, branching on it:
 
 `counts.note` is review mode's `minor` findings and is 0 in self mode;
 `counts.verified_minor` is self mode's and is 0 in review mode. `borderline`
-counts the 60-74 band in both. `context` holds the paths that were read, `null`
-for one not given, and `unread` lists any given and not readable.
+counts the 60-74 band in both. `context` holds the paths that were read; one
+not given, or given and not readable, is `null`, and `unread` lists the latter
+with the reason.
+
+In self mode the outcome is `findings` when any finding, verified-minor or
+borderline item survives, and `clean` only when none does. `headline` then
+names the most severe of them, a verified-minor included.
 
 `repo`, `head_sha` and `files_changed` let a caller prove the review saw the
 right target: `head_sha` is the checkout's commit, and `files_changed` equals
