@@ -146,4 +146,12 @@ describe('the session skills (HIVE-415)', () => {
     expect(one(goalOn())).toContain('A reply that changes the brief is not approval. Amend, present the change, wait.');
     expect(one(goalOn())).toContain('One goal per session. When the shipper has the PR, run `/done`. A follow-up is a new session.');
   });
+  const brainstorm = () => read('skills/brainstorm/SKILL.md').replace(/\s+/g, ' ');
+  it('brainstorm reviews a bounded risk-surface change, mocks inside the shell and builds the sibling first', () => {
+    expect(brainstorm()).toMatch(/If the change touches a risk surface \(the `\{\{skill:plan\}\}` list: auth, a credential, a token, a wire format, concurrency, money, a security predicate\), dispatch one task-reviewer/);
+    expect(brainstorm()).toMatch(/inside the existing shell, at real widths and with real values/);
+    expect(brainstorm()).toMatch(/the recommended option is "build the sibling first"/);
+    expect(brainstorm()).toMatch(/No question in a batch depends on another question in the same batch/);
+    expect(brainstorm()).toContain('{{skill:tdd}}');
+  });
 });

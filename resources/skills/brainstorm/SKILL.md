@@ -43,7 +43,11 @@ way: complexity found mid-task upgrades the path; nothing downgrades.
 3. Present the design in chat: approach, files touched, how it is tested.
 4. STOP and wait for an explicit yes. Presenting and starting in one breath is
    skipping the gate.
-5. Implement with `{{skill:tdd}}`; no plan document.
+5. Implement with `{{skill:tdd}}`; no plan document. If the change touches a
+   risk surface (the `{{skill:plan}}` list: auth, a credential, a token, a
+   wire format, concurrency, money, a security predicate), dispatch one
+   task-reviewer (`execute`'s `prompts/task-reviewer.md`) on the finished diff
+   before `verify`.
 
 ## Architectural
 
@@ -57,7 +61,10 @@ way: complexity found mid-task upgrades the path; nothing downgrades.
    every decision the design needs before asking any. A second call only when
    an answer changes what the next question is. (This is HiveTTY's rule and
    it replaces "one question at a time": every serial question parks the
-   session for the same information one call gathers.)
+   session for the same information one call gathers.) No question in a
+   batch depends on another question in the same batch. When the missing
+   piece is a To Do sibling ticket, the recommended option is "build the
+   sibling first", not "build it here".
 4. **Two or three approaches**, trade-offs, your recommendation first, YAGNI
    applied to each.
 5. **The design, whole,** in sections scaled to their weight: architecture,
@@ -67,7 +74,10 @@ way: complexity found mid-task upgrades the path; nothing downgrades.
 6. **A UI surface** gets one browser-rendered HTML mockup of the recommended
    design through the Artifact tool. Variants, two or three, only for a
    surface the app has no pattern for, or on request. Never ASCII. Show them
-   before any code.
+   before any code. The mock shows the new thing inside the existing shell,
+   at real widths and with real values (the app's nav and panes around it,
+   not the new page alone), and it gets its own stop: the person approves the
+   mock before the design is written around it.
 7. **Write the spec** to `<repo>/.hive/specs/YYYY-MM-DD-<topic>.md`. `.hive/`
    is a working folder, not history: if `<repo>/.hive/.gitignore` does not
    exist, write it with the single line `*`.
