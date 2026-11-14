@@ -192,4 +192,31 @@ describe('the review path (HIVE-416)', () => {
     expect(one(scorer())).toContain('How often it happens belongs here, never in confidence.');
     expect(one(scorer())).toMatch(/75 or above only when you read the source and can name the input, state or timing that triggers it/);
   });
+  const prReview = () => read('skills/pr-review/SKILL.md');
+  it('pr-review keeps verified minor findings and has one borderline band', () => {
+    expect(prReview()).not.toMatch(/60–79|60-79|always the full tier|keep editing|`command -v acr` succeeds \| ACR \|/);
+    expect(one(prReview())).toContain(
+      'Drop anything with confidence below 60. Confidence 60-74 is borderline. Confidence 75 or above is a finding at the verifier\'s severity; in self mode `minor` findings come back in their own list, "verified, minor", and are never dropped. Self mode has no reader to tire: the caller is a fixer.',
+    );
+    expect(prReview()).toMatch(/"verified_minor": 0/);
+    expect(prReview()).toMatch(/"tier": "docs" \| "small" \| "full" \| "deep"/);
+    expect(prReview()).toMatch(/"context": \{ "spec":/);
+    expect(prReview()).toMatch(/`ACR_CLI`/);
+  });
+  it('pr-review tiers self mode too, with a deep tier for size and risk', () => {
+    const text = one(prReview());
+    expect(text).toMatch(/\*\*The tier\*\*, in both modes/);
+    expect(text).toMatch(/\*\*deep\*\* when `RISK`, or `LINES` over 1,000/);
+    expect(text).toMatch(/auth, token, credential, secret, permission, licen\[cs\]e, payment/);
+    expect(text).toMatch(/one per top-level directory in `DIRS`, at most 4/);
+  });
+  it('pr-review reviews the PR head for --self <pr> and takes SPEC, PLAN and NOTES', () => {
+    const text = one(prReview());
+    expect(text).toMatch(/`--self <pr>` reviews the PR head/);
+    expect(text).toMatch(/never fall back to a working tree/);
+    expect(text).toContain('`SPEC=<abs path> PLAN=<abs path> NOTES=<abs path>`');
+    expect(text).toContain('the last thing the skill writes');
+    for (const name of ['bug-scan', 'business-alignment', 'user-pov', 'state-lifecycle'])
+      expect(read(`skills/pr-review/prompts/agent-${name}.md`)).toMatch(/`SPEC`, `PLAN`, `NOTES`/);
+  });
 });

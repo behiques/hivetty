@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Multi-agent PR review. Posts one review on a pull request, approving only when clean, or with --self reviews your branch's whole diff and returns the findings. Re-checks earlier findings and the Jira ticket's scope.
+description: Multi-agent PR review. Posts one review on a pull request, approving only when clean, or with --self reviews a branch's whole diff and returns the findings. Re-checks earlier findings and the Jira ticket's scope.
 ---
 
 # PR review
@@ -26,13 +26,16 @@ Code prints above this text when the skill loads.
 `<pr>`: a number or a URL. Optional with `--self`.
 `--self`: a self review. Nothing is posted, and the findings go back to the caller.
 - `--self` alone reviews the checkout at `REPO` as it stands.
-- `--self <pr>` reviews your work on that PR's branch. If `REPO` isn't on that
-  branch, the skill finds the checkout that is (Stage 1). If no local checkout
-  has it, it reviews the PR head from origin, under self-mode rules.
+- `--self <pr>` reviews that PR's head, fetched from origin, under self-mode
+  rules. Never a checkout's working tree (Stage 1).
 
 A caller may add `REPO=<abs path>` (the user's checkout of the repository) and
 `WORK_DIR=<abs path>` (where each run's folder is made). Without them, `REPO` is the cwd's git
-root and `WORK_DIR` is `$TMPDIR/pr-review`. In review mode a caller may also add
+root and `WORK_DIR` is `$TMPDIR/pr-review`. After `--self` a caller may add
+`SPEC=<abs path> PLAN=<abs path> NOTES=<abs path>`, any of the three: the spec,
+the plan and the builder's notes for the branch. They go to the reviewers and
+the verifier (Stage 1, `CONTEXT`). A file that does not exist or cannot be read
+is named in the report's `context` and never fails the run. In review mode a caller may also add
 `VOICE=<abs path>`: a file describing how the token's owner writes, which the
 posted review follows (`references/posting.md`). Self mode ignores it.
 
@@ -44,10 +47,10 @@ on the diff (Stage 1), never on whether it is worth doing.
 
 | | Review (default) | Self (`--self`) |
 | --- | --- | --- |
-| Whose code | a pull request somebody named | your own branch, before anyone else reads it |
-| Reads | its own detached worktree at the PR head | its own worktree of a snapshot of your checkout, uncommitted and untracked files included; with `--self <pr>` and no local checkout of its branch, the PR head |
-| Reviewers | sized by the diff (the tiers below) | always the full tier: every reviewer that applies, every finding, no cap |
-| Ends with | one posted review | the findings and the ticket's scope, returned to the caller |
+| Whose code | a pull request somebody named | the branch under review, before anyone else reads it |
+| Reads | its own detached worktree at the PR head | with `--self <pr>`, its own detached worktree at the PR head; with plain `--self`, its own worktree of a snapshot of the checkout, uncommitted and untracked files included |
+| Reviewers | sized by the diff (the tiers below) | sized by the diff (the tiers below); every finding, no cap |
+| Ends with | one posted review | the findings, the verified-minor and borderline lists and the ticket's scope, returned to the caller |
 | Touches GitHub | one review, once | never |
 
 ## Stage 1: Resolve, and work out what the diff needs
@@ -57,23 +60,18 @@ parallel, two of the same PR included, beside whatever else is working in
 `REPO`. No two runs may share a path, a ref or a scratch file:
 
 ```bash
-sh <skill-dir>/scripts/review-worktree.sh open "$REPO" "$WORK_DIR" <pr> <owner>/<name>   # review mode
-sh <skill-dir>/scripts/review-worktree.sh open "$REPO" "$WORK_DIR" --self                # self mode
+sh <skill-dir>/scripts/review-worktree.sh open "$REPO" "$WORK_DIR" <pr> <owner>/<name>   # review mode, and --self <pr>
+sh <skill-dir>/scripts/review-worktree.sh open "$REPO" "$WORK_DIR" --self                # plain --self
 ```
 
-**`--self <pr>`: find the checkout first.** Read the PR's branches with
-`gh pr view <pr> --repo <owner>/<name> --json headRefName,baseRefName`, then pick
-the source:
-
-1. `REPO` is on `headRefName` (`git -C "$REPO" branch --show-current`): use it.
-2. Otherwise, `git -C "$REPO" worktree list --porcelain` may list a worktree whose
-   `branch` is `refs/heads/<headRefName>`. That worktree becomes `REPO`.
-3. Otherwise no local checkout has the branch. Open the PR head with the
-   review-mode command. Every other self-mode rule still holds: nothing is
-   posted, the full tier runs, and nothing is capped.
-
-For 1 and 2, open with `--self <baseRefName>` so the base is the PR's own. Record
-which source it was: `workspace` for 1 and 2, `pr-head` for 3.
+**`--self <pr>` reviews the PR head.** Open it with the review-mode command,
+never a snapshot of a checkout, even one sitting on the PR's branch: a working
+tree carries untracked and unpushed files the PR does not, and a review of them
+is a review of something nobody will merge. Every other self-mode rule still
+holds: nothing is posted and nothing is capped. If the head cannot be fetched,
+close the run and return `outcome: "failed"` with `failedAt: "resolve"`; never
+fall back to a working tree. Record the source: `pr-head` for `--self <pr>` and
+review mode, `workspace` for plain `--self`.
 
 The script fetches from the remote, adds a detached worktree, computes the
 diff, and prints one JSON line:
@@ -85,25 +83,26 @@ diff, and prints one JSON line:
 - `diff` and `numstat` are the diff and its line counts, over `baseSha...head`.
   The base is always the PR's base branch (normally `main`; the repo's default
   branch when there is no PR yet), fetched fresh from `origin`. In review mode
-  the head is the PR head, the same comparison GitHub shows. In self mode the
-  head is the snapshot. The diff is then the whole branch, every commit since it
-  left `main`, plus uncommitted and untracked work. It is never only the
-  uncommitted part.
+  the head is the PR head, the same comparison GitHub shows, and so it is for
+  `--self <pr>`. With plain `--self` the head is the snapshot. The diff is then
+  the whole branch, every commit since it left `main`, plus uncommitted and
+  untracked work. It is never only the uncommitted part.
 - `workspaceHead` is the commit your checkout sits on (in review mode, the PR
   head). `changedFiles` counts the files changed from `baseSha` to that commit,
   nothing left out, so it equals the PR's own `changedFiles`. `uncommittedFiles`
   counts what the snapshot adds on top.
 
-**Review mode** checks out the PR head. **Self mode** first snapshots your
-working tree, uncommitted and untracked files included, into a commit on a
-private ref, and checks that out. The review reads a frozen copy while you, or
-anything else working in `REPO`, keep editing. Findings cite paths relative to
-the repository root, so they apply to your real checkout unchanged.
+**Review mode** and **`--self <pr>`** check out the PR head. **Plain `--self`**
+first snapshots the checkout's working tree, uncommitted and untracked files
+included, into a commit on a private ref, and checks that out. The review reads
+a frozen copy while anything else working in `REPO` carries on. Findings cite
+paths relative to the repository root, so they apply to the real checkout
+unchanged.
 
-Also read the PR. In review mode:
+Also read the PR. In review mode and with `--self <pr>`:
 `gh pr view <pr> --repo <owner>/<name> --json number,url,title,body,isDraft,state,headRefOid,author`.
-In self mode without a `<pr>`, run `gh pr view` from `REPO` to find the branch's
-PR; there may be none.
+With plain `--self`, run `gh pr view` from `REPO` to find the branch's PR; there
+may be none.
 
 **Close the run when the review ends, whatever the outcome, failures included:**
 `sh <skill-dir>/scripts/review-worktree.sh close "$RUN_DIR"`. It removes the
@@ -118,7 +117,7 @@ as clean.
 From here on every `git` call names `-C "$REVIEW_DIR"` and every `gh` call names
 `--repo <owner>/<name>`. A subagent inherits neither your shell nor your cwd.
 
-**Now establish nine facts yourself, before dispatching anything.** Every
+**Now establish these facts yourself, before dispatching anything.** Every
 subagent starts with about 40k tokens of context before it reads a line, so an
 agent dispatched only to find out it has nothing to do is pure cost.
 
@@ -126,13 +125,16 @@ agent dispatched only to find out it has nothing to do is pure cost.
 | --- | --- | --- |
 | `FILES`, `LINES` | `files` and `lines` from the script, lockfiles left out; the paths themselves are in `numstat` | the tier |
 | `DOCS_ONLY` | every changed path is `*.md`, `*.mdx`, `*.txt` or under `docs/` | the tier |
+| `RISK` | any changed path contains, case-insensitively, a risk-surface word: auth, token, credential, secret, permission, licen[cs]e, payment | the tier |
+| `DIRS` | the top-level directories of the changed paths, with their changed lines; files at the root are one group | the deep tier's extra bug scans |
 | `UI` | any changed path ends in `.tsx .jsx .vue .svelte .css .scss .html` | user POV |
 | `RUNTIME` | any changed path is source code (`.ts .js .py .go .rb .java .cs .rs .kt .swift .php` and the like) that is not a test (`test/`, `tests/`, `__tests__/`, `*.test.*`, `*.spec.*`) | performance |
-| `ACR` | `command -v acr` succeeds | ACR |
+| `ACR_CLI` | `command -v acr` succeeds | the ACR reviewer |
 | `TICKET_KEY` | a `[A-Z][A-Z0-9]+-\d+` token in the PR title, the branch, or the description (in self mode: the branch and its commit subjects) | ticket alignment |
 | `FEEDBACK` | a PR exists and any of these is non-zero: `gh api "repos/$SLUG/pulls/$PR/reviews?per_page=1" --jq length`, the same for `pulls/$PR/comments` and `issues/$PR/comments` | prior findings |
 | `STATE` | read the diff: a changed line reads, compares, branches on or writes a stored status, state, phase or enum value (a database column, a stored record, a queue message, a checkpoint, cursor or watermark), or changes a scheduled job, worker, queue consumer, lease, lock or retry loop that writes one. When unsure, true | persisted state |
 | `FIX_COMMITS` | a PR exists: the commits made after its first review (below). Otherwise `none` | bug scan, persisted state, the verifier |
+| `CONTEXT` | each of `SPEC`, `PLAN`, `NOTES` the caller gave, kept when `test -r <path>` succeeds; otherwise `none`, with the path and "not found" or "not readable" recorded for the report's `context` | every reviewer and the verifier |
 
 `FIX_COMMITS` is the code written in reply to review, usually the least-reviewed
 code on a PR: written quickly to answer one concern, then read by every later
@@ -156,10 +158,17 @@ pipe.
 A rebase restamps every commit's date, so it over-includes. That only adds a
 pass; it never skips one.
 
-**The tier**, in review mode only. A self review is always **full**:
+**The tier**, in both modes, the first that holds:
+- **deep** when `RISK`, or `LINES` over 1,000. A risk-surface path promotes
+  any tier to deep, a docs-only diff included.
 - **docs** when `DOCS_ONLY`.
 - **small** when `LINES` ≤ 150 and `FILES` ≤ 3.
 - **full** otherwise.
+
+Fewer reviewers on a small diff, more candidates on a large or risky one,
+never more review everywhere. Record the tier and the fact that chose it ("62
+lines in 2 files", "touches `electron/shared/permission-rules.ts`"); the report
+names both.
 
 **Repo extensions.** If `REVIEW_DIR` holds `.claude/pr-review/extensions/*.md`,
 read them in filename order. A repo uses them to add a check, a reviewer or a
@@ -174,14 +183,21 @@ runs at once.
 | Reviewer | Prompt(s) | Model | Dispatched when |
 | --- | --- | --- | --- |
 | Instruction compliance | `agent-claude-md.md` | sonnet | always |
-| Bug scan | `agent-bug-scan.md` | sonnet | tier small or full |
-| ACR | `agent-acr.md` | haiku | tier small or full, and `ACR` |
-| Performance | `agent-performance.md` | sonnet | tier full, and `RUNTIME` |
-| User POV | `agent-user-pov.md` | sonnet | tier full, and `UI` |
-| Git history | `agent-git-history.md` | sonnet | tier full |
-| Persisted state | `agent-state-lifecycle.md` | sonnet | tier small or full, and `STATE` |
+| Bug scan | `agent-bug-scan.md` | sonnet | tier small, full or deep |
+| Bug scan, per directory | `agent-bug-scan.md` | sonnet | tier deep: one per top-level directory in `DIRS`, at most 4 (the ones with the most changed lines), each given only its directory's slice of the diff |
+| ACR | `agent-acr.md` | haiku | tier small, full or deep, and `ACR_CLI` |
+| Performance | `agent-performance.md` | sonnet | tier full or deep, and `RUNTIME` |
+| User POV | `agent-user-pov.md` | sonnet | tier full or deep, and `UI` |
+| Git history | `agent-git-history.md` | sonnet | tier full or deep |
+| Persisted state | `agent-state-lifecycle.md` | sonnet | tier small, full or deep, and `STATE` |
 | Prior findings | `prefetch-feedback.md` then `agent-prior-findings.md` | sonnet | `FEEDBACK`, any tier |
 | Ticket alignment | `prefetch-ticket.md` then `agent-business-alignment.md` | sonnet | `TICKET_KEY`, any tier |
+
+A per-directory bug scan reads its slice, written before the wave with
+`git -C "$REVIEW_DIR" diff <baseSha>...<head> -- <dir>/ > "$RUN_DIR/review-<dir>.diff"`
+(the root group: the root's changed files by name), and its preamble's
+`DIFF_PATH` names that file. One bug scan over a 1,500-line diff returns about
+seven candidates; four over its slices return what the diff holds.
 
 The last two rows are one dispatch each, with the two prompt files joined in
 order. The first file collects what the second needs: the earlier feedback, or
@@ -198,6 +214,9 @@ MODE=review|self   REVIEW_DIR=<abs path>   OWNER/NAME=<slug>   PR=<n or none>   
 PR title and description: <verbatim, or the branch's commit subjects in self mode>
 DIFF_PATH=<RUN_DIR>/review.diff — scope your scan to this diff; read any file in REVIEW_DIR to cite or trace.
 FIX_COMMITS=<space-separated shas, or none> — code pushed in reply to earlier review.
+SPEC=<abs path or none>   PLAN=<abs path or none>   NOTES=<abs path or none> — read each one given. The spec and plan say what was
+intended: a finding that the code does what the spec asked is not a finding, and a gap between the spec and the code is.
+A path you cannot read: say so in one line and review without it; it never fails the review.
 Every git call: git -C "$REVIEW_DIR". Every gh call: --repo <slug>.
 MODE=review: return at most 6 findings, most severe first. MODE=self: return every finding, most severe first; a self review never economises.
 (Prior findings always reports every concern that still holds.)
@@ -253,16 +272,23 @@ line into Stage 4: "Ticket `KEY` could not be read — scope not checked
 1. **Verify.** Number every finding. With 12 or fewer, send them all in one
    dispatch of `prompts/confidence-scorer.md`. With more than 12, group them by
    file into shards of about 8 and dispatch one verifier per shard in a single
-   message. Pass `DIFF_PATH`, `REVIEW_DIR`, `FIX_COMMITS`, and `FEEDBACK_PATH` when
-   `$RUN_DIR/feedback.json` exists. Each verifier reads the source behind every
-   finding it holds and returns a score.
-2. **Drop anything below 60.** Keep 60–74 as **borderline** in both modes. They
-   take no severity and never mix with the findings. In self mode they come back
-   in a list of their own, each with its score and the verifier's one-line
-   reasoning. In review mode they are posted inline as **Note**, with the score,
-   and never withhold an approval. A false alarm costs a minute to dismiss; a
-   miss on someone else's PR costs an incident, not a review round. Borderline
-   findings still go through steps 3 and 4.
+   message. Pass `DIFF_PATH`, `REVIEW_DIR`, `FIX_COMMITS`, `SPEC`, `PLAN`, `NOTES`,
+   and `FEEDBACK_PATH` when `$RUN_DIR/feedback.json` exists. Each verifier reads
+   the source behind every finding it holds and returns its `confidence`
+   (0-100) and `severity` (`block`, `should_fix` or `minor`).
+2. Drop anything with confidence below 60. Confidence 60-74 is borderline.
+   Confidence 75 or above is a finding at the verifier's severity; in self
+   mode `minor` findings come back in their own list, "verified, minor", and
+   are never dropped. Self mode has no reader to tire: the caller is a fixer.
+
+   This is the one borderline band, in both modes. Borderline findings take no
+   severity and never mix with the findings. In self mode they come back in a
+   list of their own, each with its confidence and the verifier's one-line
+   reasoning. In review mode they are posted inline as **Note**, with the
+   confidence, and never withhold an approval. A false alarm costs a minute
+   to dismiss, and a
+   miss on someone else's PR costs an incident, not a review round.
+   Borderline and verified-minor findings still go through steps 3 and 4.
 3. **Must-exclude.** Drop:
    - nitpicks with no realistic trigger
    - anything without an exact file, line and snippet
@@ -274,9 +300,10 @@ line into Stage 4: "Ticket `KEY` could not be read — scope not checked
    idiom instead. Existing code that shares a flaw is no precedent for it.
 5. **Deduplicate** findings at the same file and line, recording which reviewers
    agreed.
-6. **Severity.** **Block**: bugs, security, data loss. **Should Fix**:
-   correctness or clarity, low effort. **Note**: non-blocking. Promote a finding
-   one tier when two or more reviewers raised it independently.
+6. **Severity** is the verifier's: `block` is **Block**, `should_fix` is
+   **Should Fix**, and `minor` is **Note** in review mode and the verified-minor
+   list in self mode. Promote a finding one tier when two or more reviewers
+   raised it independently; a promoted `minor` is a Should Fix.
 
 No findings at all: skip the verifier. A prior finding keeps its `priorStatus`
 and `priorUrl` through all of this. The ticket's `scope` is not a finding, so it
@@ -296,18 +323,23 @@ closes the run. No person is asked anything.
 1. The findings, Block first. Each has its file:line, the problem in one
    sentence, the fix, and which reviewer raised it (plus the earlier thread, for
    a prior finding).
-2. The borderline findings (60–79), marked "your call". Fix each one or
-   dismiss it in a sentence.
-3. The ticket's scope, when there is a ticket: what is covered, what is partial
-   and what is left. This tells you what you have not built yet.
+2. "Verified, minor": each `minor` finding with its file:line and one line.
+   Real and small; the caller fixes each or answers it in a sentence.
+3. The borderline findings (60-74), marked "your call", each with its
+   confidence and the verifier's reasoning. Fix each one or dismiss it in a
+   sentence.
+4. The ticket's scope, when there is a ticket: what is covered, what is partial
+   and what is left. This tells the caller what is not built yet.
+5. Context: the tier and why, and any `SPEC`, `PLAN` or `NOTES` that was given
+   and could not be read.
 
 Nothing is posted and nothing is edited. Close the run, then hand the findings
-to whoever invoked you: your own session, a subagent another skill dispatched,
-or a person at a terminal. Fixing them is the caller's next step, not a stage
-of this skill.
+to whoever invoked the skill: a session, an agent, a subagent another skill
+dispatched, or a person at a terminal. Fixing them is the caller's next step,
+not a stage of this skill.
 
-**Either way, the last thing you write** is one fenced `json` block. A calling
-agent branches on it:
+**Either way, the last thing the skill writes** is one fenced `json` block; a
+calling agent then reports as its own instructions say, branching on it:
 
 ```json
 {
@@ -320,18 +352,25 @@ agent branches on it:
   "snapshot_sha": "<the snapshot commit; null in review mode, or when source is pr-head>",
   "files_changed": <changedFiles>,
   "uncommitted_files": <uncommittedFiles>,
-  "tier": "docs" | "small" | "full",
-  "reviewers": ["bug scan", "instruction compliance", "..."],
+  "tier": "docs" | "small" | "full" | "deep",
+  "tier_reason": "<the fact that chose it: \"62 lines in 2 files\", \"touches electron/shared/permission-rules.ts\">",
+  "context": { "spec": "<path or null>", "plan": "<path or null>", "notes": "<path or null>", "unread": ["<path>: not found"] },
+  "reviewers": ["bug scan", "bug scan (electron/)", "instruction compliance", "..."],
   "skipped": [{ "reviewer": "ACR", "reason": "acr not installed" }],
   "outcome": "approved" | "commented" | "findings" | "clean" | "empty" | "failed",
   "review_url": "<the posted review's html_url; null in self mode or when nothing posted>",
   "headline": "<the most severe surviving finding in one plain sentence naming its file; null when there is none>",
   "ticket": { "status": "ok" | "no_ticket" | "fetch_failed", "key": "HIVE-123", "covered": 4, "partial": 1, "left": 1 },
-  "counts": { "block": 0, "should_fix": 2, "note": 1, "borderline": 0 },
+  "counts": { "block": 0, "should_fix": 2, "note": 1, "borderline": 0, "verified_minor": 0 },
   "prior": { "fixed": 3, "still_open": 0, "reopened": 1 },
   "failedAt": "<stage, only when outcome is failed>"
 }
 ```
+
+`counts.note` is review mode's `minor` findings and is 0 in self mode;
+`counts.verified_minor` is self mode's and is 0 in review mode. `borderline`
+counts the 60-74 band in both. `context` holds the paths that were read, `null`
+for one not given, and `unread` lists any given and not readable.
 
 `repo`, `head_sha` and `files_changed` let a caller prove the review saw the
 right target: `head_sha` is the checkout's commit, and `files_changed` equals
@@ -351,7 +390,7 @@ condition that kept it out as the reason. "Never looked" must not read as
 1. Two similar-looking code paths that serve different journeys are not duplicates.
 2. Never suggest added complexity without a concrete bug or security reason.
 3. Never flag a pattern the surrounding code already uses. The codebase is the style guide, for style. It is not proof of correctness: a bug the surrounding code shares is still a bug.
-4. When unsure a finding is real, drop it. A false positive costs more than a miss.
+4. In review mode, a finding the verifier could not confirm (confidence below 60) is dropped, never argued for in the body. Self mode returns everything the verifier confirmed, `minor` included: its reader is a fixer.
 5. Every finding cites a file, a line and a snippet read from source, not from the diff.
 6. Self mode never touches GitHub, whatever an extension or a caller says.
 7. Nothing here commits, pushes, checks out, or edits a file in `REPO`'s own working tree. What a run does write is its own: one worktree and two refs under `refs/hive-review/<run>/` (removed by `close`), files under `RUN_DIR`, and in review mode the one posted review.

@@ -11,6 +11,7 @@ You are a code review agent focused on finding obvious bugs. Your job is to scan
 You will be given:
 1. The PR diff
 2. `FIX_COMMITS`: the commits pushed after the PR's first review, the code written in reply to feedback (may be `none`)
+3. `SPEC`, `PLAN`, `NOTES`: the spec, the plan and the builder's notes, each a path or `none`. Read each one given. The spec and plan say what was intended: a finding that the code does what the spec asked is not a finding, and a gap between the spec and the code is. A path that does not exist or cannot be read: say so in one line and review without it; it never fails the review.
 
 Earlier review threads are not given to you. The verifier drops anything a thread already covers, so raise what you find. A thread covers its own concern, never the code written to fix it.
 
