@@ -341,13 +341,35 @@ describe('createScheduler', () => {
       expect(refusals()).toEqual([]);
     });
 
-    it('never filters a thread entry', () => {
+    it('never filters an answer', () => {
       asksFromList = [];
 
       scheduler.onEntry(entry({ id: 'n1', kind: 'answer', from: 'acr', thread: 'k0' }));
 
       expect(woke).toHaveLength(1);
       expect(refusals()).toEqual([]);
+    });
+
+    it('wakes for a threaded ask from an unlisted party on a thread the agent opened', () => {
+      asksFromList = [];
+      const threaded = entry({ id: 'k2', from: 'acr', thread: 'k1' });
+      entries = [entry({ id: 'k1', from: AGENT, to: 'acr' }), threaded];
+
+      scheduler.onEntry(threaded);
+
+      expect(woke).toHaveLength(1);
+      expect(refusals()).toEqual([]);
+    });
+
+    it('refuses a threaded ask from an unlisted party on a thread the agent is not a party to', () => {
+      asksFromList = [];
+      const threaded = entry({ id: 'k2', from: 'acr', thread: 'k1' });
+      entries = [entry({ id: 'k1', from: 'sess-1', to: 'builder' }), threaded];
+
+      scheduler.onEntry(threaded);
+
+      expect(woke).toEqual([]);
+      expect(refusals()).toHaveLength(1);
     });
 
     it('takes asks from anyone when the definition names no list', () => {
