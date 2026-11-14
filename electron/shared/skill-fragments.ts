@@ -15,11 +15,15 @@ ledger_ask
     key-confirmed: yes | no            (yes only when the key came from work-on's arguments)
     closes-ticket: yes | no            (no on every PR of a split but the last)
     reply-to: <$HIVE_SESSION_ID, sess-…> | overmind
+    spec: /abs/path | none             (optional; the spec the work was built to)
+    plan: /abs/path | none             (optional; the plan it followed)
+    notes: /abs/path | none            (optional; the builder's progress.md)
   meta: { pr: 214, repo: "behiques/hivetty", ticket: "HIVE-123", stage: "intake",
           key: "ship:behiques/hivetty#214" }
 \`\`\`
 
-An intake without the \`closes-ticket\` line reads \`yes\`. A write to \`reply-to\`
+An intake without the \`closes-ticket\` line reads \`yes\`. An intake without
+\`spec\`, \`plan\` or \`notes\` reads \`none\` for it. A write to \`reply-to\`
 refused \`unknown party\` goes to the ask's \`from\`, which becomes \`replyTo\`.`,
   'agent-worktree': `Your worktree goes under your own working directory, detached, so the person's checkout keeps its branch:
 

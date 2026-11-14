@@ -118,7 +118,8 @@ you write names its path, and a wake that continues a job reads it right after
    project checkout path>`, `worktree: <your worktree>`, `ticket:`,
    `key-confirmed:` echoed from the job, `closes-ticket:` as step 1 read it
    (the ask, else the plan header, else yes), `reply-to:` echoed from the job,
-   `meta: { pr, repo, ticket, stage: "intake", key: "ship:<owner>/<repo>#<N>",
+   `spec:` and `plan:` from the job (`none` when the job had none), `notes:`
+   your `progress.md`, all three as absolute paths, `meta: { pr, repo, ticket, stage: "intake", key: "ship:<owner>/<repo>#<N>",
    intent: "shipper merged PR
    #<N>, or let it go; nothing more to do for this job" }`. The ask ends your
    turn. The shipper takes it without waking you; its answer, when the PR

@@ -230,4 +230,16 @@ describe('the review path (HIVE-416)', () => {
     expect(prefetch).toMatch(/"route": "atlassian-mcp" \| "jira-tracker" \| "hive"/);
     expect(prefetch).not.toMatch(/jira-writer/);
   });
+  it('acr reports borderline and verified_minor in meta and passes the context through', () => {
+    const acr = agent('acr');
+    expect(acr).toContain('borderline: <counts.borderline>');
+    expect(acr).toContain('verified_minor: <counts.verified_minor>');
+    expect(acr).toMatch(/--self <pr url> \[SPEC=<path>\] \[PLAN=<path>\] \[NOTES=<path>\] REPO=<path>/);
+    expect(one(acr)).not.toMatch(/looks through the project's worktrees|reviews your work on the branch/);
+  });
+  it('the builder fills spec, plan and notes in the intake', () => {
+    const step8 = agent('builder').slice(agent('builder').indexOf('8. `ship: yes`'));
+    expect(one(step8)).toMatch(/`spec:` and `plan:` from the job \(`none` when the job had none\), `notes:` your `progress\.md`/);
+    expect(fillIncludes(agent('builder'))).toMatch(/notes: \/abs\/path \| none/);
+  });
 });

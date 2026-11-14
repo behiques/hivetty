@@ -27,4 +27,11 @@ describe('skill fragments (HIVE-413)', () => {
     expect(loop).toContain('every refspec spelling, every API spelling of the same act.');
     expect(fillIncludes('{{include:tdd-loop}}')).toBe(loop);
   });
+
+  it('ship-intake carries the optional spec, plan and notes lines (HIVE-416)', () => {
+    const intake = FRAGMENTS['ship-intake'];
+    for (const field of ['spec', 'plan', 'notes']) expect(intake).toContain(`    ${field}: /abs/path | none`);
+    expect(intake.replace(/\s+/g, ' ')).toMatch(/An intake without `spec`, `plan` or `notes` reads `none`/);
+    expect(intake).not.toMatch(/\{\{/);
+  });
 });
