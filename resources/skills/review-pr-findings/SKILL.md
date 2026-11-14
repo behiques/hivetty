@@ -82,9 +82,9 @@ push. It is removed by the run that answers `clean`, and by nobody else; a
 
 Assess each finding yourself: steelman it with a concrete failure, then try to
 refute it in the code. Dispatch a subagent only for a block finding, or before
-you answer INVALID. Such a subagent takes one finding, runs on the session's
-model, never downgraded, and independent ones go in parallel in one response. Verdict `VALID | INVALID |
-NEEDS-USER-DECISION`.
+you answer INVALID. Such a subagent takes one finding and runs on the
+session's model, never downgraded; independent ones go in parallel, in one
+response. Verdict `VALID | INVALID | NEEDS-USER-DECISION`.
 
 A self review's verified-minor items come with its findings: take a
 verified-minor when the fix is under about 20 lines and answer the rest, as
@@ -138,8 +138,8 @@ the findings notes. The end-of-round summary comment opens with
 `{{skill:verify}}`: scoped lint, targeted tests, type-check, build only when the
 change makes build-only errors likely, and a real browser drive for any UI
 surface. Commit every fix of the round, then **one push**, then the Step 5
-replies. Re-run Step 1. When CI is green, no thread is open and every findings-notes
-row that has a target has a reply, post one short summary comment (what was
+replies. Re-run Step 1. When CI is green, no thread is open and every row of the
+findings notes that has a target has a reply, post one short summary comment (what was
 fixed, what was rejected and why) and report.
 
 ## Step 7: report
