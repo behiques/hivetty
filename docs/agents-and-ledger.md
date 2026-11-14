@@ -561,10 +561,13 @@ main log once per reason; the queue waits for the next minute.
 **The asker is told, since HIVE-408.** A refusal that does not end on its own
 (`budget`, `cli`, `invalid`) on a wake an `ask` caused posts one note on that
 ask's thread, from the overmind to the asker: "<agent> is out of budget until
-midnight; a26 is queued", or "<agent> cannot wake: <reason>; a26 is queued". It
-is a `post`, not an `answer`, so the ask stays open and the queued wake still
-answers it. One note per ask per reason, deduped from the log, so a restart does
-not repeat it. The lane records the reason as `refused` until a run starts on it.
+a live run ends; a26 is queued" while live runs hold the rest of the day's
+budget (`meta.hold: true`, since HIVE-412), "<agent> is out of budget until
+midnight; a26 is queued" when the day is spent, or "<agent> cannot wake:
+<reason>; a26 is queued". It is a `post`, not an `answer`, so the ask stays
+open and the queued wake still answers it. One note per ask per reason and
+hold, deduped from the log, so a restart does not repeat it and a hold followed
+by a spent day says both. The lane records the reason as `refused` until a run starts on it.
 
 `stop()` sets a flag that every entry point honours, not just the interval. Both
 teardowns call it **before** `RunTracker.closeAll`, which finalizes each live run

@@ -63,6 +63,8 @@ describe('createScheduler', () => {
   let refuseReason: string | undefined;
   /** The CLI a `cli` refusal names (HIVE-399). */
   let refuseCli: HarnessId | undefined;
+  /** Whether a refusal says live runs hold the budget (HIVE-412). */
+  let refuseHold: boolean;
   /**
    * Refuses `'saturated'` on the one `run` call whose zero-based index
    * matches, and lets every other call through (HIVE-128). What `flush`'s
@@ -118,6 +120,7 @@ describe('createScheduler', () => {
             refused: refuse,
             ...(refuseReason === undefined ? {} : { reason: refuseReason }),
             ...(refuseCli === undefined ? {} : { cli: refuseCli }),
+            ...(refuseHold ? { hold: true as const } : {}),
           };
         }
         if (liveLanes?.has(options?.lane ?? 'standing') === true) return { started: false, refused: 'working' };
@@ -189,6 +192,7 @@ describe('createScheduler', () => {
     refuse = false;
     refuseReason = undefined;
     refuseCli = undefined;
+    refuseHold = false;
     refuseAfter = undefined;
     runCalls = 0;
     parallel = 1;
@@ -987,6 +991,59 @@ describe('createScheduler', () => {
       refuse = false;
       tick();
       expect(state.read(AGENT).refused).toBeUndefined();
+    });
+
+    it('says a hold waits on a live run, not midnight, and marks the note (HIVE-412)', () => {
+      refuse = 'budget';
+      refuseHold = true;
+      entries = [asked];
+      scheduler.start();
+      scheduler.onEntry(asked);
+      tick();
+
+      expect(notes()).toEqual([
+        {
+          from: 'overmind',
+          to: 'builder',
+          kind: 'post',
+          thread: 'a26',
+          body: `${AGENT} is out of budget until a live run ends; a26 is queued`,
+          meta: { refused: 'budget', agent: AGENT, hold: true },
+        },
+      ]);
+    });
+
+    it('tells a hold and then a spent day on the same ask, once each (HIVE-412)', () => {
+      refuse = 'budget';
+      refuseHold = true;
+      entries = [asked];
+      scheduler.start();
+      scheduler.onEntry(asked);
+      tick();
+      refuseHold = false;
+      tick();
+      tick();
+
+      expect(notes().map((note) => note.body)).toEqual([
+        `${AGENT} is out of budget until a live run ends; a26 is queued`,
+        `${AGENT} is out of budget until midnight; a26 is queued`,
+      ]);
+    });
+
+    it('dedupes from the log on reason and hold together (HIVE-412)', () => {
+      refuse = 'budget';
+      refuseHold = true;
+      entries = [
+        asked,
+        entry({ id: 'n1', from: 'overmind', to: 'builder', kind: 'post', thread: 'a26', body: 'x', meta: { refused: 'budget', agent: AGENT, hold: true } }),
+      ];
+      scheduler.start();
+      scheduler.onEntry(asked);
+      expect(notes()).toEqual([]);
+
+      refuseHold = false;
+      tick();
+      expect(notes().map((note) => note.meta)).toEqual([{ refused: 'budget', agent: AGENT }]);
     });
   });
 
