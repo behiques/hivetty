@@ -512,6 +512,8 @@ export interface AgentSummary {
    * same cached listing as `parallel`. Absent for an agent that does not lane.
    */
   lane?: AgentLane;
+  /** `asks_from:` (HIVE-412), read by the scheduler off this cached listing. Not shown by the `agents` tool. */
+  asksFrom?: string[];
   /** What is in flight right now (HIVE-128). Set by `agents:list`; absent is none. */
   live?: LiveRunSummary[];
   /**
