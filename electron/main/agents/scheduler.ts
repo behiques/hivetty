@@ -845,10 +845,11 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       const schedule = listed.get(name);
 
       /*
-        A repo agent's standing lane only routes (HIVE-408): its work is on its repo lanes, which keep
-        their own clock below. Ledger wakes still reach it.
+        A repo agent's standing lane only routes (HIVE-408): its interval work is on its repo lanes, which keep
+        their own clock below. A calendar-only one has no repo-lane clock, so its `wake.at` times wake the
+        standing lane (HIVE-412). Ledger wakes still reach it.
       */
-      if (deps.laneOf?.(name) === 'repo') {
+      if (deps.laneOf?.(name) === 'repo' && schedule?.wake.everyMs !== undefined) {
         arm(name, agent.nextRunAt, undefined);
         continue;
       }

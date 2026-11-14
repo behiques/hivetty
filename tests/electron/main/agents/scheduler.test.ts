@@ -2939,6 +2939,18 @@ describe('createScheduler', () => {
       expect(state.read(AGENT).nextRunAt).toBeUndefined();
     });
 
+    it('wakes a calendar-only repo agent on the standing lane at its time (HIVE-412)', () => {
+      const NOON = new Date(2026, 7, 31, 12).getTime();
+      clock = NOON;
+      schedules.set(AGENT, { wake: { at: ['09:00'], on: [] } });
+      state.patch(AGENT, { nextRunAt: NOON });
+
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'schedule' }]);
+      expect(state.read(AGENT).nextRunAt).toBe(new Date(2026, 8, 1, 9).getTime());
+    });
+
     it('does not tick a lane whose one claim waits on its own permission card (HIVE-408)', () => {
       holding();
       entries.push(entry({ id: 'p1', from: AGENT, to: 'overmind', kind: 'ask', body: 'merge a/x#1?', meta: { run: 'r1', kind: 'permission' } }));

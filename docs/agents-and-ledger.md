@@ -612,7 +612,9 @@ the reason. A thread lane closes when its opening ask is answered, done,
 failed or expired, and later entries in that thread go to standing. Each lane
 has its own queue: a run close drains standing first, then the other lanes, and
 stops at the first `saturated`. A repo lane ticks on `wake.every` while it
-holds an open claim, and has no clock otherwise. Two limits remain. The
+holds an open claim, and has no clock otherwise; the agent's standing lane
+then has no interval clock either. A repo agent with only `wake.at` has no
+repo-lane clock, so its times wake the standing lane (HIVE-412). Two limits remain. The
 `onchange` watermark and the Next tile read the standing lane's `lastRunAt`,
 and the standing tick still skips while the agent's rollup is not `sleeping`
 or `failed`. Both err toward a late or an extra standing wake, never a lost
