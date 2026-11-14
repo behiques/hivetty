@@ -1,5 +1,6 @@
 import {
   HOOK_ENV_GRANTS,
+  HOOK_ENV_LEDGER_SINCE,
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_RUN,
   HOOK_ENV_RUN_TOKEN,
@@ -8,7 +9,7 @@ import {
 } from '@shared/hook-contract';
 import { HIVE_TOOLS } from '@shared/ledger-tools';
 import type { CallToolResult } from '@shared/mcp-contract';
-import { createToolHandlers, type ToolLane } from '@shared/mcp-tools';
+import { createCursorStore, createToolHandlers, type ToolLane } from '@shared/mcp-tools';
 
 import { createReceiverClient } from './client';
 import type { RpcHandlers } from './rpc';
@@ -140,7 +141,8 @@ export function createHandlers(
       fetch: fetchImpl,
     }),
     readGrants(env),
-    undefined,
+    // A run reads on from where its lane's last run started (HIVE-412); a pty session has no seed.
+    createCursorStore(env[HOOK_ENV_LEDGER_SINCE]),
     lane,
   );
 }

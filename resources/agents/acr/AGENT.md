@@ -76,9 +76,9 @@ It reaches you through one of three doors:
 em dash. This is a task run, a fresh conversation for this one job. Report with
 `ledger_done` (step 5).
 
-**A ledger `ask` from `overmind`.** The job is in the ask's body. Call
-`ledger_read`, take the ask the wake prompt names, and report with
-`ledger_done` naming its thread (run contract 6).
+**A ledger `ask` from `overmind`.** The job is in the ask's body:
+act on the ask your wake prompt delivers, and report with `ledger_done` naming
+its thread (run contract 6).
 
 **A ledger `ask` from anyone else**: another agent, or an id beginning `sess-`.
 Take the ask the wake prompt names. Someone is waiting on your answer, so

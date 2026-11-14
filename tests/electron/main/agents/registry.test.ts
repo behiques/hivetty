@@ -178,6 +178,17 @@ describe('list', () => {
     expect(agents[0]?.parallel).toBe(2);
   });
 
+  it('carries asks_from when a definition names it, and none when it names none (HIVE-412)', async () => {
+    seed('gated', GOOD.replace('slack-watcher', 'gated').replace('icon: ChatCircleDots', 'icon: ChatCircleDots\nasks_from: [sess-*, builder]'));
+    seed('plain', GOOD.replace('slack-watcher', 'plain'));
+
+    const { agents } = await registry().list();
+    const byName = new Map(agents.map((agent) => [agent.name, agent]));
+
+    expect(byName.get('gated')?.asksFrom).toEqual(['sess-*', 'builder']);
+    expect(byName.get('plain')).not.toHaveProperty('asksFrom');
+  });
+
   it('carries the lane mode a definition names, and none when it names none (HIVE-186)', async () => {
     seed('laned', GOOD.replace('slack-watcher', 'laned').replace('icon: ChatCircleDots', 'icon: ChatCircleDots\nlane: repo'));
     seed('plain', GOOD.replace('slack-watcher', 'plain'));

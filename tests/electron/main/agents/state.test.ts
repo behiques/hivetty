@@ -410,6 +410,17 @@ describe('lanes (HIVE-184)', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it('keeps an inbox cursor per lane, the standing one at the top level (HIVE-412)', () => {
+    const state = createAgentState({ path });
+
+    state.patchLane('shipper', STANDING_LANE, { cursor: 'e1' });
+    state.patchLane('shipper', 'repo:a/b', { cursor: 'e2' });
+
+    expect(state.lane('shipper', STANDING_LANE).cursor).toBe('e1');
+    expect(state.read('shipper').cursor).toBe('e1');
+    expect(state.lane('shipper', 'repo:a/b').cursor).toBe('e2');
+  });
+
   it('reads a recorded pre-lane agents.json as one standing lane, every value intact', async () => {
     await copyFile(fixture, path);
     const recorded = JSON.parse(await readFile(fixture, 'utf8')) as Record<string, Record<string, unknown>>;

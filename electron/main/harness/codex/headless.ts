@@ -1,6 +1,7 @@
 import { HEADLESS_SANDBOXES } from '@shared/cli-contract';
 import {
   HOOK_ENV_GRANTS,
+  HOOK_ENV_LEDGER_SINCE,
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_RUN,
   HOOK_ENV_RUN_TOKEN,
@@ -54,6 +55,8 @@ const HIVE_SERVER_ENV = [
   HOOK_ENV_RUN,
   HOOK_ENV_RUN_TOKEN,
   HOOK_ENV_GRANTS,
+  // HIVE-412: the lane cursor, forwarded by name; empty on a run with none.
+  HOOK_ENV_LEDGER_SINCE,
 ];
 
 /** What the fence hook prints when it cannot get an answer: codex stops the call. */

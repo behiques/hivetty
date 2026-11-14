@@ -177,6 +177,7 @@ const LANE_KEYS = [
   'costBasis',
   'refused',
   'contextTokens',
+  'cursor',
 ] as const satisfies readonly (keyof LaneState & keyof AgentRunState)[];
 
 function standingOf(agent: AgentRunState): LaneState {

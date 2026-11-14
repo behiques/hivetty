@@ -8,7 +8,7 @@ import {
 } from '@shared/agent-contract';
 import { cliTakesEffort, type CliAgents } from '@shared/cli-contract';
 import { DEFAULT_ENV_ARG, isSessionEnvDenied } from '@shared/config-contract';
-import type { HarnessId } from '@shared/harness-contract';
+import { CAPABILITIES, type HarnessId } from '@shared/harness-contract';
 import { HOOK_ENV_GRANTS, HOOK_ENV_RECEIVER_URL } from '@shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '@shared/ledger-tools';
 import { fillIncludes } from '@shared/skill-fragments';
@@ -17,6 +17,8 @@ import { createPathMap } from '../container/path-map';
 import type { HarnessAdapter } from '../harness/port';
 import { withHostAlias } from '../hooks/container-origin';
 import type { McpServerSpec } from '../mcp/agent-config';
+
+import { HANDOFF_RULE } from './preamble';
 
 /**
  * The command line one wake runs (HIVE-115).
@@ -99,6 +101,8 @@ interface WakeInput {
    * `--session-id` that starts it. Never set with {@link WakeInput.lastTurn}.
    */
   handoff?: string;
+  /** The ledger entries this wake is for, rendered by `wakeEntries` (HIVE-412). Absent: none. */
+  delivered?: string;
   /**
    * A task run (HIVE-128): a fresh session for one job. Chooses the task
    * prompt. The argv is otherwise the same; the fresh `--session-id` is
@@ -178,6 +182,10 @@ export function wakePrompt(
     /** The definition's `lane:`, and the agent's name, for the lane sentence. */
     laneMode?: AgentLane;
     agent?: string;
+    /** The woken entries (HIVE-412): the sender's words, so they come last and nothing of ours follows. */
+    delivered?: string;
+    /** The definition's skills, spelled for the CLI, on a wake that starts a conversation (HIVE-412). */
+    skills?: readonly string[];
   },
 ): string {
   /*
@@ -196,6 +204,12 @@ export function wakePrompt(
     extra === undefined || extra === ''
       ? `You woke because: ${trigger}.`
       : `You woke because: ${trigger} — ${extra}.`;
+  // App-owned first, the sender's words last (HIVE-412): nothing of ours follows the block.
+  const fresh =
+    rotation?.skills === undefined || rotation.skills.length === 0
+      ? ''
+      : `\n\nThis is a fresh conversation. Before anything else, invoke the skills your definition names: ${rotation.skills.join(', ')}.`;
+  const after = `${fresh}${rotation?.delivered === undefined ? '' : `\n\n${rotation.delivered}`}`;
 
   /*
     The reason comes first here too (HIVE-126).
@@ -213,13 +227,13 @@ export function wakePrompt(
 
   /*
     A task run is told what it is before it is told what to do, because the
-    preamble it shares with the standing run says "read your inbox first" —
+    preamble it shares with the standing run tells it to act on the entries its wake delivers —
     and a task run that drains the inbox acts on asks the standing session is
     about to handle. The prompt overrides the preamble on exactly that point.
     It also never asks for a handoff: there is no conversation to hand on.
   */
   if (rotation?.task === true) {
-    return `${because} This is a task run: a fresh conversation with no memory of your standing session, started for this one job. Do the job named above and nothing else — do not act on your ledger inbox and do not do your standing work; your standing session handles both. When the job is done, report the result with ledger_done, or with ledger_failed if it could not be done, then end your turn.`;
+    return `${because} This is a task run: a fresh conversation with no memory of your standing session, started for this one job. Do the job named above and nothing else — do not act on your ledger inbox and do not do your standing work; your standing session handles both. When the job is done, report the result with ledger_done, or with ledger_failed if it could not be done, then end your turn.${after}`;
   }
 
   // A task run is no lane's, so it gets no lane sentence; the return above is its whole prompt.
@@ -229,7 +243,7 @@ export function wakePrompt(
       : ` ${laneSentence(rotation.agent, rotation.laneMode, rotation.lane)}`;
 
   if (rotation?.lastTurn === true) {
-    return `${because}${lanes} This is your last turn on this session. Carry out your instructions for this wake as usual — they are standing work whether or not anything is waiting in your inbox — then post a handoff with ledger_handoff: what you watch, open threads and their ids, decisions and preferences you have learned, anything a fresh copy of you must know. Then finish your turn.`;
+    return `${because}${lanes} This is your last turn on this session. Carry out your instructions for this wake as usual — they are standing work whether or not anything is waiting in your inbox — then leave a handoff. ${HANDOFF_RULE} Then finish your turn.${after}`;
   }
 
   /*
@@ -247,12 +261,17 @@ export function wakePrompt(
     inbox" and "do the work" read as one instruction with a precondition rather
     than two separate things to do.
   */
-  const normal = `${because}${lanes} Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.`;
+  // A lane's run has the lane's work; "one of the times" is the standing lane's clock (HIVE-412).
+  const onLane = rotation?.lane !== undefined && rotation.lane !== STANDING_LANE;
+  const standing = onLane
+    ? 'the work on this lane is standing work'
+    : 'your instructions are standing work and this wake is one of the times to do them';
+  const normal = `${because}${lanes} Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — ${standing}. End your turn when that work is done, or when you are waiting on an answer.`;
 
   // The handoff comes first: it is the context the rest of the prompt assumes.
   return rotation?.handoff === undefined
-    ? normal
-    : `You are continuing from a previous session of yourself. Its handoff:\n\n${rotation.handoff}\n\n${normal}`;
+    ? `${normal}${after}`
+    : `You are continuing from a previous session of yourself. Its handoff:\n\n${rotation.handoff}\n\n${normal}${after}`;
 }
 
 /** One sentence on the lane this run is, or how the standing lane hands work over (HIVE-188). */
@@ -316,6 +335,13 @@ export const fencedRules = (
   grants: readonly string[] = [],
   standing: readonly string[] = [],
 ): string[] => [...HIVE_STANDING_GRANTS, ...standing, ...def.tools, ...grants];
+
+/**
+ * A definition's skill as this CLI invokes it (HIVE-412): a bare name is a hive skill, a `plugin:skill` is kept.
+ * shortcut: a bare name for a personal skill outside hive gets the hive spelling; split on the skill's source if one is ever named.
+ */
+const skillRef = (name: string, cli: HarnessId): string =>
+  name.includes(':') ? name : `${CAPABILITIES[cli].skills.refPrefix}${name}`;
 
 export function wakeCommand(input: WakeInput): WakeCommand {
   const { def, paths, env } = input;
@@ -401,6 +427,11 @@ export function wakeCommand(input: WakeInput): WakeCommand {
       ...(input.kind === 'task' ? { task: true as const } : {}),
       ...(input.lane === undefined ? {} : { lane: input.lane }),
       ...(input.def.lane === undefined ? {} : { laneMode: input.def.lane, agent: input.def.name }),
+      // The branch that spells no `--resume`: a first wake, a rotation, a lost session, a changed CLI, a task run.
+      ...(input.sessionUuid === undefined && def.skills.length > 0
+        ? { skills: def.skills.map((name) => skillRef(name, adapter.id)) }
+        : {}),
+      ...(input.delivered === undefined ? {} : { delivered: input.delivered }),
     })}`,
     subscriptionAuth: env.subscriptionAuth,
     instructions: input.instructions,

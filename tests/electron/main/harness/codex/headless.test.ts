@@ -180,7 +180,7 @@ describe('launchCodexHeadless', () => {
     const value = (key: string) => args.find((arg) => arg.startsWith(`${key}=`));
 
     expect(value('mcp_servers.hive.env_vars')).toBe(
-      'mcp_servers.hive.env_vars=["HIVE_RECEIVER_URL","HIVE_SESSION_ID","HIVE_HOOK_TOKEN","HIVE_RUN_ID","HIVE_RUN_TOKEN","HIVE_GRANTS"]',
+      'mcp_servers.hive.env_vars=["HIVE_RECEIVER_URL","HIVE_SESSION_ID","HIVE_HOOK_TOKEN","HIVE_RUN_ID","HIVE_RUN_TOKEN","HIVE_GRANTS","HIVE_LEDGER_SINCE"]',
     );
     expect(value('hooks.Stop')).toContain('x-hive-session: $HIVE_SESSION_ID');
     expect(value('hooks.Stop')).toContain('x-hive-token: $HIVE_HOOK_TOKEN');

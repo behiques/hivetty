@@ -4244,6 +4244,62 @@ describe('the MCP route', () => {
       }
     });
   });
+
+  describe("a run's inbox cursor (HIVE-412)", () => {
+    const drain = async (run?: string): Promise<string> => {
+      const response = await rpc(
+        { jsonrpc: '2.0', id: 50, method: 'tools/call', params: { name: 'ledger_read', arguments: {} } },
+        { [HOOK_HEADER_SESSION]: CALLER, ...(run === undefined ? {} : { [HOOK_HEADER_RUN]: run }) },
+      );
+      const body = (await response.json()) as { result: { content: { text: string }[] } };
+      return body.result.content[0]?.text ?? '';
+    };
+    const post = (body: string): string => {
+      const result = ledger.append({ from: CALLER, kind: 'post', body });
+      if (!result.ok) throw new Error(result.reason);
+      return result.id;
+    };
+
+    it("seeds a registered run from its since, so its first drain starts after it", async () => {
+      const before = post('before the cursor');
+      post('after the cursor');
+      receiver.grants.set('run-a', CALLER, [], before);
+
+      const text = await drain('run-a');
+
+      expect(text).toContain('after the cursor');
+      expect(text).not.toContain('before the cursor');
+    });
+
+    it('keeps one cursor per run, shared with neither the caller nor a sibling run', async () => {
+      post('first entry');
+      receiver.grants.set('run-a', CALLER, []);
+      receiver.grants.set('run-b', CALLER, []);
+
+      expect(await drain('run-a')).toContain('first entry');
+      expect(await drain('run-b')).toContain('first entry');
+      expect(await drain()).toContain('first entry');
+      expect(await drain('run-a')).not.toContain('first entry');
+    });
+
+    it("never seeds from a run the caller does not own", async () => {
+      post('first entry');
+      receiver.grants.set('run-x', 'someone-else', [], 'zzzz');
+
+      expect(await drain('run-x')).toContain('first entry');
+    });
+
+    it("drops a run's cursor when the run is deleted", async () => {
+      post('first entry');
+      receiver.grants.set('run-a', CALLER, []);
+      await drain('run-a');
+
+      receiver.grants.delete('run-a');
+      receiver.grants.set('run-a', CALLER, []);
+
+      expect(await drain('run-a')).toContain('first entry');
+    });
+  });
 });
 
 /**

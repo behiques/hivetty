@@ -13,6 +13,7 @@ wake:
   check: always
   on: [ledger]
 skills: [ship, merge-pr]
+asks_from: [sess-*, builder]
 tools: [Read, Edit, Write, Grep, Glob, Skill, Bash, mcp__hive__jira_transition]
 autonomy: act
 lane: repo

@@ -88,14 +88,14 @@ export interface CursorStore {
   set(id: string): void;
 }
 
-/** A store with the stdio host's lifetime: this closure, and no longer. */
-export const createCursorStore = (): CursorStore => {
+/** A store with the stdio host's lifetime: this closure, and no longer. `initial` seeds it (HIVE-412); empty is none. */
+export const createCursorStore = (initial?: string): CursorStore => {
   /**
    * Deliberately **not** persisted: a cursor that survived a restart would mean
    * a session that came back after a crash silently skipped whatever arrived
-   * while it was down.
+   * while it was down. A seed is main's lane cursor, handed over at spawn.
    */
-  let cursor: string | undefined;
+  let cursor: string | undefined = initial === '' ? undefined : initial;
   return {
     get: () => cursor,
     set: (id: string) => {
@@ -185,8 +185,14 @@ export function createToolHandlers(
       default bound. The bound only exists for the very first read of a process:
       without it, a session opened against a months-old ledger would be handed
       all of it at once.
+
+      The cursor bounds only the undirected drain it belongs to. A targeted
+      lookup is asking for something specific — above all `ledger_read
+      { thread }`, which the wake block's cut pointer names — and a cursor
+      seeded at spawn (HIVE-412) would otherwise hide every entry of that
+      thread older than the wake, the very history it was called for.
     */
-    const cursor = cursorStore.get();
+    const cursor = isTargetedLookup ? undefined : cursorStore.get();
     if (since !== undefined) query.since = since;
     else if (cursor !== undefined) query.since = cursor;
     if (limit !== undefined) query.limit = limit;

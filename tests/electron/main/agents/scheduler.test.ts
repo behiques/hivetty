@@ -38,8 +38,10 @@ const entry = (over: Partial<LedgerEntry> = {}): LedgerEntry => ({
 describe('createScheduler', () => {
   let woke: { name: string; trigger: string; extra?: string; job?: true; lane?: string }[];
   let wakeIds: (readonly string[] | undefined)[];
+  let delivered: (string | undefined)[];
   let entries: LedgerEntry[];
   let appended: LedgerPostRequest[];
+  let asksFromList: string[] | undefined;
   let clock: number;
   let timers: Map<number, () => void>;
   let nextTimerId: number;
@@ -121,6 +123,7 @@ describe('createScheduler', () => {
         if (liveLanes?.has(options?.lane ?? 'standing') === true) return { started: false, refused: 'working' };
 
         wakeIds.push(options?.wakes);
+        delivered.push(options?.delivered);
         woke.push({
           name,
           trigger,
@@ -135,6 +138,7 @@ describe('createScheduler', () => {
       wakesOnLedger: () => wakesOnLedger,
       parallelFor: () => parallel,
       laneOf: () => laneMode,
+      asksFrom: () => asksFromList,
       removeLaneDir: (name, lane) => {
         removed.push(`${name}:${lane}`);
       },
@@ -172,8 +176,10 @@ describe('createScheduler', () => {
   beforeEach(() => {
     woke = [];
     wakeIds = [];
+    delivered = [];
     entries = [];
     appended = [];
+    asksFromList = undefined;
     clock = 0;
     timers = new Map();
     nextTimerId = 1;
@@ -242,6 +248,108 @@ describe('createScheduler', () => {
       scheduler.manualWake(AGENT);
 
       expect(wakeIds).toEqual([undefined]);
+    });
+  });
+
+  describe('delivered (HIVE-412)', () => {
+    it('hands the run the routed entry, rendered from the log', () => {
+      entries = [entry({ ref: 'a1', body: 'please look at #9', meta: { pr: 9 } })];
+
+      scheduler.onEntry(entries[0] as LedgerEntry);
+
+      expect(delivered[0]).toContain('--- ask a1 from overmind (thread a1) ---\nmeta: {"pr":9}\nplease look at #9');
+    });
+
+    it('hands a flush every ledger entry it wakes for, in order', () => {
+      entries = [
+        entry({ id: 'a1', ref: 'a1', body: 'first' }),
+        entry({ id: 'a2', kind: 'answer', from: 'sess-2', thread: 'a1', body: 'second' }),
+      ];
+      state.patch(AGENT, {
+        status: 'sleeping',
+        pendingWake: [
+          { kind: 'ask', id: 'a1', from: 'overmind' },
+          { kind: 'answer', id: 'a2', from: 'sess-2' },
+        ],
+      });
+
+      scheduler.onRunClosed(AGENT);
+
+      const block = delivered[0] ?? '';
+      expect(block.indexOf('first')).toBeGreaterThan(-1);
+      expect(block.indexOf('first')).toBeLessThan(block.indexOf('second'));
+    });
+
+    it('hands a re-wake the ask it owes', () => {
+      entries = [
+        entry({ id: 'k1', from: 'sess-1', body: 'Ship PR #1' }),
+        entry({ id: 'w1', from: 'overmind', kind: 'post', thread: 'k1', body: 'You owe an answer to k1', meta: { rewoke: 'k1' } }),
+      ];
+
+      scheduler.start();
+
+      expect(delivered[0]).toContain('You still owe an answer to ask k1:');
+    });
+
+    it('hands no block for a manual run', () => {
+      scheduler.manualWake(AGENT);
+
+      expect(delivered).toEqual([undefined]);
+    });
+
+    it('hands no block for an entry the log no longer has', () => {
+      scheduler.onEntry(entry());
+
+      expect(delivered).toEqual([undefined]);
+    });
+  });
+
+  describe('asks_from (HIVE-412)', () => {
+    const refusals = () => appended.filter((request) => request.kind === 'answer' && request.from === 'overmind');
+
+    it('answers a new ask from an unlisted party on its thread, and wakes nobody', () => {
+      asksFromList = ['builder'];
+
+      scheduler.onEntry(entry({ id: 'k9', from: 'sess-9' }));
+
+      expect(woke).toEqual([]);
+      expect(refusals()).toEqual([
+        {
+          from: 'overmind',
+          to: 'sess-9',
+          kind: 'answer',
+          thread: 'k9',
+          body: 'pr-reviewer does not take asks from sess-9; it takes them from builder and overmind.',
+        },
+      ]);
+    });
+
+    it('wakes for a listed party, a session under sess-*, the overmind and itself', () => {
+      asksFromList = ['builder', 'sess-*'];
+
+      scheduler.onEntry(entry({ id: 'k1', from: 'builder' }));
+      scheduler.onRunClosed(AGENT);
+      scheduler.onEntry(entry({ id: 'k2', from: 'sess-3f2' }));
+      scheduler.onRunClosed(AGENT);
+      scheduler.onEntry(entry({ id: 'k3' }));
+
+      expect(woke).toHaveLength(3);
+      expect(refusals()).toEqual([]);
+    });
+
+    it('never filters a thread entry', () => {
+      asksFromList = [];
+
+      scheduler.onEntry(entry({ id: 'n1', kind: 'answer', from: 'acr', thread: 'k0' }));
+
+      expect(woke).toHaveLength(1);
+      expect(refusals()).toEqual([]);
+    });
+
+    it('takes asks from anyone when the definition names no list', () => {
+      scheduler.onEntry(entry({ id: 'k1', from: 'acr' }));
+
+      expect(woke).toHaveLength(1);
     });
   });
 

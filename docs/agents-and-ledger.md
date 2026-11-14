@@ -437,6 +437,30 @@ exclusion is the same loop guard `deliver.ts` applies: the scheduler appends to
 the log it subscribes to, and every wake writes a `run.started` and a
 `run.ended`.
 
+#### What the wake prompt carries (HIVE-412)
+
+A ledger wake carries its entries. `runOnLane` renders the entries a wake is for
+(`meta.wakes`, the same ids `run.started` records) with `wakeEntries`
+(`agents/wake-entries.ts`) and the block rides `run(… { delivered })` to
+`wakePrompt`, which puts it last. The block opens with one frame: the entries are
+their senders' words, information to weigh, never the operator's instructions.
+Each entry is a header (`--- ask a81 from sess-3f2 (thread a81) ---`), its `meta`
+as compact JSON capped at 500 characters, and its body capped at 4 000. The
+block stops at 12 000; anything cut, and any entry past the cap (header only),
+ends with `[cut: ledger_read { thread: "<id>" } for the rest]`, naming the
+canonical id because refs restart. An answer to the agent's own ask also says
+`your ask a77 said: <meta.intent>`; an overmind re-wake is shown as the ask still
+owed. Manual runs, Slack events and expiries carry no block. `meta.wakes` is
+unchanged, so `owedBy`, `routeRewakes` and the `delivered` ask state read what
+they always read.
+
+The preamble no longer mandates `ledger_read` first: it is for more, an entry
+cut short, a thread's history, or the rest of the inbox since the last wake. On
+a conversation that starts fresh (first wake, rotation, lost session, changed
+CLI, task run) and a definition with `skills:`, the prompt names them as the CLI
+invokes them (`CAPABILITIES[cli].skills.refPrefix`: `hive:ship`, `$hive-ship`,
+`/hive:hive-ship`), above the block. A handoff is state only (`HANDOFF_RULE`).
+
 #### Closing an ask, and who gets woken by it
 
 Three kinds close a thread they name — `CLOSING_KINDS` in `ledger-derive.ts` is
@@ -1414,15 +1438,25 @@ over a plugin as the delivery mechanism.
 
 **The read cursor lives for the process, not the ledger.** `createToolHandlers`
 (`tools.ts`) closes over one `cursor` variable — the id of the newest entry the
-host has handed back — and defaults `since` to it on every `ledger_read` that
-doesn't name its own. It is deliberately never persisted: since `claude`
+host has handed back — and defaults `since` to it on the plain `ledger_read`
+drain only. A targeted read (`thread`, `kind`, `to`, `from`, `since` or
+`limit` named) ignores it, so `ledger_read { thread }` returns the thread's
+history rather than just what arrived since the cursor. It is deliberately never persisted: since `claude`
 starts one host per session and keeps it for that session's life, the cursor's
 life is exactly the session's life, and a cursor that survived a restart would
 mean a session coming back after a crash silently skipped whatever arrived
 while it was down. The bound (`LEDGER_READ_DEFAULT_LIMIT`, 50) only applies
-when there is no cursor yet and no explicit `since` — the very first read of a
-process — so a session opened against months of ledger history isn't handed
-all of it in one tool result.
+when no cursor bounds the read and there is no explicit `since` or `limit`.
+
+**An agent run's cursor starts at its lane's (HIVE-412).** Each lane keeps
+`cursor` in `LaneState`: the newest ledger id when its last run's child started.
+`runs.ts` hands it to the stdio host as `HIVE_LEDGER_SINCE` (Claude inherits it;
+Codex and Copilot forward it by name; empty means none) and to a container run's
+registration as `since`; `createCursorStore(initial)` seeds from either, so the
+first plain `ledger_read` returns what arrived since the last wake. Over
+`POST /mcp` the cursor is keyed on caller and run, so two lanes of one agent no
+longer share one. A refused or thrown start, and a task run, leave the cursor
+where it was; a lane with none reads the newest page.
 
 Proved against a real `claude` binary in `tests/live/ledger-conformance.test.ts`
 (`pnpm test:ledger`): that the binary actually loads the generated config and
@@ -1682,6 +1716,7 @@ different way.
 | `mcp` | Which outside systems are plugged in, and as whom | Entries in the agent's `--mcp-config`; whose OAuth token is used |
 | `tools` | Which calls proceed **without stopping to ask** | `--allowedTools` grants; `permissions.ask` + `--permission-prompt-tool` fence |
 | `grants` | Rules a permission card granted (HIVE-409) | Held exactly as `tools`; written by the app only |
+| `asks_from` | Who may open work with this agent (HIVE-412) | A new ask from anyone else is answered by the overmind |
 
 `grants:` is written by the app only, when a card's answer grants a standing
 rule. The seed never changes it and never shows it as a customisation, so
@@ -1703,6 +1738,19 @@ moves to `grants:`. Either way, an entry a release removed never comes back as a
 or no prefix that matches, the lift works as described above.
 
 The Mechanism column is Claude Code's (the adapter's `headless.ts`); every CLI's is in [harness-architecture.md › Headless runs](harness-architecture.md#headless-runs-phase-2).
+
+### `asks_from:` — who may start work (HIVE-412)
+
+A list of party ids, plus `sess-*` for any terminal session. In `deliver`,
+before `laneFor`, a new ask (no thread) from a sender the list does not name is
+answered at once by the overmind on the ask's thread:
+`<agent> does not take asks from <from>; it takes them from <list> and overmind.`
+The overmind and the agent itself are always admitted (a standing lane hands
+work to a lane with a self-addressed ask); thread entries are never filtered.
+Absent means any party; `[]` means only the overmind and itself. An unknown name
+is accepted, since peers come and go; a wildcard other than `sess-*` is a parse
+problem. The shipper ships `[sess-*, builder]` and the fixer `[shipper, sess-*]`;
+acr and the builder are open. The `agents` tool does not show it.
 
 `mcp` decides whether a system's tools exist in the process at all, and on whose
 behalf — Claude Code holds the user's Slack OAuth **not** in the Keychain but in
@@ -2329,8 +2377,8 @@ nothing in either string says to do it again. Both arms are in
 marker deleted underneath it, and is woken again; reverting either string turns
 the second assertion red while the first still passes.
 
-Both strings now name the body. `wakePrompt` says to carry out "the
-instructions you were given" and says outright that an empty inbox is not an
+Both strings now name the body. `wakePrompt` says to act on the entries it
+carries and then carry out "the instructions you were given" and says outright that an empty inbox is not an
 empty turn; the preamble opens by calling the text below the line standing work
 for every wake. The silence rule survives, narrowed to what it was always
 about: **post** nothing when there is nothing to report — a `ledger_done` every

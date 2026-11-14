@@ -317,6 +317,11 @@ export interface AgentDefinition {
   mcp: string[];
   tools: string[];
   autonomy: Autonomy;
+  /**
+   * Who may open work with this agent (HIVE-412): party ids, and {@link ASKS_FROM_SESSIONS} for any
+   * terminal session. The overmind and the agent itself always may. Absent: any party.
+   */
+  asksFrom?: string[];
   /** How the agent's work divides into conversations (HIVE-184). Absent is one lane. */
   lane?: AgentLane;
   /**
@@ -507,6 +512,8 @@ export interface AgentSummary {
    * same cached listing as `parallel`. Absent for an agent that does not lane.
    */
   lane?: AgentLane;
+  /** `asks_from:` (HIVE-412), read by the scheduler off this cached listing. Not shown by the `agents` tool. */
+  asksFrom?: string[];
   /** What is in flight right now (HIVE-128). Set by `agents:list`; absent is none. */
   live?: LiveRunSummary[];
   /**
@@ -646,6 +653,9 @@ export interface FieldSpec {
   values?: readonly string[];
 }
 
+/** The one wildcard `asks_from:` takes (HIVE-412): any terminal session. */
+export const ASKS_FROM_SESSIONS = 'sess-*';
+
 /**
  * Every legal key. A line whose key is not here is a problem naming it — which
  * is why rejecting unknown keys needs no second key-set to maintain.
@@ -667,6 +677,8 @@ export const AGENT_FIELDS: readonly FieldSpec[] = [
   { path: 'tools', kind: 'list', required: false },
   // HIVE-409. Rules a permission card granted; written by `permissions.ts` only, never shipped, never seeded.
   { path: 'grants', kind: 'list', required: false },
+  // HIVE-412. Who may open work with this agent; absent is anyone.
+  { path: 'asks_from', kind: 'list', required: false },
   { path: 'harness', kind: 'list', required: false },
   { path: 'fallback', kind: 'enum', required: false, values: AGENT_FALLBACKS },
   // HIVE-396. Codex's list is the account's, so its model is a shape the parser checks, not an enum.
@@ -1199,6 +1211,8 @@ export interface LaneState {
   refused?: { reason: string; at: number };
   /** The last run's context size, from {@link contextOf} (HIVE-408). */
   contextTokens?: number;
+  /** The newest ledger id when this lane's last run started (HIVE-412): where the next run's inbox read begins. */
+  cursor?: string;
 }
 
 /** What the form offers to fix an unavailable CLI with (HIVE-396). A fence failure has none. */
@@ -1229,6 +1243,8 @@ export interface AgentRunState {
   refused?: { reason: string; at: number };
   /** The standing lane's {@link LaneState.contextTokens} (HIVE-408). */
   contextTokens?: number;
+  /** The standing lane's {@link LaneState.cursor} (HIVE-412). */
+  cursor?: string;
   status: AgentStatus;
   lastRunAt?: number;
   /** Stored and pushed here; computed by HIVE-121's scheduler. */

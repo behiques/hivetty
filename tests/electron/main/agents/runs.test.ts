@@ -96,6 +96,7 @@ describe('createRunTracker', () => {
     kind?: string;
     lane?: string;
     budgetUsd?: number;
+    delivered?: string;
   }[];
   /** What `limits.parallel` says for the agent under test (HIVE-128). */
   let parallel: number;
@@ -108,6 +109,8 @@ describe('createRunTracker', () => {
   let statusWhenClosed: string | undefined;
   let tracker: ReturnType<typeof createRunTracker>;
   let state: ReturnType<typeof createAgentState>;
+  let head: string | undefined;
+  let registered: { run: string; owner: string; since?: string }[];
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -134,6 +137,8 @@ describe('createRunTracker', () => {
     runIds = 0;
     closed = [];
     statusWhenClosed = undefined;
+    head = undefined;
+    registered = [];
     state = createAgentState({ path: '/dev/null/agents.json', debounceMs: 1 });
 
     tracker = createRunTracker({
@@ -148,6 +153,7 @@ describe('createRunTracker', () => {
           ...(options?.kind === undefined ? {} : { kind: options.kind }),
           ...(options?.lane === undefined ? {} : { lane: options.lane }),
           ...(options?.budgetUsd === undefined ? {} : { budgetUsd: options.budgetUsd }),
+          ...(options?.delivered === undefined ? {} : { delivered: options.delivered }),
         });
 
         return {
@@ -188,6 +194,11 @@ describe('createRunTracker', () => {
         runIds += 1;
 
         return `run-${String(runIds)}`;
+      },
+      ledgerHead: () => head,
+      grants: {
+        set: (run, owner, _grants, since) => registered.push({ run, owner, ...(since === undefined ? {} : { since }) }),
+        delete: () => {},
       },
     });
   });
@@ -250,6 +261,12 @@ describe('createRunTracker', () => {
     tracker.run('a', 'ledger', 'ask a1 from overmind', { wakes: ['k1', 'k2'] });
 
     expect(ledger[0]).toMatchObject({ body: 'run.started — ledger', meta: { wakes: ['k1', 'k2'] } });
+  });
+
+  it('hands the delivered entries to the command builder (HIVE-412)', () => {
+    tracker.run('a', 'ledger', 'ask a1 from overmind', { wakes: ['a1'], delivered: 'BLOCK' });
+
+    expect(commandArgs[0]).toMatchObject({ delivered: 'BLOCK' });
   });
 
   it('writes no wakes for a run that was started for no entry (HIVE-410)', () => {
@@ -2990,6 +3007,85 @@ describe('createRunTracker', () => {
       tracker.run('a', 'test');
 
       expect(tracker.containers()).toEqual([]);
+    });
+  });
+
+  describe('the lane inbox cursor (HIVE-412)', () => {
+    it('starts a lane with no cursor on the newest page, then moves its cursor to the ledger head', () => {
+      head = 'e5';
+
+      tracker.run('a', 'ledger');
+
+      expect(spawnCalls[0]?.options).toMatchObject({ env: { HIVE_LEDGER_SINCE: '' } });
+      expect(registered).toEqual([{ run: 'run-1', owner: 'a' }]);
+      expect(state.lane('a', 'standing').cursor).toBe('e5');
+    });
+
+    it('hands a lane run the cursor its last run left, by env and by registration', () => {
+      parallel = 2;
+      state.patchLane('a', 'thread:A', { cursor: 'e2' });
+      head = 'e9';
+
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:A' });
+
+      expect(spawnCalls[0]?.options).toMatchObject({ env: { HIVE_LEDGER_SINCE: 'e2' } });
+      expect(registered).toEqual([{ run: 'run-1', owner: 'a', since: 'e2' }]);
+      expect(state.lane('a', 'thread:A').cursor).toBe('e9');
+      expect(state.lane('a', 'standing').cursor).toBeUndefined();
+    });
+
+    it('leaves the cursor alone on a refused start', () => {
+      state.patchLane('a', 'standing', { cursor: 'e2' });
+      state.patch('a', { status: 'paused' });
+      head = 'e9';
+
+      expect(tracker.run('a', 'ledger')).toMatchObject({ started: false, refused: 'paused' });
+      expect(state.lane('a', 'standing').cursor).toBe('e2');
+    });
+
+    it('neither reads nor moves a cursor for a task run', () => {
+      parallel = 2;
+      state.patchLane('a', 'standing', { cursor: 'e2' });
+      head = 'e9';
+
+      tracker.run('a', 'manual', 'review PR 1', { job: true });
+
+      expect(spawnCalls[0]?.options).toMatchObject({ env: { HIVE_LEDGER_SINCE: '' } });
+      expect(state.lane('a', 'standing').cursor).toBe('e2');
+    });
+
+    it('leaves the cursor alone when the spawn throws', () => {
+      const throwing = createRunTracker({
+        spawn: () => {
+          throw new Error('EMFILE: too many open files');
+        },
+        command: () => ({
+          file: '/opt/bin/claude',
+          args: [],
+          env: {},
+          cwd: '/tmp/work',
+          sessionUuid: 'sess-1',
+          namesConversation: true,
+          lastTurn: false,
+          kind: 'standing' as const,
+        }),
+        parallelFor: () => 1,
+        state,
+        appendLedger: (entry) => ledger.push(entry),
+        openAsksFor: () => false,
+        hasOpenAsk: () => false,
+        handoffFor: () => undefined,
+        newUuid: () => 'uuid-minted',
+        pushStatus: () => {},
+        pushLines: () => {},
+        now: () => 1_000,
+        newRunId: () => 'run-1',
+        ledgerHead: () => 'e9',
+      });
+
+      throwing.run('a', 'ledger');
+
+      expect(state.lane('a', 'standing').cursor).toBeUndefined();
     });
   });
 });

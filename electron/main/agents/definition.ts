@@ -15,6 +15,7 @@ import {
   AGENT_FIELDS,
   AGENT_LIMIT_DEFAULTS,
   AGENT_NAME_PATTERN,
+  ASKS_FROM_SESSIONS,
   WAKE_EVERY_FLOOR_MS,
   WAKE_ON_CHANNEL_PREFIX,
   WAKE_ON_EVENTS,
@@ -345,6 +346,21 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
     });
   }
 
+  /*
+    Who may open work with this agent (HIVE-412). An unknown name is not a problem: peers come and go, and
+    there is no warning channel to say so. A wildcard other than `sess-*` is, since nothing could match it.
+  */
+  const asksFrom = parseList(shaped('asks_from') ?? '[]') ?? [];
+
+  for (const party of asksFrom) {
+    if (party === ASKS_FROM_SESSIONS || /^[^*\s]+$/.test(party)) continue;
+
+    problems.push({
+      field: 'asks_from',
+      reason: `${party === '' ? 'An empty name' : party} is not a party: name an agent, overmind, or sess-* for any terminal session.`,
+    });
+  }
+
   const mcp = parseList(shaped('mcp') ?? '[]') ?? [];
 
   for (const server of mcp) {
@@ -565,6 +581,7 @@ export function parseAgent(source: string, ctx: ParseContext): ParseResult {
       mcp,
       tools,
       autonomy: (shaped('autonomy') ?? 'ask') as Autonomy,
+      ...(shaped('asks_from') === undefined ? {} : { asksFrom }),
       ...(shaped('lane') === undefined ? {} : { lane: shaped('lane') as AgentLane }),
       limits: {
         turns: limit('limits.turns', AGENT_LIMIT_DEFAULTS.turns),

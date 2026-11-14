@@ -1,4 +1,5 @@
 import {
+  ASKS_FROM_SESSIONS,
   STANDING_LANE,
   repoLane,
   threadLane,
@@ -252,4 +253,24 @@ export function acceptedLanes(agent: string, entries: readonly LedgerEntry[], no
     lanes.set(lane, (lanes.get(lane) ?? 0) + 1);
   }
   return lanes;
+}
+
+/**
+ * Why an agent will not take this entry as new work (HIVE-412), or `undefined` when it may. Only a new
+ * ask is filtered: the list is who may *start* work, so a thread entry always passes. The overmind (D3)
+ * and the agent itself (a lane's self-addressed hand-over) are always admitted.
+ */
+export function askRefusal(
+  agent: string,
+  asksFrom: readonly string[] | undefined,
+  entry: Pick<LedgerEntry, 'kind' | 'from' | 'thread'>,
+): string | undefined {
+  if (asksFrom === undefined || entry.kind !== 'ask' || entry.thread !== undefined) return undefined;
+  if (entry.from === OVERMIND || entry.from === agent) return undefined;
+  const admitted = asksFrom.some(
+    (party) => party === entry.from || (party === ASKS_FROM_SESSIONS && entry.from.startsWith('sess-')),
+  );
+  if (admitted) return undefined;
+  const list = asksFrom.length === 0 ? '' : `${asksFrom.join(', ')} and `;
+  return `${agent} does not take asks from ${entry.from}; it takes them from ${list}${OVERMIND}.`;
 }

@@ -43,6 +43,7 @@ import { MOOT, isPermissionAsk } from './permissions';
 import type { RunStart } from './runs';
 import {
   acceptedLanes,
+  askRefusal,
   decide,
   decideForEvent,
   decideForStatus,
@@ -53,6 +54,7 @@ import {
   type WakeDecision,
 } from './scheduler-rules';
 import type { AgentState } from './state';
+import { wakeEntries } from './wake-entries';
 import { inQuiet, nextRunFrom, quietEndAfter } from './wake-schedule';
 
 /**
@@ -141,7 +143,7 @@ interface SchedulerDeps {
     name: string,
     trigger: string,
     extra?: string,
-    options?: { job?: true; lane?: string; wakes?: readonly string[] },
+    options?: { job?: true; lane?: string; wakes?: readonly string[]; delivered?: string },
   ) => RunStart;
   state: Pick<AgentState, 'read' | 'patch' | 'all' | 'lane' | 'patchLane' | 'forgetLane'>;
   /** Whether a party id names a registered agent rather than a session. */
@@ -170,6 +172,11 @@ interface SchedulerDeps {
    * at one lane.
    */
   laneOf?: (name: string) => AgentLane | undefined;
+  /**
+   * `asks_from:` from the definition (HIVE-412), from the same cached listing as `laneOf`. Absent: any
+   * party may open work.
+   */
+  asksFrom?: (name: string) => readonly string[] | undefined;
   /**
    * Whether a conversation run holds this lane right now (HIVE-186). Absent in
    * a spec that predates lanes, which is every agent at one lane.
@@ -1104,9 +1111,12 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     lane: string,
     wakes: readonly string[] = [],
   ): RunStart => {
+    // The woken entries in the prompt itself (HIVE-412); read off the log, which already holds the one routed now.
+    const delivered = wakes.length === 0 ? undefined : wakeEntries(wakes, deps.ledger.read().entries, name);
     const options = {
       ...(lane === STANDING_LANE ? {} : { lane }),
       ...(wakes.length === 0 ? {} : { wakes }),
+      ...(delivered === undefined ? {} : { delivered }),
     };
     const started = noteStart(
       name,
@@ -1419,7 +1429,9 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
    * lane that wrote it and wakes any other.
    */
   const deliver = (to: string, item: LedgerEntry, entries: readonly LedgerEntry[]): void => {
-    const routed = laneFor(deps.laneOf?.(to), item, entries);
+    // A sender `asks_from:` does not name is answered at once, on the path a lane refusal takes (HIVE-412).
+    const refused = askRefusal(to, deps.asksFrom?.(to), item);
+    const routed = refused === undefined ? laneFor(deps.laneOf?.(to), item, entries) : { refuse: refused };
 
     if ('refuse' in routed) {
       const written = deps.ledger.append({

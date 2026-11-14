@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { AGENT_PREAMBLE, HANDOFF_RULE } from '../../../../electron/main/agents/preamble';
+import { wakeEntries } from '../../../../electron/main/agents/wake-entries';
 import { claudeCodeAdapter } from '../../../../electron/main/harness/claude-code';
 import { codexAdapter } from '../../../../electron/main/harness/codex';
 import { copilotAdapter } from '../../../../electron/main/harness/copilot';
@@ -8,6 +10,7 @@ import type { AgentDefinition } from '../../../../electron/shared/agent-contract
 import { FRAGMENTS } from '../../../../electron/shared/skill-fragments';
 import { HOOK_ENV_GRANTS } from '../../../../electron/shared/hook-contract';
 import { HIVE_STANDING_GRANTS } from '../../../../electron/shared/ledger-tools';
+import type { LedgerEntry } from '../../../../electron/shared/ledger-contract';
 import { matches } from '../../../../electron/shared/permission-rules';
 import {
   fencedRules,
@@ -1033,5 +1036,101 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
     expect(prompt).toContain(
       'This is a fresh conversation on claude-code: your last one ran on codex, which is not available for this wake.\n\nYou woke because: ledger.',
     );
+  });
+});
+
+describe('the delivered entries (HIVE-412)', () => {
+  const BLOCK = 'HiveTTY delivered these ledger entries for this wake.\n\n--- ask a1 from sess-1 (thread a1) ---\nShip PR #1';
+
+  it('ends an ordinary wake with the block', () => {
+    expect(wakePrompt('ledger', 'ask a1 from sess-1', { delivered: BLOCK }).endsWith(`\n\n${BLOCK}`)).toBe(true);
+  });
+
+  it('carries it on a last turn, and after a handoff', () => {
+    expect(wakePrompt('ledger', undefined, { lastTurn: true, delivered: BLOCK }).endsWith(BLOCK)).toBe(true);
+    expect(wakePrompt('ledger', undefined, { handoff: 'I watch #ops.', delivered: BLOCK }).endsWith(BLOCK)).toBe(true);
+  });
+
+  it('reaches the argv through wakeCommand', () => {
+    expect(build({ delivered: BLOCK }).args.at(-1)).toContain('--- ask a1 from sess-1 (thread a1) ---');
+  });
+
+  it('adds nothing when there is no block', () => {
+    expect(wakePrompt('ledger')).toBe(wakePrompt('ledger', undefined, {}));
+    expect(wakePrompt('ledger')).not.toContain('HiveTTY delivered');
+  });
+});
+
+describe('a wake that needs no ledger_read (HIVE-412)', () => {
+  it('carries the answer and the intent behind it in the prompt, and mandates no read', () => {
+    const log: LedgerEntry[] = [
+      { id: 'k1', ts: 1, from: 'shipper', to: 'fixer', kind: 'ask', ref: 'a77', body: 'Fix #293', meta: { intent: 'mark #293 ready once clean' } },
+      { id: 'k2', ts: 2, from: 'fixer', to: 'shipper', kind: 'answer', thread: 'k1', body: 'clean, 1 round' },
+    ];
+    const block = wakeEntries(['k2'], log, 'shipper');
+    if (block === undefined) throw new Error('expected a block');
+
+    const prompt = wakePrompt('ledger', 'answer k2 from fixer', { delivered: block });
+    const system = systemPromptFor(AGENT_PREAMBLE, def());
+
+    expect(prompt).toContain('clean, 1 round');
+    expect(prompt).toContain('your ask a77 said: mark #293 ready once clean');
+    expect(`${system}\n${prompt}`).not.toContain('Call `ledger_read` first');
+    expect(prompt).not.toContain('Read your ledger inbox');
+  });
+
+  it('says the lane\'s work is standing work on a lane, and keeps the standing text elsewhere', () => {
+    expect(wakePrompt('ledger', undefined, { lane: 'repo:a/x', laneMode: 'repo', agent: 'shipper' })).toContain(
+      'the work on this lane is standing work',
+    );
+    expect(wakePrompt('ledger')).toContain('your instructions are standing work and this wake is one of the times to do them');
+  });
+
+  it('asks a last turn for the same state-only handoff (HIVE-412)', () => {
+    const prompt = wakePrompt('schedule', undefined, { lastTurn: true });
+
+    expect(prompt).toContain(HANDOFF_RULE);
+    expect(prompt).not.toContain('what you watch');
+  });
+});
+
+describe('skills on a fresh conversation (HIVE-412)', () => {
+  const SHIP = def({ skills: ['ship', 'merge-pr'] });
+
+  it('names the skills as Claude invokes them when the wake starts a conversation', () => {
+    expect(build({ def: SHIP }).args.at(-1)).toContain(
+      'This is a fresh conversation. Before anything else, invoke the skills your definition names: hive:ship, hive:merge-pr.',
+    );
+  });
+
+  it('says nothing about skills on a resumed wake, or when the definition names none', () => {
+    expect(build({ def: SHIP, sessionUuid: 'aaaa-bbbb' }).args.at(-1)).not.toContain('invoke the skills');
+    expect(build().args.at(-1)).not.toContain('invoke the skills');
+  });
+
+  it('spells them the way Codex and Copilot invoke a hive skill', () => {
+    expect(build({ def: SHIP, adapter: codexAdapter }).args.join('\n')).toContain(
+      'invoke the skills your definition names: $hive-ship, $hive-merge-pr.',
+    );
+    expect(build({ def: SHIP, adapter: copilotAdapter }).args.join('\n')).toContain(
+      'invoke the skills your definition names: /hive:hive-ship, /hive:hive-merge-pr.',
+    );
+  });
+
+  it('keeps a plugin skill as written', () => {
+    expect(build({ def: def({ skills: ['jira-writer:jira-writer'] }) }).args.at(-1)).toContain(
+      'invoke the skills your definition names: jira-writer:jira-writer.',
+    );
+  });
+
+  it('gives a task run the line too, since it is always fresh', () => {
+    expect(build({ def: SHIP, kind: 'task' }).args.at(-1)).toContain('hive:ship, hive:merge-pr');
+  });
+
+  it('puts the line above the delivered entries', () => {
+    const prompt = build({ def: SHIP, delivered: 'BLOCK' }).args.at(-1) ?? '';
+
+    expect(prompt.indexOf('invoke the skills')).toBeGreaterThan(-1);
+    expect(prompt.indexOf('invoke the skills')).toBeLessThan(prompt.indexOf('BLOCK'));
   });
 });

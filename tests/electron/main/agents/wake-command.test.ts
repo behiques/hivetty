@@ -1915,3 +1915,14 @@ describe('createHarnessCheck (HIVE-396)', () => {
     });
   });
 });
+
+describe('the delivered entries (HIVE-412)', () => {
+  it('ends the prompt with the block the scheduler built', () => {
+    const built = build()('slack-watcher', 'ledger', 'ask a1 from overmind', {
+      delivered: 'HiveTTY delivered these ledger entries for this wake.',
+    });
+
+    if ('problem' in built) throw new Error(built.problem);
+    expect(built.args.at(-1)?.endsWith('HiveTTY delivered these ledger entries for this wake.')).toBe(true);
+  });
+});

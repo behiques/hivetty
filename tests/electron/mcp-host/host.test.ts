@@ -144,3 +144,24 @@ describe('createHandlers — the session lane (HIVE-368)', () => {
     expect(names({ HIVE_RUN_ID: 'run-9' })).not.toContain('session_done');
   });
 });
+
+describe('createHandlers — the lane cursor (HIVE-412)', () => {
+  const ENV = { HIVE_SESSION_ID: 'shipper', HIVE_HOOK_TOKEN: 't', HIVE_RECEIVER_URL: 'http://127.0.0.1:1', HIVE_RUN_ID: 'run-1' };
+  const firstRead = async (env: NodeJS.ProcessEnv): Promise<unknown> => {
+    const fetchImpl = vi.fn(
+      async (_url: string, _init: RequestInit) =>
+        new Response(JSON.stringify({ entries: [], openAsks: [], claims: {} }), { status: 200 }),
+    );
+    await createHandlers(env, fetchImpl as never).callTool('ledger_read', {});
+    return JSON.parse(String(fetchImpl.mock.calls[0]?.[1].body));
+  };
+
+  it('starts the first plain read after HIVE_LEDGER_SINCE', async () => {
+    expect(await firstRead({ ...ENV, HIVE_LEDGER_SINCE: '20261113-100000-0001' })).toEqual({ since: '20261113-100000-0001' });
+  });
+
+  it('reads the newest page when it is empty or absent', async () => {
+    expect(await firstRead({ ...ENV, HIVE_LEDGER_SINCE: '' })).toEqual({ limit: 50 });
+    expect(await firstRead(ENV)).toEqual({ limit: 50 });
+  });
+});

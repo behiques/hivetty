@@ -156,6 +156,7 @@ describe('agent-contract', () => {
       'mcp',
       'tools',
       'grants',
+      'asks_from',
       'harness',
       'fallback',
       'codex.model',

@@ -28,7 +28,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > a one-shot grant 1
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+    "You woke because: ledger. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "env": {
@@ -74,7 +74,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > a wide grant narro
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+    "You woke because: ledger. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "env": {
@@ -122,7 +122,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > budgetUsd set 1`] 
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+    "You woke because: ledger. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "env": {
@@ -168,7 +168,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > container agent 1`
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+    "You woke because: ledger. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "container": {
     "command": "claude",
@@ -220,7 +220,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > container agent, r
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+    "You woke because: ledger. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "container": {
     "command": "/opt/claude",
@@ -272,7 +272,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > first wake 1`] = `
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+    "You woke because: ledger. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "env": {
@@ -322,7 +322,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > fresh session with
 
 Carry on with the review.
 
-You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+You woke because: ledger. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "env": {
@@ -368,7 +368,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > handoff (last turn
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. This is your last turn on this session. Carry out your instructions for this wake as usual — they are standing work whether or not anything is waiting in your inbox — then post a handoff with ledger_handoff: what you watch, open threads and their ids, decisions and preferences you have learned, anything a fresh copy of you must know. Then finish your turn.",
+    "You woke because: ledger. This is your last turn on this session. Carry out your instructions for this wake as usual — they are standing work whether or not anything is waiting in your inbox — then leave a handoff. Call \`ledger_handoff\` with state only: what you hold, open thread ids and refs, loose ends, preferences this user has shown. Never restate a skill or your instructions; your next session loads both itself. Then finish your turn.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "env": {
@@ -418,7 +418,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > model and effort 1
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+    "You woke because: ledger. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "effort": "high",
@@ -466,7 +466,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > resume 1`] = `
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+    "You woke because: ledger. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "env": {
@@ -512,7 +512,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > subscriptionAuth o
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+    "You woke because: ledger. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "env": {
@@ -559,7 +559,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > subscriptionAuth o
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+    "You woke because: ledger. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "env": {
@@ -651,7 +651,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > thread lane 1`] = 
     "--output-format",
     "stream-json",
     "--verbose",
-    "You woke because: ledger. You are slack-watcher's lane for ask A. Entries on this lane wake you; entries for other lanes are not yours. Read your ledger inbox, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — your instructions are standing work and this wake is one of the times to do them. End your turn when that work is done, or when you are waiting on an answer.",
+    "You woke because: ledger. You are slack-watcher's lane for ask A. Entries on this lane wake you; entries for other lanes are not yours. Act on the entries this prompt carries, if any, then carry out the instructions you were given. An empty inbox does not mean there is nothing to do — the work on this lane is standing work. End your turn when that work is done, or when you are waiting on an answer.",
   ],
   "cwd": "/home/me/.hive/work/slack-watcher",
   "env": {

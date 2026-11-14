@@ -998,6 +998,8 @@ const agentSchedules = new Map<
 const agentParallel = new Map<string, number>();
 /** `lane:` per agent, from the same listing (HIVE-186). Absent: a pre-lane agent. */
 const agentLanes = new Map<string, AgentLane>();
+/** `asks_from:` per agent, from the same listing (HIVE-412). Absent: any party may open work. */
+const agentAsksFrom = new Map<string, readonly string[]>();
 /**
  * Every valid agent's own `container.host_alias`, for the receiver's `Host`
  * guard (HIVE-134 follow-up).
@@ -1074,6 +1076,7 @@ function refreshKnownAgents(): Promise<void> {
       agentSchedules.clear();
       agentParallel.clear();
       agentLanes.clear();
+      agentAsksFrom.clear();
       agentHostAliases.clear();
 
       for (const agent of snapshot.agents) {
@@ -1101,6 +1104,7 @@ function refreshKnownAgents(): Promise<void> {
         );
         // The lane mode, for the scheduler's routing (HIVE-186).
         if (agent.lane !== undefined) agentLanes.set(agent.name, agent.lane);
+        if (agent.asksFrom !== undefined) agentAsksFrom.set(agent.name, agent.asksFrom);
         // The receiver's `Host` guard (HIVE-134 follow-up), asked just as
         // synchronously as the two above. Absent means this agent inherits
         // the global alias, which `hostAliases` always admits on its own —
@@ -3050,9 +3054,12 @@ export function registerIpcHandlers(
       here would be `null` for the life of the app.
     */
     grants: {
-      set: (run, owner, grants) => hooks.receiverGrants()?.set(run, owner, grants),
+      set: (run, owner, grants, since) => hooks.receiverGrants()?.set(run, owner, grants, since),
       delete: (run) => hooks.receiverGrants()?.delete(run),
     },
+    // HIVE-412: the lane cursor's next value, read at the moment a run's child exists.
+    // shortcut: read() derives open asks and claims over the whole log only to keep one id; add a store-level head() if run starts ever show in a profile.
+    ledgerHead: () => ledger.read({ limit: 1 }).entries.at(-1)?.id,
     // HIVE-184: read per call for the reason `grants` is; the receiver binds later.
     runToken: (run) => hooks.runToken(run),
     /*
@@ -3147,6 +3154,7 @@ export function registerIpcHandlers(
     // The watcher's cache, filled in the same pass as `agentSchedules` (HIVE-128).
     parallelFor: (name) => agentParallel.get(name) ?? AGENT_LIMIT_DEFAULTS.parallel,
     laneOf: (name) => agentLanes.get(name),
+    asksFrom: (name) => agentAsksFrom.get(name),
     /*
       HIVE-409: a merge card is moot once its PR merged. `github` is declared further down this
       function; this runs only from the sweep's interval, after the whole body has executed, as
@@ -6141,6 +6149,7 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
   agentSchedules.clear();
   agentParallel.clear();
   agentLanes.clear();
+  agentAsksFrom.clear();
   // Back to "nothing has been listed", not "nothing is scheduled": the next
   // registration must earn the right to clear a `nextRunAt` all over again.
   agentsListed = false;
