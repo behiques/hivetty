@@ -370,11 +370,13 @@ const SOCKET = 'probe-socket';
  * Every Claude Code agent holds the `Workflow` tool (HIVE-414), granted by the fence rather than
  * named in `tools:`. Agent runs set `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` and Workflow runs its
  * agents in the background, so only a real run proves the grant is usable and not just allowed.
- * The inner agent's word is the reverse of a word written backwards, so the answer carries what
- * the workflow's agent produced.
+ * The workflow's agent makes one fenced call of its own, a `ledger_post` carrying a marker: a
+ * background subagent that skipped `--permission-prompt-tool` would be denied it under
+ * `ask: ["*"]` (see `FOREGROUND_ONLY` in `headless.ts`), so the post on disk is what proves the
+ * workflow's agents can do work, not only start. The outer agent is told never to post.
  */
 const WORKFLOW = 'probe-workflow';
-const WORKFLOW_WORD = 'dropback';
+const WORKFLOW_MARKER = 'workflow-agent-posted-7319';
 
 const AGENTS = [
   NAME,
@@ -969,6 +971,37 @@ commands — there is nothing here to find. After your ledger inbox, reply with
 the single sentence "socket probe reporting in" and end your turn.
 `;
 
+const WORKFLOW_MD = `---
+name: ${WORKFLOW}
+description: Proves a fenced agent can run the Workflow tool without naming it.
+icon: Ghost
+model: haiku
+wake:
+  on: [ledger]
+tools: [TodoWrite]
+limits:
+  turns: 12
+  rotate_after: 50
+---
+This is a conformance probe. Do not read files, search the disk, or run
+commands.
+
+Read your ledger inbox. For the ask addressed to you, call the \`Workflow\`
+tool (fetch its schema with \`ToolSearch\` first if you must) with exactly
+this inline script and nothing else:
+
+\`\`\`js
+export const meta = { name: 'probe', description: 'one agent, one fenced call' }
+return await agent("Call the mcp__hive__ledger_post tool (load its schema with ToolSearch first) with the body ${WORKFLOW_MARKER} and no other fields. Then reply with only the word posted, or with the error if the call was refused.")
+\`\`\`
+
+Never call \`ledger_post\` yourself. Wait for the workflow's result. Then call
+\`ledger_answer\` with \`thread\` set to that ask's \`id\` and the body
+\`workflow said: <the result>\`. If the Workflow call failed, answer with
+\`workflow failed: <the error>\` instead. Then end your turn. Say nothing
+else.
+`;
+
 /**
  * The fence probe, as a definition (HIVE-119).
  *
@@ -990,36 +1023,6 @@ the single sentence "socket probe reporting in" and end your turn.
  * have made this scenario unable to prove anything about the ordering it
  * exists to check.
  */
-const WORKFLOW_MD = `---
-name: ${WORKFLOW}
-description: Proves a fenced agent can run the Workflow tool without naming it.
-icon: Ghost
-model: haiku
-wake:
-  on: [ledger]
-tools: [TodoWrite]
-limits:
-  turns: 12
-  rotate_after: 50
----
-This is a conformance probe. Do not read files, search the disk, or run
-commands.
-
-Read your ledger inbox. For the ask addressed to you, call the \`Workflow\`
-tool (fetch its schema with \`ToolSearch\` first if you must) with exactly
-this inline script and nothing else:
-
-\`\`\`js
-export const meta = { name: 'probe', description: 'one agent, one word' }
-return await agent("Reply with only the letters of the word 'kcabpord' in reverse order, one word, lowercase, nothing else.")
-\`\`\`
-
-Wait for the workflow's result. Then call \`ledger_answer\` with \`thread\`
-set to that ask's \`id\` and the body \`workflow said: <the result>\`. If the
-Workflow call failed, answer with \`workflow failed: <the error>\` instead.
-Then end your turn. Say nothing else.
-`;
-
 const fenceMd = (marker: string) => `---
 name: ${FENCE}
 description: Proves the permission fence denies an ungranted Bash call.
@@ -2477,6 +2480,47 @@ describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
     }, 300_000);
   });
 
+  it('runs the Workflow tool on the standing grant, with no card and no denial (HIVE-414)', async () => {
+    const lineMark = lines.length;
+    const woken = settled(WORKFLOW);
+
+    const asked = ledger.append({ from: SESSION, to: WORKFLOW, kind: 'ask', body: 'run the probe workflow' });
+
+    expect(asked.ok).toBe(true);
+
+    await woken;
+
+    const entries = await onDisk();
+    const cards = entries.filter(
+      (entry) =>
+        entry['from'] === WORKFLOW &&
+        entry['kind'] === 'ask' &&
+        (entry['meta'] as Record<string, unknown> | undefined)?.['kind'] === 'permission',
+    );
+
+    // 1. The fence allowed the call: no permission card was raised for it.
+    expect(cards.map((card) => (card['meta'] as Record<string, unknown>)['tool'])).toEqual([]);
+
+    // 2. The call happened, read off the run log's fully-qualified line, not the model's prose.
+    expect(
+      lines.slice(lineMark).some((line) => line.text.startsWith('Workflow')),
+      'the run log should show the Workflow tool being called',
+    ).toBe(true);
+
+    // 3. The workflow's agent made a fenced call of its own, and it was allowed: its post is on disk.
+    const posts = entries.filter(
+      (entry) => entry['from'] === WORKFLOW && entry['kind'] === 'post' && String(entry['body'] ?? '').includes(WORKFLOW_MARKER),
+    );
+
+    expect(posts, 'the workflow agent\'s ledger_post should be on disk').toHaveLength(1);
+
+    // 4. The outer agent got the workflow's result and closed the ask.
+    const answers = entries.filter((entry) => entry['from'] === WORKFLOW && entry['kind'] === 'answer');
+
+    expect(answers).toHaveLength(1);
+    expect(String(answers[0]?.['body'] ?? '')).not.toMatch(/workflow failed/i);
+  }, 300_000);
+
   /**
    * The permission fence, end to end (HIVE-119).
    *
@@ -2507,41 +2551,6 @@ describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
    * sequencing `ipc/index.ts` now uses. A regression in that ordering fails
    * here, not only in `permissions.test.ts`'s narrower unit coverage.
    */
-  it('runs the Workflow tool on the standing grant, with no card and no denial (HIVE-414)', async () => {
-    const lineMark = lines.length;
-    const woken = settled(WORKFLOW);
-
-    const asked = ledger.append({ from: SESSION, to: WORKFLOW, kind: 'ask', body: 'run the probe workflow' });
-
-    expect(asked.ok).toBe(true);
-
-    await woken;
-
-    const entries = await onDisk();
-    const cards = entries.filter(
-      (entry) =>
-        entry['from'] === WORKFLOW &&
-        entry['kind'] === 'ask' &&
-        (entry['meta'] as Record<string, unknown> | undefined)?.['kind'] === 'permission',
-    );
-
-    // 1. The fence allowed the call: no permission card was raised for it.
-    expect(cards.map((card) => (card['meta'] as Record<string, unknown>)['tool'])).toEqual([]);
-
-    // 2. The call happened, read off the run log's fully-qualified line, not the model's prose.
-    expect(
-      lines.slice(lineMark).some((line) => line.text.startsWith('Workflow')),
-      'the run log should show the Workflow tool being called',
-    ).toBe(true);
-
-    // 3. The workflow's agent ran, and its word reached the answer.
-    const answers = entries.filter((entry) => entry['from'] === WORKFLOW && entry['kind'] === 'answer');
-
-    expect(answers).toHaveLength(1);
-    expect(String(answers[0]?.['body'] ?? '')).not.toMatch(/workflow failed/i);
-    expect(String(answers[0]?.['body'] ?? '').toLowerCase()).toContain(WORKFLOW_WORD);
-  }, 300_000);
-
   it('denies an ungranted Bash call, then carries a permanent grant to the next wake', async () => {
     await wake('manual', FENCE);
 

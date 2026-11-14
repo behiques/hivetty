@@ -2249,8 +2249,9 @@ by the person, can run a workflow without a `tools:` entry or a card. Agent
 runs set `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` and a workflow runs its agents
 in the background, so the grant was proven by a live probe first
 (`runs the Workflow tool on the standing grant`, `pnpm test:agent`): before
-the grant the fence raised a card, after it the workflow's agent ran and its
-word reached the answer. Every tool a workflow's agents call is still fenced.
+the grant the fence raised a card, after it the workflow's agent made a
+fenced `ledger_post` of its own and it landed. Every tool a workflow's agents
+call still goes through the fence.
 Codex and Copilot have no Workflow tool and grant nothing new.
 
 Under `-p`, `Notification` and `PermissionRequest` hooks do not fire and the
