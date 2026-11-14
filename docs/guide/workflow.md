@@ -37,7 +37,7 @@ or type the key in any session:
 ```
 
 `work-on` reads the ticket through HiveTTY's Jira connection, reconciles it with the code,
-reports, and stops for your go-ahead. Then `brainstorm` sorts the work, asking its questions
+and reports; it stops for you only when the reconciliation needs a decision. Then `brainstorm` sorts the work, asking its questions
 in one batch: a spike, a bounded change with a short design in the chat, or an architectural
 one whose design is written down. Anything with more than one step gets a plan. The ticket
 moves to In Progress when the build starts, and only from To Do.
