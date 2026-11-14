@@ -34,7 +34,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > a one-shot grant 1
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep","Bash(git push:*)"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep","Bash(git push:*)"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -80,7 +80,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > a wide grant narro
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","*","mcp__hive__project_auto_merge"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","*","mcp__hive__project_auto_merge"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -128,7 +128,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > budgetUsd set 1`] 
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -182,7 +182,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > container agent 1`
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://host.docker.internal:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -234,7 +234,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > container agent, r
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://host.docker.internal:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -278,7 +278,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > first wake 1`] = `
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -328,7 +328,7 @@ You woke because: ledger. Act on the entries this prompt carries, if any, then c
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -374,7 +374,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > handoff (last turn
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -425,7 +425,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > model and effort 1
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -472,7 +472,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > resume 1`] = `
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -519,7 +519,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > subscriptionAuth o
     "ANTHROPIC_API_KEY": "sk-leak",
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -565,7 +565,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > subscriptionAuth o
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -611,7 +611,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > task run 1`] = `
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",
@@ -657,7 +657,7 @@ exports[`the command line an agent wake runs (HIVE-337 pin) > thread lane 1`] = 
   "env": {
     "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
     "HIVE_AGENT": "1",
-    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Read","Grep"]",
+    "HIVE_GRANTS": "["mcp__hive__ledger_*","mcp__hive__agents","mcp__hive__projects","mcp__hive__pr","mcp__hive__jira_get","mcp__hive__jira_users","mcp__hive__approve","ToolSearch","Workflow","Read","Grep"]",
     "HIVE_HOOK_TOKEN": "tok",
     "HIVE_RECEIVER_URL": "http://127.0.0.1:5051",
     "HIVE_SESSION_ID": "slack-watcher",

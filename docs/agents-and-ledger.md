@@ -1405,7 +1405,8 @@ Jira on the same server; those are `HIVE_CONSENT_TOOLS`, and an agent lists
 them in `tools:` or its call becomes a card.
 `ToolSearch` is granted just as unconditionally, which matters here: MCP tool
 schemas are deferred, so without it an agent could not reach even a granted
-tool.
+tool. On Claude Code, `Workflow` is granted the same way (HIVE-414), so any
+agent can orchestrate subagents without naming it in `tools:`.
 
 **What this unlocks with no console change.** An agent that finds work it is
 not for looks up who is, addresses the ask, and — because `wake.on: [ledger]`
@@ -2242,6 +2243,17 @@ widens nothing an agent can do. This was found by `pnpm test:agent`, not by
 any unit test — nothing in a mocked child process can show a real `claude`
 binary refusing to call a tool it cannot yet describe.
 
+**`Workflow` is granted unconditionally on Claude Code** (HIVE-414), beside
+`ToolSearch` in `claudeFence.grants`: every Claude Code agent, shipped or made
+by the person, can run a workflow without a `tools:` entry or a card. Agent
+runs set `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` and a workflow runs its agents
+in the background, so the grant was proven by a live probe first
+(`runs the Workflow tool on the standing grant`, `pnpm test:agent`): before
+the grant the fence raised a card, after it the workflow's agent made a
+fenced `ledger_post` of its own and it landed. Every tool a workflow's agents
+call still goes through the fence.
+Codex and Copilot have no Workflow tool and grant nothing new.
+
 Under `-p`, `Notification` and `PermissionRequest` hooks do not fire and the
 status line does not run — there is no footer to write to and no human
 sitting at one. The fence's only externally visible effect is the `ask` entry
@@ -2738,7 +2750,10 @@ command. HIVE-166's grant or the fence's card decides each merge, and
 `matches`, and pins every shipped icon to the Settings list so none draws as
 a question mark. The builder (HIVE-170) takes a plan by `ledger_ask` from the
 session that planned it, builds it task by task in a worktree under
-`~/.hivetty/work/builder/` with `execute`'s drift check after each task, opens
+`~/.hivetty/work/builder/` with `execute` inline (no per-task check agent; one
+re-read of the plan against the branch diff before the one gate; it holds no
+`SendMessage`, so a fix round is a fresh implementer, and a build ask with no
+`closes-ticket:` line takes the plan header's `Closes ticket:`), opens
 the draft PR, and asks the shipper. A question the plan does not answer goes
 to the job's `reply-to` party, the planning session first, and the live suite
 proves that addressing across two wakes (`asks the party its job named`).

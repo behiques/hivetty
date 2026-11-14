@@ -56,7 +56,8 @@ verifier only; Claude Code adds a second check that judges the evidence.
 
 ## Plan and build
 
-`plan` writes tasks sized in builder minutes, about five per TDD task, every one with the test that proves it. The
+`plan` writes tasks that name the behaviour, the files and the test that proves it, with code only
+on the risk-bearing ones, and a header that names the environment and the verification. The
 plan is a file under the repository's `.hive/plans`, ignored by git, and it is what a builder
 run or an inline run executes.
 

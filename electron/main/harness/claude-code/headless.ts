@@ -146,5 +146,10 @@ export function launchHeadless(spec: HeadlessSpec): HeadlessPlan {
  * built-in `ToolSearch` to fetch the schema. No `def.tools` names a built-in, so without this the
  * fence denies the first thing the preamble asks for. It grants no capability: every tool it
  * surfaces is still fenced when called.
+ *
+ * `Workflow` is granted on every wake too (HIVE-414), so any Claude Code agent, shipped or made by
+ * the person, can orchestrate subagents without naming it. Proven by the live probe in
+ * `tests/live/agent-conformance.test.ts`, because agent runs disable background tasks and a
+ * workflow runs its agents in the background. Every tool a workflow's agents call is still fenced.
  */
-export const claudeFence: PermissionFence = { express: () => ({ ok: true }), grants: ['ToolSearch'] };
+export const claudeFence: PermissionFence = { express: () => ({ ok: true }), grants: ['ToolSearch', 'Workflow'] };

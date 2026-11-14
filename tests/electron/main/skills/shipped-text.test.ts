@@ -60,6 +60,23 @@ describe('shipped text agrees (HIVE-413)', () => {
   });
 });
 
+describe('the builder and the skills it loads agree (HIVE-414)', () => {
+  const builder = () => agent('builder');
+  const execute = () => read('skills/execute/SKILL.md');
+  it('name one progress file, ignored where it is written', () => {
+    for (const text of [builder(), execute()]) expect(text).toContain('<worktree>/.hive/sdd/<plan>/progress.md');
+    expect(execute()).toMatch(/<worktree>\/\.hive\/\.gitignore/);
+  });
+  it('the shots folder is the one path outside the worktree the builder writes', () => {
+    expect(builder()).toContain('<hive>/work/builder/shots/<ticket>/');
+  });
+  it('one gate, no caffeinate, closes-ticket falls back to the plan header', () => {
+    expect(builder()).toMatch(/do\s+not run it a second time/);
+    expect(builder()).not.toMatch(/caffeinate/);
+    expect(builder()).toMatch(/`Closes ticket:`/);
+  });
+});
+
 describe('one copy of each shared rule (HIVE-413 PR 2)', () => {
   const uses = (text: string, name: string) => text.includes(`{{include:${name}}}`);
   it('ship and the builder include the intake; neither restates it', () => {
@@ -74,5 +91,12 @@ describe('one copy of each shared rule (HIVE-413 PR 2)', () => {
   });
   it('ship, merge-pr and review-pr-findings include literal-target', () => {
     for (const text of [ship(), mergePr(), read('skills/review-pr-findings/SKILL.md')]) expect(uses(text, 'literal-target')).toBe(true);
+  });
+  it('tdd and execute share the tdd-loop, and tdd restates no loop of its own (HIVE-414)', () => {
+    const tdd = read('skills/tdd/SKILL.md');
+    const execute = read('skills/execute/SKILL.md');
+    expect(uses(tdd, 'tdd-loop')).toBe(true);
+    expect(uses(execute, 'tdd-loop')).toBe(true);
+    for (const text of [tdd, execute]) expect(text).not.toContain('NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST');
   });
 });

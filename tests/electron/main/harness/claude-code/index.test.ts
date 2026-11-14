@@ -220,7 +220,7 @@ describe('the headless members (HIVE-344)', () => {
     expect(claudeCodeAdapter.installed.skillPlaces).toBe('~/.claude/skills and your installed plugins');
   });
 
-  it('grants ToolSearch on every run, which loads the deferred MCP schemas', () => {
-    expect(claudeCodeAdapter.headless.fence.grants).toEqual(['ToolSearch']);
+  it('grants ToolSearch and Workflow on every run (HIVE-344, HIVE-414)', () => {
+    expect(claudeCodeAdapter.headless.fence.grants).toEqual(['ToolSearch', 'Workflow']);
   });
 });

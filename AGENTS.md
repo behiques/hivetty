@@ -58,6 +58,7 @@ This is **HiveTTY Pro**, a commercial, proprietary app by Behiques Consulting LL
 | `pnpm test:hooks` · `:statusline` · `:skills` · `:codex-plugin` · … (one script per `tests/live/*-conformance.test.ts`) | Live conformance suites against a real `claude`, `codex` or `copilot`, Docker, or the built app (some need a `desktop:build` first). Each is skipped, not failed, when its CLI or credentials are absent; read the test file for what it proves |
 | `pnpm verify:boundaries` | Proves every architecture fence still fires |
 
+The gate, for `hive:verify`, under Node from `.nvmrc`: `pnpm lint`, `pnpm type-check`, `pnpm test` (`pnpm exec vitest run <spec>` for one), `pnpm test:e2e` when behaviour moved or several files did (`pnpm desktop:build` first), a live suite when its subject moved.
 **`pnpm lint` and `pnpm type-check` must both pass before any task is considered
 done.** Neither is optional, and no rule may be disabled inline to make a task pass.
 

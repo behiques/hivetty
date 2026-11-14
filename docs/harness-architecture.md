@@ -354,7 +354,7 @@ none. Open gap: HIVE-353.
 - `reply(reason?)`: the CLI's answer on `/fence`. Absent: the CLI is not hook-fenced, and `/fence`
   answers `400`.
 - `grants`: built-ins every run on this CLI needs, granted whatever the definition says
-  (`ToolSearch` on Claude and Copilot, none on Codex).
+  (`ToolSearch` and `Workflow` on Claude, `ToolSearch` on Copilot, none on Codex).
 
 `decide` in `@shared/permission-rules` is the only matcher; the translating fences map calls into
 its vocabulary. **Can't express means not a candidate:** resolution skips the CLI and never runs
