@@ -2783,6 +2783,16 @@ describe('createRunTracker', () => {
       ]);
     });
 
+    it('still re-wakes when the run\'s own ask was answered while it exited: that rule is the thread lane\'s', () => {
+      owed = [{ ask: { id: 'k1', ref: 'a7' }, rewoken: false }];
+      answeredMidExit = true;
+
+      tracker.run('a', 'ledger', undefined, { wakes: ['k1'] });
+      end();
+
+      expect(fromOvermind()[0]).toMatchObject({ kind: 'post', to: 'a', thread: 'k1', meta: { rewoke: 'k1' } });
+    });
+
     it('does the same on the standing lane', () => {
       owed = [{ ask: { id: 'k1' }, rewoken: false }];
 
@@ -2853,6 +2863,16 @@ describe('createRunTracker', () => {
         thread: 'k1',
         body: 'a run r-old ended (failed: lost) without answering k1',
       });
+    });
+
+    it("leaves a lost thread lane's ask alone when the run's own ask was answered as it exited", () => {
+      left = { ask: { id: 'k1' }, claims: ['HIVE-416'] };
+      answeredMidExit = true;
+
+      tracker.settleLost([{ agent: 'a', run: 'run-1', lane: 'thread:k1' }]);
+
+      expect(ledger).toHaveLength(1);
+      expect(ledger[0]).toMatchObject({ body: 'run.ended — failed' });
     });
 
     it('only ends a run that was waiting on a question of its own', () => {

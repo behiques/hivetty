@@ -657,7 +657,10 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
    * What a run that has ended still owes, and what main does about it.
    *
    * A thread lane (HIVE-354): the ask it exists to answer is failed to the asker at once, and
-   * what the run claimed is released.
+   * what the run claimed is released. Unless the run's own ask was closed before it ended
+   * (HIVE-406 follow-ups): `ledger_ask` ends the turn, so an answer landing before the process
+   * exits is no longer open when this runs, yet the run was waiting on it, and its queued wake
+   * belongs to this lane's next run. A run lost to a quit gets the same reading.
    *
    * A standing or repo lane (HIVE-410): each ask the run was woken for and neither accepted nor
    * answered gets one re-wake, a post from the overmind on the ask's thread that the scheduler
@@ -670,6 +673,7 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     const meta = { run, agent: name, outcome, ...(reason === null ? {} : { reason }) };
 
     if (lane.startsWith('thread:')) {
+      if (deps.answeredDuring?.(name, run) === true) return;
       const left = deps.leftOpen?.(name, run, lane);
       if (left?.ask === undefined) return;
       const freed = left.claims.length === 0 ? '' : `\nReleased: ${left.claims.join(', ')}`;
@@ -1007,18 +1011,13 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
     /*
       Lane-wide (HIVE-408): a queued post re-wakes a thread lane as a second run, which asked
       nothing while the first run's question is still open. That lane is waiting, not abandoned.
-    */
-    /*
-      Answered mid-exit (HIVE-406 follow-ups): `ledger_ask` ends the turn, so an answer to this run's
-      own ask that lands before its process ends is not open any more by the time it closes, and
-      `asking` misses it. The run is waiting on that answer; the lane's next run reads it.
+      A thread lane whose run's own ask was answered while it exited is waiting too: `settleOwed`.
     */
     if (
       outcome !== 'asking' &&
       !asking &&
       current.status !== 'paused' &&
-      deps.openAsksOnLane?.(name, info.lane) !== true &&
-      deps.answeredDuring?.(name, info.run) !== true
+      deps.openAsksOnLane?.(name, info.lane) !== true
     ) {
       // The re-wake post may start the agent's next run from the ledger's change listener, while this
       // finalizer is on the stack: nothing below writes the agent's status, so that is safe (HIVE-410).

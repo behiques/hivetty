@@ -966,9 +966,10 @@ The lane is failed only when the run has no open ask and none of its own asks
 was closed before it ended (`answeredDuring` in `ledger-derive.ts`, HIVE-406
 follow-ups). `ledger_ask` ends the turn, so an answer that lands between the
 ask and the process exiting is no longer open when `finalizeRun` looks, yet
-the run was waiting on it: an answer, a `failed` from the party asked, or an
-expiry all count, and the queued wake reaches the thread lane's next run. A
-moot close does not count; it is addressed to nobody and wakes no lane.
+the run was waiting on it: an answer (a moot one included), a `failed` from the
+party asked, or an expiry all count, and the queued wake reaches the thread
+lane's next run. A run lost to a quit is read the same way. Standing and repo
+lanes keep their re-wake: the rule is the thread lane's.
 
 A standing or repo lane has the same contract, one step softer (HIVE-410).
 `run.started` records in `meta.wakes` which entries the run was woken for, and

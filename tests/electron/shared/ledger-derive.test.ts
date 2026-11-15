@@ -1193,9 +1193,9 @@ describe('answeredDuring (HIVE-406 follow-ups)', () => {
     expect(answeredDuring([old], 'builder', 'r1', NOW)).toBe(true);
   });
 
-  it('is false for an ask the overmind closed as moot', () => {
+  it('is true for an ask the overmind closed as moot: that answer reaches the asking lane too', () => {
     const moot = entry({ id: 'm1', from: OVERMIND, kind: 'answer', thread: 'q1', body: 'moot', meta: { moot: 'x' } });
-    expect(answeredDuring([ask('q1', 'r1'), moot], 'builder', 'r1', NOW)).toBe(false);
+    expect(answeredDuring([ask('q1', 'r1'), moot], 'builder', 'r1', NOW)).toBe(true);
   });
 });
 

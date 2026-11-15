@@ -1143,16 +1143,16 @@ export function openAsksOnLane(entries: readonly LedgerEntry[], agent: string, l
  * the turn, so whatever closed it reached the run after its last tool call: the lane's next run is
  * the one that reads it, and the run is waiting on that answer, not abandoning its lane.
  *
- * Answered and `failed` count: each is addressed back to the asker and routed to the lane that asked.
- * Expired counts too: `expiredAsks` feeds the scheduler's sweep, which wakes the asking lane with the
- * expiry notice. Moot does not: the sweep's moot answer is addressed to nobody, so it wakes no lane.
+ * Every terminal state counts. An answer, the sweep's moot answer included, is addressed to the
+ * asker by `Ledger.append` and routed to the lane that asked; so is a `failed` from the party asked.
+ * An expiry wakes the asking lane through the scheduler's sweep, which reads `expiredAsks`.
  */
 export function answeredDuring(entries: readonly LedgerEntry[], agent: string, run: string, now: number): boolean {
   return askStates(entries, now).some(
     ({ ask, state }) =>
       ask.from === agent &&
       ask.meta?.['run'] === run &&
-      (state === 'answered' || state === 'failed' || state === 'expired'),
+      (state === 'answered' || state === 'failed' || state === 'expired' || state === 'moot'),
   );
 }
 
