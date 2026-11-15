@@ -1139,6 +1139,24 @@ export function openAsksOnLane(entries: readonly LedgerEntry[], agent: string, l
 }
 
 /**
+ * Was an ask this run posted closed before the run ended (HIVE-406 follow-ups)? `ledger_ask` ends
+ * the turn, so whatever closed it reached the run after its last tool call: the lane's next run is
+ * the one that reads it, and the run is waiting on that answer, not abandoning its lane.
+ *
+ * Every terminal state counts. An answer, the sweep's moot answer included, is addressed to the
+ * asker by `Ledger.append` and routed to the lane that asked; so is a `failed` from the party asked.
+ * An expiry wakes the asking lane through the scheduler's sweep, which reads `expiredAsks`.
+ */
+export function answeredDuring(entries: readonly LedgerEntry[], agent: string, run: string, now: number): boolean {
+  return askStates(entries, now).some(
+    ({ ask, state }) =>
+      ask.from === agent &&
+      ask.meta?.['run'] === run &&
+      (state === 'answered' || state === 'failed' || state === 'expired' || state === 'moot'),
+  );
+}
+
+/**
  * What a closing run leaves behind it (HIVE-354): the ask its thread lane
  * exists to answer, while that ask is still open, and every task the agent
  * still holds by a claim this run wrote. A standing or repo lane names no ask;

@@ -292,9 +292,9 @@ line into Stage 4: "Ticket `KEY` could not be read — scope not checked
    confidence, and never withhold an approval. A false alarm costs a minute
    to dismiss, and a
    miss on someone else's PR costs an incident, not a review round.
-   Borderline findings still go through steps 3 and 4. A verified-minor
-   finding is dropped there only when it lacks an exact file, line and
-   snippet; being small is what its list is for.
+   Borderline and verified-minor findings go through steps 3 and 4 like
+   every finding. Being small is never the reason a verified-minor is
+   dropped: that is what its list is for.
 3. **Must-exclude.** Drop:
    - nitpicks with no realistic trigger
    - anything without an exact file, line and snippet

@@ -14,8 +14,8 @@ import type { Ledger } from './index';
  *
  * `claims()` is the dedup: a claim another party has since taken is not this
  * session's, and a second ending finds nothing left to release. A release that
- * fails is logged and the rest still go out; the claim stays held, and the
- * next ending of the same id retries it.
+ * fails is logged and the rest still go out; that claim stays held until
+ * someone releases it, or the session is resumed and ends again.
  */
 export function releaseClaimsOf(ledger: Pick<Ledger, 'read' | 'append'>, entityId: string): void {
   let held: string[];

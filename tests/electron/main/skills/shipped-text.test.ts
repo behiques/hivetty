@@ -227,6 +227,12 @@ describe('the review path (HIVE-416)', () => {
     for (const name of ['bug-scan', 'business-alignment', 'user-pov', 'state-lifecycle'])
       expect(read(`skills/pr-review/prompts/agent-${name}.md`)).toMatch(/`SPEC`, `PLAN`, `NOTES`/);
   });
+  it('pr-review puts borderline and verified-minor findings through steps 3 and 4 like every finding', () => {
+    const text = one(prReview());
+    expect(text).toContain('Borderline and verified-minor findings go through steps 3 and 4 like every finding.');
+    expect(text).toContain('Being small is never the reason a verified-minor is dropped: that is what its list is for.');
+    expect(text).not.toMatch(/dropped there only when it lacks an exact file/);
+  });
   it('prefetch-ticket reads through the jira-tracker script, and no skill names jira-writer', () => {
     const prefetch = read('skills/pr-review/prompts/prefetch-ticket.md');
     expect(prefetch).toContain('bash "$JT" get_issue <KEY>');

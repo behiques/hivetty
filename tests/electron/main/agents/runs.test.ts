@@ -82,6 +82,8 @@ describe('createRunTracker', () => {
   let unfinished: { agent: string; run: string; lane: string }[];
   /** Does any run of the closing lane hold an open ask (HIVE-408)? Set per test. */
   let askingOnLane: boolean;
+  /** Was an ask this run posted closed before it ended (HIVE-406 follow-ups)? Set per test. */
+  let answeredMidExit: boolean;
   /** What `onLive` reported, in order (HIVE-408). */
   let awake: boolean[];
   /** The prompt hash a session-starting command carries. Set per test. */
@@ -126,6 +128,7 @@ describe('createRunTracker', () => {
     owed = [];
     unfinished = [];
     askingOnLane = false;
+    answeredMidExit = false;
     awake = [];
     promptHash = undefined;
     commandCalls = 0;
@@ -180,6 +183,7 @@ describe('createRunTracker', () => {
       owedBy: () => owed,
       unfinishedRuns: () => unfinished,
       openAsksOnLane: (name, lane) => askingOnLane && name === 'a' && lane === 'thread:k1',
+      answeredDuring: (name, run) => answeredMidExit && name === 'a' && run === 'run-1',
       onLive: (live) => awake.push(live),
       newUuid: () => 'uuid-minted',
       pushStatus: (name) => statuses.push(name),
@@ -2636,6 +2640,18 @@ describe('createRunTracker', () => {
       expect(state.read('a').runs.at(-1)?.outcome).toBe('done');
     });
 
+    it('leaves the job alone when the run\'s own ask was answered while it exited (HIVE-406 follow-ups)', () => {
+      left = { ask: { id: 'k1', ref: 'a253' }, claims: ['HIVE-416'] };
+      answeredMidExit = true; // run-1 asked a254; the answer landed before its process ended
+
+      tracker.run('a', 'ledger', undefined, { lane: 'thread:k1' });
+      childInstances[0]?.emitStdout(resultLine());
+      childInstances[0]?.emitClose(0);
+
+      expect(abandoned()).toEqual([]);
+      expect(ledger).toContainEqual(expect.objectContaining({ from: 'a', kind: 'event', body: 'run.ended — done' }));
+    });
+
     it('fails the ask to the asker, naming the run, then releases what the run claimed', () => {
       left = { ask: { id: 'k1', ref: 'a148' }, claims: ['HIVE-342'] };
 
@@ -2767,6 +2783,16 @@ describe('createRunTracker', () => {
       ]);
     });
 
+    it('still re-wakes when the run\'s own ask was answered while it exited: that rule is the thread lane\'s', () => {
+      owed = [{ ask: { id: 'k1', ref: 'a7' }, rewoken: false }];
+      answeredMidExit = true;
+
+      tracker.run('a', 'ledger', undefined, { wakes: ['k1'] });
+      end();
+
+      expect(fromOvermind()[0]).toMatchObject({ kind: 'post', to: 'a', thread: 'k1', meta: { rewoke: 'k1' } });
+    });
+
     it('does the same on the standing lane', () => {
       owed = [{ ask: { id: 'k1' }, rewoken: false }];
 
@@ -2837,6 +2863,16 @@ describe('createRunTracker', () => {
         thread: 'k1',
         body: 'a run r-old ended (failed: lost) without answering k1',
       });
+    });
+
+    it("leaves a lost thread lane's ask alone when the run's own ask was answered as it exited", () => {
+      left = { ask: { id: 'k1' }, claims: ['HIVE-416'] };
+      answeredMidExit = true;
+
+      tracker.settleLost([{ agent: 'a', run: 'run-1', lane: 'thread:k1' }]);
+
+      expect(ledger).toHaveLength(1);
+      expect(ledger[0]).toMatchObject({ body: 'run.ended — failed' });
     });
 
     it('only ends a run that was waiting on a question of its own', () => {
