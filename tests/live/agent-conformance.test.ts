@@ -2616,13 +2616,14 @@ describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
 
     expect(patched).toContain('Bash(touch *)');
 
-    // The grant reached the wake itself, not only the file: the second run's
-    // own argv names the rule `matches()` checked the retried call against.
+    // The grant reached the wake itself, not only the file, through the fence env:
+    // since HIVE-395 every Bash rule stays off `--allowedTools`, and the fence reads
+    // the rule `matches()` checked the retried call against from `HIVE_GRANTS`.
+    expect(spawns.at(-1)?.grants).toContain('Bash(touch *)');
     const args = spawns.at(-1)?.args ?? [];
     const allowedIndex = args.indexOf('--allowedTools');
 
-    expect(allowedIndex).toBeGreaterThan(-1);
-    expect(args[allowedIndex + 1]).toContain('Bash(touch *)');
+    expect(allowedIndex === -1 ? '' : (args[allowedIndex + 1] ?? '')).not.toContain('Bash(');
 
     // And the call actually ran — the one thing no transcript can fake, and
     // the one proof that the wake really did land behind the grant rather
