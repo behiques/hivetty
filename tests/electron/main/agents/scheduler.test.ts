@@ -2816,6 +2816,36 @@ describe('createScheduler', () => {
       expect(woke).toEqual([{ name: AGENT, trigger: 'ledger', extra: 'answer ans from overmind', lane: 'thread:A' }]);
     });
 
+    /*
+      HIVE-406 follow-ups: the answer lands while lane A's asking run is exiting. With no `failed`
+      on A (the run tracker no longer writes one), the queued answer wakes A, where the job is.
+      The second half is the bug it replaces: the `failed` closed A and the answer went to standing.
+    */
+    it('wakes the thread lane with an answer that landed while its run exited, unless A was failed', () => {
+      liveLanes?.add('thread:A');
+      const answer = entry({ id: 'ans', kind: 'answer', thread: 'Q' });
+      entries.push(
+        entry({ id: 'A' }), begun('r1', 'thread:A'),
+        entry({ id: 'Q', from: AGENT, to: 'overmind', meta: { run: 'r1' } }), answer,
+      );
+
+      scheduler.onEntry(answer);
+      expect(woke).toEqual([]);
+      liveLanes?.delete('thread:A');
+      scheduler.onRunClosed(AGENT);
+      expect(woke).toEqual([{ name: AGENT, trigger: 'ledger', extra: 'answer ans from overmind', lane: 'thread:A' }]);
+
+      woke.length = 0;
+      liveLanes?.add('thread:A');
+      scheduler.onEntry(answer);
+      const failed = entry({ id: 'f', from: 'overmind', to: undefined, kind: 'failed', thread: 'A' });
+      entries.push(failed);
+      scheduler.onEntry(failed);
+      liveLanes?.delete('thread:A');
+      scheduler.onRunClosed(AGENT);
+      expect(woke).toEqual([{ name: AGENT, trigger: 'ledger', extra: 'answer ans from overmind' }]);
+    });
+
     it('wakes a different lane with a self-entry, never its own', () => {
       laneMode = 'repo';
       scheduler = build();

@@ -204,6 +204,11 @@ export interface RunTrackerDeps {
    * `ledger-derive.ts`? Optional so a spec that never runs a thread lane needs none.
    */
   openAsksOnLane?: (name: string, lane: string) => boolean;
+  /**
+   * Was an ask this run posted closed before it ended (HIVE-406 follow-ups), from `answeredDuring` in
+   * `ledger-derive.ts`? Optional so a spec that never runs a thread lane needs none.
+   */
+  answeredDuring?: (name: string, run: string) => boolean;
   /** Called with `true` when the first run goes live and `false` when the last one ends (HIVE-408). */
   onLive?: (live: boolean) => void;
   /**
@@ -1003,11 +1008,17 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       Lane-wide (HIVE-408): a queued post re-wakes a thread lane as a second run, which asked
       nothing while the first run's question is still open. That lane is waiting, not abandoned.
     */
+    /*
+      Answered mid-exit (HIVE-406 follow-ups): `ledger_ask` ends the turn, so an answer to this run's
+      own ask that lands before its process ends is not open any more by the time it closes, and
+      `asking` misses it. The run is waiting on that answer; the lane's next run reads it.
+    */
     if (
       outcome !== 'asking' &&
       !asking &&
       current.status !== 'paused' &&
-      deps.openAsksOnLane?.(name, info.lane) !== true
+      deps.openAsksOnLane?.(name, info.lane) !== true &&
+      deps.answeredDuring?.(name, info.run) !== true
     ) {
       // The re-wake post may start the agent's next run from the ledger's change listener, while this
       // finalizer is on the stack: nothing below writes the agent's status, so that is safe (HIVE-410).

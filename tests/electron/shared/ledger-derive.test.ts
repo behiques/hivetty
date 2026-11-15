@@ -8,6 +8,7 @@ import {
 } from '../../../electron/shared/ledger-contract';
 import {
   agentSiteFor,
+  answeredDuring,
   askerOf,
   asksMeAbout,
   INBOUND_NAME_MAX,
@@ -1151,6 +1152,50 @@ describe('openAsksOnLane (HIVE-408)', () => {
       entry({ id: 'q2', from: 'fixer', to: 'sess-a', kind: 'ask', body: 'x', meta: { run: 'r1' } }),
     ];
     expect(openAsksOnLane(log, 'builder', 'thread:k1', NOW)).toBe(false);
+  });
+});
+
+describe('answeredDuring (HIVE-406 follow-ups)', () => {
+  const ask = (id: string, run: string, over: Partial<LedgerEntry> = {}) =>
+    entry({ id, ts: NOW - 1_000, from: 'builder', to: 'sess-a', kind: 'ask', body: 'which?', meta: { run }, ...over });
+  const answer = (id: string, thread: string) =>
+    entry({ id, from: 'sess-a', to: 'builder', kind: 'answer', thread, body: 'main' });
+
+  it('is true when an ask this run posted has been answered', () => {
+    expect(answeredDuring([ask('q1', 'r1'), answer('a1', 'q1')], 'builder', 'r1', NOW)).toBe(true);
+  });
+
+  it('is false for an answered ask another run of the same agent posted', () => {
+    expect(answeredDuring([ask('q1', 'r0'), answer('a1', 'q1')], 'builder', 'r1', NOW)).toBe(false);
+  });
+
+  it('is false for an answered ask another agent posted under the same run id', () => {
+    const log = [ask('q1', 'r1', { from: 'fixer' }), answer('a1', 'q1')];
+    expect(answeredDuring(log, 'builder', 'r1', NOW)).toBe(false);
+  });
+
+  it("is false while the ask is still open: that case is openAsksFor's", () => {
+    expect(answeredDuring([ask('q1', 'r1')], 'builder', 'r1', NOW)).toBe(false);
+  });
+
+  it('is false when the run asked nothing', () => {
+    const log = [entry({ id: 'p1', from: 'builder', meta: { run: 'r1' } })];
+    expect(answeredDuring(log, 'builder', 'r1', NOW)).toBe(false);
+  });
+
+  it('is true when the asked party closed it with failed', () => {
+    const log = [ask('q1', 'r1'), entry({ id: 'f1', from: 'sess-a', kind: 'failed', thread: 'q1', body: 'no' })];
+    expect(answeredDuring(log, 'builder', 'r1', NOW)).toBe(true);
+  });
+
+  it('is true when the ask expired: the sweep still wakes the lane that asked', () => {
+    const old = ask('q1', 'r1', { ts: NOW - LEDGER_ASK_TTL_MS - 1 });
+    expect(answeredDuring([old], 'builder', 'r1', NOW)).toBe(true);
+  });
+
+  it('is false for an ask the overmind closed as moot', () => {
+    const moot = entry({ id: 'm1', from: OVERMIND, kind: 'answer', thread: 'q1', body: 'moot', meta: { moot: 'x' } });
+    expect(answeredDuring([ask('q1', 'r1'), moot], 'builder', 'r1', NOW)).toBe(false);
   });
 });
 
