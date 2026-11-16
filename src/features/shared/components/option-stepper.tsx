@@ -132,17 +132,23 @@ export function OptionStepper<T extends string>({
         align theirs to the outer edge instead, their dots still on the point.
         The line sits at the dots' vertical centre, half the 16px dot box.
         Not zero-width: a box with no size reads as invisible to Playwright.
+
+        The inset is the radiogroup's own padding, not a margin around it: the
+        end stops' boxes reach half a dot past the rail's ends, and with a
+        margin they hung outside the group that owns them (the agent form's
+        `thinking effort: max`, agents-settings.spec.ts). Padding keeps the
+        same picture with every stop inside its control.
       */}
-      <div className="relative mx-2">
+      <div className="relative">
         {/* Track and fill are decorative; the dots below carry the semantics. */}
         <div
           aria-hidden="true"
-          className="absolute inset-x-0 top-2 h-0.5 -translate-y-1/2 rounded bg-term-track"
+          className="absolute inset-x-2 top-2 h-0.5 -translate-y-1/2 rounded bg-term-track"
         />
         <div
           aria-hidden="true"
-          className="absolute top-2 left-0 h-0.5 -translate-y-1/2 rounded bg-green transition-[width] duration-250"
-          style={{ width: `${fill}%` }}
+          className="absolute top-2 left-2 h-0.5 -translate-y-1/2 rounded bg-green transition-[width] duration-250"
+          style={{ width: `calc((100% - 1rem) * ${String(fill / 100)})` }}
         />
 
         <div
@@ -156,7 +162,7 @@ export function OptionStepper<T extends string>({
             operable.
           */
           aria-disabled={disabled || undefined}
-          className="relative flex justify-between"
+          className="relative flex justify-between px-2"
         >
           {options.map((option, position) => {
             const selected = option === value;
