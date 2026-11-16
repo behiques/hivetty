@@ -79,7 +79,26 @@ describe('bridgeListProblems', () => {
   it('fires when the spec asserts a namespace with no BRIDGE_* array', () => {
     const spec = SPEC.replace("expect(surface.pty)", "expect(surface.nope)");
     const problems = bridgeListProblems({ bridgeKeys: KEYS, securitySpec: spec });
-    expect(problems).toEqual(['surface.nope: no BRIDGE_NOPE_KEYS in bridge-keys.ts']);
+    expect(problems).toEqual([
+      'surface.nope: no BRIDGE_NOPE_KEYS in bridge-keys.ts',
+      'BRIDGE_PTY_KEYS: no expect(surface.pty).toEqual([...]) in security.spec.ts',
+    ]);
+  });
+
+  it('fires when a BRIDGE_*_KEYS array has no spec list (acr on #307)', () => {
+    const keys = `${KEYS}export const BRIDGE_PROBE_KEYS = ['poke'] as const;\n`;
+    const problems = bridgeListProblems({ bridgeKeys: keys, securitySpec: SPEC });
+    expect(problems).toEqual([
+      'BRIDGE_PROBE_KEYS: no expect(surface.probe).toEqual([...]) in security.spec.ts',
+    ]);
+  });
+
+  it('reads a multi-word namespace back from its array name', () => {
+    const keys = `${KEYS}export const BRIDGE_CHANGED_FILES_KEYS = ['list'] as const;\n`;
+    const problems = bridgeListProblems({ bridgeKeys: keys, securitySpec: SPEC });
+    expect(problems).toEqual([
+      'BRIDGE_CHANGED_FILES_KEYS: no expect(surface.changedFiles).toEqual([...]) in security.spec.ts',
+    ]);
   });
 });
 

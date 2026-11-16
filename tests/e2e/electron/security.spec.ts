@@ -95,6 +95,11 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     updates: Object.keys(window.hive!.updates).sort(),
     ui: Object.keys(window.hive!.ui).sort(),
     cli: Object.keys(window.hive!.cli).sort(),
+    shipped: Object.keys(window.hive!.shipped).sort(),
+    slack: Object.keys(window.hive!.slack).sort(),
+    plans: Object.keys(window.hive!.plans).sort(),
+    account: Object.keys(window.hive!.account).sort(),
+    licence: Object.keys(window.hive!.licence).sort(),
   }));
 
   // HIVE-343: no verb here reads a stored token back. HIVE-375 added detect and rescan (a CLI's path and version),
@@ -690,6 +695,51 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * `act` and its guard above.
    */
   expect(surface.updates).toEqual(['check', 'status']);
+  // #298: read which shipped agents and skills you edited; restore, take the prompt or keep yours, by `{ kind, name }` only.
+  expect(surface.shipped).toEqual(['keepMine', 'reset', 'status', 'takePrompt']);
+  /*
+    HIVE-123's four take no argument and spawn `claude` with no renderer argv. HIVE-124's socket mode adds a secret
+    write and clear, a test, a presence read and a subscription. No verb returns a token.
+  */
+  expect(surface.slack).toEqual([
+    'clearTokens',
+    'onSocketStatus',
+    'setTokens',
+    'signIn',
+    'signOut',
+    'socketState',
+    'socketTest',
+    'status',
+    'test',
+  ]);
+  // HIVE-179: read-only, like `changedFiles`: every live plan, listed and pushed.
+  expect(surface.plans).toEqual(['list', 'onChanged']);
+  /*
+    HIVE-264 sign-in and sign-out, HIVE-266 the device code, HIVE-265 devices, HIVE-291 orgs and the switch, #243/#244
+    billing, invoices, Remove device and the Stripe portal. No verb returns a token. `openWeb` takes a same-site path
+    only; `openInvoice` opens only a Stripe URL main checks (`openStripeLink`); `openBilling` takes an org id and
+    opens the portal the cloud answers with.
+  */
+  expect(surface.account).toEqual([
+    'billing',
+    'cancel',
+    'devices',
+    'onChanged',
+    'onDeviceCode',
+    'openBilling',
+    'openInvoice',
+    'openWeb',
+    'orgs',
+    'payments',
+    'revokeDevice',
+    'signIn',
+    'signInWithCode',
+    'signOut',
+    'state',
+    'switchOrg',
+  ]);
+  // HIVE-267: this machine's licence; read, renew, poll for a purchase, hear changes, start a trial, read a pause.
+  expect(surface.licence).toEqual(['onChanged', 'paused', 'refresh', 'startTrial', 'state', 'watchPurchase']);
   expect(surface.jira).toEqual([
     /**
      * HIVE-70's `applyTransition` is the **first verb in this bridge that

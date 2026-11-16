@@ -735,6 +735,19 @@ const SIBLING_CHECKS = [
     expect: /surface\.top: in BRIDGE_KEYS, missing from security\.spec\.ts: probeKey/,
   },
   {
+    name: 'bridge: every BRIDGE_*_KEYS array in tests/support/bridge-keys.ts has a security.spec.ts list',
+    clean: () => bridgeListProblems(readBridgeSources(appRoot)),
+    /** acr on #307: five namespaces had arrays and no e2e list, and the check compared only the listed ones. */
+    plant: () => {
+      const sources = readBridgeSources(appRoot);
+      return bridgeListProblems({
+        ...sources,
+        bridgeKeys: `${sources.bridgeKeys}\nexport const BRIDGE_PROBE_KEYS = ['poke'] as const;\n`,
+      });
+    },
+    expect: /^BRIDGE_PROBE_KEYS: no expect\(surface\.probe\)\.toEqual\(\[\.\.\.\]\) in security\.spec\.ts$/,
+  },
+  {
     name: 'selectors: store hooks and docs/state-and-data.md agree (allow-list: scripts/selector-doc-allow.json)',
     clean: () => selectorTableProblemsOnDisk(appRoot),
     /** #251/#256: a store exporting a hook the doc does not name. */

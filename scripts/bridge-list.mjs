@@ -96,11 +96,25 @@ function arrayNameFor(namespace) {
   return `BRIDGE_${namespace.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase()}_KEYS`;
 }
 
-/** What differs between the spec's lists and bridge-keys.ts; empty when they agree. */
+/** `BRIDGE_KEYS` → `top`; `BRIDGE_CHANGED_FILES_KEYS` → `changedFiles`. */
+function namespaceFor(arrayName) {
+  if (arrayName === 'BRIDGE_KEYS') return 'top';
+  return arrayName
+    .slice('BRIDGE_'.length, -'_KEYS'.length)
+    .toLowerCase()
+    .replace(/_([a-z0-9])/g, (_, letter) => letter.toUpperCase());
+}
+
+/**
+ * What differs between the spec's lists and bridge-keys.ts; empty when they agree.
+ * Every `BRIDGE_*_KEYS` array needs a spec list (acr on #307): comparing only the
+ * namespaces the spec already asserted let five namespaces go unchecked.
+ */
 export function bridgeListProblems({ bridgeKeys, securitySpec }) {
   const lists = readBridgeKeyLists(bridgeKeys);
+  const specLists = readSpecSurfaceLists(securitySpec);
   const problems = [];
-  for (const { namespace, keys } of readSpecSurfaceLists(securitySpec)) {
+  for (const { namespace, keys } of specLists) {
     const arrayName = arrayNameFor(namespace);
     const expected = lists.get(arrayName);
     if (!expected) {
@@ -121,6 +135,13 @@ export function bridgeListProblems({ bridgeKeys, securitySpec }) {
         `surface.${namespace}: in security.spec.ts, missing from ${arrayName}: ${bridgeMissing.join(', ')}`,
       );
     }
+  }
+  const asserted = new Set(specLists.map((list) => arrayNameFor(list.namespace)));
+  for (const arrayName of lists.keys()) {
+    if (!/^BRIDGE_(?:\w+_)?KEYS$/.test(arrayName) || asserted.has(arrayName)) continue;
+    problems.push(
+      `${arrayName}: no expect(surface.${namespaceFor(arrayName)}).toEqual([...]) in security.spec.ts`,
+    );
   }
   return problems;
 }
