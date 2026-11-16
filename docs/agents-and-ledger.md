@@ -2812,9 +2812,12 @@ reviews the PR head, never a checkout's working tree; the verifier returns
 `confidence` and `severity` separately, 60-74 is the one borderline band, and a
 self review keeps confirmed `minor` findings in a "verified, minor" list. Self
 mode is tiered like review mode, with a `deep` tier for a diff over 1,000 lines
-or a risk-surface path. Until HIVE-417 adds a `pull_request` workflow, the
-shipper's `ci` stage asks the fixer to run the full gate once on a head the
-fixer pushed. `tests/resources/agents/shipped-agents.test.ts` parses every shipped definition against
+or a risk-surface path. The shipper's `ci` stage reads CI per PR, never as a
+lane fact (HIVE-417): checks reported on the PR are waited for, and a pending
+required check is not green; with no checks and no workflow on `pull_request`
+at the PR head, it asks the fixer to run the full gate once on a head the fixer
+pushed. hivetty's own `.github/workflows/ci.yml` runs on every PR, and its `ci`
+job is required on main. `tests/resources/agents/shipped-agents.test.ts` parses every shipped definition against
 the shipped skills, so a definition the registry would refuse fails here.
 
 ### Run contract (HIVE-413)

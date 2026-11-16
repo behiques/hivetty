@@ -257,8 +257,15 @@ describe('the review path (HIVE-416)', () => {
     expect(text).toMatch(/findings, borderline and verified-minor all go to the fixer in one ask/i);
     expect(text).toMatch(/"spec": null, "plan": null, "notes": null/);
     expect(text).toMatch(/`gatedHead`/);
-    expect(text).toMatch(/Remove this step once HIVE-417 adds a `pull_request` workflow/);
     expect(text).toMatch(/confidence 60-74/);
+  });
+  it('ship reads CI per PR, with the fixer stand-in only where no workflow runs on pull_request', () => {
+    const text = one(ship());
+    expect(text).not.toMatch(/prCi|decided at the lane's first `ci` stage|Remove this step once HIVE-417/);
+    expect(text).toContain('Read per PR, at every `ci` stage');
+    expect(text).toContain('Checks reported → wait for them; exit 8 is pending, and a required check that is pending is not green');
+    expect(text).toContain('No checks reported and no workflow triggered on `pull_request` → the no-CI path');
+    expect(text).toContain('No-CI path, head `fixerHead` and not `gatedHead`: `gatedHead = head`');
   });
   it('review-pr-findings assesses inline, dispatches only for block or INVALID, and keeps findings notes', () => {
     const text = read('skills/review-pr-findings/SKILL.md');
