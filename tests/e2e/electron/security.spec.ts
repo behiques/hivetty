@@ -412,6 +412,12 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * answers to, for the reason `pause` does.
    */
   expect(surface.agents).toEqual([
+    /*
+      HIVE-396 adds `harnessCheck`: a forwarded read that parses a draft AGENT.md's text and answers each CLI's
+      verdict on it. It writes nothing and starts nothing. It reached BRIDGE_AGENTS_KEYS and the preload without
+      this list; verify:boundaries now compares the two (HIVE-417).
+    */
+    'harnessCheck',
     'kill',
     'list',
     'onChanged',

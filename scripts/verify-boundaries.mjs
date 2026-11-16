@@ -23,6 +23,7 @@ import ts from 'typescript';
 
 import { aliases } from '../vite.aliases.mjs';
 
+import { bridgeListProblems, readBridgeSources } from './bridge-list.mjs';
 import {
   protocolLockProblems,
   readLock,
@@ -703,6 +704,19 @@ const SIBLING_CHECKS = [
       return protocolLockProblems(readProtocolState(planted), readLock(appRoot));
     },
     expect: /channels changed: bump REMOTE_PROTOCOL_VERSION/,
+  },
+  {
+    name: 'bridge: security.spec.ts surface lists match tests/support/bridge-keys.ts',
+    clean: () => bridgeListProblems(readBridgeSources(appRoot)),
+    /** #238: a key added to BRIDGE_KEYS (and the preload) that the e2e list lacks. */
+    plant: () => {
+      const sources = readBridgeSources(appRoot);
+      return bridgeListProblems({
+        ...sources,
+        bridgeKeys: insertAfter(sources.bridgeKeys, 'export const BRIDGE_KEYS = [', "\n  'probeKey',"),
+      });
+    },
+    expect: /surface\.top: in BRIDGE_KEYS, missing from security\.spec\.ts: probeKey/,
   },
 ];
 
