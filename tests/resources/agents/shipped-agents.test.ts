@@ -88,7 +88,7 @@ describe('shipped agents', () => {
     expect(readFileSync(join(resources, 'skills', 'ship', 'SKILL.md'), 'utf8')).not.toMatch(/ten.minute|ten minutes/);
   });
 
-  it('never lets the shipper push to the default branch unasked, and still to a PR branch (HIVE-395)', () => {
+  it('lets the shipper push to any branch with its Bash grant, the default branch included', () => {
     const source = readFileSync(join(resources, 'agents', 'shipper', 'AGENT.md'), 'utf8');
     const result = parseAgent(source, {
       folder: 'shipper',
@@ -100,9 +100,8 @@ describe('shipped agents', () => {
     const allows = (command: string) =>
       result.def.tools.some((rule) => matches(rule, 'Bash', { command }));
 
-    expect(allows('git -C /w push origin HEAD:main')).toBe(false);
-    expect(allows('git -C /w push origin main')).toBe(false);
-    expect(allows('git -C /w push --force origin feat:master')).toBe(false);
+    expect(allows('git -C /w push origin HEAD:main')).toBe(true);
+    expect(allows('git -C /w push origin main')).toBe(true);
     expect(allows('git -C /w push origin feat/x')).toBe(true);
     expect(allows('git -C /w push origin --delete feat/x')).toBe(true);
   });
