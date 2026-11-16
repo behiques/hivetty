@@ -1155,47 +1155,76 @@ describe('openAsksOnLane (HIVE-408)', () => {
   });
 });
 
-describe('answeredDuring (HIVE-406 follow-ups)', () => {
+describe('answeredDuring (HIVE-406 follow-ups; lane-wide since the answer race)', () => {
+  const LANE = 'thread:k1';
+  const started = (run: string, ts: number, lane: string = LANE, from = 'builder') =>
+    entry({ id: `s-${run}`, ts, from, kind: 'event', body: 'run.started — ledger', meta: { run, lane } });
   const ask = (id: string, run: string, over: Partial<LedgerEntry> = {}) =>
-    entry({ id, ts: NOW - 1_000, from: 'builder', to: 'sess-a', kind: 'ask', body: 'which?', meta: { run }, ...over });
-  const answer = (id: string, thread: string) =>
-    entry({ id, from: 'sess-a', to: 'builder', kind: 'answer', thread, body: 'main' });
+    entry({ id, ts: NOW - 4_000, from: 'builder', to: 'sess-a', kind: 'ask', body: 'which?', meta: { run }, ...over });
+  const answer = (id: string, thread: string, ts = NOW - 2_000) =>
+    entry({ id, ts, from: 'sess-a', to: 'builder', kind: 'answer', thread, body: 'main' });
+  // The 2026-11-16 evidence: r1 asked q1 and ended; r2, queued by a note, was live when q1's answer landed.
+  const evidence = [started('r1', NOW - 5_000), ask('q1', 'r1'), started('r2', NOW - 3_000)];
 
-  it('is true when an ask this run posted has been answered', () => {
-    expect(answeredDuring([ask('q1', 'r1'), answer('a1', 'q1')], 'builder', 'r1', NOW)).toBe(true);
+  it("is true for a sibling run's ask on the same lane closed after the ending run started", () => {
+    expect(answeredDuring([...evidence, answer('a1', 'q1')], 'builder', 'r2', LANE, NOW)).toBe(true);
   });
 
-  it('is false for an answered ask another run of the same agent posted', () => {
-    expect(answeredDuring([ask('q1', 'r0'), answer('a1', 'q1')], 'builder', 'r1', NOW)).toBe(false);
+  it("is true for the run's own ask closed during the run (#305's case)", () => {
+    const log = [started('r1', NOW - 5_000), ask('q1', 'r1'), answer('a1', 'q1')];
+    expect(answeredDuring(log, 'builder', 'r1', LANE, NOW)).toBe(true);
   });
 
-  it('is false for an answered ask another agent posted under the same run id', () => {
-    const log = [ask('q1', 'r1', { from: 'fixer' }), answer('a1', 'q1')];
-    expect(answeredDuring(log, 'builder', 'r1', NOW)).toBe(false);
-  });
-
-  it("is false while the ask is still open: that case is openAsksFor's", () => {
-    expect(answeredDuring([ask('q1', 'r1')], 'builder', 'r1', NOW)).toBe(false);
-  });
-
-  it('is false when the run asked nothing', () => {
-    const log = [entry({ id: 'p1', from: 'builder', meta: { run: 'r1' } })];
-    expect(answeredDuring(log, 'builder', 'r1', NOW)).toBe(false);
-  });
-
-  it('is true when the asked party closed it with failed', () => {
-    const log = [ask('q1', 'r1'), entry({ id: 'f1', from: 'sess-a', kind: 'failed', thread: 'q1', body: 'no' })];
-    expect(answeredDuring(log, 'builder', 'r1', NOW)).toBe(true);
-  });
-
-  it('is true when the ask expired: the sweep still wakes the lane that asked', () => {
+  it("is true for a sibling's ask that expired after the ending run started", () => {
     const old = ask('q1', 'r1', { ts: NOW - LEDGER_ASK_TTL_MS - 1 });
-    expect(answeredDuring([old], 'builder', 'r1', NOW)).toBe(true);
+    const log = [started('r1', old.ts - 1_000), old, started('r2', old.ts + 1_000)];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(true);
   });
 
-  it('is true for an ask the overmind closed as moot: that answer reaches the asking lane too', () => {
-    const moot = entry({ id: 'm1', from: OVERMIND, kind: 'answer', thread: 'q1', body: 'moot', meta: { moot: 'x' } });
-    expect(answeredDuring([ask('q1', 'r1'), moot], 'builder', 'r1', NOW)).toBe(true);
+  it("is true for a sibling's ask the overmind closed as moot after the ending run started", () => {
+    const moot = entry({
+      id: 'm1', ts: NOW - 2_000, from: OVERMIND, kind: 'answer', thread: 'q1', body: 'moot', meta: { moot: 'x' },
+    });
+    expect(answeredDuring([...evidence, moot], 'builder', 'r2', LANE, NOW)).toBe(true);
+  });
+
+  it('is true when the asked party closed it with failed during the run', () => {
+    const failed = entry({ id: 'f1', ts: NOW - 2_000, from: 'sess-a', kind: 'failed', thread: 'q1', body: 'no' });
+    expect(answeredDuring([...evidence, failed], 'builder', 'r2', LANE, NOW)).toBe(true);
+  });
+
+  it("is false for a sibling's ask on the same lane closed before the ending run started", () => {
+    const log = [started('r1', NOW - 5_000), ask('q1', 'r1'), answer('a1', 'q1', NOW - 3_500), started('r2', NOW - 3_000)];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it('is false for an ask from another lane closed during the run', () => {
+    const log = [started('r1', NOW - 5_000, 'thread:k2'), ask('q1', 'r1'), started('r2', NOW - 3_000), answer('a1', 'q1')];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it('is false for an ask another agent posted on a lane of the same name', () => {
+    const log = [
+      started('r1', NOW - 5_000, LANE, 'fixer'),
+      ask('q1', 'r1', { from: 'fixer' }),
+      started('r2', NOW - 3_000),
+      answer('a1', 'q1'),
+    ];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it("is false while the ask is still open: that case is openAsksOnLane's", () => {
+    expect(answeredDuring(evidence, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it('is false when the lane asked nothing', () => {
+    const log = [started('r1', NOW - 5_000), entry({ id: 'p1', from: 'builder', meta: { run: 'r1' } })];
+    expect(answeredDuring(log, 'builder', 'r1', LANE, NOW)).toBe(false);
+  });
+
+  it('is false, and does not throw, when the ending run has no run.started in the log', () => {
+    const log = [started('r1', NOW - 5_000), ask('q1', 'r1'), answer('a1', 'q1')];
+    expect(answeredDuring(log, 'builder', 'r9', LANE, NOW)).toBe(false);
   });
 });
 

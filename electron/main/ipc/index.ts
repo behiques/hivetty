@@ -3093,7 +3093,7 @@ export function registerIpcHandlers(
     owedBy: (name, run) => owedBy(ledger.read({}).entries, name, run, Date.now()),
     unfinishedRuns: () => unfinishedRuns(ledger.read({}).entries),
     openAsksOnLane: (name, lane) => openAsksOnLane(ledger.read({}).entries, name, lane, Date.now()),
-    answeredDuring: (name, run) => answeredDuring(ledger.read({}).entries, name, run, Date.now()),
+    answeredDuring: (name, run, lane) => answeredDuring(ledger.read({}).entries, name, run, lane, Date.now()),
     newUuid,
     pushStatus: pushAgentStatus,
     pushLines: (name, lines) => {
