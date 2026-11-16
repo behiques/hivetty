@@ -10,6 +10,7 @@ import {
 } from '@shared/window';
 
 import { devIconPath } from './app-icon';
+import { reveal } from './background';
 import { isSafeExternalUrl } from './external-links';
 import { createSplashWindow, splashEnabled, type SplashController } from './splash';
 import {
@@ -190,11 +191,11 @@ export function createWindow({
    */
   win.once('ready-to-show', () => {
     if (!splash) {
-      win.show();
+      reveal(win);
       return;
     }
     setTimeout(() => {
-      win.show();
+      reveal(win);
       void splash.dismiss();
     }, splash.remaining());
   });

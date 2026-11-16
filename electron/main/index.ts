@@ -9,6 +9,7 @@ import { CH } from '@shared/ipc-contract';
 
 import { applyDevDockIcon } from './app-icon';
 import { primaryWindow } from './aux-windows';
+import { bringForward } from './background';
 import { parseInvocation } from './cli';
 import { getConfig } from './config';
 import { startLoginEnvImport } from './config/login-env';
@@ -460,7 +461,7 @@ if (!app.requestSingleInstanceLock()) {
           const existing = primaryWindow();
           if (existing) {
             if (existing.isMinimized()) existing.restore();
-            existing.focus();
+            bringForward(existing);
             return;
           }
           createWindow();

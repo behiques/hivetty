@@ -21,12 +21,14 @@ const appMock = {
   quit: vi.fn(),
   getName: vi.fn(() => 'HiveTTY Pro'),
   requestSingleInstanceLock: vi.fn(() => true),
+  setActivationPolicy: vi.fn(),
 };
 
 const windows: {
   isMinimized: () => boolean;
   restore: () => void;
   focus: () => void;
+  showInactive?: () => void;
   /** Real `BrowserWindow`s have this; `aux-windows` filters destroyed ones. */
   isDestroyed: () => boolean;
 }[] =
@@ -226,6 +228,44 @@ describe('second-instance', () => {
     await fire('second-instance');
 
     expect(createWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('never focuses in a background launch; it shows the window inactive (HIVE_BACKGROUND)', async () => {
+    const focus = vi.fn();
+    const showInactive = vi.fn();
+    windows.push({ isMinimized: () => false, restore: vi.fn(), focus, showInactive, isDestroyed: () => false });
+    await register({ createWindow: vi.fn(), platform: 'darwin' });
+
+    process.env.HIVE_BACKGROUND = '1';
+    try {
+      await fire('second-instance');
+    } finally {
+      delete process.env.HIVE_BACKGROUND;
+    }
+
+    expect(focus).not.toHaveBeenCalled();
+    expect(showInactive).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('background launch policy (HIVE_BACKGROUND)', () => {
+  afterEach(() => {
+    delete process.env.HIVE_BACKGROUND;
+  });
+
+  it('makes a macOS background launch an accessory before its first window', async () => {
+    process.env.HIVE_BACKGROUND = '1';
+    let policyBeforeWindow = false;
+    const createWindow = vi.fn(() => {
+      policyBeforeWindow = appMock.setActivationPolicy.mock.calls.some(([p]) => p === 'accessory');
+    });
+    await register({ createWindow, platform: 'darwin' });
+    expect(policyBeforeWindow).toBe(true);
+  });
+
+  it('leaves an ordinary launch alone', async () => {
+    await register({ createWindow: vi.fn(), platform: 'darwin' });
+    expect(appMock.setActivationPolicy).not.toHaveBeenCalled();
   });
 });
 

@@ -52,6 +52,7 @@ describe('launchPlan', () => {
     expect(plan.env).toEqual({
       PATH: '/usr/bin',
       HIVE_CONFIG_PATH: '/tmp/smoke-x/profile/config.json',
+      HIVE_BACKGROUND: '1',
     });
   });
 

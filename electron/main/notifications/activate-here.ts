@@ -2,6 +2,7 @@ import { BrowserWindow, shell } from 'electron';
 
 import type { ThisMachineAction } from '@shared/notification-contract';
 
+import { bringForward } from '../background';
 import { isSafeExternalUrl } from '../external-links';
 import { downloadUpdate, installUpdate } from '../updates';
 
@@ -36,7 +37,7 @@ export function focusThisMachine(): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (window.isDestroyed()) continue;
     if (window.isMinimized()) window.restore();
-    window.focus();
+    bringForward(window);
   }
 }
 

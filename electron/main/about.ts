@@ -6,6 +6,7 @@ import { ABOUT_SIZE, ABOUT_TRAFFIC_LIGHT_POSITION } from '@shared/about';
 import { WINDOW_BACKGROUND } from '@shared/window';
 
 import { markAuxiliary } from './aux-windows';
+import { bringForward, reveal } from './background';
 import { applyWebContentsPolicy } from './window';
 
 /**
@@ -61,8 +62,8 @@ function loadAbout(win: BrowserWindow): void {
  */
 export function showAboutWindow(parent?: BrowserWindow | null): BrowserWindow {
   if (current && !current.isDestroyed()) {
-    current.show();
-    current.focus();
+    reveal(current);
+    bringForward(current);
     return current;
   }
 
@@ -125,7 +126,7 @@ export function showAboutWindow(parent?: BrowserWindow | null): BrowserWindow {
    */
   markAuxiliary(win);
 
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => reveal(win));
   win.on('closed', () => {
     if (current === win) current = null;
   });
