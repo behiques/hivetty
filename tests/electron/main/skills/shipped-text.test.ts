@@ -303,6 +303,11 @@ describe('the review path (HIVE-416)', () => {
     expect(intake).toMatch(/a stuck row/);
     expect(one(read('skills/verify/SKILL.md'))).toContain('needs a `Drive:` line in the PR body');
   });
+  it('the Drive trigger skips test files (acr on #308)', () => {
+    const text = one(ship());
+    const intake = text.slice(text.indexOf('| `intake` |'), text.indexOf('| `self-review` |'));
+    expect(intake).toContain('outside `tests/`, `__mocks__/` and `e2e/`, not named `*.test.*` or `*.spec.*`');
+  });
   it('the builder fills spec, plan and notes in the intake', () => {
     const step8 = agent('builder').slice(agent('builder').indexOf('8. `ship: yes`'));
     expect(one(step8)).toMatch(/`spec:` and `plan:` from the job \(`none` when the job had none\), `notes:` your `progress\.md`/);

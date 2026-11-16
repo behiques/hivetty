@@ -71,7 +71,7 @@ anyone stops the row, with no ask.
 
 | Stage | This wake | Advance when |
 | --- | --- | --- |
-| `intake` | `gh pr view <N> --repo <owner>/<repo> --json state,isDraft,headRefName,body`; force draft with `gh pr ready <N> --repo <owner>/<repo> --undo`. `gh pr diff <N> --repo <owner>/<repo> --name-only` lists a `.tsx`, a `.css` or a `components/`/`styles/` file, and the body has neither a `Drive:` line nor `owed: drive` → a stuck row | → `self-review` |
+| `intake` | `gh pr view <N> --repo <owner>/<repo> --json state,isDraft,headRefName,body`; force draft with `gh pr ready <N> --repo <owner>/<repo> --undo`. `gh pr diff <N> --repo <owner>/<repo> --name-only` lists a `.tsx`, a `.css` or a `components/`/`styles/` file outside `tests/`, `__mocks__/` and `e2e/`, not named `*.test.*` or `*.spec.*`, and the body has neither a `Drive:` line nor `owed: drive` → a stuck row | → `self-review` |
 | `self-review` | `{{tool:agents}}` lists `acr`: `waitingOn: acr`, then the acr ask (below). No `acr`: ask `reply-to`, options `[reviewed elsewhere, skip the self review]` | acr's answer (below) |
 | `fix-self` | `fixer` listed: `waitingOn: fixer`, `ledger_ask to: fixer` (below). No fixer: ask `reply-to`, options `[fixed, park them]` | the fixer's answer (below); fixed → `ready` |
 | `ready` | `gh pr ready <N> --repo <owner>/<repo>`; only if `keyConfirmed` and the ticket is before In Review: `{{tool:jira_transition}} { key, status: "In Review" }` (or the `jira-tracker` skill) | → `ci` |
