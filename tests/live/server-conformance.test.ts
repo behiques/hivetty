@@ -533,7 +533,8 @@ function spawnApp(
   assertScratchPath(configPath);
   const args = [MAIN_ENTRY, `--user-data-dir=${userDataDir}`, ...extraArgs];
   const child = spawn(electronBinary, args, {
-    env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, HIVE_E2E: '1' }),
+    // HIVE_BACKGROUND: the launch never takes the person's focus or the Dock (`electron/main/background.ts`).
+    env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, HIVE_E2E: '1', HIVE_BACKGROUND: '1' }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 

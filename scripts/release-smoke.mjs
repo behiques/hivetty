@@ -60,13 +60,16 @@ export function findAppBinary(outputDir, list) {
   return join(macDir, app, 'Contents', 'MacOS', app.slice(0, -'.app'.length));
 }
 
-/** Command, argv and env for the launch: profile and hive folder both inside `tmp`. */
+/**
+ * Command, argv and env for the launch: profile and hive folder both inside `tmp`.
+ * `HIVE_BACKGROUND=1` keeps the smoke from taking the person's focus (`electron/main/background.ts`).
+ */
 export function launchPlan(binary, tmp, baseEnv) {
   const profile = join(tmp, 'profile');
   return {
     command: binary,
     args: [`--user-data-dir=${profile}`],
-    env: { ...baseEnv, HIVE_CONFIG_PATH: join(profile, 'config.json') },
+    env: { ...baseEnv, HIVE_CONFIG_PATH: join(profile, 'config.json'), HIVE_BACKGROUND: '1' },
   };
 }
 

@@ -106,6 +106,19 @@ export function scrubbedEnv(): Record<string, string> {
 }
 
 /**
+ * Background mode for every launch, unless the runner asked to watch (`electron/main/background.ts`).
+ *
+ * `HIVE_BACKGROUND=1` runs the app as a macOS accessory with every window shown inactive, so a suite run
+ * never becomes the frontmost app, never shows a Dock icon and never takes the keyboard from whatever the
+ * person is typing in. Playwright drives Electron over CDP and emulates page focus, so the specs'
+ * `toBeFocused` checks do not need OS focus. `HIVE_E2E_FOREGROUND=1` in the runner's environment leaves it
+ * unset: the app shows and focuses as a person launching it would see, for watching a run.
+ */
+export function backgroundEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  return env['HIVE_E2E_FOREGROUND'] === '1' ? {} : { HIVE_BACKGROUND: '1' };
+}
+
+/**
  * Launch the built app against a specific profile.
  *
  * Exported because `window-state.spec.ts` needs **two** launches sharing one
@@ -168,6 +181,8 @@ export async function launchHive({
        * determinism concern `?sim=0` handles for the web project (story 061).
        */
       HIVE_E2E: '1',
+      /** Never the frontmost app; see {@link backgroundEnv}. */
+      ...backgroundEnv(),
       /**
        * Overrides `~/.hivetty/config.json` (story 090) so specs point at a scratch
        * fixture repo and never at the developer's real projects. A suite that

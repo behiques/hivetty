@@ -1087,6 +1087,14 @@ Two traps that cost time when rediscovered, both handled by the harness:
 | `pnpm test:e2e:web` | the browser specs |
 | `pnpm test:e2e:electron` | the built desktop app |
 
+**Test launches never take focus.** The fixture launches the app with
+`HIVE_BACKGROUND=1` (`electron/main/background.ts`): on macOS it becomes an
+accessory app with no Dock icon, every window is shown inactive and nothing
+calls `focus()`, so a run never steals the keyboard. `pnpm release:smoke` and
+the server live suite set it too. To watch a run in the foreground, set
+`HIVE_E2E_FOREGROUND=1` in the runner's environment. The switch is
+environment-only, and without it the app behaves exactly as shipped.
+
 `globalSetup` builds `out/` when it is missing or stale, so `--project=electron`
 can never silently test yesterday's binary. It no-ops for a web-only run.
 
