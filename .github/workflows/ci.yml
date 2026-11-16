@@ -52,6 +52,12 @@ jobs:
       # `postinstall` runs `check-native-abi.mjs --fix`. node-pty has no Linux
       # prebuild, so it builds from source here; the build is N-API, which
       # loads under Electron without a rebuild, so the check holds as it is.
+      # `tests/electron/main/config/login-env.test.ts` runs the login-env probe
+      # through every shell the config may name, zsh included. ubuntu ships
+      # without it; macOS has it at /bin/zsh, so this matches the developer box.
+      - name: sudo apt-get install -y zsh
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+
       - name: pnpm install --frozen-lockfile
         run: pnpm install --frozen-lockfile
 

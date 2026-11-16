@@ -285,12 +285,18 @@ describe('the probe and the parser agree, run against a real shell', () => {
    */
   const NOISY_VALUE = 'ghp_first\n\nUnknown command: "bin"\n  npm help=yes';
 
+  /**
+   * `/usr/bin:/bin` rides along because the probe calls `printenv`. macOS's
+   * `path_helper` adds them back on its own; Linux's `/etc/profile` leaves a
+   * non-root `PATH` alone, so without them `printenv` is not found and every
+   * value reads empty (HIVE-417, the first CI run on ubuntu).
+   */
   for (const shell of ['/bin/sh', '/bin/bash', '/bin/zsh']) {
     it(`round-trips a newline-bearing value through ${shell}`, async () => {
       const { stdout } = await runLoginShell(shell, LOGIN_ENV_PROBE_ARGS, {
         cwd: dir,
         env: {
-          PATH: '/opt/hive-probe-one:/opt/hive-probe-two',
+          PATH: '/opt/hive-probe-one:/opt/hive-probe-two:/usr/bin:/bin',
           GH_TOKEN: NOISY_VALUE,
           // A home with no rc files, so this asserts the protocol rather than
           // whatever the developer running it keeps in ~/.zshrc.
