@@ -139,8 +139,8 @@ whose authority lives in the other process, and that shapes both of its actions:
   the renderer writes to this slice directly; a write goes out over IPC and comes
   back on the channel, so the mirror can only ever hold what the log holds.
 
-Its selectors — `useLedgerEntries(filter?)` and `useThread(id)` — apply the rule the whole store follows: *nothing* about
-openness or claims is stored. They call the same pure functions in
+Its selectors — `useLedgerEntries(filter?)` and `useThread(id)` — apply the
+rule the whole store follows: *nothing* about openness or claims is stored. They call the same pure functions in
 `electron/shared/ledger-derive.ts` that main calls against the authoritative
 log, which is what stops "what counts as an open ask" from having two
 definitions.
