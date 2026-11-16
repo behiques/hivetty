@@ -605,6 +605,16 @@ const CASES = [
         "import { adapter } from './claude-code/probe-target';\nexport const probe = adapter;\n",
     },
   },
+  /** #244's miss: a double-quoted import review let through (HIVE-417). */
+  {
+    name: 'format: a double-quoted import is refused',
+    rule: '@stylistic/quotes',
+    files: {
+      'src/lib/probe-target.ts': 'export const target = 1;\n',
+      'src/lib/probe.ts':
+        'import { target } from "@lib/probe-target";\nexport const probe = target;\n',
+    },
+  },
 ];
 
 /** Run ESLint over the given paths and return its JSON report. */
