@@ -11,6 +11,10 @@
  * importing itself, and a slice importing `features/shared` — because the
  * per-slice zone formulation exists precisely to keep those working.
  *
+ * HIVE-417 adds the sibling checks, each in its own module and proved the same
+ * two ways (this tree passes, a planted miss fires): the remote protocol lock,
+ * the e2e bridge lists, the docs selector table and the test mirror.
+ *
  * Run with `pnpm verify:boundaries`. Exits non-zero if any case misbehaves.
  */
 
@@ -30,6 +34,7 @@ import {
   readProtocolState,
   readSources,
 } from './protocol-lock.mjs';
+import { selectorTableProblemsOnDisk } from './selector-table.mjs';
 import { testMirrorProblemsOnDisk } from './test-mirror.mjs';
 
 const appRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -728,6 +733,21 @@ const SIBLING_CHECKS = [
       });
     },
     expect: /surface\.top: in BRIDGE_KEYS, missing from security\.spec\.ts: probeKey/,
+  },
+  {
+    name: 'selectors: store hooks and docs/state-and-data.md agree (allow-list: scripts/selector-doc-allow.json)',
+    clean: () => selectorTableProblemsOnDisk(appRoot),
+    /** #251/#256: a store exporting a hook the doc does not name. */
+    plant: () => {
+      const probe = join(appRoot, 'src/stores/probe-store.ts');
+      writeFileSync(probe, 'export const useProbeHook = () => 1;\n');
+      try {
+        return selectorTableProblemsOnDisk(appRoot);
+      } finally {
+        rmSync(probe, { force: true });
+      }
+    },
+    expect: /^src\/stores\/probe-store\.ts: useProbeHook is not in docs\/state-and-data\.md's selector table$/,
   },
   {
     name: 'mirror: every src file has its tests/ mirror or is in scripts/test-mirror-allow.json',
