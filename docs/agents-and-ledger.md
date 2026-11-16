@@ -2755,9 +2755,10 @@ on GitHub (HIVE-412), `prs.json` in its work dir as memory, one
 `ledger_ask` per wake because an ask ends the wake. It holds all of Bash but
 never the merge: `isPrMerge` (`permission-rules.ts`) refuses `gh pr merge`, a
 REST merge through `gh api` and the GraphQL merge mutations to every wide rule,
-and `isDefaultBranchPush` refuses a `git push` to `main` or `master` the same
-way (HIVE-395: a one-shot card, for every agent holding Bash), and no Bash rule reaches Claude's `--allowedTools`, so `approve` decides each
-command. HIVE-166's grant or the fence's card decides each merge, and
+and no Bash rule reaches Claude's `--allowedTools`, so `approve` decides each
+command. A push, to any branch, is ordinary Bash: the HIVE-395 default-branch
+push fence is gone, since a once-only card on every push cost the agents their
+autonomy and the agent's own `tools:` already decides who holds Bash. HIVE-166's grant or the fence's card decides each merge, and
 `tests/resources/agents/shipped-agents.test.ts` proves it against the real
 `matches`, and pins every shipped icon to the Settings list so none draws as
 a question mark. The builder (HIVE-170) takes a plan by `ledger_ask` from the

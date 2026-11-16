@@ -204,8 +204,8 @@ const specifierTextFor = (
  * The fence therefore refuses to match *any* `Bash(...)` specifier against a
  * command that contains one. It is deliberately blunt rather than a shell
  * parser: this module is pure by construction and a half-correct tokeniser is
- * worse than none. The push fence (HIVE-407) does tokenise, with `shellSegments`, because it only ever
- * adds asks: a command the tokeniser cannot parse fails closed, and the text match stays beside it.
+ * worse than none. The merge fence does tokenise, with `shellSegments`, because it only ever adds
+ * asks: a command the tokeniser cannot parse fails closed, and the text match stays beside it.
  *
  * Redirection is in the class for the same reason and it is not a lesser
  * case: `Bash(echo *)` and `Bash(cat *)` are ordinary one-click family
@@ -315,24 +315,6 @@ export function isToolName(value: unknown): value is string {
  * would be needed to forge one.
  */
 const LITERAL_PREFIX = 'literal:';
-
-/** First words that read and never run anything; `rg` (`--pre`) and `sed` (`e`) can run a program, so they are absent. */
-const READ_ONLY_TOOLS = new Set(['grep', 'cat']);
-/** Raw text that voids the read-only exemption, whatever the tokeniser made of it; see {@link readsOnly}. */
-const UNSAFE_FOR_EXEMPTION = /[$`>]|<</;
-
-/**
- * A lone `grep` or `cat` that only *mentions* a merge or a push (HIVE-407): reviewing the fence's own
- * code raised a card for it seven times in one audit week. One command and nothing else, since an
- * operator, a substitution or a process substitution each parse as a second command. The raw text must
- * also hold no `$` or backtick (bash runs a substitution hidden in an arithmetic subscript, which the
- * tokeniser reads as escaped text), no `>` (a write into a hook or rc file is not a read), and no `<<`
- * (the tokeniser skips a heredoc body as data, and the exemption is not meant to cover one).
- */
-const readsOnly = (command: string): boolean => {
-  const segments = shellSegments(command);
-  return segments?.length === 1 && READ_ONLY_TOOLS.has(segments[0][0]) && !UNSAFE_FOR_EXEMPTION.test(command);
-};
 
 /**
  * A command that merges a pull request: `gh pr merge`, a REST merge through `gh api` (a pull's
@@ -558,11 +540,8 @@ const autoMergeCovers = (command: string, grants: readonly string[]): boolean =>
   const allBash = grants.includes('Bash') || grants.includes('*');
   let merges = 0;
   if (hidesMerge(command, segments)) return false;
-  /*
-    What rides beside the merge is held to every gate bare `Bash` is (#281 R2): a default-branch push
-    asks, as it did before this read existed. A redirection writes a file, so it needs all of Bash too.
-  */
-  if (isDefaultBranchPush('Bash', { command }) || (!allBash && REDIRECT.test(command))) return false;
+  // A redirection writes a file, so what rides beside the merge needs all of Bash for one (#281 R2).
+  if (!allBash && REDIRECT.test(command)) return false;
   for (const words of segments) {
     if (!words.some((word, i) => namesGh(word) && ghMerges(words, i))) {
       if (!allBash || segmentMerges(words)) return false;
@@ -573,100 +552,6 @@ const autoMergeCovers = (command: string, grants: readonly string[]): boolean =>
     merges += 1;
   }
   return merges > 0;
-};
-
-/**
- * A `git push` that writes the default branch (HIVE-395, HIVE-407). This text match is one half of
- * {@link pushesDefault}'s union: together they catch a target of `main` or `master`, bare, as a
- * refspec's destination (`HEAD:main`), forced (`+main`), as `refs/heads/main` or `heads/main`, deleted
- * (`:main`, `--delete main`), a wildcard destination, a destination the shell fills in (`"$BRANCH"`),
- * or a push swept up by `--all`, `--mirror` or `--branches`.
- *
- * It reaches what a merge reaches with no PR at all, so it is fenced the way {@link isPrMerge} is: no
- * wide rule grants it, only a one-shot literal, and anywhere in the command for the same reason. A
- * local `main:feature` (main pushed to a feature branch), `feat/main` and `main-v2` stay allowed; a
- * commit message reading "push to main" asks, which fails closed. A backslash-newline is a line
- * continuation, not a new command, so the gaps cross it (`git push origin \<newline>  main`) and a
- * target may end at one (`main\<newline>  --force`).
- * shortcut: the default branch is `main` or `master` by name, not the repository's own; pass each
- * project's real default branch into the fence if one ever differs.
- * shortcut: a `git push` with no refspec, or `git push origin HEAD`, while on the default branch is not
- * caught, nor is a ref written through `gh api`; the fence is pure and cannot read the current branch.
- */
-const DEFAULT_BRANCH_PUSH =
-  /\bgit\b(?:[^;&|\n]|\\\r?\n)*?\bpush\b(?:[^;&|\n]|\\\r?\n)*?(\s--(?:all|mirror)\b|[\s:+'"](?:refs\/heads\/)?(?:main|master)(?=['"\s;&|)]|\\\r?\n|$))/;
-
-/** Git's global options that take the next word as their value (`git -C <dir> push`). */
-const GIT_VALUE_OPTIONS = new Set([
-  '-C',
-  '-c',
-  '--git-dir',
-  '--work-tree',
-  '--namespace',
-  '--config-env',
-  '--attr-source',
-]);
-/** `git push` options that take the next word as their value. */
-const PUSH_VALUE_OPTIONS = new Set(['-o', '--push-option', '--repo', '--receive-pack', '--exec']);
-/** `git push` options that push every branch, the default one included. */
-const PUSH_EVERY_BRANCH = new Set(['--all', '--mirror', '--branches']);
-
-/** Whether a refspec's destination is the default branch, a wildcard, or a value the shell fills in. */
-const writesDefaultBranch = (refspec: string): boolean => {
-  const spec = refspec.startsWith('+') ? refspec.slice(1) : refspec;
-  const colon = spec.indexOf(':');
-  const destination = (colon === -1 ? spec : spec.slice(colon + 1)).replace(/^(?:refs\/)?heads\//, '');
-  return destination === 'main' || destination === 'master' || /[*$?[{`]/.test(destination);
-};
-
-/** Whether one simple command, read from its `git` word on, pushes the default branch. */
-const pushesDefaultBranch = (words: string[], git: number): boolean => {
-  let i = git + 1;
-  while (i < words.length && words[i].startsWith('-')) i += GIT_VALUE_OPTIONS.has(words[i]) ? 2 : 1;
-  if (words[i] !== 'push') return false;
-  let positional = false;
-  for (i++; i < words.length; i++) {
-    const word = words[i];
-    if (!positional && word === '--') positional = true;
-    else if (!positional && PUSH_EVERY_BRANCH.has(word)) return true;
-    else if (!positional && PUSH_VALUE_OPTIONS.has(word)) i++;
-    else if (!positional && word.startsWith('-')) continue;
-    // Every positional is checked, the repository too: cheaper than knowing what `--repo` moved.
-    else if (writesDefaultBranch(word)) return true;
-  }
-  return false;
-};
-
-/** A word that may name git: `git`, a path to it, or one the shell fills in (`$G`, `$(which git)`). */
-const namesGit = (word: string): boolean => word === 'git' || word.endsWith('/git') || word.includes('$');
-/** A word that reads as a command of its own: a wrapper's argument (`bash -c '…'`, `ssh host '…'`, `eval "…"`). */
-const READS_AS_COMMAND = /[\s;&|<>`]|\$\(/;
-/** How deep a wrapper's argument is read again: `bash -c "sh -c '…'"` is two. */
-const WRAPPER_DEPTH = 3;
-
-/**
- * The union, so the fence only ever widens (HIVE-407): the tokenised refspec check sees through quoting,
- * redirects and operators; the text match above keeps catching what the tokeniser cannot follow; a word
- * that reads as a command (a wrapper's argument) is checked again as one; and a top-level command the
- * tokeniser cannot parse asks if it mentions a push. A wrapper's unparseable argument is left to the text
- * match, since a quoted PR body reading "it's ready to push" is prose, not a push.
- */
-const pushesDefault = (command: string, depth = 0): boolean => {
-  if (DEFAULT_BRANCH_PUSH.test(command)) return true;
-  const segments = shellSegments(command);
-  if (segments === undefined) return depth === 0 && /\bpush\b/.test(command);
-  return segments.some((words) =>
-    words.some(
-      (word, i) =>
-        (namesGit(word) && pushesDefaultBranch(words, i)) ||
-        (depth < WRAPPER_DEPTH && READS_AS_COMMAND.test(word) && pushesDefault(word, depth + 1)),
-    ),
-  );
-};
-
-export const isDefaultBranchPush = (toolName: string, input: Record<string, unknown>): boolean => {
-  const command = str(input, 'command') ?? '';
-  return toolName === 'Bash' && pushesDefault(command) && !readsOnly(command);
 };
 
 export function matches(
@@ -716,9 +601,6 @@ export function matches(
       plainMergeRepo(segments[0]!) === autoMerge[1]
     );
   }
-
-  // No rule but the literal may allow one: see DEFAULT_BRANCH_PUSH.
-  if (isDefaultBranchPush(toolName, input)) return false;
 
   if (rule === '*') return true;
 
@@ -949,8 +831,8 @@ export function rungsFor(
     }
     return rungs;
   }
-  // No standing rung grants a once-only tool or a default-branch push (`matches`), so the card offers none.
-  if (ONCE_ONLY_TOOLS.has(toolName) || isDefaultBranchPush(toolName, input)) return rungs;
+  // No standing rung grants a once-only tool (`matches`), so the card offers none.
+  if (ONCE_ONLY_TOOLS.has(toolName)) return rungs;
 
   /*
     Both rules below embed `toolName`, so both are gated on `isToolName`
