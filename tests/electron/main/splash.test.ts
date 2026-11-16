@@ -22,6 +22,7 @@ interface FakeWindow {
   options: Record<string, unknown>;
   once: ReturnType<typeof vi.fn>;
   show: ReturnType<typeof vi.fn>;
+  showInactive: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
   setOpacity: ReturnType<typeof vi.fn>;
   isDestroyed: () => boolean;
@@ -43,6 +44,7 @@ vi.mock('electron', () => ({
           listeners.set(event, handler);
         }),
         show: vi.fn(),
+        showInactive: vi.fn(),
         destroy: vi.fn(() => {
           destroyed = true;
         }),
@@ -133,6 +135,18 @@ describe('createSplashWindow', () => {
     createSplashWindow();
     created[0].fire('ready-to-show');
     expect(created[0].show).toHaveBeenCalled();
+  });
+
+  it('shows itself inactive in a background launch (HIVE_BACKGROUND)', () => {
+    process.env.HIVE_BACKGROUND = '1';
+    try {
+      createSplashWindow();
+      created[0].fire('ready-to-show');
+      expect(created[0].showInactive).toHaveBeenCalled();
+      expect(created[0].show).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.HIVE_BACKGROUND;
+    }
   });
 });
 

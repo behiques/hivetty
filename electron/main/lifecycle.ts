@@ -4,6 +4,7 @@ import { APP_NAME } from '@shared/app-name';
 
 import { showAboutWindow } from './about';
 import { appWindows, primaryWindow } from './aux-windows';
+import { applyBackgroundPolicy, bringForward } from './background';
 import { releaseForQuit } from './licence/suspend';
 import { installApplicationMenu } from './menu';
 import { runShutdown } from './shutdown';
@@ -100,10 +101,12 @@ export function registerLifecycle({
       return;
     }
     if (existing.isMinimized()) existing.restore();
-    existing.focus();
+    bringForward(existing);
   });
 
   void app.whenReady().then(() => {
+    // Before the first window: a background run never takes the Dock or focus.
+    applyBackgroundPolicy(platform);
     if (isMac) {
       installApplicationMenu({
         isMac,

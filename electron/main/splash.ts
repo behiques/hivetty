@@ -11,6 +11,7 @@ import {
 import { WINDOW_BACKGROUND } from '@shared/window';
 
 import { markAuxiliary } from './aux-windows';
+import { reveal } from './background';
 
 /**
  * The cold-start splash — the Overmind Chamber.
@@ -157,7 +158,7 @@ export function createSplashWindow({
 
   win.once('ready-to-show', () => {
     shownAt = now();
-    win.show();
+    reveal(win);
   });
 
   loadSplash(win);
