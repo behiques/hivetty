@@ -107,16 +107,16 @@ names. `blocked`, or any other shape → a stuck row.
 
 ### ci
 
-1. Lane fact `prCi`, decided at the lane's first `ci` stage: no checks on the
-   PR and `gh workflow list --repo <owner>/<repo>` shows no workflow triggered
-   on `pull_request` → `false`, else `true`.
-2. While `false` and `gh pr diff <N> --repo <owner>/<repo> --name-only` lists
-   nothing under `.github/workflows/`, skip `gh pr checks`: green.
-3. Otherwise `gh pr checks <N> --repo <owner>/<repo>`; exit 8 is pending.
-4. Green, `prCi` false, head `fixerHead` and not `gatedHead`: `gatedHead =
-   head`, `waitingOn: fixer`, ask the fixer to run the repository's full gate
-   once in the PR worktree; `clean` → green, else stuck. Remove this step once
-   HIVE-417 adds a `pull_request` workflow.
+1. Read per PR, at every `ci` stage, never kept as a lane fact:
+   `gh pr checks <N> --repo <owner>/<repo>`. Checks reported → wait for them;
+   exit 8 is pending, and a required check that is pending is not green.
+2. No checks reported and no workflow triggered on `pull_request` → the no-CI
+   path: green. Look in `.github/workflows/` at the PR head (`gh api
+   repos/<owner>/<repo>/contents/.github/workflows?ref=<headRef>`); one with
+   `pull_request` in its `on:` means checks are still to come: pending.
+3. No-CI path, head `fixerHead` and not `gatedHead`: `gatedHead = head`,
+   `waitingOn: fixer`, ask the fixer to run the repository's full gate once in
+   the PR worktree; `clean` → green, else stuck.
 
 ### sync (inside approval and merge)
 
