@@ -30,6 +30,7 @@ import {
   readProtocolState,
   readSources,
 } from './protocol-lock.mjs';
+import { testMirrorProblemsOnDisk } from './test-mirror.mjs';
 
 const appRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -717,6 +718,21 @@ const SIBLING_CHECKS = [
       });
     },
     expect: /surface\.top: in BRIDGE_KEYS, missing from security\.spec\.ts: probeKey/,
+  },
+  {
+    name: 'mirror: every src file has its tests/ mirror or is in scripts/test-mirror-allow.json',
+    clean: () => testMirrorProblemsOnDisk(appRoot),
+    /** #229: a new src file with no test. On disk, because the check walks the disk. */
+    plant: () => {
+      const probe = join(appRoot, 'src/lib/probe-unmirrored.ts');
+      writeFileSync(probe, 'export const probe = 1;\n');
+      try {
+        return testMirrorProblemsOnDisk(appRoot);
+      } finally {
+        rmSync(probe, { force: true });
+      }
+    },
+    expect: /^src\/lib\/probe-unmirrored\.ts: no tests\/lib\/probe-unmirrored\.test\.ts\(x\)$/,
   },
 ];
 
