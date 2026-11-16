@@ -127,11 +127,10 @@ async function main() {
     throw new Error('release:smoke packages for macOS arm64 and runs only there');
   }
   const tmp = mkdtempSync(join(tmpdir(), 'hivetty-release-smoke-'));
-  if (isInside(tmp, appRoot)) throw new Error(`temp folder ${tmp} is inside the checkout`);
-
   let pid = null;
   let failure = null;
   try {
+    if (isInside(tmp, appRoot)) throw new Error(`temp folder ${tmp} is inside the checkout`);
     const outputDir = join(tmp, 'dist');
     console.log(`release:smoke: packaging into ${outputDir}`);
     const build = spawnSync('pnpm', ['exec', 'electron-builder', ...builderArgs(outputDir)], {
