@@ -190,6 +190,16 @@ describe('SessionRow', () => {
     expect(mark?.compareDocumentPosition(name)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(comb?.compareDocumentPosition(mark as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
+
+  it('reads the session name first, the CLI after it and the id tag', () => {
+    // The e2e specs find a row by /^sess-01\b/: a screen reader hears the session first.
+    const { rerender } = render(<SessionRow id="hero-refresh" />);
+    expect(row()).toHaveAccessibleName(/^hero-refresh Claude Code\b/);
+
+    act(() => useHiveStore.getState().renameSession('hero-refresh', 'hero-tokens'));
+    rerender(<SessionRow id="hero-refresh" />);
+    expect(row()).toHaveAccessibleName(/^hero-tokens hero-refresh Claude Code\b/);
+  });
 });
 
 /**
