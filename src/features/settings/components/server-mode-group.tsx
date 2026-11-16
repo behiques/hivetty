@@ -83,7 +83,7 @@ import { useApplyModeChange } from '@stores/hive-store';
  */
 
 const GRANT =
-  "A paired device can open, watch and type into every session on this Mac.";
+  'A paired device can open, watch and type into every session on this Mac.';
 
 const SWITCH_DESCRIPTION = `${GRANT} Takes effect at next launch.`;
 

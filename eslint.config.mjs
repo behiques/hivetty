@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 
 import js from '@eslint/js';
+import stylistic from '@stylistic/eslint-plugin';
 import checkFile from 'eslint-plugin-check-file';
 import importPlugin from 'eslint-plugin-import';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
@@ -558,6 +559,24 @@ export default tseslint.config(
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+    },
+  },
+  {
+    /**
+     * House format (HIVE-417): single quotes and semicolons, the style all but
+     * five files already used by habit (the four shadcn primitives among them,
+     * reformatted when this landed). #244 shipped a double-quoted import that
+     * review let through; `scripts/verify-boundaries.mjs` proves this fires.
+     */
+    files: ['**/*.{ts,tsx,mjs}'],
+    plugins: { '@stylistic': stylistic },
+    rules: {
+      '@stylistic/quotes': [
+        'error',
+        'single',
+        { avoidEscape: true, allowTemplateLiterals: 'always' },
+      ],
+      '@stylistic/semi': ['error', 'always'],
     },
   },
   {

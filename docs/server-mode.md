@@ -46,6 +46,8 @@ that the machine looks after itself.
 - **The same version on both ends.** The first frame carries
   `REMOTE_PROTOCOL_VERSION` (`electron/shared/remote-contract.ts`). A mismatch
   is refused with a message naming both versions and which side to update.
+  `scripts/remote-protocol.lock.json` pins the channel set to that version, so
+  `pnpm verify:boundaries` fails a channel change that did not bump it.
 - **Tailscale on the server and on every client, in one tailnet.** It is the
   primary security control, not a convenience. See [Exposure](#exposure).
 - **Claude Code installed and logged in on the server.** Sessions run there, so

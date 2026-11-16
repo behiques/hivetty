@@ -11,6 +11,10 @@
  * importing itself, and a slice importing `features/shared` — because the
  * per-slice zone formulation exists precisely to keep those working.
  *
+ * HIVE-417 adds the sibling checks, each in its own module and proved the same
+ * two ways (this tree passes, a planted miss fires): the remote protocol lock,
+ * the e2e bridge lists, the docs selector table and the test mirror.
+ *
  * Run with `pnpm verify:boundaries`. Exits non-zero if any case misbehaves.
  */
 
@@ -22,6 +26,16 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 import { aliases } from '../vite.aliases.mjs';
+
+import { bridgeListProblems, readBridgeSources } from './bridge-list.mjs';
+import {
+  protocolLockProblems,
+  readLock,
+  readProtocolState,
+  readSources,
+} from './protocol-lock.mjs';
+import { selectorTableProblemsOnDisk } from './selector-table.mjs';
+import { testMirrorProblemsOnDisk } from './test-mirror.mjs';
 
 const appRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -596,6 +610,16 @@ const CASES = [
         "import { adapter } from './claude-code/probe-target';\nexport const probe = adapter;\n",
     },
   },
+  /** #244's miss: a double-quoted import review let through (HIVE-417). */
+  {
+    name: 'format: a double-quoted import is refused',
+    rule: '@stylistic/quotes',
+    files: {
+      'src/lib/probe-target.ts': 'export const target = 1;\n',
+      'src/lib/probe.ts':
+        'import { target } from "@lib/probe-target";\nexport const probe = target;\n',
+    },
+  },
 ];
 
 /** Run ESLint over the given paths and return its JSON report. */
@@ -659,6 +683,121 @@ results.push({
   fired: aliasProblems.length ? aliasProblems.join('; ') : '(none)',
 });
 if (aliasProblems.length) failures += 1;
+
+/**
+ * Sibling checks (HIVE-417): a change that forgets the file it must move with.
+ *
+ * Each check is proved in both directions, like the lint cases above: the tree
+ * as it stands must pass, and a planted violation (the miss a real PR shipped)
+ * must fire. A plant that touches disk is removed in its own `finally`.
+ */
+/** `text` with `insert` after `anchor`; throws when the anchor moved, so a plant never silently plants nothing. */
+function insertAfter(text, anchor, insert) {
+  const at = text.indexOf(anchor);
+  if (at === -1) throw new Error(`plant anchor not found: ${anchor}`);
+  return text.slice(0, at + anchor.length) + insert + text.slice(at + anchor.length);
+}
+
+const SIBLING_CHECKS = [
+  {
+    name: 'protocol: channel set matches scripts/remote-protocol.lock.json',
+    clean: () => protocolLockProblems(readProtocolState(readSources(appRoot)), readLock(appRoot)),
+    /** #252: a channel added to CH and FRAME_KIND with no REMOTE_PROTOCOL_VERSION bump. */
+    plant: () => {
+      const sources = readSources(appRoot);
+      const planted = {
+        ipcContract: insertAfter(
+          sources.ipcContract,
+          'export const CH = {',
+          "\n  probeChannel: 'probe:channel',",
+        ),
+        remoteContract: insertAfter(
+          sources.remoteContract,
+          'export const FRAME_KIND = {',
+          "\n  [CH.probeChannel]: 'call',",
+        ),
+      };
+      return protocolLockProblems(readProtocolState(planted), readLock(appRoot));
+    },
+    expect: /channels changed: bump REMOTE_PROTOCOL_VERSION/,
+  },
+  {
+    name: 'bridge: security.spec.ts surface lists match tests/support/bridge-keys.ts',
+    clean: () => bridgeListProblems(readBridgeSources(appRoot)),
+    /** #238: a key added to BRIDGE_KEYS (and the preload) that the e2e list lacks. */
+    plant: () => {
+      const sources = readBridgeSources(appRoot);
+      return bridgeListProblems({
+        ...sources,
+        bridgeKeys: insertAfter(sources.bridgeKeys, 'export const BRIDGE_KEYS = [', "\n  'probeKey',"),
+      });
+    },
+    expect: /surface\.top: in BRIDGE_KEYS, missing from security\.spec\.ts: probeKey/,
+  },
+  {
+    name: 'selectors: store hooks and docs/state-and-data.md agree (allow-list: scripts/selector-doc-allow.json)',
+    clean: () => selectorTableProblemsOnDisk(appRoot),
+    /** #251/#256: a store exporting a hook the doc does not name. */
+    plant: () => {
+      const probe = join(appRoot, 'src/stores/probe-store.ts');
+      writeFileSync(probe, 'export const useProbeHook = () => 1;\n');
+      try {
+        return selectorTableProblemsOnDisk(appRoot);
+      } finally {
+        rmSync(probe, { force: true });
+      }
+    },
+    expect: /^src\/stores\/probe-store\.ts: useProbeHook is not in docs\/state-and-data\.md's selector table$/,
+  },
+  {
+    name: 'mirror: every src file has its tests/ mirror or is in scripts/test-mirror-allow.json',
+    clean: () => testMirrorProblemsOnDisk(appRoot),
+    /** #229: a new src file with no test. On disk, because the check walks the disk. */
+    plant: () => {
+      const probe = join(appRoot, 'src/lib/probe-unmirrored.ts');
+      writeFileSync(probe, 'export const probe = 1;\n');
+      try {
+        return testMirrorProblemsOnDisk(appRoot);
+      } finally {
+        rmSync(probe, { force: true });
+      }
+    },
+    expect: /^src\/lib\/probe-unmirrored\.ts: no tests\/lib\/probe-unmirrored\.test\.ts\(x\)$/,
+  },
+];
+
+for (const check of SIBLING_CHECKS) {
+  let clean;
+  let planted;
+  try {
+    clean = check.clean();
+  } catch (error) {
+    clean = [`threw: ${error.message}`];
+  }
+  try {
+    planted = check.plant();
+  } catch (error) {
+    planted = [`threw: ${error.message}`];
+  }
+  const cleanOk = clean.length === 0;
+  const plantOk = planted.some((problem) => check.expect.test(problem));
+  if (!cleanOk) failures += 1;
+  if (!plantOk) failures += 1;
+  results.push(
+    {
+      ok: cleanOk,
+      name: `${check.name} (this tree)`,
+      expected: '(no problems)',
+      fired: clean.length ? clean.join('; ') : '(none)',
+    },
+    {
+      ok: plantOk,
+      name: `${check.name} (planted miss)`,
+      expected: String(check.expect),
+      fired: planted.length ? planted.join('; ') : '(none)',
+    },
+  );
+}
 
 for (const result of results) {
   console.log(

@@ -139,9 +139,8 @@ whose authority lives in the other process, and that shapes both of its actions:
   the renderer writes to this slice directly; a write goes out over IPC and comes
   back on the channel, so the mirror can only ever hold what the log holds.
 
-Its selectors — `useLedgerEntries(filter?)`, `useOpenAskCount()`
-and `useThread(id)` — apply the rule the whole store follows: *nothing* about
-openness or claims is stored. They call the same pure functions in
+Its selectors — `useLedgerEntries(filter?)` and `useThread(id)` — apply the
+rule the whole store follows: *nothing* about openness or claims is stored. They call the same pure functions in
 `electron/shared/ledger-derive.ts` that main calls against the authoritative
 log, which is what stops "what counts as an open ask" from having two
 definitions.
@@ -434,7 +433,6 @@ Components never read a store object directly and never call `getState()`.
 | `useStackUp()` / `useArrivalPulse()` | ui-store: whether the Inbox stack is up (HIVE-228) and the pill's pulse id (HIVE-198) |
 | `useInboxDrawer()` / `useInboxActions()` | ui-store: the drawer's `{ open, thread }`, and the arrival and drawer actions |
 | `useUnreadCount()` | inbox unread count |
-| `useNotifs()` | the inbox, newest first |
 | `useSummons(onStage)` | the Summons queue, `{ asks, sessions }`, newest first: open `agent.ask` / `agent.permission` and `pr.review_requested`; `session.blocked`, `session.idle` and `session.input_needed` less the one on stage (HIVE-214) |
 | `useSummonsCount(onStage)` | its length; `useSummonsCount(null)` is the dock's count |
 | `useYoursAgain(terminalId)` | true while an unswept `session.idle` / `session.input_needed` row names that terminal |
@@ -453,14 +451,11 @@ Components never read a store object directly and never call `getState()`.
 | `useShipTrack(slug, n)` | the shipper's eight stops for one PR, with time and holder (HIVE-205) |
 | `useMergeAsk(slug, n)` | the shipper's open merge card for one PR, the ask the PR page's Merge answers (HIVE-205) |
 | `useSessionPr(id)` | one row's PR, matched on its branch |
-| `useSessionPrRow(id)` | the session's PR with its Hatchery row, matched by URL; `row: null` for a remembered PR. The session panel's PR tab and dot (HIVE-209) |
+| `useSessionPrRows(id)` | every PR `useSessionPrs` lists, each with its Hatchery row, matched by URL; `row: null` for a remembered PR. The session panel's PR tab and dot (HIVE-209) |
 | `useHasResumable()` | whether the fleet table reserves its Resume column |
-| `useMarkRead()` | mark one notification read, by index |
-
 | `usePushNotif()` | push a notification |
 | `useActiveEntity()` | the entity behind `activeTab`, or `null` |
 | `useLedgerEntries(filter?)` | the ledger tail, by the shared query rules |
-| `useOpenAskCount()` | how many asks are unanswered and not yet TTL-retired |
 | `useThread(id)` | one conversation: the ask, and everything that named it |
 | `useCombEntities()` | Home's comb cells: every live session, live terminal and agent, as raw facts (HIVE-199) |
 | `useCombSummary()` | the headline's counts over the same cells: `{ working, failed, resting, projects, agents }` |
