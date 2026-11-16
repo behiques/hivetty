@@ -563,8 +563,9 @@ export default tseslint.config(
   },
   {
     /**
-     * House format (HIVE-417): single quotes and semicolons, the style every
-     * file already used by habit. #244 shipped a double-quoted import that
+     * House format (HIVE-417): single quotes and semicolons, the style all but
+     * five files already used by habit (the four shadcn primitives among them,
+     * reformatted when this landed). #244 shipped a double-quoted import that
      * review let through; `scripts/verify-boundaries.mjs` proves this fires.
      */
     files: ['**/*.{ts,tsx,mjs}'],
