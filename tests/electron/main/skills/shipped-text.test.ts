@@ -15,11 +15,12 @@ const words = (text: string) => text.replace(/^---[\s\S]*?\n---\n/, '').split(/\
 describe('shipped text agrees (HIVE-413)', () => {
   it('ship is short enough to follow', () => {
     // HIVE-416: the limit is on the stage table plus its numbered steps (about 1,200 words);
-    // the whole file is held under 1,400 so the prose around them cannot grow unseen.
+    // the whole file is held under 1,450 so the prose around them cannot grow unseen
+    // (raised from 1,400 for the CI bound and the Drive trigger's test-file rule; the steps limit is the real one).
     const body = ship().replace(/^---[\s\S]*?\n---\n/, '');
     const steps = body.slice(body.indexOf('| Stage |'), body.indexOf('## A stuck row'));
     expect(words(steps)).toBeLessThanOrEqual(1200);
-    expect(words(ship())).toBeLessThanOrEqual(1400);
+    expect(words(ship())).toBeLessThanOrEqual(1450);
   });
   it('carries closes-ticket in the intake, the row and the Done rule', () => {
     expect(fillIncludes(ship())).toMatch(/closes-ticket: yes \| no/);
@@ -266,6 +267,16 @@ describe('the review path (HIVE-416)', () => {
     expect(text).toContain('Checks reported → wait for them; exit 8 is pending, and a required check that is pending is not green');
     expect(text).toContain('No checks reported and no workflow triggered on `pull_request` → the no-CI path');
     expect(text).toContain('No-CI path, head `fixerHead` and not `gatedHead`: `gatedHead = head`');
+  });
+  it('ship bounds the CI wait at 60 minutes from `ciSince` (acr on #306)', () => {
+    const text = one(ship());
+    expect(text).toMatch(/"ciSince": null/);
+    const ci = text.slice(text.indexOf('### ci'), text.indexOf('### sync'));
+    expect(ci).toContain('`ciSince` is set when the row enters `ci`');
+    expect(ci).toContain(
+      'Still pending 60 minutes after `ciSince`, or a `pull_request` workflow that has reported nothing by then (path filters can skip a PR) → a stuck row naming the pending checks',
+    );
+    expect(ci).toContain('Under 60 minutes is a wait');
   });
   it('review-pr-findings assesses inline, dispatches only for block or INVALID, and keeps findings notes', () => {
     const text = read('skills/review-pr-findings/SKILL.md');

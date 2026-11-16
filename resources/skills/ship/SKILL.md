@@ -25,7 +25,7 @@ then write the row, before any other row's work:
   "ticket": "HIVE-123", "keyConfirmed": true, "closesTicket": true, "replyTo": "sess-…",
   "ask": "20261113-101500-0001", "asker": "builder", "spec": null, "plan": null, "notes": null,
   "stage": "intake", "waitingOn": null, "since": null, "rounds": 0, "askHead": null,
-  "fixerHead": null, "gatedHead": null }
+  "fixerHead": null, "gatedHead": null, "ciSince": null }
 ```
 
 `spec`, `plan`, `notes`: the intake's paths, `none` as `null`. `since` is
@@ -71,14 +71,14 @@ anyone stops the row, with no ask.
 
 | Stage | This wake | Advance when |
 | --- | --- | --- |
-| `intake` | Claim, accept, row; `gh pr view <N> --repo <owner>/<repo> --json state,isDraft,headRefName,body`; force draft with `gh pr ready <N> --repo <owner>/<repo> --undo`. `gh pr diff <N> --repo <owner>/<repo> --name-only` lists a `.tsx`, a `.css` or a `components/`/`styles/` file, and the body has neither a `Drive:` line nor `owed: drive` → a stuck row | → `self-review` |
+| `intake` | `gh pr view <N> --repo <owner>/<repo> --json state,isDraft,headRefName,body`; force draft with `gh pr ready <N> --repo <owner>/<repo> --undo`. `gh pr diff <N> --repo <owner>/<repo> --name-only` lists a `.tsx`, a `.css` or a `components/`/`styles/` file, and the body has neither a `Drive:` line nor `owed: drive` → a stuck row | → `self-review` |
 | `self-review` | `{{tool:agents}}` lists `acr`: `waitingOn: acr`, then the acr ask (below). No `acr`: ask `reply-to`, options `[reviewed elsewhere, skip the self review]` | acr's answer (below) |
 | `fix-self` | `fixer` listed: `waitingOn: fixer`, `ledger_ask to: fixer` (below). No fixer: ask `reply-to`, options `[fixed, park them]` | the fixer's answer (below); fixed → `ready` |
 | `ready` | `gh pr ready <N> --repo <owner>/<repo>`; only if `keyConfirmed` and the ticket is before In Review: `{{tool:jira_transition}} { key, status: "In Review" }` (or the `jira-tracker` skill) | → `ci` |
 | `ci` | see below | green → `findings`; red → `ledger_ask to: fixer` with the failing checks |
-| `findings` | Pending-fix check; `{{tool:pr}} { repo: "<owner>/<repo>", number: <N> }`: unresolved threads are a finding. The gather, `gh pr view <N> --repo <owner>/<repo> --json reviews,comments,latestReviews,statusCheckRollup`, newer than `since`: every review with a body, any state; a bodyless `COMMENTED` or `CHANGES_REQUESTED` review as "inline review <id> by <author>"; a bodyless `APPROVED` carries nothing and is left out, as is a bodyless review whose author posted a `<!-- hive-fixer` comment on this PR; every PR-level comment; red checks. Leave out `<!-- hive-fixer` comments, ids they name, LGTM-only bodies. An approval asking for a change is a finding. Any → `ledger_ask to: fixer`, each with author and `id` | `clean`, nothing newer → `approval` |
+| `findings` | `{{tool:pr}} { repo: "<owner>/<repo>", number: <N> }`: unresolved threads are a finding. The gather, `gh pr view <N> --repo <owner>/<repo> --json reviews,comments,latestReviews,statusCheckRollup`, newer than `since`: every review with a body, any state; a bodyless `COMMENTED` or `CHANGES_REQUESTED` review as "inline review <id> by <author>"; a bodyless `APPROVED` carries nothing and is left out, as is a bodyless review whose author posted a `<!-- hive-fixer` comment on this PR; every PR-level comment; red checks. Leave out `<!-- hive-fixer` comments, ids they name, LGTM-only bodies. An approval asking for a change is a finding. Any → `ledger_ask to: fixer`, each with author and `id` | `clean`, nothing newer → `approval` |
 | `approval` | see below | → `merge` |
-| `merge` | Pending-fix check; sync; the gather again. Anything → `findings`. Nothing → `{{skill:merge-pr}} <owner>/<repo>#<N> <worktree-or-path> [KEY only if keyConfirmed] [closes-ticket: no when closesTicket is false]` | `merged` → `closed`; a thread HOLD → `findings` |
+| `merge` | Sync; the gather again. Anything → `findings`. Nothing → `{{skill:merge-pr}} <owner>/<repo>#<N> <worktree-or-path> [KEY only if keyConfirmed] [closes-ticket: no when closesTicket is false]` | `merged` → `closed`; a thread HOLD → `findings` |
 | `closed` | `ledger_release <owner>/<repo>#<N>`; remove the row; `ledger_answer <ask>` "PR #N merged", `meta: { pr, repo, stage: "closed" }`; also `ledger_post to: <reply-to>` (`ledger_done` for overmind) when it is not the asker | done |
 
 ### The fixer's answer
@@ -112,6 +112,10 @@ names. `blocked`, or any other shape → a stuck row.
 3. No-CI path, head `fixerHead` and not `gatedHead`: `gatedHead = head`,
    `waitingOn: fixer`, ask the fixer to run the repository's full gate once in
    the PR worktree; `clean` → green, else stuck.
+4. `ciSince` is set when the row enters `ci`. Still pending 60 minutes after
+   `ciSince`, or a `pull_request` workflow that has reported nothing by then
+   (path filters can skip a PR) → a stuck row naming the pending checks.
+   Under 60 minutes is a wait.
 
 ### sync (inside approval and merge)
 
@@ -133,7 +137,7 @@ names. `blocked`, or any other shape → a stuck row.
 
 ### approval
 
-1. Pending-fix check; sync; the gather again. Anything → `findings`.
+1. Sync; the gather again. Anything → `findings`.
 2. `gh pr view <N> --repo <owner>/<repo> --json reviewDecision,reviewRequests,latestReviews`,
    reading (c) first:
    - (a) `APPROVED`, or `{{tool:projects}}` shows this checkout's project with
@@ -145,17 +149,13 @@ names. `blocked`, or any other shape → a stuck row.
      now, wait for review, hand back]`, no `merge now` when the decision blocks.
      `wait for review` → stay, no further asks.
 
-Jira Done is merge-pr's, only when `keyConfirmed` and `closesTicket`;
-`closes-ticket: no` stops at In Review.
-
 ## A stuck row
 
 Asks `reply-to` once: `waitingOn: "reply-to"`, then `ledger_ask` with what is
 stuck, options `[keep waiting, hand back, abandon]`. A hand back or abandon
-releases, answers the `ask`, removes the row. Stuck: CI red with no
+releases and removes the row. Stuck: CI red with no
 fixer, a refused sync, a fixer's `blocked`, an acr answer with `verdict:
-"failed"` or `"empty"`, a fixer answer whose `meta.result` is none of the
-three, a permission card still open when next woken.
+"failed"` or `"empty"`, a permission card still open when next woken.
 
 Every ask to `reply-to` carries `meta: { pr: <N>, repo: "<owner>/<repo>" }`;
 never a post in its place.
