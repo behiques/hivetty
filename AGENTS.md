@@ -47,7 +47,7 @@ This is **HiveTTY Pro**, a commercial, proprietary app by Behiques Consulting LL
 | `pnpm desktop:build` | Type-check, then build `out/{main,preload,renderer}/` |
 | `pnpm desktop:preview` | Run the built Electron app |
 | `pnpm docs:shots` | Retake the guide screenshots from the built app (after `desktop:build`) |
-| `pnpm desktop:dist` | Package `.dmg` + `.zip` into `dist/` (macOS arm64); `:publish` uploads them |
+| `pnpm desktop:dist` · `release:smoke` | Package `.dmg` + `.zip` into `dist/` (macOS arm64); `:publish` uploads them. `release:smoke` packages into a temp folder, launches it once with a scratch profile, then kills it and removes the temp folder: run it before a tag |
 | `pnpm lint` | ESLint across `src/`, `electron/` and config |
 | `pnpm type-check` | `tsc --noEmit` for the app, the Node-side configs, and `electron/` |
 | `pnpm test` | Vitest, single run |

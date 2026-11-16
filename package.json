@@ -28,6 +28,7 @@
     "desktop:build": "pnpm run type-check && electron-vite build",
     "desktop:preview": "electron-vite preview",
     "desktop:dist": "pnpm run desktop:build && electron-builder --mac --arm64 --publish never",
+    "release:smoke": "pnpm run desktop:build && node scripts/release-smoke.mjs",
     "desktop:publish": "pnpm run desktop:build && electron-builder --mac --arm64 --publish always",
     "lint": "eslint .",
     "verify:boundaries": "node scripts/verify-boundaries.mjs",

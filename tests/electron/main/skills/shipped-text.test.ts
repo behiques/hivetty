@@ -283,6 +283,15 @@ describe('the review path (HIVE-416)', () => {
       expect(text).toMatch(/findings\s+notes/);
     }
   });
+  it('ship checks a UI diff for the Drive line verify requires (HIVE-417 item 13)', () => {
+    const text = one(ship());
+    const intake = text.slice(text.indexOf('| `intake` |'), text.indexOf('| `self-review` |'));
+    expect(intake).toContain('`gh pr diff <N> --repo <owner>/<repo> --name-only`');
+    expect(intake).toMatch(/`\.tsx`, a `\.css`/);
+    expect(intake).toMatch(/neither a `Drive:` line nor `owed: drive`/);
+    expect(intake).toMatch(/a stuck row/);
+    expect(one(read('skills/verify/SKILL.md'))).toContain('needs a `Drive:` line in the PR body');
+  });
   it('the builder fills spec, plan and notes in the intake', () => {
     const step8 = agent('builder').slice(agent('builder').indexOf('8. `ship: yes`'));
     expect(one(step8)).toMatch(/`spec:` and `plan:` from the job \(`none` when the job had none\), `notes:` your `progress\.md`/);
