@@ -2685,6 +2685,24 @@ describe('createRunTracker', () => {
         expect(state.read('a').runs.at(-1)?.outcome).toBe('done');
       });
 
+      it('fails the job when the answer was the one that woke this run, in the same millisecond', () => {
+        left = { ask: { id: 'k1', ref: 'a278' }, claims: ['HIVE-417'] };
+        const at = (id: string, over: Partial<LedgerEntry>): LedgerEntry =>
+          ({ id, ts: clock, from: 'a', kind: 'post', body: '', ...over }) as LedgerEntry;
+        laneLog = [
+          at('s0', { kind: 'event', body: 'run.started — ledger', meta: { run: 'r-0', lane: 'thread:k1' } }),
+          at('q1', { kind: 'ask', to: 'sess-a', body: 'which?', meta: { run: 'r-0' } }),
+          at('a1', { from: 'sess-a', to: 'a', kind: 'answer', thread: 'q1', body: 'main' }),
+          at('s1', { kind: 'event', body: 'run.started — ledger', meta: { run: 'run-1', lane: 'thread:k1', wakes: ['a1'] } }),
+        ];
+
+        tracker.run('a', 'ledger', undefined, { lane: 'thread:k1' });
+        childInstances[0]?.emitStdout(resultLine());
+        childInstances[0]?.emitClose(0);
+
+        expect(abandoned().map((item) => item.kind)).toEqual(['failed', 'release']);
+      });
+
       it('fails the job and releases its claims when no answer landed', () => {
         left = { ask: { id: 'k1', ref: 'a278' }, claims: ['HIVE-417'] };
         laneLog = evidence(false);

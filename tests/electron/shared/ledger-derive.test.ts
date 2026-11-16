@@ -1157,8 +1157,13 @@ describe('openAsksOnLane (HIVE-408)', () => {
 
 describe('answeredDuring (HIVE-406 follow-ups; lane-wide since the answer race)', () => {
   const LANE = 'thread:k1';
-  const started = (run: string, ts: number, lane: string = LANE, from = 'builder') =>
-    entry({ id: `s-${run}`, ts, from, kind: 'event', body: 'run.started — ledger', meta: { run, lane } });
+  const started = (run: string, ts: number, lane: string = LANE, from = 'builder', wakes?: string[]) =>
+    entry({
+      id: `s-${run}`, ts, from, kind: 'event', body: 'run.started — ledger',
+      meta: { run, lane, ...(wakes === undefined ? {} : { wakes }) },
+    });
+  const marker = (askId: string, ts: number) =>
+    entry({ id: `x-${askId}`, ts, from: OVERMIND, to: 'builder', kind: 'event', thread: askId, body: 'expired', meta: { expired: askId } });
   const ask = (id: string, run: string, over: Partial<LedgerEntry> = {}) =>
     entry({ id, ts: NOW - 4_000, from: 'builder', to: 'sess-a', kind: 'ask', body: 'which?', meta: { run }, ...over });
   const answer = (id: string, thread: string, ts = NOW - 2_000) =>
@@ -1191,6 +1196,34 @@ describe('answeredDuring (HIVE-406 follow-ups; lane-wide since the answer race)'
   it('is true when the asked party closed it with failed during the run', () => {
     const failed = entry({ id: 'f1', ts: NOW - 2_000, from: 'sess-a', kind: 'failed', thread: 'q1', body: 'no' });
     expect(answeredDuring([...evidence, failed], 'builder', 'r2', LANE, NOW)).toBe(true);
+  });
+
+  it('is false for the answer that woke the ending run, stamped in the same millisecond as its run.started', () => {
+    const log = [started('r1', NOW - 5_000), ask('q1', 'r1'), answer('a1', 'q1', NOW - 3_000), started('r2', NOW - 3_000, LANE, 'builder', ['a1'])];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it('is true for a close appended after run.started in the same millisecond', () => {
+    const log = [...evidence.slice(0, 2), started('r2', NOW - 2_000), answer('a1', 'q1', NOW - 2_000)];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(true);
+  });
+
+  it('is false for the expiry that woke the ending run (the sweep wakes by the ask id)', () => {
+    const old = ask('q1', 'r1', { ts: NOW - LEDGER_ASK_TTL_MS - 5_000 });
+    const log = [started('r1', old.ts - 1_000), old, marker('q1', NOW - 1_000), started('r2', NOW - 1_000, LANE, 'builder', ['q1'])];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it("is false for an expiry the sweep marked before the ending run started", () => {
+    const old = ask('q1', 'r1', { ts: NOW - LEDGER_ASK_TTL_MS - 5_000 });
+    const log = [started('r1', old.ts - 1_000), old, marker('q1', NOW - 2_000), started('r2', NOW - 1_000)];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it('is true for an expiry the sweep marked after the ending run started', () => {
+    const old = ask('q1', 'r1', { ts: NOW - LEDGER_ASK_TTL_MS - 5_000 });
+    const log = [started('r1', old.ts - 1_000), old, started('r2', NOW - 2_000), marker('q1', NOW - 1_000)];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(true);
   });
 
   it("is false for a sibling's ask on the same lane closed before the ending run started", () => {

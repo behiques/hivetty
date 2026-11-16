@@ -206,7 +206,7 @@ export interface RunTrackerDeps {
   openAsksOnLane?: (name: string, lane: string) => boolean;
   /**
    * Is an ask from `lane` in flight to it as `run` ends: posted by any run of this agent on the lane
-   * and closed at or after `run` started (HIVE-406 follow-ups, lane-wide since the answer race), from
+   * and closed after `run` started, in log order (HIVE-406 follow-ups, lane-wide since the answer race), from
    * `answeredDuring` in `ledger-derive.ts`? Optional so a spec that never runs a thread lane needs none.
    */
   answeredDuring?: (name: string, run: string, lane: string) => boolean;
@@ -659,8 +659,8 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
    *
    * A thread lane (HIVE-354): the ask it exists to answer is failed to the asker at once, and
    * what the run claimed is released. Unless an ask from this lane is in flight to it (HIVE-406
-   * follow-ups, lane-wide since the answer race): posted by any run of the lane and closed at or
-   * after this run started. `ledger_ask` ends the turn, so an answer landing before the process
+   * follow-ups, lane-wide since the answer race): posted by any run of the lane and closed, in log
+   * order, after this run started. `ledger_ask` ends the turn, so an answer landing before the process
    * exits is no longer open when this runs, and a sibling run's answer can land while a queued run
    * is live; either way the lane was waiting on it, and its queued wake belongs to this lane's next
    * run. A run lost to a quit gets the same reading.

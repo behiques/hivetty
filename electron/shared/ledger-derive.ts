@@ -1140,15 +1140,21 @@ export function openAsksOnLane(entries: readonly LedgerEntry[], agent: string, l
 
 /**
  * Is an ask from this lane in flight to it as `run` ends (HIVE-406 follow-ups, made lane-wide by the
- * 2026-11-16 answer race)? An ask any run of `agent` on `lane` posted, closed at or after `run`'s
- * own `run.started`, is a close `run` may not have acted on: the lane's next run is the one that
- * reads it, and the lane is waiting on that answer, not abandoning its job. The run's own ask
- * closed during the run is one instance; a sibling run's, answered while a queued run was live,
- * is the other. An ask closed before `run` started already woke a run, so it does not count.
+ * 2026-11-16 answer race)? An ask any run of `agent` on `lane` posted, closed after `run`'s own
+ * `run.started`, is a close `run` may not have acted on: the lane's next run is the one that reads
+ * it, and the lane is waiting on that answer, not abandoning its job. The run's own ask closed
+ * during the run is one instance; a sibling run's, answered while a queued run was live, is the
+ * other.
+ *
+ * "After" is log order, not the clock: a close that wakes an idle lane is appended, then starts the
+ * run in the same call stack, so the two share a millisecond. That close, and anything else the
+ * run's `meta.wakes` lists (an expiry wakes by the ask's id), was delivered to `run` and does not
+ * count; neither does a close before `run` started, which already woke a run.
  *
  * Every terminal state counts. An answer, the sweep's moot answer included, is addressed to the
  * asker by `Ledger.append` and routed to the lane that asked; so is a `failed` from the party asked.
- * An expiry wakes the asking lane through the scheduler's sweep, which reads `expiredAsks`.
+ * An expiry wakes the asking lane through the scheduler's sweep, which writes the `meta.expired`
+ * marker first: an expiry the sweep has not reached yet still has its wake to come, so it counts.
  *
  * A run with no `run.started` in the log has nothing to compare against: not in flight.
  */
@@ -1159,20 +1165,42 @@ export function answeredDuring(
   lane: string,
   now: number,
 ): boolean {
-  const started = entries.find(
+  const at = entries.findIndex(
     (item) =>
       item.kind === 'event' &&
       item.from === agent &&
       item.meta?.['run'] === run &&
       item.body.startsWith('run.started'),
   );
-  if (started === undefined) return false;
+  if (at === -1) return false;
+  const wakes = entries[at]?.meta?.['wakes'];
+  const woke = new Set(Array.isArray(wakes) ? (wakes as readonly unknown[]).filter((id) => typeof id === 'string') : []);
+
+  // Each ask's first close, and the sweep's expiry marker, by log position.
+  const closedAt = new Map<string, { index: number; id: string }>();
+  const expiredAt = new Map<string, number>();
+  entries.forEach((item, index) => {
+    if (item.thread !== undefined && CLOSING_KINDS.has(item.kind) && !closedAt.has(item.thread)) {
+      closedAt.set(item.thread, { index, id: item.id });
+    }
+    const expired = item.meta?.expired;
+    if (typeof expired === 'string' && item.from === OVERMIND && !expiredAt.has(expired)) expiredAt.set(expired, index);
+  });
+
+  const inFlight = (ask: LedgerEntry, state: AskStateName): boolean => {
+    if (state === 'expired') {
+      if (woke.has(ask.id)) return false;
+      const marker = expiredAt.get(ask.id);
+      return marker === undefined || marker > at;
+    }
+    if (state !== 'answered' && state !== 'failed' && state !== 'moot') return false;
+    const close = closedAt.get(ask.id);
+    return close !== undefined && close.index > at && !woke.has(close.id);
+  };
+
   return askStates(entries, now).some(
-    ({ ask, state, since }) =>
-      ask.from === agent &&
-      (state === 'answered' || state === 'failed' || state === 'expired' || state === 'moot') &&
-      since >= started.ts &&
-      laneOfRun(agent, ask.meta?.['run'], entries) === lane,
+    ({ ask, state }) =>
+      ask.from === agent && inFlight(ask, state) && laneOfRun(agent, ask.meta?.['run'], entries) === lane,
   );
 }
 
