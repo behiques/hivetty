@@ -243,8 +243,8 @@ Fixtures live in `tests/support/`; nothing under `src/` seeds the stores.
 - `tests/` **mirrors** `src/`. A test for `src/features/inbox/components/x.tsx`
   lives at `tests/features/inbox/components/x.test.tsx`. No exceptions — the mirror
   is what makes "is this covered?" answerable by path.
-- **80% coverage** on all four metrics. No pull-request workflow runs it yet (HIVE-417): `hive:verify` runs it in the
-  build, and the fixer when the shipper asks.
+- **80% coverage** on all four metrics. The gate fails the build; CI (`.github/workflows/ci.yml`) runs it on every PR,
+  required on main.
 - Stores are plain functions and the highest-value target: every action gets a
   test against a fresh store (`tests/stores/hive-store.test.ts`).
 - Timer-based behaviour uses **fake timers**, never real waits.

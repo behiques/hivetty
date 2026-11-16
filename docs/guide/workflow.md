@@ -90,7 +90,7 @@ shipper holds it stage by stage, and each stage is a line in the ledger:
 | `self-review` | the **acr** agent reviews the whole branch once, at depth |
 | `fix-self` | the **fixer** applies the valid findings behind tests and replies to the rest |
 | `ready` | the PR is marked ready; the ticket moves to In Review |
-| `ci` | checks are watched; a red one goes back to the fixer |
+| `ci` | the PR's checks are read fresh each time and watched; a red one goes back to the fixer. A repository with no `pull_request` workflow gets the fixer's full local gate instead. hivetty's own CI (`.github/workflows/ci.yml`) is required on main |
 | `findings` | new reviewer comments and bot findings go to the fixer, round by round |
 | `approval` | waits for a review only when one is required or requested, and asks your session once; with no review coming it goes to merge |
 | `merge` | `merge-pr` re-checks every block, merges, tears the branch down, moves the ticket to Done |
