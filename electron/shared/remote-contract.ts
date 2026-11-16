@@ -21,11 +21,7 @@ import { isThisMachineAction } from './notification-contract';
 
 /**
  * Bumped whenever {@link CH} gains or loses an entry, or any payload type on an
- * existing channel changes shape. The channel half is enforced:
- * `scripts/remote-protocol.lock.json` hashes {@link FRAME_KIND} at this
- * version, and `pnpm verify:boundaries` fails when the channels move and this
- * does not (`node scripts/protocol-lock.mjs --write` updates the lock after a
- * bump). A payload shape change is still yours to notice.
+ * existing channel changes shape.
  *
  * Two artifacts version independently once the app can be split across two
  * machines: the mini updates on its own schedule and the laptop on its own. The

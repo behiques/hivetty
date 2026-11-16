@@ -674,6 +674,13 @@ if (aliasProblems.length) failures += 1;
  * as it stands must pass, and a planted violation (the miss a real PR shipped)
  * must fire. A plant that touches disk is removed in its own `finally`.
  */
+/** `text` with `insert` after `anchor`; throws when the anchor moved, so a plant never silently plants nothing. */
+function insertAfter(text, anchor, insert) {
+  const at = text.indexOf(anchor);
+  if (at === -1) throw new Error(`plant anchor not found: ${anchor}`);
+  return text.slice(0, at + anchor.length) + insert + text.slice(at + anchor.length);
+}
+
 const SIBLING_CHECKS = [
   {
     name: 'protocol: channel set matches scripts/remote-protocol.lock.json',
@@ -682,13 +689,15 @@ const SIBLING_CHECKS = [
     plant: () => {
       const sources = readSources(appRoot);
       const planted = {
-        ipcContract: sources.ipcContract.replace(
+        ipcContract: insertAfter(
+          sources.ipcContract,
           'export const CH = {',
-          "export const CH = {\n  probeChannel: 'probe:channel',",
+          "\n  probeChannel: 'probe:channel',",
         ),
-        remoteContract: sources.remoteContract.replace(
+        remoteContract: insertAfter(
+          sources.remoteContract,
           'export const FRAME_KIND = {',
-          "export const FRAME_KIND = {\n  [CH.probeChannel]: 'call',",
+          "\n  [CH.probeChannel]: 'call',",
         ),
       };
       return protocolLockProblems(readProtocolState(planted), readLock(appRoot));

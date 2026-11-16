@@ -97,6 +97,15 @@ export function readChannelKinds({ ipcContract, remoteContract }) {
     }
     pairs.push([channel, kind]);
   }
+  /*
+    `satisfies Record<Channel, …>` already makes type-check refuse a partial
+    table; this keeps verify:boundaries honest when it runs on its own.
+  */
+  const listed = new Set(pairs.map(([channel]) => channel));
+  const missing = [...names.values()].filter((channel) => !listed.has(channel));
+  if (missing.length) {
+    throw new Error(`${REMOTE_CONTRACT_PATH}: FRAME_KIND lacks ${missing.join(', ')}`);
+  }
   return pairs.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
 }
 

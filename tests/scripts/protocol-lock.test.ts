@@ -48,6 +48,13 @@ describe('readChannelKinds', () => {
     );
   });
 
+  it('throws when a CH channel is absent from FRAME_KIND, rather than hashing a partial table', () => {
+    const remote = REMOTE.replace("  [CH.ptyData]: 'event',\n", '');
+    expect(() => readChannelKinds({ ipcContract: IPC, remoteContract: remote })).toThrow(
+      /pty:data/,
+    );
+  });
+
   it('throws when FRAME_KIND is missing', () => {
     expect(() =>
       readChannelKinds({ ipcContract: IPC, remoteContract: 'export const X = 1;' }),
