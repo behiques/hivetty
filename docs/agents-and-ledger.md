@@ -2820,8 +2820,9 @@ at the PR head, it asks the fixer to run the full gate once on a head the fixer
 pushed. The wait is bounded: the row records `ciSince` when it enters `ci`,
 and checks still pending 60 minutes later, or a `pull_request` workflow that
 has reported nothing by then (a path filter can skip a PR), make a stuck row
-that asks `reply-to` once, naming the pending checks. hivetty's own `.github/workflows/ci.yml` runs on every PR, and its `ci`
-job is required on main. `tests/resources/agents/shipped-agents.test.ts` parses every shipped definition against
+that asks `reply-to` once, naming the pending checks. hivetty's own
+`.github/workflows/ci.yml` runs on every PR, and its `ci` job is required on
+main. `tests/resources/agents/shipped-agents.test.ts` parses every shipped definition against
 the shipped skills, so a definition the registry would refuse fails here.
 
 ### Run contract (HIVE-413)
