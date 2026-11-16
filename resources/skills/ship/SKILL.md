@@ -11,8 +11,7 @@ description: >-
 
 A state machine the shipper advances one wake at a time, woken by the ledger
 and a thirty-minute clock. Nothing sleeps inside a turn except merge-pr's bounded `UNKNOWN` re-read.
-Claim, answer, release, denial and expiry follow the run contract. It sequences
-`pr-review` (`acr`), `review-pr-findings` (`fixer`) and `merge-pr`.
+Claim, answer, release, denial and expiry follow the run contract.
 
 ## Intake
 
@@ -41,14 +40,11 @@ first row (`test -f` before reading). Lane facts live in `lane.json` beside it.
 The standing lane never advances a row: it hands a PR to its repo lane with a
 self-addressed `ledger_ask to: shipper` carrying `meta.repo`, no `key`.
 
-Every `gh` command carries `--repo <owner>/<repo>`, every `git` command `-C
-<path>`.
-
 {{include:literal-target}}
 
 ## Stages
 
-On a stage change: write `prs.json`, one `ledger_post` with `meta: { pr,
+On a stage change: one `ledger_post` with `meta: { pr,
 repo, stage }`, and fall through in the same wake. A row stops only where it
 waits (CI pending, or `waitingOn` naming `acr`, `fixer` or `reply-to`), with
 one `ledger_post` naming the stage and what it waits on. The write that records an answer
@@ -66,8 +62,7 @@ An overmind `meta.kind: auto-merge` post re-runs `approval` for rows in its
 consent goes back to `approval`.
 
 An overmind post with `meta.changed` (`owner/repo#N changed: checks running →
-passing`; facets `state`, `checks`, `reviewDecision`, `findings`, `head`,
-`mergeable`) means the PR at `meta.repo`, `meta.pr` moved on GitHub: re-run
+passing`) means the PR at `meta.repo`, `meta.pr` moved on GitHub: re-run
 that row's stage check in this wake.
 
 **Pending-fix check**, first at `findings`, `approval` and `merge`:
@@ -76,7 +71,7 @@ anyone stops the row, with no ask.
 
 | Stage | This wake | Advance when |
 | --- | --- | --- |
-| `intake` | Claim, accept, row; `gh pr view <N> --repo <owner>/<repo> --json state,isDraft,headRefName`; force draft with `gh pr ready <N> --repo <owner>/<repo> --undo` | → `self-review` |
+| `intake` | Claim, accept, row; `gh pr view <N> --repo <owner>/<repo> --json state,isDraft,headRefName,body`; force draft with `gh pr ready <N> --repo <owner>/<repo> --undo`. `gh pr diff <N> --repo <owner>/<repo> --name-only` lists a `.tsx`, a `.css` or a `components/`/`styles/` file, and the body has neither a `Drive:` line nor `owed: drive` → a stuck row | → `self-review` |
 | `self-review` | `{{tool:agents}}` lists `acr`: `waitingOn: acr`, then the acr ask (below). No `acr`: ask `reply-to`, options `[reviewed elsewhere, skip the self review]` | acr's answer (below) |
 | `fix-self` | `fixer` listed: `waitingOn: fixer`, `ledger_ask to: fixer` (below). No fixer: ask `reply-to`, options `[fixed, park them]` | the fixer's answer (below); fixed → `ready` |
 | `ready` | `gh pr ready <N> --repo <owner>/<repo>`; only if `keyConfirmed` and the ticket is before In Review: `{{tool:jira_transition}} { key, status: "In Review" }` (or the `jira-tracker` skill) | → `ci` |
