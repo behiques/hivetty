@@ -23,6 +23,13 @@ import ts from 'typescript';
 
 import { aliases } from '../vite.aliases.mjs';
 
+import {
+  protocolLockProblems,
+  readLock,
+  readProtocolState,
+  readSources,
+} from './protocol-lock.mjs';
+
 const appRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
@@ -659,6 +666,69 @@ results.push({
   fired: aliasProblems.length ? aliasProblems.join('; ') : '(none)',
 });
 if (aliasProblems.length) failures += 1;
+
+/**
+ * Sibling checks (HIVE-417): a change that forgets the file it must move with.
+ *
+ * Each check is proved in both directions, like the lint cases above: the tree
+ * as it stands must pass, and a planted violation (the miss a real PR shipped)
+ * must fire. A plant that touches disk is removed in its own `finally`.
+ */
+const SIBLING_CHECKS = [
+  {
+    name: 'protocol: channel set matches scripts/remote-protocol.lock.json',
+    clean: () => protocolLockProblems(readProtocolState(readSources(appRoot)), readLock(appRoot)),
+    /** #252: a channel added to CH and FRAME_KIND with no REMOTE_PROTOCOL_VERSION bump. */
+    plant: () => {
+      const sources = readSources(appRoot);
+      const planted = {
+        ipcContract: sources.ipcContract.replace(
+          'export const CH = {',
+          "export const CH = {\n  probeChannel: 'probe:channel',",
+        ),
+        remoteContract: sources.remoteContract.replace(
+          'export const FRAME_KIND = {',
+          "export const FRAME_KIND = {\n  [CH.probeChannel]: 'call',",
+        ),
+      };
+      return protocolLockProblems(readProtocolState(planted), readLock(appRoot));
+    },
+    expect: /channels changed: bump REMOTE_PROTOCOL_VERSION/,
+  },
+];
+
+for (const check of SIBLING_CHECKS) {
+  let clean;
+  let planted;
+  try {
+    clean = check.clean();
+  } catch (error) {
+    clean = [`threw: ${error.message}`];
+  }
+  try {
+    planted = check.plant();
+  } catch (error) {
+    planted = [`threw: ${error.message}`];
+  }
+  const cleanOk = clean.length === 0;
+  const plantOk = planted.some((problem) => check.expect.test(problem));
+  if (!cleanOk) failures += 1;
+  if (!plantOk) failures += 1;
+  results.push(
+    {
+      ok: cleanOk,
+      name: `${check.name} (this tree)`,
+      expected: '(no problems)',
+      fired: clean.length ? clean.join('; ') : '(none)',
+    },
+    {
+      ok: plantOk,
+      name: `${check.name} (planted miss)`,
+      expected: String(check.expect),
+      fired: planted.length ? planted.join('; ') : '(none)',
+    },
+  );
+}
 
 for (const result of results) {
   console.log(
