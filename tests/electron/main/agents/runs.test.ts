@@ -21,7 +21,8 @@ import {
   AGENT_STALL_GRACE_MS,
   type RunLine,
 } from '../../../../electron/shared/agent-contract';
-import { OVERMIND } from '../../../../electron/shared/ledger-contract';
+import { OVERMIND, type LedgerEntry } from '../../../../electron/shared/ledger-contract';
+import { answeredDuring } from '../../../../electron/shared/ledger-derive';
 import type { RunEventReader } from '../../../../electron/main/harness/port';
 
 /** A test's stand-in reader for the next run, or `null` for the registry's own (HIVE-343). */
@@ -84,6 +85,8 @@ describe('createRunTracker', () => {
   let askingOnLane: boolean;
   /** Was an ask this run posted closed before it ended (HIVE-406 follow-ups)? Set per test. */
   let answeredMidExit: boolean;
+  /** A real log to read `answeredDuring` from instead of `answeredMidExit` (the lane-wide answer race). */
+  let laneLog: LedgerEntry[] | undefined;
   /** What `onLive` reported, in order (HIVE-408). */
   let awake: boolean[];
   /** The prompt hash a session-starting command carries. Set per test. */
@@ -129,6 +132,7 @@ describe('createRunTracker', () => {
     unfinished = [];
     askingOnLane = false;
     answeredMidExit = false;
+    laneLog = undefined;
     awake = [];
     promptHash = undefined;
     commandCalls = 0;
@@ -183,7 +187,10 @@ describe('createRunTracker', () => {
       owedBy: () => owed,
       unfinishedRuns: () => unfinished,
       openAsksOnLane: (name, lane) => askingOnLane && name === 'a' && lane === 'thread:k1',
-      answeredDuring: (name, run) => answeredMidExit && name === 'a' && run === 'run-1',
+      answeredDuring: (name, run, lane) =>
+        laneLog === undefined
+          ? answeredMidExit && name === 'a' && run === 'run-1' && lane === 'thread:k1'
+          : answeredDuring(laneLog, name, run, lane, clock),
       onLive: (live) => awake.push(live),
       newUuid: () => 'uuid-minted',
       pushStatus: (name) => statuses.push(name),
@@ -2650,6 +2657,63 @@ describe('createRunTracker', () => {
 
       expect(abandoned()).toEqual([]);
       expect(ledger).toContainEqual(expect.objectContaining({ from: 'a', kind: 'event', body: 'run.ended — done' }));
+    });
+
+    describe("a sibling run's answer in flight as a queued run ends (the 2026-11-16 answer race)", () => {
+      // r-0 asked q1 and ended; run-1, queued by a note on the job's thread, is live when q1's answer lands.
+      const evidence = (answered: boolean): LedgerEntry[] => {
+        const at = (id: string, ts: number, over: Partial<LedgerEntry>): LedgerEntry =>
+          ({ id, ts, from: 'a', kind: 'post', body: '', ...over }) as LedgerEntry;
+        const log = [
+          at('s0', clock - 5_000, { kind: 'event', body: 'run.started — ledger', meta: { run: 'r-0', lane: 'thread:k1' } }),
+          at('q1', clock - 4_000, { kind: 'ask', to: 'sess-a', body: 'which?', meta: { run: 'r-0' } }),
+          at('s1', clock - 3_000, { kind: 'event', body: 'run.started — ledger', meta: { run: 'run-1', lane: 'thread:k1' } }),
+        ];
+        if (answered) log.push(at('a1', clock - 1_000, { from: 'sess-a', to: 'a', kind: 'answer', thread: 'q1', body: 'main' }));
+        return log;
+      };
+
+      it('leaves the job alone and releases nothing', () => {
+        left = { ask: { id: 'k1', ref: 'a278' }, claims: ['HIVE-417'] };
+        laneLog = evidence(true);
+
+        tracker.run('a', 'ledger', undefined, { lane: 'thread:k1' });
+        childInstances[0]?.emitStdout(resultLine());
+        childInstances[0]?.emitClose(0);
+
+        expect(abandoned()).toEqual([]);
+        expect(state.read('a').runs.at(-1)?.outcome).toBe('done');
+      });
+
+      it('fails the job when the answer was the one that woke this run, in the same millisecond', () => {
+        left = { ask: { id: 'k1', ref: 'a278' }, claims: ['HIVE-417'] };
+        const at = (id: string, over: Partial<LedgerEntry>): LedgerEntry =>
+          ({ id, ts: clock, from: 'a', kind: 'post', body: '', ...over }) as LedgerEntry;
+        laneLog = [
+          at('s0', { kind: 'event', body: 'run.started — ledger', meta: { run: 'r-0', lane: 'thread:k1' } }),
+          at('q1', { kind: 'ask', to: 'sess-a', body: 'which?', meta: { run: 'r-0' } }),
+          at('a1', { from: 'sess-a', to: 'a', kind: 'answer', thread: 'q1', body: 'main' }),
+          at('s1', { kind: 'event', body: 'run.started — ledger', meta: { run: 'run-1', lane: 'thread:k1', wakes: ['a1'] } }),
+        ];
+
+        tracker.run('a', 'ledger', undefined, { lane: 'thread:k1' });
+        childInstances[0]?.emitStdout(resultLine());
+        childInstances[0]?.emitClose(0);
+
+        expect(abandoned().map((item) => item.kind)).toEqual(['failed', 'release']);
+      });
+
+      it('fails the job and releases its claims when no answer landed', () => {
+        left = { ask: { id: 'k1', ref: 'a278' }, claims: ['HIVE-417'] };
+        laneLog = evidence(false);
+
+        tracker.run('a', 'ledger', undefined, { lane: 'thread:k1' });
+        childInstances[0]?.emitStdout(resultLine());
+        childInstances[0]?.emitClose(0);
+
+        expect(abandoned().map((item) => item.kind)).toEqual(['failed', 'release']);
+        expect(abandoned()[0]).toMatchObject({ thread: 'k1', meta: { unanswered: 'k1' } });
+      });
     });
 
     it('fails the ask to the asker, naming the run, then releases what the run claimed', () => {

@@ -962,14 +962,27 @@ wakes or nudges it, and closes the lane. Nothing else would: a lane's ask is no
 longer in any wake queue once its run started, and boot flushes only persisted
 queues. A paused agent is skipped; resuming it is the person's call.
 
-The lane is failed only when the run has no open ask and none of its own asks
-was closed before it ended (`answeredDuring` in `ledger-derive.ts`, HIVE-406
-follow-ups). `ledger_ask` ends the turn, so an answer that lands between the
-ask and the process exiting is no longer open when `finalizeRun` looks, yet
-the run was waiting on it: an answer (a moot one included), a `failed` from the
-party asked, or an expiry all count, and the queued wake reaches the thread
-lane's next run. A run lost to a quit is read the same way. Standing and repo
-lanes keep their re-wake: the rule is the thread lane's.
+The lane is failed only when no run of the lane holds an open ask
+(`openAsksOnLane`) and no ask from the lane is in flight to it
+(`answeredDuring` in `ledger-derive.ts`, HIVE-406 follow-ups, lane-wide since
+the 2026-11-16 answer race). An ask is in flight when any run of the agent on
+this lane posted it and its close comes after the ending run's own
+`run.started` in the log. `ledger_ask` ends the turn, so an answer that lands
+between the ask and the process exiting is no longer open when `finalizeRun`
+looks, yet the run was waiting on it. And a queued post re-wakes a thread lane
+as a second run while the first run's question is out, so the answer can land
+while that second run is live: the second run asked nothing, but the lane was
+waiting. An answer (a moot one included), a `failed` from the party asked, or
+an expiry all count, and the queued wake reaches the thread lane's next run; an
+expiry the sweep has not marked yet still has its wake to come.
+
+"After" is log order, not the clock. A close that wakes an idle lane is
+appended and starts the run in the same call stack, so the two share a
+millisecond; that close, and anything else the run's `meta.wakes` lists (an
+expiry wakes by the ask's id), was delivered to the ending run and does not
+count. Neither does a close before the run started, which already woke a run,
+or an ask from another lane. A run lost to a quit is read the same way.
+Standing and repo lanes keep their re-wake: the rule is the thread lane's.
 
 A standing or repo lane has the same contract, one step softer (HIVE-410).
 `run.started` records in `meta.wakes` which entries the run was woken for, and
