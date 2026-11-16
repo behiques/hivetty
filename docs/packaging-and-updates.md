@@ -272,9 +272,16 @@ launch on every install; 1.0.1 removed the override. The updater cannot recover
 a build that never starts, so before pushing a tag, launch the packaged app once:
 
 ```sh
-pnpm desktop:dist
-timeout 5 "dist/mac-arm64/HiveTTY Pro.app/Contents/MacOS/HiveTTY Pro"; echo $?   # 124 = still alive
+pnpm release:smoke
 ```
+
+It builds, packages an unsigned `--dir` build into a fresh `os.tmpdir()` folder
+(nothing lands in `dist/`), and launches it with its own `--user-data-dir` and
+`HIVE_CONFIG_PATH`, so an installed HiveTTY Pro's single-instance lock cannot
+make it quit with exit 0 and hide a crash. Still up after 6 s passes; an early
+exit fails with its code and the tail of its stderr. Either way it kills only
+the process it started (its group) and removes the temp folder. It never signs,
+notarises or publishes (`scripts/release-smoke.mjs`).
 
 `app.setName` cannot fix the first. Under `pnpm desktop:dev` the running bundle
 is `node_modules/electron/dist/Electron.app`, and macOS reads that title from
