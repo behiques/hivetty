@@ -72,7 +72,6 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
         <StatusComb status={entity.status} detail={entity.idleDetail} />
         {/* The CLI on every row, Claude's included, in front of the name. */}
         <CliMark cli={cli} className="shrink-0 text-muted" />
-        <span className="sr-only">{CLI_NAMES[cli]}</span>
         <span className="min-w-0 truncate text-left text-ui">{label}</span>
         {/* The id after the name; an unnamed session already reads as its id. */}
         {label === entity.id ? null : (
@@ -80,6 +79,11 @@ export function SessionRow({ id, compact = false }: SessionRowProps) {
             {entity.id}
           </Tag>
         )}
+        {/*
+          The CLI's name after the session's: the mark is drawn in front, but a
+          screen reader hears which session first, then which CLI runs it.
+        */}
+        <span className="sr-only">{CLI_NAMES[cli]}</span>
         <span className="flex-1" />
         <Hint label={delegateTitle ?? undefined}>
           <span
