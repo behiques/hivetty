@@ -1,0 +1,83 @@
+# The gates on every pull request and every push to main (HIVE-417).
+#
+# What runs here: lint, type-check, the unit suite with its 80% coverage gate,
+# the process-boundary check, and the web half of the Playwright suite in
+# Chromium. These are the gates AGENTS.md asks of every change, and none of
+# them needs anything a Linux runner lacks: unit tests use
+# `__mocks__/node-pty.ts`, so no real PTY is spawned, and the `web` project is
+# the shell with no bridge behind it.
+#
+# What stays local, and why: the Electron e2e project, `test:pty`,
+# `test:mcp-host` and every live conformance suite. They need macOS, a display,
+# a real PTY under Electron's ABI, or real agent CLIs with credentials, and a
+# runner has none of those. Run them before handing a change over.
+#
+# The job's name, `ci`, is the required status check on main. Renaming it
+# un-requires the check without anyone noticing, so it stays as it is.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A PR's runs share one group per ref, so a new commit supersedes the run in
+# flight. On main the group is the commit itself: GitHub keeps one pending run
+# per group and drops the older, so a per-ref group would skip a merge landing
+# between two others.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # `postinstall` runs `check-native-abi.mjs --fix`. node-pty has no Linux
+      # prebuild, so it builds from source here; the build is N-API, which
+      # loads under Electron without a rebuild, so the check holds as it is.
+      - name: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm lint
+        run: pnpm lint
+
+      - name: pnpm type-check
+        run: pnpm type-check
+
+      - name: pnpm test:coverage
+        run: pnpm test:coverage
+
+      - name: pnpm verify:boundaries
+        run: pnpm verify:boundaries
+
+      - name: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: pnpm test:e2e:web
+        id: e2e
+        run: pnpm test:e2e:web
+
+      - name: Upload the Playwright report
+        if: failure() && steps.e2e.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
