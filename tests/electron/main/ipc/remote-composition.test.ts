@@ -1567,16 +1567,6 @@ describe('the mode switch (HIVE-144)', () => {
     expect(remoteProxyBindingsSize()).toBe(0);
   });
 
-  /**
-   * Reconnecting after a drop (HIVE-150).
-   *
-   * HIVE-144's delivery notes list "nothing re-attaches after a socket drops"
-   * as a deliberately deferred gap; this is where it closes. The loop's own
-   * schedule is `reattach.test.ts`'s subject — what these prove is the seam:
-   * that a drop is heard at all, that the surface is rebound to the new socket
-   * rather than left pointing at the dead one, and that the two teardown paths
-   * this module already had are not disturbed.
-   */
   describe('a relay target, resolved per dial (HIVE-429)', () => {
     beforeEach(() => {
       vi.useFakeTimers();
@@ -1659,17 +1649,7 @@ describe('the mode switch (HIVE-144)', () => {
       expect(ipcBindingsSize()).toBe(local);
     });
 
-    it('does not fence a relay target by its stored host', async () => {
-      boundLocally();
-      const { session } = fakeSession();
-      // A relay target carries no host at all; a public one stored beside it is never read.
-      const outcome = await switchIpcMode('remote', relayOpts({ session: () => session }));
-
-      expect(outcome).not.toEqual({ ok: false, reason: 'address-refused' });
-      expect(outcome).toEqual({ ok: true });
-    });
-
-    it('reads a relay block from the stored config when not told a target', async () => {
+    it('reads a relay block from the stored config, never fencing its public host', async () => {
       boundLocally();
       const { session } = fakeSession();
       const connect = vi.fn(async () => fakeClient());
@@ -1682,6 +1662,7 @@ describe('the mode switch (HIVE-144)', () => {
           session: () => session,
         });
 
+        // A public host stored beside `via: 'relay'` is not refused `address-refused`: it is never dialled.
         expect(outcome).toEqual({ ok: true });
         expect(connect).toHaveBeenCalledWith(
           expect.objectContaining({ target: expect.objectContaining({ kind: 'relay', serverId: 'dev_1' }) }),
@@ -1813,6 +1794,16 @@ describe('the mode switch (HIVE-144)', () => {
     });
   });
 
+  /**
+   * Reconnecting after a drop (HIVE-150).
+   *
+   * HIVE-144's delivery notes list "nothing re-attaches after a socket drops"
+   * as a deliberately deferred gap; this is where it closes. The loop's own
+   * schedule is `reattach.test.ts`'s subject — what these prove is the seam:
+   * that a drop is heard at all, that the surface is rebound to the new socket
+   * rather than left pointing at the dead one, and that the two teardown paths
+   * this module already had are not disturbed.
+   */
   describe('a socket that drops after a successful attach', () => {
     // The backoff is the subject of every case here, and waiting out even the
     // first step for real would be a second of wall-clock per assertion.
