@@ -852,7 +852,18 @@ export interface RemoteConfig {
    */
   host: string;
   port: number;
+  /**
+   * HIVE-429. How `'remote'` mode reaches the server: `'direct'` dials {@link host} and
+   * {@link port}; `'relay'` dials {@link relayServerId} through the HiveTTY relay, and `host` is
+   * then neither dialled nor fenced.
+   */
+  via: RemoteVia;
+  /** HIVE-429. The relay id of the server a relay attach dials; `''` until one is chosen. */
+  relayServerId: string;
 }
+
+/** HIVE-429. A direct dial to a private address, or the HiveTTY relay. */
+export type RemoteVia = 'direct' | 'relay';
 
 /**
  * HIVE-264. Only where the cloud is, for self-hosted Enterprise (HIVE-316); hand-edited, read at launch.
@@ -868,10 +879,35 @@ export interface AccountConfig {
  * {@link isRemoteTarget}. The port is 7434, one above The Hive's default, so
  * both can serve on one Mac (HIVE-242).
  */
-export const DEFAULT_REMOTE: RemoteConfig = { mode: 'local', host: '', port: 7434 };
+export const DEFAULT_REMOTE: RemoteConfig = {
+  mode: 'local',
+  host: '',
+  port: 7434,
+  via: 'direct',
+  relayServerId: '',
+};
+
+/** HIVE-429. What `attachedServer` names on a relay block, whose `host` is never dialled. */
+export const RELAY_ATTACHED_NAME = 'a server through the relay';
+
+/**
+ * `ConfigSnapshot.attachedServer` from a resolved block: the one derivation `loadConfig` and
+ * `writeConfig` share. A relay block names the relay, since its `host` is unused and often empty.
+ */
+export function attachedServerOf(remote: RemoteConfig): { name: string; host: string } | null {
+  if (remote.mode !== 'remote') return null;
+  if (remote.via === 'relay') return { name: RELAY_ATTACHED_NAME, host: '' };
+  return { name: remote.host, host: remote.host };
+}
 
 /** The block's keys, for the parser's exact-key check. */
-export const REMOTE_KEYS: readonly (keyof RemoteConfig)[] = ['mode', 'host', 'port'];
+export const REMOTE_KEYS: readonly (keyof RemoteConfig)[] = [
+  'mode',
+  'host',
+  'port',
+  'via',
+  'relayServerId',
+];
 
 /**
  * How a containerised session's `${VAR}` references get their values (HIVE-132).
@@ -2214,6 +2250,10 @@ export interface SetRemoteRequest {
   mode?: RemoteMode;
   host?: string;
   port?: number;
+  /** HIVE-429. */
+  via?: RemoteVia;
+  /** HIVE-429. `''` or a `RELAY_ID` match. */
+  relayServerId?: string;
 }
 
 /**

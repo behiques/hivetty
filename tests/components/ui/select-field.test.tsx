@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -111,5 +111,16 @@ describe('SelectField', () => {
       />,
     );
     expect(screen.getByRole('option', { name: 'B' })).toBeDisabled();
+  });
+
+  it('disables the whole control and never calls onChange (HIVE-429)', () => {
+    const onChange = vi.fn();
+    render(<SelectField label="Server" value="menlo" options={OPTIONS} onChange={onChange} disabled />);
+
+    const select = screen.getByRole('combobox', { name: 'Server' });
+    expect(select).toBeDisabled();
+    expect(select).toHaveClass('disabled:opacity-60');
+    fireEvent.change(select, { target: { value: 'monaco' } });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

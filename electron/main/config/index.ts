@@ -10,6 +10,7 @@ import {
   type SetCliSessionsRequest,
 } from '@shared/cli-contract';
 import {
+  attachedServerOf,
   DEFAULT_BIND,
   DEFAULT_CLAUDE_COMMAND,
   DEFAULT_IMPORT_LOGIN_ENV,
@@ -209,7 +210,7 @@ export function loadConfig(): ConfigSnapshot {
     // `remote.host` is the only handle the file carries for the far end — see
     // `ConfigSnapshot.attachedServer`'s own doc comment for why this is a
     // config-derived control's readout, not the header chip's runtime one.
-    attachedServer: remote.mode === 'remote' ? { name: remote.host, host: remote.host } : null,
+    attachedServer: attachedServerOf(remote),
     // Defaults *under* whatever the file named, exactly as `jira` and
     // `receiver` do above (HIVE-124). A plain spread suffices here too.
     slack: { ...DEFAULT_SLACK, ...parsed.slack },
@@ -1239,6 +1240,8 @@ export function setRemote(request: SetRemoteRequest): ConfigSnapshot {
       if (request.mode !== undefined) current.mode = request.mode;
       if (request.host !== undefined) current.host = request.host;
       if (request.port !== undefined) current.port = request.port;
+      if (request.via !== undefined) current.via = request.via;
+      if (request.relayServerId !== undefined) current.relayServerId = request.relayServerId;
 
       // The invariant, checked once against the merged result — see this
       // function's own doc comment. `current.mode === 'remote'` rather than
@@ -1249,7 +1252,9 @@ export function setRemote(request: SetRemoteRequest): ConfigSnapshot {
       // reader have to agree on what "effectively remote" means, or a value
       // this function let through could still be refused, or the reverse,
       // the moment the file is reloaded.
-      if (current.mode === 'remote' && !isRemoteTarget(current.host)) {
+      // A relay block (HIVE-429) dials the relay, never `host`, so `host` is not fenced there;
+      // `optionalRemote` skips the same check on the same condition.
+      if (current.mode === 'remote' && current.via !== 'relay' && !isRemoteTarget(current.host)) {
         throw new WriteRefused(
           `remote.host must be loopback, a local network address or a Tailscale address before mode can be "remote" — a server elsewhere is reached through the relay`,
         );

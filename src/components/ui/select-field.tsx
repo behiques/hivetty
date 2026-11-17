@@ -35,6 +35,8 @@ interface SelectFieldProps {
   onChange: (value: string) => void;
   /** Rendered under the control — the "not installed falls back" note. */
   hint?: string;
+  /** The whole control, not one option: nothing to choose yet (HIVE-429's "No server online"). */
+  disabled?: boolean;
   className?: string;
 }
 
@@ -44,6 +46,7 @@ export function SelectField({
   options,
   onChange,
   hint,
+  disabled = false,
   className,
 }: SelectFieldProps) {
   const id = useId();
@@ -81,12 +84,17 @@ export function SelectField({
         <select
           id={id}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            if (!disabled) onChange(event.target.value);
+          }}
+          disabled={disabled}
           aria-describedby={hint ? hintId : undefined}
           className={cn(
             'w-full appearance-none rounded-full border border-border bg-panel-2 py-1.5 pr-7 pl-3',
             'text-control text-ink outline-none hover:bg-hover',
             'focus-visible:ring-1 focus-visible:ring-brand',
+            // The dimming every disabled control here takes (`Button`'s own).
+            'disabled:cursor-default disabled:opacity-60 disabled:hover:bg-panel-2',
           )}
         >
           {runs.map((run, index) =>

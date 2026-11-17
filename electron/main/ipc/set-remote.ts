@@ -1,5 +1,6 @@
 import type {
   ModeChange,
+  RemoteConfig,
   RemoteMode,
   SetRemoteResult,
   SwitchOutcome,
@@ -24,8 +25,21 @@ import { getConfig, setRemote } from '../config';
  */
 export type ModeSwitcher = (
   mode: RemoteMode,
-  options?: { target?: { host: string; port: number } },
+  options?: { target?: ConfiguredTarget },
 ) => Promise<SwitchOutcome>;
+
+/** Where the stored `remote` block points, before a relay target has a token (HIVE-429). */
+export type ConfiguredTarget =
+  | { kind: 'direct'; host: string; port: number }
+  | { kind: 'relay'; serverId: string };
+
+export function targetOf(
+  remote: Pick<RemoteConfig, 'via' | 'host' | 'port' | 'relayServerId'>,
+): ConfiguredTarget {
+  return remote.via === 'relay'
+    ? { kind: 'relay', serverId: remote.relayServerId }
+    : { kind: 'direct', host: remote.host, port: remote.port };
+}
 
 /**
  * The attached socket's own accept-frame snapshot, or `null` when this
@@ -122,10 +136,12 @@ export async function applySetRemote(
     request.mode === undefined
       ? { ok: true }
       : await switchMode(request.mode, {
-          target: {
+          target: targetOf({
+            via: request.via ?? current.via,
             host: request.host ?? current.host,
             port: request.port ?? current.port,
-          },
+            relayServerId: request.relayServerId ?? current.relayServerId,
+          }),
         });
   // The old snapshot, unchanged, on every refusal — the file was never
   // opened. `getConfig()` rather than the `current` block above, because a

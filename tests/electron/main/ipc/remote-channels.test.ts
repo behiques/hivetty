@@ -10,6 +10,7 @@ import {
   DEFAULT_REMOTE,
   type SwitchOutcome,
 } from '../../../../electron/shared/config-contract';
+import type { ConfiguredTarget } from '../../../../electron/main/ipc/set-remote';
 
 /**
  * `config:set-remote`, the one settings verb that also *acts* (HIVE-144).
@@ -201,7 +202,7 @@ let outcome: SwitchOutcome = { ok: true };
 let calls: { mode: string; target: unknown; diskAtCall: Record<string, unknown> | null }[] = [];
 
 const switchMode = vi.fn(
-  (mode: 'local' | 'remote', options?: { target?: { host: string; port: number } }) => {
+  (mode: 'local' | 'remote', options?: { target?: ConfiguredTarget }) => {
     calls.push({ mode, target: options?.target, diskAtCall: onDisk() });
     return Promise.resolve(outcome);
   },
@@ -311,7 +312,7 @@ describe('config:set-remote (HIVE-144, Ruling 19)', () => {
 
     expect(calls[0]).toMatchObject({
       mode: 'remote',
-      target: { host: '100.64.0.1', port: 9001 },
+      target: { kind: 'direct', host: '100.64.0.1', port: 9001 },
     });
   });
 

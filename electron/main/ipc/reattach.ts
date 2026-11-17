@@ -93,6 +93,8 @@ export function createReattachLoop(deps: ReattachDeps): ReattachLoop {
     user a moment after they asked to work locally.
   */
   let generation = 0;
+  /** The reason the last `reconnecting` carried, so Try now and a wake restate it rather than dropping it. */
+  let lastReason: string | null = null;
 
   const emit = (status: Omit<RemoteLinkStatus, 'serverName' | 'epoch' | 'lost'>): void => {
     onStatus({ ...status, serverName, epoch });
@@ -105,16 +107,22 @@ export function createReattachLoop(deps: ReattachDeps): ReattachLoop {
 
   const finish = (): void => {
     running = false;
+    lastReason = null;
     generation += 1;
     stopTimer();
     stopWake?.();
     stopWake = null;
   };
 
-  const schedule = (): void => {
+  /** "The server is offline." is worth saying while retrying; any other transport failure is just a drop. */
+  const reasonOf = (cause: CloseCause): string | null =>
+    cause.code === 'relay-server-offline' ? cause.message : null;
+
+  const schedule = (reason: string | null = null): void => {
     const wait = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
     attempt += 1;
-    emit({ state: 'reconnecting', attempt, nextAttemptAt: now() + wait, reason: null });
+    lastReason = reason;
+    emit({ state: 'reconnecting', attempt, nextAttemptAt: now() + wait, reason });
     stopTimer();
     timer = setTimeout(() => {
       void dial(generation);
@@ -133,7 +141,7 @@ export function createReattachLoop(deps: ReattachDeps): ReattachLoop {
         emit({ state: 'disconnected', attempt: 0, nextAttemptAt: null, reason: classified.message });
         return;
       }
-      schedule();
+      schedule(reasonOf(classified));
       return;
     }
 
@@ -176,7 +184,7 @@ export function createReattachLoop(deps: ReattachDeps): ReattachLoop {
       sleep — a countdown to a moment that has already passed, next to an
       attempt number that is about to restart anyway.
     */
-    emit({ state: 'reconnecting', attempt: 1, nextAttemptAt: now(), reason: null });
+    emit({ state: 'reconnecting', attempt: 1, nextAttemptAt: now(), reason: lastReason });
     void dial(generation);
   };
 
@@ -200,7 +208,7 @@ export function createReattachLoop(deps: ReattachDeps): ReattachLoop {
         already attached and one that looks broken for half a minute.
       */
       stopWake = onWake?.(restartNow) ?? null;
-      schedule();
+      schedule(reasonOf(cause));
     },
 
     dialNow() {

@@ -104,7 +104,7 @@ export const BRIDGE_SERVER_KEYS = [
   'pair', 'revoke', 'licence', 'onLicence',
 ] as const satisfies readonly (keyof HiveBridge['server'])[];
 
-export const BRIDGE_RELAY_KEYS = ['status', 'onStatus'] as const satisfies readonly (keyof HiveBridge['relay'])[];
+export const BRIDGE_RELAY_KEYS = ['status', 'onStatus', 'hosts'] as const satisfies readonly (keyof HiveBridge['relay'])[];
 
 export const BRIDGE_REMOTE_KEYS = [
   'pair', 'forget', 'dialNow', 'onLinkStatus',

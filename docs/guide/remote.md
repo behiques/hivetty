@@ -66,6 +66,14 @@ loopback, on your local network, or a Tailscale address; a server anywhere else 
 relay. A server on an older HiveTTY is named as one: update it. A wrong token ends the attach with
 "Pair again".
 
+### From another network
+
+Both Macs signed in to the same HiveTTY account, on a plan with the relay. On the server, turn on
+**Reachable through HiveTTY relay** under **Serve this machine**. On the laptop, turn on **Connect
+through relay** under **Attach to a server**: **Server** and **Refresh** take the place of the
+address and port. Pick the server, enter its device id and token as usual, then **Attach**. See
+[Through the HiveTTY relay](../server-mode.md#through-the-hivetty-relay).
+
 ## When the connection drops
 
 The connection item at the bar's foot turns amber and the laptop redials after 1, 2, 4, 8, 15 and 30 seconds, then

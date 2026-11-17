@@ -5,6 +5,7 @@ import { WebSocket, type ClientOptions } from 'ws';
 
 import { isRemoteTarget } from '@shared/config-contract';
 import type { Channel } from '@shared/ipc-contract';
+import { RELAY_CLOSE, RELAY_PATH, relaySocketUrl } from '@shared/relay-contract';
 import {
   ATTACH_FRAME_MAX_BYTES,
   CALL_GIVE_UP_MS,
@@ -194,6 +195,41 @@ export class AttachFrameTooLargeError extends Error {
   }
 }
 
+/** Where a dial goes (HIVE-429): straight to a private address, or to this person's server through the relay. */
+export type RemoteTarget =
+  | { kind: 'direct'; host: string; port: number }
+  | { kind: 'relay'; serverId: string; cloudUrl: string; accessToken: string };
+
+export const RELAY_SERVER_OFFLINE = 'The server is offline.';
+
+/** The relay's own verdicts on a client socket. 1001 and 1012 are ordinary drops and are not here. */
+const RELAY_CLOSE_MESSAGE: Partial<Record<number, string>> = {
+  [RELAY_CLOSE.unauthorized]: 'Sign in again to use the relay.',
+  [RELAY_CLOSE.notEntitled]: 'Your plan does not include the relay.',
+  [RELAY_CLOSE.notFound]: RELAY_SERVER_OFFLINE,
+  [RELAY_CLOSE.acceptTimeout]: 'The server did not answer through the relay in time.',
+  [RELAY_CLOSE.rateLimited]: 'The relay is limiting new connections.',
+};
+
+/** The relay closed a client socket with one of its own codes (HIVE-429). */
+export class RelayClosedError extends Error {
+  readonly code: number;
+
+  constructor(code: number) {
+    super(RELAY_CLOSE_MESSAGE[code] ?? 'The relay closed the connection.');
+    this.name = 'RelayClosedError';
+    this.code = code;
+  }
+}
+
+/** A relay target no socket may be opened for: the cloud base or the server id is not usable. */
+export class RelayTargetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RelayTargetError';
+  }
+}
+
 /**
  * A `call` that came back as an `error` frame, or that this client gave up on.
  *
@@ -229,7 +265,8 @@ export interface CloseCause {
   /**
    * The server's own refusal code where there is one (`unauthorized`,
    * `revoked`, `protocol-mismatch`), this side's where it refused first
-   * (`address-refused`, `attach-frame-too-large`, `server-too-old`), or `transport`.
+   * (`address-refused`, `attach-frame-too-large`, `server-too-old`, `relay-target`), the relay's
+   * (`relay-sign-in`, `relay-locked`, `relay-server-offline`, HIVE-429), or `transport`.
    */
   code: string;
   message: string;
@@ -262,6 +299,23 @@ export function classifyCause(cause: unknown): CloseCause {
   }
   if (cause instanceof AttachFrameTooLargeError) {
     return { kind: 'terminal', code: 'attach-frame-too-large', message: cause.message };
+  }
+  if (cause instanceof RelayTargetError) {
+    return { kind: 'terminal', code: 'relay-target', message: cause.message };
+  }
+  if (cause instanceof RelayClosedError) {
+    // Another dial is answered the same way: the account, or the plan.
+    if (cause.code === RELAY_CLOSE.unauthorized) {
+      return { kind: 'terminal', code: 'relay-sign-in', message: cause.message };
+    }
+    if (cause.code === RELAY_CLOSE.notEntitled) {
+      return { kind: 'terminal', code: 'relay-locked', message: cause.message };
+    }
+    // Retried: after a relay restart this client may redial before the server is serving again.
+    if (cause.code === RELAY_CLOSE.notFound) {
+      return { kind: 'transport', code: 'relay-server-offline', message: cause.message };
+    }
+    return { kind: 'transport', code: 'transport', message: cause.message };
   }
   return {
     kind: 'transport',
@@ -318,8 +372,8 @@ export interface RemoteClient {
 }
 
 export interface ConnectRemoteDeps {
-  host: string;
-  port: number;
+  /** A private address, fenced; or this person's server through the relay (HIVE-429), not fenced. */
+  target: RemoteTarget;
   credential: { deviceId: string; token: string };
   resumeFrom?: Readonly<Record<string, ResumePoint>>;
   /** Injectable purely so a unit test needs no socket. Defaults to `ws`'s. */
@@ -419,29 +473,40 @@ export function frameBytes(text: string): number {
 }
 
 export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
-  const {
-    host,
-    port,
-    credential,
-    resumeFrom,
-    WebSocketCtor = WebSocket,
-    resolveAddress = dnsLookup,
-  } = deps;
+  const { target, credential, resumeFrom, WebSocketCtor = WebSocket, resolveAddress = dnsLookup } = deps;
+  /** How messages name the far end: an address for a direct dial, never one for the relay. */
+  const label =
+    target.kind === 'direct' ? `${target.host}:${String(target.port)}` : 'the server through the relay';
 
-  /*
-    Fence (1), before a socket object exists. The brief's first test asserts
-    `WebSocketCtor` was never called, and that assertion is the point: a
-    refusal that costs a TCP connection has already told an attacker this
-    machine is here and looking for a Hive.
-  */
-  if (!isRemoteTarget(host)) {
-    return Promise.reject(
-      new AddressRefusedError(
-        `Refusing to attach directly to "${host}": it is not loopback, on the ` +
-          `local network, or a Tailscale address. A server elsewhere is reached ` +
-          `with "Connect through relay".`,
-      ),
-    );
+  let url: string;
+  if (target.kind === 'direct') {
+    /*
+      Fence (1), before a socket object exists. The brief's first test asserts
+      `WebSocketCtor` was never called, and that assertion is the point: a
+      refusal that costs a TCP connection has already told an attacker this
+      machine is here and looking for a Hive.
+    */
+    if (!isRemoteTarget(target.host)) {
+      return Promise.reject(
+        new AddressRefusedError(
+          `Refusing to attach directly to "${target.host}": it is not loopback, on the ` +
+            `local network, or a Tailscale address. A server elsewhere is reached ` +
+            `with "Connect through relay".`,
+        ),
+      );
+    }
+    url = `ws://${target.host}:${String(target.port)}/`;
+  } else {
+    // The address fences are for a direct dial. A relay dial goes to the cloud base over TLS and nowhere else.
+    try {
+      url = relaySocketUrl(target.cloudUrl, RELAY_PATH.attach(target.serverId));
+    } catch (cause) {
+      return Promise.reject(
+        new RelayTargetError(
+          `Cannot attach through the relay: ${cause instanceof Error ? cause.message : String(cause)}`,
+        ),
+      );
+    }
   }
 
   return new Promise<RemoteClient>((resolveConnection, rejectConnection) => {
@@ -457,11 +522,7 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
       literal type-checks, and every other key is still checked against `ws`'s
       own option type rather than escaping through a cast of the whole thing.
     */
-    const options: ClientOptions & { lookup: LookupFunction } = {
-      family: 4,
-      lookup: fencedLookup(host, resolveAddress, (cause) => {
-        refusal = cause;
-      }),
+    const shared = {
       // Every frame is a Noise transport message: its plaintext, then a 16-byte tag (HIVE-428).
       maxPayload: POST_ATTACH_FRAME_MAX_BYTES + CHANNEL_TAG_BYTES,
       /*
@@ -474,8 +535,19 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
       */
       handshakeTimeout: CLIENT_ATTACH_TIMEOUT_MS,
     };
+    const options: ClientOptions & { lookup?: LookupFunction } =
+      target.kind === 'direct'
+        ? {
+            ...shared,
+            family: 4,
+            lookup: fencedLookup(target.host, resolveAddress, (cause) => {
+              refusal = cause;
+            }),
+          }
+        : // The token goes only to the URL `relaySocketUrl` built from the cloud base (HIVE-429).
+          { ...shared, headers: { authorization: `Bearer ${target.accessToken}` } };
 
-    const socket = new WebSocketCtor(`ws://${host}:${String(port)}/`, options);
+    const socket = new WebSocketCtor(url, options);
 
     /** Cleared once the handshake settles, so a later failure is not a double-settle. */
     let handshakeSettled = false;
@@ -549,7 +621,7 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
     const deadline = setTimeout(() => {
       failHandshake(
         new Error(
-          `${host}:${String(port)} did not complete the attach handshake within ` +
+          `${target.kind === 'direct' ? label : 'The server through the relay'} did not complete the attach handshake within ` +
             `${String(CLIENT_ATTACH_TIMEOUT_MS)}ms. It may not be a Hive, or it may not be ` +
             `reachable from here.`,
         ),
@@ -759,8 +831,14 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
 
     socket.on('close', (code?: number) => {
       closed = true;
+      // The relay's own verdicts (HIVE-429), only on a relay socket: a direct peer's 4404 means nothing.
+      const relayed =
+        target.kind === 'relay' && code !== undefined && code in RELAY_CLOSE_MESSAGE
+          ? new RelayClosedError(code)
+          : null;
       failHandshake(
         refusal ??
+          relayed ??
           /*
             A 1008 before message 2 is the server refusing the pairing (HIVE-428),
             and this listener runs before `initiate`'s own, so it names it here.
@@ -768,9 +846,9 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
           */
           (initiating && code === CHANNEL_CLOSE_CODE
             ? new PairingRefusedError(PAIRING_REFUSED_MESSAGE)
-            : new Error(`The connection to ${host}:${String(port)} closed before it attached.`)),
+            : new Error(`The connection to ${label} closed before it attached.`)),
       );
-      const ending = new Error(`The connection to ${host}:${String(port)} closed.`);
+      const ending = relayed ?? new Error(`The connection to ${label} closed.`);
       failAllPending(ending);
       announceClose(refusal ?? ending);
     });
@@ -816,7 +894,7 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
         call(channel, payload) {
           if (closed) {
             return Promise.reject(
-              new Error(`Cannot call ${channel}: the connection to ${host} is closed.`),
+              new Error(`Cannot call ${channel}: the connection to ${label} is closed.`),
             );
           }
           nextId += 1;
@@ -871,7 +949,7 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
           if (closed) {
             throw new RemoteCallError(
               'connection-closed',
-              `Cannot send ${channel}: the connection to ${host} is closed.`,
+              `Cannot send ${channel}: the connection to ${label} is closed.`,
             );
           }
           const tooLarge = sendBounded({ kind: 'notify', channel, payload });

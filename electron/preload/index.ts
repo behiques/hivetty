@@ -172,7 +172,7 @@ import type {
 } from '@shared/notification-contract';
 import type { OrgSummary } from '@shared/orgs';
 import type { PlanChangedEvent, PlansSnapshot } from '@shared/plan-contract';
-import type { RelayServeStatus } from '@shared/relay-contract';
+import type { RelayHostsResult, RelayServeStatus } from '@shared/relay-contract';
 import type {
   SessionBranchEvent,
   SessionClearedEvent,
@@ -443,6 +443,7 @@ const bridge: HiveBridge = {
     status: (): Promise<RelayServeStatus> => ipcRenderer.invoke(CH.relayStatus) as Promise<RelayServeStatus>,
     onStatus: (callback: (status: RelayServeStatus) => void) =>
       subscribe<RelayServeStatus>(CH.relayStatusChanged, callback),
+    hosts: (): Promise<RelayHostsResult> => ipcRenderer.invoke(CH.relayHosts) as Promise<RelayHostsResult>,
   },
   // HIVE-144. Storing and forgetting the credential this machine was handed
   // to attach outward, as a client, to someone else's server. Its own

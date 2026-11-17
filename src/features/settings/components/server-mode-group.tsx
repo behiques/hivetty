@@ -1,9 +1,10 @@
 import { WarningCircle } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@components/ui/button';
 import { Hint } from '@components/ui/hint';
 import { UpgradeLink } from '@components/ui/lock';
+import { SelectField, type SelectFieldOption } from '@components/ui/select-field';
 import { Switch } from '@components/ui/switch';
 import { TextField } from '@components/ui/text-field';
 import { SettingsGroup } from '@features/shared/components/settings-group';
@@ -17,6 +18,7 @@ import {
   setRemoteConfig,
   setServerConfig,
 } from '@lib/project-config';
+import { listRelayHosts } from '@lib/relay';
 import {
   DEFAULT_REMOTE,
   DEFAULT_SERVER,
@@ -30,7 +32,7 @@ import {
   type SwitchOutcome,
 } from '@shared/config-contract';
 import type { LocalRemoteState, RemoteLinkStatus } from '@shared/ipc-contract';
-import type { RelayServeStatus } from '@shared/relay-contract';
+import type { RelayHostsResult, RelayServeStatus } from '@shared/relay-contract';
 import { useApplyModeChange } from '@stores/hive-store';
 
 /**
@@ -298,6 +300,114 @@ function RelaySwitch({
             ) : null}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+const VIA_LABEL = 'Connect through relay';
+const VIA_DESCRIPTION =
+  'Reach a server of yours on any network. Both machines are signed in to the same HiveTTY account.';
+/** The 403 from `GET /relay/hosts`, when the plan the renderer last read still said yes. */
+const VIA_NOT_ENTITLED = 'Your plan does not include the relay.';
+const PICKER_HINT = 'Your Macs with "Reachable through HiveTTY relay" on. Names come from Account › Devices.';
+const PICKER_EMPTY_HINT = 'Turn on "Reachable through HiveTTY relay" on the server, signed in to this account.';
+const PICKER_SIGNED_OUT = 'Sign in to list your servers.';
+const PICKER_UNAVAILABLE = 'Could not reach HiveTTY. Check your connection and refresh.';
+const SAVED_OFFLINE = 'Saved server · offline';
+
+/** `online since 09:14` in local time, or `online` for a `since` that is not a date. */
+function onlineSince(since: string): string {
+  const at = new Date(since);
+  if (Number.isNaN(at.getTime())) return 'online';
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `online since ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+
+/**
+ * The Server picker that replaces the address fields while "Connect through relay" is on (HIVE-429).
+ *
+ * The list is read when this mounts, which is when the switch turns on or the block opens with `via: 'relay'`,
+ * and on Refresh. Only the newest request may answer: a list that lands after a newer one, or after unmount, is
+ * dropped. The client stores no names, so a saved server that is not online reads "Saved server · offline".
+ */
+function RelayPicker({
+  serverId,
+  onChoose,
+  onLocked,
+}: {
+  serverId: string;
+  onChoose: (serverId: string) => void;
+  /** Stable (a state setter): the cloud said the plan has no relay. */
+  onLocked: (locked: boolean) => void;
+}) {
+  const [answer, setAnswer] = useState<RelayHostsResult | null>(null);
+  const latest = useRef(0);
+
+  const load = useCallback(() => {
+    latest.current += 1;
+    const mine = latest.current;
+    void listRelayHosts().then((result) => {
+      if (mine !== latest.current) return;
+      setAnswer(result);
+      if (!result.ok && result.reason === 'not-entitled') onLocked(true);
+    });
+  }, [onLocked]);
+
+  useEffect(() => {
+    load();
+    return () => {
+      // Unmounted: whatever is still in flight answers nobody.
+      latest.current += 1;
+    };
+  }, [load]);
+
+  const hosts = answer?.ok ? answer.hosts : [];
+  const options: SelectFieldOption[] = hosts.map((host) => ({
+    value: host.serverId,
+    label: `${host.name} · ${onlineSince(host.since)}`,
+  }));
+  if (serverId !== '' && !hosts.some((host) => host.serverId === serverId)) {
+    options.unshift({ value: serverId, label: SAVED_OFFLINE });
+  }
+  const empty = options.length === 0;
+  if (empty) {
+    options.push({ value: '', label: answer === null ? 'Looking for servers…' : 'No server online' });
+  } else if (serverId === '') {
+    // Nothing chosen yet: say so rather than let the first server look chosen when it is not saved.
+    options.unshift({ value: '', label: 'Choose a server', disabled: true });
+  }
+
+  const hint =
+    answer === null
+      ? PICKER_HINT
+      : answer.ok
+        ? answer.hosts.length === 0
+          ? PICKER_EMPTY_HINT
+          : PICKER_HINT
+        : answer.reason === 'signed-out'
+          ? PICKER_SIGNED_OUT
+          : PICKER_UNAVAILABLE;
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+      <SelectField
+        label="Server"
+        value={empty ? '' : serverId}
+        options={options}
+        onChange={onChoose}
+        hint={hint}
+        disabled={empty}
+        className="min-w-0"
+      />
+      <div className="flex flex-col gap-1">
+        {/* The label's height, so Refresh sits level with the select rather than with its label. */}
+        <span aria-hidden="true" className="invisible text-control">
+          Refresh
+        </span>
+        <Button variant="secondary" size="sm" onClick={load}>
+          Refresh
+        </Button>
       </div>
     </div>
   );
@@ -702,6 +812,26 @@ export function ServerModeGroup({
   const [remoteHostInvalid, setRemoteHostInvalid] = useState(false);
   const [remotePortDraft, setRemotePortDraft] = useState(String(target?.port ?? DEFAULT_REMOTE.port));
   const [remotePortInvalid, setRemotePortInvalid] = useState(false);
+  // HIVE-429: how this machine reaches its server, and which relay server. Drafts for the same reason the
+  // address is: the switch and the picker answer at once, and the snapshot that follows the write re-seeds them.
+  const [viaDraft, setViaDraft] = useState(target?.via ?? DEFAULT_REMOTE.via);
+  const [serverDraft, setServerDraft] = useState(target?.relayServerId ?? DEFAULT_REMOTE.relayServerId);
+  /** The cloud answered `not-entitled` to the server list: locked, as a locked plan is. */
+  const [cloudLocked, setCloudLocked] = useState(false);
+  /*
+    Lifted whenever the plan's own answer changes (self review, borderline 4): the picker that would
+    re-ask the cloud is unmounted while locked, so nothing else could ever clear it short of a remount.
+    Keyed by value, since `useEntitlement` derives a fresh object on every render.
+  */
+  const lockKey = relayLock.allowed ? 'allowed' : `locked:${relayLock.reason}`;
+  const [seenLockKey, setSeenLockKey] = useState(lockKey);
+  if (lockKey !== seenLockKey) {
+    setSeenLockKey(lockKey);
+    setCloudLocked(false);
+  }
+  const relayLocked = !relayLock.allowed || cloudLocked;
+  /** Connect through relay is on, and usable: the picker replaces the address fields. */
+  const relayOn = viaDraft === 'relay' && !relayLocked;
   /** The last attach attempt's outcome, or `null` before one has been made. */
   const [switchResult, setSwitchResult] = useState<SwitchOutcome | null>(null);
   const [attaching, setAttaching] = useState(false);
@@ -719,7 +849,11 @@ export function ServerModeGroup({
     written into a draft.
   */
   const [seenTarget, setSeenTarget] = useState(target);
-  const targetChanged = seenTarget?.host !== target?.host || seenTarget?.port !== target?.port;
+  const targetChanged =
+    seenTarget?.host !== target?.host ||
+    seenTarget?.port !== target?.port ||
+    seenTarget?.via !== target?.via ||
+    seenTarget?.relayServerId !== target?.relayServerId;
   if (targetChanged) {
     setSeenTarget(target);
     if (target !== null) {
@@ -727,6 +861,8 @@ export function ServerModeGroup({
       setRemoteHostInvalid(false);
       setRemotePortDraft(String(target.port));
       setRemotePortInvalid(false);
+      setViaDraft(target.via);
+      setServerDraft(target.relayServerId);
     }
   }
 
@@ -740,6 +876,25 @@ export function ServerModeGroup({
    * obviously not loopback, LAN or tailnet — a bare hostname, a public IPv4
    * literal, anything with a scheme or a port baked in.
    */
+  /**
+   * A no-mode write of how this machine reaches its server (HIVE-429, self review). Awaited: a refused
+   * or failed write puts the via and server drafts back to the block it was made against and says why,
+   * rather than leaving the switch or picker showing a value `config.json` does not hold.
+   */
+  const [targetError, setTargetError] = useState<string | null>(null);
+  const commitTarget = (request: Parameters<typeof setRemoteConfig>[0]) => {
+    const saved = target;
+    setTargetError(null);
+    void setRemoteConfig(request).then(({ switched }) => {
+      if (switched.ok) return;
+      setTargetError(switched.reason === 'connect-failed' ? switched.message : 'The change was refused.');
+      if (saved !== null) {
+        setViaDraft(saved.via);
+        setServerDraft(saved.relayServerId);
+      }
+    });
+  };
+
   const commitRemoteHost = () => {
     const next = remoteHostDraft.trim();
     if (next === '' || !isRemoteTarget(next)) {
@@ -760,7 +915,13 @@ export function ServerModeGroup({
       showing a value `config.json` did not hold, which is the exact defect this
       story set out to remove.
     */
-    if (target === null || next === target.host) return;
+    if (target === null) return;
+    // A `direct` the switch is still holding as a draft rides along: see `commitTarget`.
+    if (viaDraft === 'direct' && target.via !== 'direct') {
+      commitTarget({ host: next, via: 'direct' });
+      return;
+    }
+    if (next === target.host) return;
     /*
       Write only, and now actually so (HIVE-144 review, I6).
 
@@ -819,7 +980,27 @@ export function ServerModeGroup({
    * Leaving the optimistic draft in place is the defect this guards: a user
    * would read their own rejected input as the saved one.
    */
+  /** What a switch's answer does to this pane, whichever way Attach dialled. */
+  const settleAttach = ({ switched, changed }: Awaited<ReturnType<typeof setRemoteConfig>>) => {
+    setAttaching(false);
+    setSwitchResult(switched);
+    // See the direct arm below for why `changed` is applied, and why the drafts go back to `remote`.
+    if (changed) applyModeChange(changed);
+    if (!switched.ok) {
+      setRemoteHostDraft(remote.host);
+      setRemotePortDraft(String(remote.port));
+    }
+  };
+
   const handleAttach = () => {
+    if (relayOn) {
+      // HIVE-429: no address to check; the relay server is the target, and Attach waits for one.
+      if (serverDraft === '') return;
+      setSwitchResult(null);
+      setAttaching(true);
+      void setRemoteConfig({ mode: 'remote', via: 'relay', relayServerId: serverDraft }).then(settleAttach);
+      return;
+    }
     const host = remoteHostDraft.trim();
     if (host === '' || !isRemoteTarget(host)) {
       setRemoteHostInvalid(true);
@@ -840,7 +1021,7 @@ export function ServerModeGroup({
     setRemotePortInvalid(false);
     setSwitchResult(null);
     setAttaching(true);
-    void setRemoteConfig({ mode: 'remote', host, port }).then(({ switched, changed }) => {
+    void setRemoteConfig({ mode: 'remote', host, port, via: 'direct' }).then(({ switched, changed }) => {
       setAttaching(false);
       setSwitchResult(switched);
       /*
@@ -1110,7 +1291,7 @@ export function ServerModeGroup({
                 <span>
                   Reconnecting to{' '}
                   <span className="font-medium text-ink">{attachedServerName}</span>.
-                  The connection dropped. Attempt {link.attempt}
+                  {link.reason ?? 'The connection dropped.'} Attempt {link.attempt}
                   {link.nextAttemptAt === null ? '' : `, ${nextTryIn(link.nextAttemptAt)}`}.
                   Your sessions are still running on that machine.
                 </span>
@@ -1206,6 +1387,55 @@ export function ServerModeGroup({
             did.
           */}
           {target === null ? null : (
+            <Switch
+              label={VIA_LABEL}
+              description={
+                relayLocked ? (
+                  <>
+                    {relayLock.allowed ? VIA_NOT_ENTITLED : relayLock.reason} · <UpgradeLink />
+                  </>
+                ) : (
+                  VIA_DESCRIPTION
+                )
+              }
+              checked={relayOn}
+              disabled={relayLocked}
+              onCheckedChange={(next) => {
+                const via = next ? 'relay' : 'direct';
+                setViaDraft(via);
+                if (switchResult) setSwitchResult(null);
+                setTargetError(null);
+                /*
+                  A write with no `mode`: it never dials (`applySetRemote`). On a remote block it is
+                  written only when the block stays dialable (self review, block and borderline 3):
+                  `direct` needs a stored address, or `setRemote`'s fence refuses it, and `relay` needs a
+                  stored server, or the next boot attach is refused. Otherwise it stays a draft, and the
+                  address commit or the picker writes it together with what it was missing.
+                */
+                const dialable = via === 'relay' ? target.relayServerId !== '' : isRemoteTarget(target.host);
+                if (target.mode !== 'remote' || dialable) commitTarget({ via });
+              }}
+            />
+          )}
+
+          {targetError === null ? null : (
+            <p className="text-ui-sm text-red">Could not save: {targetError}</p>
+          )}
+
+          {target === null ? null : relayOn ? (
+            <RelayPicker
+              serverId={serverDraft}
+              onChoose={(serverId) => {
+                setServerDraft(serverId);
+                if (switchResult) setSwitchResult(null);
+                // A `relay` the switch is holding as a draft is written with the server it was waiting for.
+                commitTarget(
+                  target.via === 'relay' ? { relayServerId: serverId } : { via: 'relay', relayServerId: serverId },
+                );
+              }}
+              onLocked={setCloudLocked}
+            />
+          ) : (
           <div className="grid grid-cols-[1fr_96px] gap-2">
             <TextField
               label="Server address"
@@ -1318,7 +1548,7 @@ export function ServerModeGroup({
               variant="primary"
               size="sm"
               className="w-fit"
-              disabled={serving}
+              disabled={serving || (relayOn && serverDraft === '')}
               pending={attaching}
               onClick={handleAttach}
             >

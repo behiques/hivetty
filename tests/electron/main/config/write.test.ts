@@ -172,6 +172,8 @@ describe('writeConfig — the round trip', () => {
       mode: 'remote',
       host: DEFAULT_REMOTE.host,
       port: DEFAULT_REMOTE.port,
+      via: DEFAULT_REMOTE.via,
+      relayServerId: DEFAULT_REMOTE.relayServerId,
     });
     expect(JSON.parse(readFileSync(path, 'utf8')).remote).toEqual({ mode: 'remote' });
   });

@@ -691,6 +691,86 @@ test('the Attach to a server switch is off, and its fields are hidden, by defaul
 });
 
 /**
+ * HIVE-429: "Connect through relay" sits above the address fields in the open Attach block. On, the Server picker
+ * and Refresh replace "Server address" and "Port", with the pairing fields still there; off, the address fields
+ * come back. The switch writes `remote.via` and never dials.
+ */
+test('Connect through relay swaps the address fields for the Server picker, and back', async ({}, testInfo) => {
+  const { configPath } = seed((name) => testInfo.outputPath(name));
+  const app = await launchHive({
+    userDataDir: testInfo.outputPath('user-data'),
+    configPath,
+  });
+  const page = await app.firstWindow();
+  await page.waitForSelector('nav[aria-label="Places"]');
+
+  await openServerMode(page);
+  await page.getByRole('switch', { name: 'Attach to a server' }).click();
+
+  const viaSwitch = page.getByRole('switch', { name: 'Connect through relay' });
+  await expect(viaSwitch).toBeVisible();
+  await expect(viaSwitch).not.toBeChecked();
+  await expect(page.getByLabel(/server address/i)).toBeVisible();
+
+  await viaSwitch.click();
+  await expect(viaSwitch).toBeChecked();
+  await expect(page.getByLabel(/server address/i)).toBeHidden();
+  await expect(page.getByRole('combobox', { name: 'Server' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible();
+  await expect(page.getByLabel('Device id')).toBeVisible();
+  await expect(page.getByLabel('Pairing token')).toBeVisible();
+  await expect
+    .poll(() => (read(configPath).remote as { via?: string; mode?: string } | undefined)?.via)
+    .toBe('relay');
+  expect((read(configPath).remote as { mode?: string }).mode).toBeUndefined();
+
+  await viaSwitch.click();
+  await expect(page.getByLabel(/server address/i)).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Server' })).toBeHidden();
+
+  await app.close();
+});
+
+/**
+ * HIVE-429 self review, block: a relay attach stores no host, so `{ via: 'direct' }` alone onto that remote block
+ * is refused by the writer's fence. Off holds `direct` as a draft, writes nothing and shows no error, and the
+ * address commit writes `via` and `host` together. Seeded as a failed boot attach leaves it: still `mode: 'remote'`.
+ */
+test('Connect through relay off on a relay block with no address waits for one, then writes both', async ({}, testInfo) => {
+  const { configPath } = seed((name) => testInfo.outputPath(name));
+  writeFileSync(
+    configPath,
+    JSON.stringify({ ...read(configPath), remote: { mode: 'remote', via: 'relay', relayServerId: 'dev_1' } }, null, 2),
+  );
+  const app = await launchHive({
+    userDataDir: testInfo.outputPath('user-data'),
+    configPath,
+  });
+  const page = await app.firstWindow();
+  await page.waitForSelector('nav[aria-label="Places"]');
+
+  await openServerMode(page);
+  const viaSwitch = page.getByRole('switch', { name: 'Connect through relay' });
+  await expect(viaSwitch).toBeChecked();
+
+  await viaSwitch.click();
+  await expect(viaSwitch).not.toBeChecked();
+  const address = page.getByLabel(/server address/i);
+  await expect(address).toBeVisible();
+  await expect(page.getByText(/Could not save/)).toBeHidden();
+  expect(read(configPath).remote).toEqual({ mode: 'remote', via: 'relay', relayServerId: 'dev_1' });
+
+  await address.fill('192.168.1.20');
+  await address.press('Tab');
+  await expect
+    .poll(() => read(configPath).remote)
+    .toEqual({ mode: 'remote', via: 'direct', relayServerId: 'dev_1', host: '192.168.1.20' });
+  await expect(page.getByText(/Could not save/)).toBeHidden();
+
+  await app.close();
+});
+
+/**
  * The security boundary itself, driven through the real app rather than only
  * through the unit suite's mocked bridge: `isRemoteTarget` refuses a public
  * address client-side, before `config:set-remote` is ever reached, so a typo
@@ -717,7 +797,7 @@ test('the attach address field refuses a public address, and writes nothing', as
   await field.blur();
 
   await expect(
-    page.getByText(/connect through relay/i),
+    page.getByText(/use connect through relay/i),
   ).toBeVisible();
 
   /*

@@ -27,22 +27,24 @@ describe('readLocalRemote', () => {
 
   it("answers this process's own remote block", () => {
     getConfig.mockReturnValue(
-      snapshotWith({ mode: 'remote', host: 'mini.tail1234.ts.net', port: 7433 }),
+      snapshotWith({ mode: 'remote', host: 'mini.tail1234.ts.net', port: 7433, via: 'direct', relayServerId: '' }),
     );
 
     expect(readLocalRemote(false)).toEqual({
       mode: 'remote',
       host: 'mini.tail1234.ts.net',
       port: 7433,
+      via: 'direct',
+      relayServerId: '',
       paired: false,
     });
   });
 
   it('re-reads on every call, so a mode switch is visible to the next caller', () => {
     getConfig
-      .mockReturnValueOnce(snapshotWith({ mode: 'local', host: '', port: 7433 }))
+      .mockReturnValueOnce(snapshotWith({ mode: 'local', host: '', port: 7433, via: 'direct', relayServerId: '' }))
       .mockReturnValueOnce(
-        snapshotWith({ mode: 'remote', host: '100.101.102.103', port: 7500 }),
+        snapshotWith({ mode: 'remote', host: '100.101.102.103', port: 7500, via: 'direct', relayServerId: '' }),
       );
 
     expect(readLocalRemote(false).mode).toBe('local');
@@ -50,6 +52,8 @@ describe('readLocalRemote', () => {
       mode: 'remote',
       host: '100.101.102.103',
       port: 7500,
+      via: 'direct',
+      relayServerId: '',
       paired: false,
     });
     expect(getConfig).toHaveBeenCalledTimes(2);
@@ -61,11 +65,18 @@ describe('readLocalRemote', () => {
    * rides on this answer, as a yes or no and never the credential.
    */
   it('says whether a credential is stored, and nothing more about it', () => {
-    getConfig.mockReturnValue(snapshotWith({ mode: 'remote', host: 'mini', port: 7433 }));
+    getConfig.mockReturnValue(snapshotWith({ mode: 'remote', host: 'mini', port: 7433, via: 'direct', relayServerId: '' }));
 
     const answer = readLocalRemote(true);
 
     expect(answer.paired).toBe(true);
-    expect(Object.keys(answer).sort()).toEqual(['host', 'mode', 'paired', 'port']);
+    expect(Object.keys(answer).sort()).toEqual([
+      'host',
+      'mode',
+      'paired',
+      'port',
+      'relayServerId',
+      'via',
+    ]);
   });
 });

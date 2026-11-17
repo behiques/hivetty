@@ -2,7 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { RemoteLinkStatus } from '../../../../electron/shared/ipc-contract';
-import type { CloseCause, RemoteClient } from '../../../../electron/remote-client/socket';
+import {
+  RELAY_SERVER_OFFLINE,
+  RelayClosedError,
+  type CloseCause,
+  type RemoteClient,
+} from '../../../../electron/remote-client/socket';
 import { BACKOFF_MS, createReattachLoop } from '../../../../electron/main/ipc/reattach';
 
 /**
@@ -457,5 +462,59 @@ describe('createReattachLoop', () => {
       which is worth one guard rather than one assumption.
     */
     expect(h.connect).toHaveBeenCalledTimes(1);
+  });
+
+  describe('the offline reason while reconnecting (HIVE-429)', () => {
+    it('says the server is offline when the relay said so, and nothing for a plain drop', async () => {
+      let dials = 0;
+      const h = harness(async () => {
+        dials += 1;
+        throw dials === 1 ? new RelayClosedError(4404) : new Error('ECONNREFUSED');
+      });
+
+      h.loop.begin(TRANSPORT);
+      expect(h.statuses.at(-1)).toMatchObject({ state: 'reconnecting', reason: null });
+
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS[0]);
+      expect(h.statuses.at(-1)).toMatchObject({ state: 'reconnecting', reason: RELAY_SERVER_OFFLINE });
+
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS[1]);
+      expect(h.statuses.at(-1)).toMatchObject({ state: 'reconnecting', reason: null });
+    });
+
+    it('carries the reason on the first reconnecting when the close said the server is offline', () => {
+      const h = harness(async () => fakeClient());
+
+      h.loop.begin({ kind: 'transport', code: 'relay-server-offline', message: RELAY_SERVER_OFFLINE });
+
+      expect(h.statuses).toEqual([
+        expect.objectContaining({ state: 'reconnecting', attempt: 1, reason: RELAY_SERVER_OFFLINE }),
+      ]);
+    });
+
+    it('keeps saying the server is offline when Try now restarts the schedule', () => {
+      const h = harness(() => new Promise<never>(() => {}));
+
+      h.loop.begin({ kind: 'transport', code: 'relay-server-offline', message: RELAY_SERVER_OFFLINE });
+      h.loop.dialNow();
+
+      expect(h.statuses.at(-1)).toMatchObject({ state: 'reconnecting', attempt: 1, reason: RELAY_SERVER_OFFLINE });
+    });
+
+    it('stops with the sign-in sentence when a reconnect is refused 4401', async () => {
+      const h = harness(async () => {
+        throw new RelayClosedError(4401);
+      });
+
+      h.loop.begin(TRANSPORT);
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS[0]);
+
+      expect(h.statuses.at(-1)).toMatchObject({
+        state: 'disconnected',
+        reason: 'Sign in again to use the relay.',
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(h.connect).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -478,7 +478,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    */
   expect(surface.remote).toEqual(['dialNow', 'forget', 'onLinkStatus', 'pair']);
   // HIVE-429: this machine's relay serving state, read and pushed; no payload, nothing to point anywhere.
-  expect(surface.relay).toEqual(['onStatus', 'status']);
+  expect(surface.relay).toEqual(['hosts', 'onStatus', 'status']);
   // HIVE-367: cliSkills lists the user's own CLI skills by name, read-only.
   expect(surface.skills).toEqual([
     'cliSkills',

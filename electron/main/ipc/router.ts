@@ -2,16 +2,20 @@ import { powerMonitor } from 'electron';
 
 import { isRemoteTarget, type SwitchOutcome } from '@shared/config-contract';
 import { CH, type AppInfo, type RemoteLinkStatus } from '@shared/ipc-contract';
+import { RELAY_CLOSE } from '@shared/relay-contract';
 
 import {
   AddressRefusedError,
+  RelayClosedError,
   ServerTooOldError,
   connectRemote,
   type ConnectRemoteDeps,
   type RemoteClient,
+  type RemoteTarget,
 } from '../../remote-client/socket';
 import type { StoredDeviceCredential } from '../../remote-client/token-store';
 import { getConfig } from '../config';
+import { cloudSession, type CloudSession } from '../licence';
 import { isServerMode } from '../server-mode';
 
 import { createWindowBroadcaster, type Broadcaster } from './broadcaster';
@@ -19,7 +23,7 @@ import { createReattachLoop, type ReattachLoop } from './reattach';
 import { applyRemoteForget, applyRemotePair } from './remote-pairing';
 import { registerRemoteProxy, remoteProxyBindingsSize, resetRemoteProxy } from './remote-proxy';
 import { composeResumeFrom, createResumeTracker, type ResumeTracker } from './resume-tracker';
-import { applySetRemote } from './set-remote';
+import { applySetRemote, targetOf, type ConfiguredTarget } from './set-remote';
 
 import {
   ipcBindingsSize,
@@ -208,7 +212,12 @@ interface SwitchIpcOptions {
    * Where to attach. Defaults to the stored `remote` block — right for boot,
    * wrong for the settings pane, which passes the address being committed.
    */
-  target?: { host: string; port: number };
+  target?: ConfiguredTarget;
+  /**
+   * The signed-in cloud session a relay target takes its base and a fresh token from (HIVE-429).
+   * Defaults to the licence module's.
+   */
+  session?: () => CloudSession | null;
   /** Who is attaching. Defaults to this machine's stored device credential. */
   credential?: StoredDeviceCredential | null;
   /** The dialler. Defaults to the real socket. */
@@ -450,9 +459,28 @@ function unbindEverything(): void {
 }
 
 /** The stored target, for a switch that was not told one. */
-function configuredTarget(): { host: string; port: number } {
-  const { host, port } = getConfig().remote;
-  return { host, port };
+function configuredTarget(): ConfiguredTarget {
+  return targetOf(getConfig().remote);
+}
+
+/**
+ * The dial's target, resolved per dial (HIVE-429): a relay access token lives fifteen minutes and a
+ * reconnect loop outlives it.
+ */
+async function resolveTarget(
+  target: ConfiguredTarget,
+  session: () => CloudSession | null,
+): Promise<RemoteTarget> {
+  if (target.kind === 'direct') return target;
+  const held = session();
+  // Signed out: another dial is refused the same way, so the loop stops and says so.
+  if (held === null || held.account().kind !== 'signed-in') {
+    throw new RelayClosedError(RELAY_CLOSE.unauthorized);
+  }
+  const accessToken = await held.getAccessToken();
+  // Signed in and no token: the refresh could not reach the cloud. The network is down; retry.
+  if (accessToken === null) throw new Error('Could not reach HiveTTY to authorize the relay.');
+  return { kind: 'relay', serverId: target.serverId, cloudUrl: held.baseUrl, accessToken };
 }
 
 /**
@@ -630,7 +658,18 @@ export async function switchIpcMode(
     dialling an address it has not validated: direct attach stays on a
     private network, and the relay is the only route off one (HIVE-428).
   */
-  if (!isRemoteTarget(target.host)) return { ok: false, reason: 'address-refused' };
+  const session = options.session ?? cloudSession;
+  if (target.kind === 'direct') {
+    if (!isRemoteTarget(target.host)) return { ok: false, reason: 'address-refused' };
+  } else {
+    // Refused before the unbind, like an address: a refusal is supposed to cost nothing (Ruling 19).
+    if (target.serverId === '') {
+      return { ok: false, reason: 'connect-failed', message: 'Choose a server first.' };
+    }
+    if (session()?.account().kind !== 'signed-in') {
+      return { ok: false, reason: 'connect-failed', message: 'Sign in to use the relay.' };
+    }
+  }
 
   // Step 2.
   unbindEverything();
@@ -666,17 +705,13 @@ export async function switchIpcMode(
       resume from nothing.
     */
     resumeTracker = createResumeTracker();
-    client = await dial({
-      host: target.host,
-      port: target.port,
-      credential,
-    });
+    client = await dial({ target: await resolveTarget(target, session), credential });
     registerIpc('remote', { client, broadcaster: pushes, resumeTracker });
     // Recorded only once the surface is up, so a registration that threw
     // leaves nothing behind for the next `unbindEverything` to close twice —
     // the catch below closes this attempt's own socket itself.
     attached = client;
-    armReattach(client, { host: target.host, port: target.port }, credential, dial, pushes);
+    armReattach(client, target, credential, dial, pushes, session);
   } catch (cause) {
     /*
       Whatever the failed attempt managed to bind, unbound again before local
@@ -720,16 +755,17 @@ export async function switchIpcMode(
  */
 function armReattach(
   client: RemoteClient,
-  target: { host: string; port: number },
+  target: ConfiguredTarget,
   credential: StoredDeviceCredential,
   dial: (deps: ConnectRemoteDeps) => Promise<RemoteClient>,
   pushes: Broadcaster,
+  session: () => CloudSession | null,
 ): void {
   const serverName = client.serverName();
 
   const loop = createReattachLoop({
     serverName,
-    connect: () => {
+    connect: async () => {
       /*
         The point of the whole story: a reconnect that names where each watched
         terminal left off, so the server replays what was missed instead of the
@@ -743,8 +779,7 @@ function armReattach(
       */
       const resumeFrom = resumeTracker === null ? undefined : composeResumeFrom(resumeTracker);
       return dial({
-        host: target.host,
-        port: target.port,
+        target: await resolveTarget(target, session),
         credential,
         ...(resumeFrom === undefined ? {} : { resumeFrom }),
       });

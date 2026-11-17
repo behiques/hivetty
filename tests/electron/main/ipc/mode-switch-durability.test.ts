@@ -179,7 +179,7 @@ const fakeClient = () => ({
 });
 
 const opts = () => ({
-  target: { host: '127.0.0.1', port: 7433 },
+  target: { kind: 'direct' as const, host: '127.0.0.1', port: 7433 },
   credential: { deviceId: 'device-1', token: 'secret' },
   connect: async () => fakeClient(),
 });

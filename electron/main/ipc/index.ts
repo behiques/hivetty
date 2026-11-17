@@ -310,7 +310,7 @@ import { prOpenedEntry } from '../ledger/pr-opened';
 import { createPermissionReminder } from '../ledger/reminders';
 import { releaseClaimsOf } from '../ledger/session-ended';
 import { shipStatus } from '../ledger/ship-status';
-import { ACCOUNT_CALLS, hostLicence, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
+import { ACCOUNT_CALLS, cloudSession, hostLicence, LICENCE_CALLS, licence, onLicenceChange, setPausedCensus } from '../licence';
 import { cliEntitled } from '../licence/entitled';
 import { createSuspender, installSuspender, isLapsed, releaseNow, runContainer } from '../licence/suspend';
 import { agentMcpConfigFile, createMcpRuntime } from '../mcp';
@@ -333,6 +333,7 @@ import { badgeDock, clearDockBadge } from '../notifications/dock-badge';
 import { createBuilderProgress, type BuilderProgress } from '../plans';
 import { registerPtyHost } from '../pty-host';
 import { onRelayStatus, relayStatus } from '../relay';
+import { relayHostsFor } from '../relay/hosts';
 import {
   keepMine,
   resetShipped,
@@ -2069,6 +2070,8 @@ export function registerIpcHandlers(
   handle(CH.serverLicence, () => hostLicence());
   // HIVE-429: this machine's own relay serving state; bound local only, answered locally when attached.
   handle(CH.relayStatus, () => relayStatus());
+  // HIVE-429: the servers of the account signed in here; bound local only, answered locally when attached.
+  handle(CH.relayHosts, () => relayHostsFor(cloudSession()));
   // HIVE-265: the gate's Quit. window.close() would leave the app running in the dock.
   handle(CH.appQuit, () => app.quit());
 
