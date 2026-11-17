@@ -1,5 +1,5 @@
 import { Switch as SwitchPrimitive } from 'radix-ui';
-import { useId, type Ref } from 'react';
+import { useId, type ReactNode, type Ref } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -24,8 +24,11 @@ interface SwitchProps {
   label: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
-  /** Rendered under the label, for the "why you might want this" line. */
-  description?: string;
+  /**
+   * Rendered under the label, for the "why you might want this" line. A node, so a locked switch can carry its
+   * reason and an Upgrade link (HIVE-429).
+   */
+  description?: ReactNode;
   disabled?: boolean;
   /** The control itself, for a caller that hands focus back to it (React 19: a plain prop). */
   ref?: Ref<HTMLButtonElement>;

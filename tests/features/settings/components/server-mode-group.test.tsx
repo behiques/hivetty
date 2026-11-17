@@ -14,12 +14,20 @@ import {
 } from '@lib/project-config';
 import type { LocalRemoteState, RemoteLinkStatus } from '@shared/ipc-contract';
 import { useHiveStore } from '@stores/hive-store';
+import { signIn } from '@lib/account';
+import type { RelayServeStatus } from '@shared/relay-contract';
+import type { EntitlementView } from '@hooks/use-entitlement';
 import {
   DEFAULT_REMOTE,
   type RemoteConfig,
   type ServerBindConfig,
   type ServerDevice,
 } from '@shared/config-contract';
+
+vi.mock('@lib/account', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@lib/account')>()),
+  signIn: vi.fn(() => Promise.resolve(null)),
+}));
 
 vi.mock('@lib/project-config', () => ({
   setServerConfig: vi.fn(() => Promise.resolve()),
@@ -1760,6 +1768,145 @@ describe('ServerModeGroup', () => {
    * the user from finding that out by clicking. Both directions, because the
    * two switches sit side by side and either one can be flipped first.
    */
+  describe('the relay switch (HIVE-429)', () => {
+    const renderRelay = (
+      overrides: {
+        enabled?: boolean;
+        relay?: { enabled: boolean };
+        relayStatus?: RelayServeStatus;
+        relayLock?: EntitlementView;
+        attachedServerName?: string | null;
+      } = {},
+    ) =>
+      render(
+        <ServerModeGroup
+          enabled={overrides.enabled ?? true}
+          bind={DEFAULT_BIND}
+          devices={[]}
+          remote={DEFAULT_REMOTE}
+          localRemote={null}
+          attachedServer={null}
+          attachedServerName={overrides.attachedServerName ?? null}
+          serving={false}
+          relay={overrides.relay ?? { enabled: true }}
+          relayStatus={overrides.relayStatus ?? { state: 'off' }}
+          relayLock={overrides.relayLock ?? { allowed: true }}
+        />,
+      );
+    const relaySwitch = () => screen.getByRole('switch', { name: 'Reachable through HiveTTY relay' });
+    const LOCKED: EntitlementView = {
+      allowed: false,
+      reason: 'Relay is in Solo and above',
+      plan: 'Solo',
+      upgradeUrl: '/account/plan',
+    };
+
+    beforeEach(() => {
+      vi.mocked(signIn).mockClear();
+    });
+
+    it('is absent while Serve is closed, and present, after Allowed origins, when it is open', () => {
+      const { unmount } = renderRelay({ enabled: false });
+      expect(screen.queryByRole('switch', { name: 'Reachable through HiveTTY relay' })).not.toBeInTheDocument();
+      unmount();
+
+      renderRelay();
+      const origins = screen.getByLabelText('Allowed origins');
+      expect(relaySwitch()).toBeChecked();
+      expect(origins.compareDocumentPosition(relaySwitch()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(
+        screen.getByText(
+          'Your paired devices reach this Mac from any network. This Mac dials out to the relay, so nothing connects in. The relay carries encrypted traffic it cannot read.',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('writes the switch through setServerConfig', async () => {
+      renderRelay({ relay: { enabled: false } });
+      expect(relaySwitch()).not.toBeChecked();
+      await userEvent.click(relaySwitch());
+      expect(setServerConfig).toHaveBeenCalledWith({ relay: { enabled: true } });
+    });
+
+    it('writes off too', async () => {
+      renderRelay({ relay: { enabled: true } });
+      await userEvent.click(relaySwitch());
+      expect(setServerConfig).toHaveBeenCalledWith({ relay: { enabled: false } });
+    });
+
+    it('is disabled while attached', () => {
+      renderRelay({ attachedServerName: 'mini' });
+      expect(relaySwitch()).toBeDisabled();
+    });
+
+    it('when locked, shows off and disabled with the reason and Upgrade, and no status line', () => {
+      renderRelay({ relay: { enabled: true }, relayLock: LOCKED, relayStatus: { state: 'connected', since: 1 } });
+      expect(relaySwitch()).not.toBeChecked();
+      expect(relaySwitch()).toBeDisabled();
+      expect(screen.getByText(/Relay is in Solo and above/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Upgrade' })).toBeInTheDocument();
+      expect(screen.getByRole('status', { name: 'Relay status' })).toBeEmptyDOMElement();
+    });
+
+    it('keeps an always-mounted status region, empty for off', () => {
+      renderRelay({ relayStatus: { state: 'off' } });
+      expect(screen.getByRole('status', { name: 'Relay status' })).toBeEmptyDOMElement();
+    });
+
+    it('shows no status line while the switch is off', () => {
+      renderRelay({ relay: { enabled: false }, relayStatus: { state: 'pending-launch' } });
+      expect(screen.getByRole('status', { name: 'Relay status' })).toBeEmptyDOMElement();
+    });
+
+    it('reads connected with the local time it connected', () => {
+      const since = new Date('2026-11-17T09:14:00').getTime();
+      renderRelay({ relayStatus: { state: 'connected', since } });
+      const time = new Date(since).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const region = screen.getByRole('status', { name: 'Relay status' });
+      expect(region).toHaveTextContent(`Connected to the relay since ${time}.`);
+      expect(region.querySelector('.bg-green')).not.toBeNull();
+    });
+
+    it('reads reconnecting with the seconds to the next try', () => {
+      renderRelay({ relayStatus: { state: 'reconnecting', nextAttemptAt: Date.now() + 8_000 } });
+      const region = screen.getByRole('status', { name: 'Relay status' });
+      expect(region).toHaveTextContent('The relay connection dropped. Next try in 8 s.');
+      expect(region.querySelector('.bg-amber')).not.toBeNull();
+    });
+
+    it('reads reconnecting without a time as trying again', () => {
+      renderRelay({ relayStatus: { state: 'reconnecting' } });
+      expect(screen.getByRole('status', { name: 'Relay status' })).toHaveTextContent(
+        'The relay connection dropped. Trying again.',
+      );
+    });
+
+    it.each([
+      [{ state: 'connecting' } as RelayServeStatus, 'Connecting to the relay…', 'bg-subtle'],
+      [{ state: 'locked' } as RelayServeStatus, 'Your plan does not include the relay.', 'bg-red'],
+      [
+        { state: 'replaced' } as RelayServeStatus,
+        'Another HiveTTY on this Mac took over the relay. Turn this off and on to take it back.',
+        'bg-red',
+      ],
+      [{ state: 'pending-launch' } as RelayServeStatus, 'Starts at next launch, with serving.', 'bg-subtle'],
+    ])('reads %j as its sentence', (relayStatus, sentence, dot) => {
+      renderRelay({ relayStatus });
+      const region = screen.getByRole('status', { name: 'Relay status' });
+      expect(region).toHaveTextContent(sentence);
+      expect(region.querySelector(`.${dot}`)).not.toBeNull();
+    });
+
+    it('reads sign-in with a Sign in button that signs in', async () => {
+      renderRelay({ relayStatus: { state: 'sign-in' } });
+      const region = screen.getByRole('status', { name: 'Relay status' });
+      expect(region).toHaveTextContent('Sign in again to use the relay.');
+      expect(region.querySelector('.bg-red')).not.toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+      expect(signIn).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('the serve/attach interlock', () => {
     it('disables the attach switch on a serving machine, and says why', () => {
       render(

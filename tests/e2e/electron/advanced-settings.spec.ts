@@ -623,6 +623,43 @@ test('turning server mode on reveals the bind fields and writes enabled: true', 
 });
 
 /**
+ * HIVE-429: "Reachable through HiveTTY relay" sits in the open Serve block. This run did not boot in server mode,
+ * so turning it on reads "Starts at next launch, with serving." (main's gate pushes `pending-launch`), and the
+ * value survives closing and reopening Settings because it is the file's.
+ */
+test('the relay switch appears under Serve, writes relay.enabled, and survives reopening Settings', async ({}, testInfo) => {
+  const { configPath } = seed((name) => testInfo.outputPath(name));
+  const app = await launchHive({
+    userDataDir: testInfo.outputPath('user-data'),
+    configPath,
+  });
+  const page = await app.firstWindow();
+  await page.waitForSelector('nav[aria-label="Places"]');
+
+  await openServerMode(page);
+  const relay = page.getByRole('switch', { name: 'Reachable through HiveTTY relay' });
+  await expect(relay).toBeHidden();
+
+  await page.getByRole('switch', { name: 'Serve this machine' }).click();
+  await expect(relay).toBeVisible();
+  await expect(relay).not.toBeChecked();
+
+  await relay.click();
+  await expect(relay).toBeChecked();
+  await expect(page.getByText('Starts at next launch, with serving.')).toBeVisible();
+  await expect
+    .poll(() => (read(configPath).server as { relay?: { enabled?: boolean } } | undefined)?.relay?.enabled)
+    .toBe(true);
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeHidden();
+  await openServerMode(page);
+  await expect(page.getByRole('switch', { name: 'Reachable through HiveTTY relay' })).toBeChecked();
+
+  await app.close();
+});
+
+/**
  * HIVE-144's attach half, the same group's second switch. Off by default and
  * discloses nothing — the same `toBeHidden()` distinction the serving switch's
  * own test above draws, for the identical reason: `attachOpen` gates a `?

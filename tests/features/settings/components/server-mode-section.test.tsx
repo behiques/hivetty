@@ -35,6 +35,30 @@ afterEach(() => {
 });
 
 describe('ServerModeSection', () => {
+  it('wires the relay switch, its status and its lock (HIVE-429)', async () => {
+    const base = emptySnapshot('/x');
+    install({ server: { ...base.server, enabled: true, relay: { enabled: true } } });
+    // No licence gate in this test: useEntitlement('relay') locks nothing.
+    (window as { hive?: unknown }).hive = {
+      relay: {
+        status: () => Promise.resolve({ state: 'pending-launch' }),
+        onStatus: () => () => undefined,
+      },
+      appInfo: () => Promise.resolve({ gateOff: true }),
+      licence: { state: () => Promise.resolve(null), onChanged: () => () => undefined },
+      config: { getRemote: () => new Promise(() => undefined) },
+    };
+    try {
+      render(<ServerModeSection />);
+      const relay = screen.getByRole('switch', { name: 'Reachable through HiveTTY relay' });
+      expect(relay).toBeChecked();
+      expect(relay).toBeEnabled();
+      expect(await screen.findByText('Starts at next launch, with serving.')).toBeInTheDocument();
+    } finally {
+      delete (window as { hive?: unknown }).hive;
+    }
+  });
+
   it('holds the serve and attach halves', () => {
     render(<ServerModeSection />);
 

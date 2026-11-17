@@ -1,11 +1,13 @@
 import { ServerModeGroup } from '@features/settings/components/server-mode-group';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
+import { useEntitlement } from '@hooks/use-entitlement';
 import {
   useAttachedServer,
   useLocalRemote,
   useProjectConfig,
   useServing,
 } from '@hooks/use-project-config';
+import { useRelayStatus } from '@hooks/use-relay-status';
 import { useRemoteLink } from '@stores/hive-store';
 
 /**
@@ -36,6 +38,9 @@ export function ServerModeSection() {
     while attached.
   */
   const localRemote = useLocalRemote();
+  /* HIVE-429: this machine's relay serving state, and whether the plan includes the relay. */
+  const relayStatus = useRelayStatus();
+  const relayLock = useEntitlement('relay');
 
   if (!snapshot) {
     return (
@@ -65,6 +70,9 @@ export function ServerModeSection() {
         attachedServerName={attachedServerName}
         serving={serving}
         link={remoteLink}
+        relay={snapshot.server.relay}
+        relayStatus={relayStatus}
+        relayLock={relayLock}
       />
     </div>
   );
