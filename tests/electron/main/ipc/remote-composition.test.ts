@@ -538,6 +538,16 @@ describe('acceptRelaySocket (HIVE-429)', () => {
     ).resolves.toEqual({ state: 'off' });
   });
 
+  it('answers relay:hosts locally, signed out when there is no cloud session', async () => {
+    registerIpcHandlers();
+    const handler = handledChannels.get(CH.relayHosts);
+    expect(handler).toBeDefined();
+    const mainFrame = { url: 'file:///out/renderer/index.html' };
+    await expect(
+      Promise.resolve(handler?.({ senderFrame: mainFrame, sender: { mainFrame } }, undefined)),
+    ).resolves.toEqual({ ok: false, reason: 'signed-out' });
+  });
+
   it('terminates the socket when there is no listener', () => {
     const socket = { terminate: vi.fn() };
     acceptRelaySocket(socket as never);
@@ -578,7 +588,7 @@ describe('remote composition (HIVE-143)', () => {
       elsewhere, by the real `ipcMain.handle` refusing a second handler for a
       channel — not by this number.
     */
-    expect(remoteRegistrySize()).toBe(168);
+    expect(remoteRegistrySize()).toBe(169);
   });
 
   it('re-registers every channel after a reset without throwing (HIVE-144)', () => {
@@ -1159,12 +1169,12 @@ describe('handlers that dereference the Electron event', () => {
 describe('the mode switch (HIVE-144)', () => {
   /**
    * Both modes bind the same channels: every `call` and every `notify` in the
-   * contract, and no `event` — 168 of them. Written once here because the two
+   * contract, and no `event` — 169 of them. Written once here because the two
    * surfaces agreeing on this number is itself the invariant. `remote-proxy
-   * .test.ts` and the registry case above own the question of whether 168 is
+   * .test.ts` and the registry case above own the question of whether 169 is
    * still the right number; this file only asks whether the two agree.
    */
-  const BOUND_CHANNELS = 168;
+  const BOUND_CHANNELS = 169;
 
   /**
    * `assertSender` compares `senderFrame` to `sender.mainFrame` by identity,

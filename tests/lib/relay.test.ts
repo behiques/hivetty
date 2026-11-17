@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { onRelayStatusChanged, readRelayStatus } from '@/lib/relay';
+import { listRelayHosts, onRelayStatusChanged, readRelayStatus } from '@/lib/relay';
 
 const bridge = (relay: Record<string, unknown>): void => {
   (window as { hive?: unknown }).hive = { relay };
@@ -30,6 +30,23 @@ describe('src/lib/relay', () => {
     const callback = vi.fn();
     expect(onRelayStatusChanged(callback)).toBe(dispose);
     expect(relay.onStatus).toHaveBeenCalledWith(callback);
+  });
+
+  it('lists no servers, unavailable, with no bridge (HIVE-429)', async () => {
+    await expect(listRelayHosts()).resolves.toEqual({ ok: false, reason: 'unavailable' });
+  });
+
+  it('passes the server list main answers through (HIVE-429)', async () => {
+    const answer = { ok: true, hosts: [{ serverId: 'dev_1', name: 'Studio mini', since: '2026-11-17T14:14:00Z' }] };
+    bridge({ hosts: vi.fn().mockResolvedValue(answer) });
+    await expect(listRelayHosts()).resolves.toEqual(answer);
+  });
+
+  it('answers unavailable rather than throwing when main refuses the list (HIVE-429)', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    bridge({ hosts: vi.fn().mockRejectedValue(new Error('no handler')) });
+    await expect(listRelayHosts()).resolves.toEqual({ ok: false, reason: 'unavailable' });
+    expect(error).toHaveBeenCalled();
   });
 
   it('answers off rather than throwing when main refuses', async () => {

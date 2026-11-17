@@ -13,12 +13,13 @@ import {
 } from '@shared/remote-contract';
 
 import { RemoteCallError, type RemoteClient } from '../../remote-client/socket';
-import { ACCOUNT_CALLS, LICENCE_CALLS } from '../licence';
+import { ACCOUNT_CALLS, cloudSession, LICENCE_CALLS } from '../licence';
 import { activateOnThisMachine } from '../notifications/activate-here';
 import { notificationDelivery } from '../notifications/delivery';
 import { badgeDock, clearDockBadgeWithLastWindow } from '../notifications/dock-badge';
 import { createRemoteToasts, type RemoteToasts } from '../notifications/remote-toast';
 import { relayStatus } from '../relay';
+import { relayHostsFor } from '../relay/hosts';
 import { checkForUpdatesInteractively, updateStatus } from '../updates';
 
 
@@ -180,6 +181,9 @@ function localAnswerFor(
     /* HIVE-429. This machine's own relay state; imported for `CH.updatesStatus`'s reason. */
     case CH.relayStatus:
       return () => relayStatus();
+    /* HIVE-429. The servers of the account signed in here, not on the server. */
+    case CH.relayHosts:
+      return () => relayHostsFor(cloudSession());
     default:
       return null;
   }

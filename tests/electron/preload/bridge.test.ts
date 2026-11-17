@@ -1069,6 +1069,11 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
 });
 
 describe('the relay status verbs (HIVE-429)', () => {
+  it('relay.hosts invokes relay:hosts', async () => {
+    await (relay().hosts as () => Promise<unknown>)();
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.relayHosts);
+  });
+
   it('relay.status invokes relay:status', async () => {
     await (relay().status as () => Promise<unknown>)();
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.relayStatus);

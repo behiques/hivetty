@@ -166,7 +166,7 @@ import type {
 } from './notification-contract';
 import type { OrgSummary } from './orgs';
 import type { PlanChangedEvent, PlansSnapshot } from './plan-contract';
-import type { RelayServeStatus } from './relay-contract';
+import type { RelayHostsResult, RelayServeStatus } from './relay-contract';
 import type {
   SessionBranchEvent,
   SessionClearedEvent,
@@ -931,6 +931,8 @@ export const CH = {
   relayStatus: 'relay:status',
   /** HIVE-429: push, the serving relay state changed. Local-only, never from a socket. */
   relayStatusChanged: 'relay:status-changed',
+  /** HIVE-429: this account's Macs serving the relay now, for Connect through relay. Process-local. */
+  relayHosts: 'relay:hosts',
   /** HIVE-291: this account's orgs, from the cloud; `[]` when it cannot say. Process-local. */
   accountOrgs: 'account:orgs',
   /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. Process-local. */
@@ -2454,6 +2456,8 @@ export interface HiveBridge {
   relay: {
     status(): Promise<RelayServeStatus>;
     onStatus(callback: (status: RelayServeStatus) => void): () => void;
+    /** This account's Macs serving the relay now (HIVE-429), for the Connect through relay picker. */
+    hosts(): Promise<RelayHostsResult>;
   };
   remote: {
     /**

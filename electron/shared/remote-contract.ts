@@ -103,8 +103,10 @@ import { isThisMachineAction } from './notification-contract';
  *   is the binary hello; today's JSON frames travel inside the channel unchanged. A 44 peer cannot speak to a 45 one.
  * 45 → 46 (HIVE-429): `relay:status` (call) and `relay:status-changed` (event), both this machine's own and never
  *   carried on the socket.
+ * 46 → 47 (HIVE-429): `relay:hosts` (call, process-local); `RemoteConfig` and `SetRemoteRequest` gained `via` and
+ *   `relayServerId`.
  */
-export const REMOTE_PROTOCOL_VERSION = 46;
+export const REMOTE_PROTOCOL_VERSION = 47;
 
 /**
  * What a frame is for.
@@ -306,6 +308,7 @@ export const FRAME_KIND = {
   // HIVE-429: process-local and local-only; graded so the renderer can call and subscribe, not so a socket can.
   [CH.relayStatus]: 'call',
   [CH.relayStatusChanged]: 'event',
+  [CH.relayHosts]: 'call',
   [CH.accountOrgs]: 'call',
   [CH.accountSwitchOrg]: 'call',
   [CH.accountBilling]: 'call',
@@ -655,6 +658,8 @@ export const CHANNEL_AUTHORIZATION = {
   // HIVE-429: a read of this machine's relay state, and its push.
   [CH.relayStatus]: 'read',
   [CH.relayStatusChanged]: 'read',
+  // HIVE-429: the servers of the account signed in here; a read, never answered by a server.
+  [CH.relayHosts]: 'read',
   [CH.accountOrgs]: 'read',
   [CH.accountSwitchOrg]: 'execute',
   [CH.accountBilling]: 'read',
@@ -1051,6 +1056,8 @@ const PROCESS_LOCAL_REFUSALS = {
     "account:open-invoice opens an invoice in the answering machine's browser. A server refuses to open its own account's invoices on a peer's say-so; the asking machine opens its own.",
   [CH.relayStatus]:
     'relay:status describes the machine you are sitting at, so it is answered there and never by a server.',
+  [CH.relayHosts]:
+    'relay:hosts lists the servers of the account signed in on the machine you are sitting at, so it is answered there and never by a server.',
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**
