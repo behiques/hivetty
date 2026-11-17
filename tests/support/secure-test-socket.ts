@@ -26,6 +26,7 @@ export class SecureTestSocket extends EventEmitter {
   /** The plaintext the server answered the hello with, when it answered in text. */
   plaintextReply: string | null = null;
   readonly framesAfterHandshake: { isBinary: boolean }[] = [];
+  private readonly credentials: { deviceId: string; token: string } | null;
   private channel: SecureSocket | null = null;
   private handshaking = false;
   private readonly queued: string[] = [];
@@ -40,9 +41,13 @@ export class SecureTestSocket extends EventEmitter {
     this.raw.on('open', () => this.emit('open'));
     this.raw.on('close', (code: number) => this.emit('close', code));
     this.raw.on('error', (cause: Error) => this.emit('error', cause));
+    // Forwarded only when someone listens: `ws` emits 'error' instead when nothing handles it.
+    this.on('newListener', (event: string) => {
+      if (event === 'unexpected-response' && this.listenerCount('unexpected-response') === 0) {
+        this.raw.on('unexpected-response', (request, response) => this.emit('unexpected-response', request, response));
+      }
+    });
   }
-
-  private readonly credentials: { deviceId: string; token: string } | null;
 
   get readyState(): number {
     return this.raw.readyState;
