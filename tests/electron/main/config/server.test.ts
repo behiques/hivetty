@@ -27,11 +27,13 @@ const resolved = (parsed: {
     enabled?: boolean;
     bind?: { host?: string; port?: number; allowedOrigins?: readonly string[] };
     devices?: readonly unknown[];
+    relay?: { enabled?: boolean };
   };
 }) => ({
   ...DEFAULT_SERVER,
   ...parsed.server,
   bind: { ...DEFAULT_SERVER.bind, ...parsed.server?.bind },
+  relay: { ...DEFAULT_SERVER.relay, ...parsed.server?.relay },
 });
 
 const doc = (extra: object) =>
@@ -49,6 +51,7 @@ describe('server resolution', () => {
       enabled: false,
       bind: DEFAULT_SERVER.bind,
       devices: [],
+      relay: { enabled: false },
     });
   });
 
@@ -59,6 +62,7 @@ describe('server resolution', () => {
       enabled: true,
       bind: DEFAULT_SERVER.bind,
       devices: [],
+      relay: { enabled: false },
     });
   });
 
@@ -69,6 +73,7 @@ describe('server resolution', () => {
       enabled: false,
       bind: DEFAULT_SERVER.bind,
       devices: [],
+      relay: { enabled: false },
     });
   });
 
@@ -211,6 +216,7 @@ describe('setServer', () => {
       enabled: true,
       bind: DEFAULT_SERVER.bind,
       devices: [],
+      relay: { enabled: false },
     });
     expect(onDisk().server).toEqual({ enabled: true });
   });
@@ -314,6 +320,60 @@ describe('setServer and the bind block', () => {
     expect(onDisk().server).toEqual({
       bind: { host: '100.101.102.103', futureKey: 1, port: 7433 },
     });
+  });
+});
+
+describe('setServer and the relay block (HIVE-429)', () => {
+  it('resolves relay off on a file that names none', () => {
+    seed('{\n  "version": 2\n}\n');
+
+    const snapshot = setServer({ enabled: true });
+
+    expect(snapshot.server.relay).toEqual({ enabled: false });
+    expect(onDisk().server).toEqual({ enabled: true });
+  });
+
+  it('writes relay.enabled and leaves enabled, bind and devices as they were', () => {
+    seed(
+      '{\n  "version": 2,\n  "server": { "enabled": true, "bind": { "host": "100.101.102.103" }, "devices": [] }\n}\n',
+    );
+
+    const snapshot = setServer({ relay: { enabled: true } });
+
+    expect(snapshot.server.relay).toEqual({ enabled: true });
+    expect(snapshot.server.enabled).toBe(true);
+    expect(snapshot.server.bind.host).toBe('100.101.102.103');
+    expect(onDisk().server).toEqual({
+      enabled: true,
+      bind: { host: '100.101.102.103' },
+      devices: [],
+      relay: { enabled: true },
+    });
+  });
+
+  it('preserves a sibling inside relay that this build does not know', () => {
+    seed('{\n  "version": 2,\n  "server": { "relay": { "enabled": true, "futureKey": 1 } }\n}\n');
+
+    setServer({ relay: { enabled: false } });
+
+    expect(onDisk().server).toEqual({ relay: { enabled: false, futureKey: 1 } });
+  });
+
+  it('replaces a relay that is not an object', () => {
+    seed('{\n  "version": 2,\n  "server": { "relay": "on" }\n}\n');
+
+    setServer({ relay: { enabled: true } });
+
+    expect(onDisk().server).toEqual({ relay: { enabled: true } });
+  });
+
+  it('leaves relay alone when only enabled is set', () => {
+    seed('{\n  "version": 2,\n  "server": { "relay": { "enabled": true } }\n}\n');
+
+    const snapshot = setServer({ enabled: true });
+
+    expect(snapshot.server.relay).toEqual({ enabled: true });
+    expect(onDisk().server).toEqual({ enabled: true, relay: { enabled: true } });
   });
 });
 

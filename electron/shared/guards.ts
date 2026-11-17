@@ -1598,7 +1598,7 @@ function assertServerBindPort(value: unknown, label: string): number {
  * arriving on this channel.
  */
 export function parseSetServerRequest(input: unknown): SetServerRequest {
-  const raw = assertShape(input, [], 'setServer', ['enabled', 'bind']);
+  const raw = assertShape(input, [], 'setServer', ['enabled', 'bind', 'relay']);
 
   let bind: Partial<ServerBindConfig> | undefined;
   if (raw.bind !== undefined) {
@@ -1635,9 +1635,20 @@ export function parseSetServerRequest(input: unknown): SetServerRequest {
     return fail(`setServer.enabled: expected a boolean, got ${describe(raw.enabled)}`);
   }
 
+  // HIVE-429: the relay switch, validated as `bind` is, one field at a time.
+  let relay: SetServerRequest['relay'];
+  if (raw.relay !== undefined) {
+    const rawRelay = assertShape(raw.relay, [], 'setServer.relay', ['enabled']);
+    if (rawRelay.enabled !== undefined && typeof rawRelay.enabled !== 'boolean') {
+      return fail(`setServer.relay.enabled: expected a boolean, got ${describe(rawRelay.enabled)}`);
+    }
+    relay = rawRelay.enabled !== undefined ? { enabled: rawRelay.enabled as boolean } : {};
+  }
+
   const request: SetServerRequest = {
     ...(raw.enabled !== undefined ? { enabled: raw.enabled as boolean } : {}),
     ...(bind !== undefined && Object.keys(bind).length > 0 ? { bind } : {}),
+    ...(relay !== undefined && Object.keys(relay).length > 0 ? { relay } : {}),
   };
 
   if (Object.keys(request).length === 0) {

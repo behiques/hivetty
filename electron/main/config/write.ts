@@ -331,6 +331,8 @@ export function writeConfig(
         ...validated.server,
         bind: { ...DEFAULT_SERVER.bind, ...validated.server?.bind },
         devices: validated.server?.devices ?? [],
+        // One level down, as `bind` is (HIVE-429).
+        relay: { ...DEFAULT_SERVER.relay, ...validated.server?.relay },
       },
       /*
         Resolved here as well as in `loadConfig` (HIVE-144), for the same
