@@ -69,11 +69,15 @@ export function parseIncoming(text: string): string | null {
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
 
+/** Exactly the routes `RELAY_PATH` builds: a path is pasted after the host, so nothing else may reach it. */
+const RELAY_ROUTE = /^\/relay\/(?:serve|hosts|(?:attach|accept)\/[A-Za-z0-9_-]{1,64})$/;
+
 /**
  * The relay socket for `path`, on the cloud the app signs in to. The bearer token goes only to a URL this
- * built: TLS, or loopback for a self-hosted base and the test stub. Anything else throws.
+ * built: TLS, or loopback for a self-hosted base and the test stub, and a relay route. Anything else throws.
  */
 export function relaySocketUrl(cloudBase: string, path: string): string {
+  if (!RELAY_ROUTE.test(path)) throw new Error('Not a relay path.');
   let base: URL;
   try {
     base = new URL(cloudBase);

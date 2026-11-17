@@ -108,6 +108,21 @@ describe('relaySocketUrl', () => {
     );
   });
 
+  it('composes with every relay path', () => {
+    const base = 'https://api.hivetty.dev';
+    expect(relaySocketUrl(base, RELAY_PATH.hosts)).toBe('wss://api.hivetty.dev/relay/hosts');
+    expect(relaySocketUrl(base, RELAY_PATH.attach('dev_1'))).toBe('wss://api.hivetty.dev/relay/attach/dev_1');
+    expect(relaySocketUrl(base, RELAY_PATH.accept('c-1'))).toBe('wss://api.hivetty.dev/relay/accept/c-1');
+  });
+
+  // A path is pasted after the host: one that is not a relay route could move the host, the userinfo or the port.
+  it.each(['.evil.com/x', '@evil.com/x', ':9/x', 'relay/serve', '/relay/serve/x', '/relay/attach/a/b', '/other', ''])(
+    'refuses the path %j',
+    (path) => {
+      expect(() => relaySocketUrl('https://api.hivetty.dev', path)).toThrow('Not a relay path.');
+    },
+  );
+
   it.each(['nonsense', ''])('refuses the non-URL %j', (base) => {
     expect(() => relaySocketUrl(base, RELAY_PATH.serve)).toThrow('The cloud address is not a URL.');
   });
