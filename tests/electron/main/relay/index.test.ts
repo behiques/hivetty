@@ -158,7 +158,35 @@ describe('startRelay', () => {
     expect(relayStatus()).toEqual({ state: 'locked', reason: 'Relay is in Solo and above' });
   });
 
-  it.each(['replaced', 'sign-in', 'locked'] as const)(
+  it('holds a replaced loop until the switch goes off and on, so two installs never trade the socket', () => {
+    const ctx = start();
+    ctx.loopDeps().onStatus({ state: 'replaced' });
+    ctx.fireConfig();
+    ctx.fireLicence();
+    ctx.fireAccount();
+    expect(ctx.loop.start).toHaveBeenCalledTimes(1);
+    expect(relayStatus()).toEqual({ state: 'replaced' });
+
+    ctx.state.enabled = false;
+    ctx.fireConfig();
+    expect(relayStatus()).toEqual({ state: 'off' });
+    ctx.state.enabled = true;
+    ctx.fireConfig();
+    expect(ctx.loop.start).toHaveBeenCalledTimes(2);
+  });
+
+  it('publishes an unchanged resting status once', () => {
+    const heard: RelayServeStatus[] = [];
+    const unsubscribe = onRelayStatus((status) => heard.push(status));
+    const ctx = start({}, { account: SIGNED_OUT });
+    ctx.fireConfig();
+    ctx.fireLicence();
+    ctx.fireAccount();
+    unsubscribe();
+    expect(heard).toEqual([{ state: 'sign-in' }]);
+  });
+
+  it.each(['sign-in', 'locked'] as const)(
     'restarts a loop that halted itself with %s on the next change that still says run',
     (state) => {
       const ctx = start();
@@ -204,15 +232,16 @@ describe('startRelay', () => {
 
   it('rests at sign-in, without throwing, before the licence has a session', async () => {
     let loopDeps: RelayServeDeps | null = null;
-    const ctx = start({
+    const injected = { start: vi.fn(), stop: vi.fn() };
+    start({
       session: () => null,
       createServe: (deps) => {
         loopDeps = deps;
-        return { start: vi.fn(), stop: vi.fn() };
+        return injected;
       },
     });
     expect(relayStatus()).toEqual({ state: 'sign-in' });
-    expect(ctx.loop.start).not.toHaveBeenCalled();
+    expect(injected.start).not.toHaveBeenCalled();
     const deps = loopDeps as RelayServeDeps | null;
     expect(() => deps?.url('/relay/serve')).toThrow();
     await expect(deps?.token()).resolves.toBeNull();

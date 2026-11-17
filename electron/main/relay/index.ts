@@ -40,21 +40,36 @@ export function onRelayStatus(listener: (status: RelayServeStatus) => void): () 
   return () => listeners.delete(listener);
 }
 
+function same(a: RelayServeStatus, b: RelayServeStatus): boolean {
+  return a.state === b.state && a.since === b.since && a.nextAttemptAt === b.nextAttemptAt && a.reason === b.reason;
+}
+
 function publish(status: RelayServeStatus): void {
+  // An unrelated config write re-evaluates the gate; the same resting status is not news.
+  if (same(status, current)) return;
   current = status;
   for (const listener of listeners) listener(status);
 }
 
-/** The loop's own verdicts that end it: another dial would be answered the same way. */
+/**
+ * The loop's own verdicts that end it: another dial would be answered the same way. `sign-in` and `locked`
+ * restart on the next evaluation that still says run; `replaced` waits for the switch to go off and on.
+ */
 const HALTED = new Set<RelayServeStatus['state']>(['sign-in', 'locked', 'replaced']);
 
 /**
  * Decides whether the serve loop runs (HIVE-429): the switch, server mode at boot, sign-in, and the `relay`
- * entitlement. Re-evaluated on every config, account and licence change.
+ * entitlement. Re-evaluated on every config, account and licence change. A `replaced` halt holds until the
+ * switch is turned off and on, as the status line tells the person.
  */
 export function startRelay(deps: RelayDeps): { stop(): void } {
   const session = deps.session();
   let running = false;
+  /**
+   * Set by a `replaced` halt and cleared only by the switch going off: another install of this device holds
+   * the relay, and retaking it on any config or licence event would trade the socket between the two.
+   */
+  let replaced = false;
 
   const serve = (deps.createServe ?? createRelayServe)({
     url: (path) => relaySocketUrl(session?.baseUrl ?? '', path),
@@ -63,6 +78,7 @@ export function startRelay(deps: RelayDeps): { stop(): void } {
     onStatus: (status) => {
       // The loop stopped itself; the next evaluation that still wants it starts it again.
       if (HALTED.has(status.state)) running = false;
+      if (status.state === 'replaced') replaced = true;
       publish(status);
     },
   });
@@ -77,9 +93,10 @@ export function startRelay(deps: RelayDeps): { stop(): void } {
   };
 
   const sync = (): void => {
+    if (!deps.enabled()) replaced = false;
     const rest = resting();
     if (rest === null) {
-      if (!running) {
+      if (!running && !replaced) {
         running = true;
         serve.start();
       }
