@@ -55,6 +55,7 @@ import {
   type ResumePoint,
   type ServerFrame,
 } from '../../electron/shared/remote-contract';
+import { startStubCloud, type StubCloud } from '../e2e/electron/fixtures/stub-cloud';
 
 /**
  * Server-mode conformance (HIVE-142): the eight acceptance criteria plus the
@@ -214,6 +215,20 @@ import {
  * `HIVE_CONFIG_PATH`, or a leftover `HIVE_LIVE_*_PROOF`, cannot leak into a
  * child and make this suite pass for the wrong reason.
  *
+ * ## Every launch is licensed against a stub cloud (HIVE-428)
+ *
+ * Since HIVE-265 a served app binds nothing until it holds a licence
+ * (`electron/main/licence/serve-gate.ts`), and a scrubbed environment gives it
+ * none. So the outermost `beforeAll` starts one e2e stub cloud
+ * (`tests/e2e/electron/fixtures/stub-cloud.ts`) for the whole file, on the
+ * `team` plan, and every process {@link spawnApp} and {@link runOneShot} start
+ * gets, after the scrub, the stub's two variables: `HIVETTY_CLOUD_URL` (where
+ * the app signs in and fetches its lease) and `HIVETTY_LEASE_KEYS` (the public
+ * key that lease verifies against). Both also get `--use-mock-keychain`, so the
+ * account one launch stores on a `--user-data-dir` is readable by the next
+ * launch on that profile, with no Keychain prompt to hang a headless run. Each
+ * served profile signs in through the `--login` one-shot before it serves.
+ *
  * ## Evidence
  *
  * A `vitest run` off a TTY (a background shell) prints totals only, so a
@@ -302,6 +317,16 @@ async function waitForListener(host: string, port: number, deadlineMs: number): 
     await delay(200);
   }
   throw new Error(`timed out waiting for ${host}:${String(port)} to accept connections`);
+}
+
+/** Polls a raw TCP connect across `windowMs`; true if any attempt was accepted. The negative of {@link waitForListener}, over the same window, so a late bind is seen. */
+async function acceptsWithin(host: string, port: number, windowMs: number): Promise<boolean> {
+  try {
+    await waitForListener(host, port, windowMs);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** A loopback TCP relay in front of a served app, see {@link openRelay}. */
@@ -501,6 +526,15 @@ interface ProcessRecord {
 
 const processLog: ProcessRecord[] = [];
 
+/** The stub cloud every launch signs in and leases against — started by the outermost `beforeAll`, see the header's HIVE-428 section. */
+let stub: StubCloud | undefined;
+
+/** The stub's environment, for a spawn. Throws if the outermost `beforeAll` has not started it. */
+function stubEnv(): StubCloud['env'] {
+  if (!stub) throw new Error('the stub cloud is not running: the outermost beforeAll starts it');
+  return stub.env;
+}
+
 /** Every scratch `config.json` path this run wrote to — part of the evidence, and a second, independent confirmation that none of them is one of {@link REAL_CONFIG_PATHS}. */
 const scratchConfigPaths: string[] = [];
 
@@ -531,10 +565,10 @@ function spawnApp(
   userDataDir: string,
 ): { child: ChildProcess; record: ProcessRecord } {
   assertScratchPath(configPath);
-  const args = [MAIN_ENTRY, `--user-data-dir=${userDataDir}`, ...extraArgs];
+  const args = [MAIN_ENTRY, `--user-data-dir=${userDataDir}`, '--use-mock-keychain', ...extraArgs];
   const child = spawn(electronBinary, args, {
     // HIVE_BACKGROUND: the launch never takes the person's focus or the Dock (`electron/main/background.ts`).
-    env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, HIVE_E2E: '1', HIVE_BACKGROUND: '1' }),
+    env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, HIVE_E2E: '1', HIVE_BACKGROUND: '1', ...stubEnv() }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -617,6 +651,8 @@ async function bootServerApp(
    */
   expect: 'listening' | 'refusing' = 'listening',
 ): Promise<BootedApp> {
+  // HIVE-428: a profile serves nothing until it holds a licence. Once, before the retry loop: the profile keeps it.
+  await signIn(configPath, userDataDir);
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const port = await freePort();
@@ -666,9 +702,9 @@ function runOneShot(
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   assertScratchPath(configPath);
   return new Promise((resolve, reject) => {
-    const fullArgs = [MAIN_ENTRY, ...args, `--user-data-dir=${userDataDir}`];
+    const fullArgs = [MAIN_ENTRY, ...args, `--user-data-dir=${userDataDir}`, '--use-mock-keychain'];
     const child = spawn(electronBinary, fullArgs, {
-      env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath }),
+      env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, ...stubEnv() }),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -698,6 +734,62 @@ function runOneShot(
       record.code = code;
       record.signal = signal;
       resolve({ code, stdout: record.stdout, stderr: record.stderr });
+    });
+  });
+}
+
+/**
+ * Signs the profile in through the `--login` one-shot against the stub cloud
+ * (HIVE-428), so a `--server` launch on it holds a licence and binds. Same
+ * environment and arguments as {@link runOneShot}. When the one-shot prints
+ * its device code the stub is told to approve it; resolves once it exits 0
+ * having printed `Signed in as` (`electron/main/licence/account-command.ts`),
+ * and rejects with its stdout and stderr on anything else, or after 30s.
+ */
+function signIn(configPath: string, userDataDir: string, timeoutMs = 30_000): Promise<void> {
+  assertScratchPath(configPath);
+  const env = stubEnv();
+  return new Promise((resolve, reject) => {
+    const args = ['--login'];
+    const fullArgs = [MAIN_ENTRY, ...args, `--user-data-dir=${userDataDir}`, '--use-mock-keychain'];
+    const child = spawn(electronBinary, fullArgs, {
+      env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, ...env }),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const record: ProcessRecord = {
+      label: 'one-shot --login',
+      args: fullArgs,
+      code: null,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    };
+    processLog.push(record);
+    const output = (): string => `stdout:\n${record.stdout || '(empty)'}\nstderr:\n${record.stderr || '(empty)'}`;
+
+    let approved = false;
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`--login timed out after ${String(timeoutMs)}ms. ${output()}`));
+    }, timeoutMs);
+    child.stdout?.on('data', (chunk: Buffer) => {
+      record.stdout += chunk.toString();
+      if (!approved && record.stdout.includes('enter the code')) {
+        approved = true;
+        stub?.controls.approveDeviceCode();
+      }
+    });
+    child.stderr?.on('data', (chunk: Buffer) => (record.stderr += chunk.toString()));
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('exit', (code, signal) => {
+      clearTimeout(timer);
+      record.code = code;
+      record.signal = signal;
+      if (code === 0 && record.stdout.includes('Signed in as')) resolve();
+      else reject(new Error(`--login exited ${String(code)} (${String(signal)}). ${output()}`));
     });
   });
 }
@@ -1491,6 +1583,9 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       throw new Error(`${MAIN_ENTRY} is missing. Run \`pnpm desktop:build\` before \`pnpm test:server\`.`);
     }
     evidenceDir = mkdtempSync(join(tmpdir(), 'hive-live-server-evidence-'));
+    // HIVE-428: one stub cloud for the file; `team` so every lease it issues is licensed.
+    stub = await startStubCloud();
+    stub.controls.setPlan('team');
 
     /*
       Case 22's clock starts here — see {@link DeadlineRun} for why it is
@@ -1540,6 +1635,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
   afterAll(async () => {
     deadlineRun?.client.close();
     await stopApp(deadlineRun?.app);
+    await stub?.close();
     const findingPath = join(evidenceDir, 'finding.json');
     writeFileSync(
       findingPath,
@@ -1558,6 +1654,66 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
     );
     console.info('EVIDENCE ', findingPath);
   }, 30_000);
+
+  /*
+    The gate every other case depends on (HIVE-265, `serve-gate.ts`): a profile
+    that has never held a lease serves nothing. This profile is never signed in,
+    so its `--server` must leave the port closed — which is why every served
+    profile below signs in first.
+  */
+  it('a served app with no licence does not bind', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hive-live-server-unlicensed-'));
+    const configPath = join(dir, 'config.json');
+    const userDataDir = join(dir, 'user-data');
+    assertScratchPath(configPath);
+    scratchConfigPaths.push(configPath);
+    const port = await freePort();
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        version: CONFIG_VERSION,
+        shell: '/bin/sh',
+        projects: [],
+        server: { bind: { host: '127.0.0.1', port, allowedOrigins: [] }, devices: [] },
+      }),
+      'utf8',
+    );
+    const { child } = spawnApp(['--server'], configPath, userDataDir);
+    try {
+      // The signed-in sibling allows 30s to bind; a refusal is only proven over the same window.
+      expect(await acceptsWithin('127.0.0.1', port, 30_000)).toBe(false);
+      // Still running: a closed port from an app that crashed would prove nothing about the gate.
+      expect(child.exitCode).toBeNull();
+    } finally {
+      await stopApp(child);
+    }
+  }, 50_000);
+
+  it('a signed-in served app binds', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hive-live-server-licensed-'));
+    const configPath = join(dir, 'config.json');
+    const userDataDir = join(dir, 'user-data');
+    assertScratchPath(configPath);
+    scratchConfigPaths.push(configPath);
+    const port = await freePort();
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        version: CONFIG_VERSION,
+        shell: '/bin/sh',
+        projects: [],
+        server: { bind: { host: '127.0.0.1', port, allowedOrigins: [] }, devices: [] },
+      }),
+      'utf8',
+    );
+    await signIn(configPath, userDataDir);
+    const { child } = spawnApp(['--server'], configPath, userDataDir);
+    try {
+      await waitForListener('127.0.0.1', port, 30_000);
+    } finally {
+      await stopApp(child);
+    }
+  }, 90_000);
 
   describe('the handshake, the CLI in a second process, and the token never on disk', () => {
     let dir: string;
