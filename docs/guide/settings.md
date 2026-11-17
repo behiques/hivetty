@@ -183,6 +183,11 @@ Under **Environment**. **Serve this machine**, paired devices, and **Attach to a
 ([Remote](remote.md)). While this window is attached, the bind fields and the device roster are
 the server's, and the pane says so.
 
+- **Reachable through HiveTTY relay**, under **Serve this machine**: your other Macs reach this one
+  from any network, through HiveTTY's relay.
+- **Connect through relay**, under **Attach to a server**: pick one of your serving Macs in
+  **Server** instead of typing an address and port.
+
 ## Account center
 
 The card at the top of the Settings nav, with your avatar, name and plan, opens the **Account center**. So does

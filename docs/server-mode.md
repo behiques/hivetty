@@ -519,6 +519,50 @@ Headscale's default config still uses Tailscale's public DERP relays. To keep
 relayed traffic off Tailscale's servers as well, enable Headscale's embedded
 DERP server and drop the default map.
 
+## Through the HiveTTY relay
+
+**What it is for.** A server you own, reached from another network with no
+Tailscale, no port forward and no inbound connection on either machine. Both
+Macs dial out to HiveTTY's relay, and the relay joins the two connections.
+
+**Turning it on.**
+
+- On the server: **Settings › Machines › Server mode**, open **Serve this
+  machine**, then turn on **Reachable through HiveTTY relay**
+  (`server.relay.enabled`). It needs the app running in server mode, signed in
+  to HiveTTY, on a plan that includes the relay. Turned on in a window that is
+  not serving, it reads *Starts at next launch, with serving.*
+- On the client: open **Attach to a server**, turn on **Connect through
+  relay** (`remote.via: "relay"`), pick the server in **Server**
+  (`remote.relayServerId`), then **Attach**. **Refresh** reads the list again.
+  The list holds your Macs that hold the relay right now, named as in
+  **Account › Devices**. A server you saved that is not online reads *Saved
+  server · offline*.
+- Pairing is unchanged. The client still needs that Mac's device id and token
+  from `hivetty --pair`.
+
+**A headless server** signs in with `hivetty --login` (see [Sign the server
+in](#sign-the-server-in)).
+
+**Where the relay is.** It is the same address the app signs in to, over
+`wss`. For a self-hosted cloud, `account.cloudUrl` moves both. There is no
+separate relay address to configure.
+
+**What the relay can see:** which account, which device, when, and how many
+bytes. **What it cannot see:** anything inside the encrypted channel, which is
+terminal output, keystrokes, file contents and the pairing token. The Noise
+handshake runs end to end between the two Macs, through the relay, exactly as
+it does on a direct attach.
+
+**The same-person rule.** A client lists and reaches only Macs signed in to
+its own HiveTTY account, and still needs that Mac's pairing token. Another
+account's server is neither listed nor reachable.
+
+**When it drops**, the client reconnects on the usual schedule (1, 2, 4, 8, 15
+and 30 seconds, then every 30) and terminals resume where they left off. While
+the server is not serving, the reconnecting banner says *The server is
+offline.*
+
 ## Exposure
 
 The controls, in order of how much they carry:
@@ -578,3 +622,9 @@ bytes at normal flush sizes.
 | Server never updates | Something is always live. Check for a long-lived session or a busy agent schedule, or update by hand. |
 | `hivetty --login` exits 3 | The keychain is locked: nobody is logged in to the Mac's desktop. Log in once, in person or over Screen Sharing, so the login keychain unlocks, then run it again. See [The keychain requirement](#the-keychain-requirement). |
 | Menu-bar item shows the text "Hive" | The bundle is missing `Contents/Resources/tray/`. Reinstall. |
+| *Sign in again to use the relay* | The relay refused the account (4401): this Mac is signed out, or the device was removed in **Account › Devices**. Sign in again. |
+| *Your plan does not include the relay*, or a locked relay switch | The relay refused the plan (4403). **Upgrade**, or attach directly. |
+| *The server is offline* | The relay has no server for that id (4404): the server is not running, not in server mode, signed out, or its **Reachable through HiveTTY relay** switch is off. The client keeps retrying. |
+| *Another HiveTTY on this Mac took over the relay* | Two installs signed in as one device both tried to serve (4409). Turn **Reachable through HiveTTY relay** off and on in the one that should serve. |
+| *The relay is limiting new connections* | Too many attaches in a short time (4429). The client retries on its schedule. |
+| A relay attach reconnects every few minutes with no message | The relay restarted, or the other side dropped (1012 or 1001). Nothing to do; terminals resume. |
