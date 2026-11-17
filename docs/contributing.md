@@ -64,7 +64,7 @@ draws cannot be faked. Each costs time, some cost tokens.
 | `pnpm test:session:copilot` | interactive Copilot sessions: status, a permission card, an Esc denial, resume by the pinned id, the user's own hooks and MCP servers, the home untouched (copilot 1.0.105, signed in) |
 | `pnpm test:agent:copilot` | headless Copilot agent runs end to end: pinned id, resume, the fence, receipts, `~/.copilot` untouched (copilot 1.0.105, `COPILOT_GITHUB_TOKEN` set) |
 | `pnpm test:container` | containerised sessions and agents |
-| `pnpm test:server` | server mode across two real app processes |
+| `pnpm test:server` | server mode across two real app processes, direct and through a stub relay |
 
 [`AGENTS.md`](../AGENTS.md) has what each covers in full.
 

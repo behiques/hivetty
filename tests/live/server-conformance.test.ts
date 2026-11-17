@@ -1,6 +1,7 @@
 // @vitest-environment node
 import assert from 'node:assert/strict';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -42,6 +43,7 @@ import {
   type RemoteLinkStatus,
 } from '../../electron/shared/ipc-contract';
 import { type HiveNotification } from '../../electron/shared/notification-contract';
+import { RELAY_CLOSE, RELAY_PATH, type RelayHostsResult } from '../../electron/shared/relay-contract';
 import {
   CALL_DEADLINE_MS,
   CALL_TIMEOUT_CODE,
@@ -236,6 +238,33 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  * account one launch stores on a `--user-data-dir` is readable by the next
  * launch on that profile, with no Keychain prompt to hang a headless run. Each
  * served profile signs in through the `--login` one-shot before it serves.
+ *
+ * ## Two apps that meet only through the relay (HIVE-286)
+ *
+ * Cases 23a to 23g boot a serving app with `server.relay.enabled` and an
+ * ordinary attaching app, and the client is never told the server's port: the
+ * only route between them is a stub relay on the same stub cloud
+ * (`tests/e2e/electron/fixtures/stub-relay.ts`), which speaks the paths,
+ * control frame, close codes and ping of `electron/shared/relay-contract.ts`
+ * and records every message it passes. The block pairs, attaches through the
+ * relay, types into the server's shell, cuts the relay and watches the link
+ * come back by itself, then revokes the device and sees the refusal cross the
+ * relay from inside the encrypted channel. Three readings a reader would
+ * otherwise question:
+ *
+ * - "Nothing the relay passed can be read" looks for the pairing token, every
+ *   bearer the stub saw, the hostname and the typed marker, and for a JSON
+ *   object with at least one key. `{}` alone is not counted: ciphertext holds
+ *   those two bytes by chance, and they parse.
+ * - "The marker survives the cut" means the same shell resumed with no gap
+ *   marker: a variable set in that shell before the cut is printed after it.
+ *   The client's on-screen terminal buffer is not read.
+ * - The stub lists one server, under the stub cloud's one device id. Both apps
+ *   share it, because the app refuses a lease whose `device` is not its own.
+ *
+ * The relay's own refusals (rate limit, accept timeout, entitlement, size cap,
+ * the re-check sweep) are not in the stub; the cloud's suite (HIVE-285) proves
+ * them.
  *
  * ## Evidence
  *
@@ -5069,6 +5098,351 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         await quietly(() => a.close());
       }
     }, 240_000);
+  });
+
+  describe('two built apps that meet only through the relay (HIVE-286)', () => {
+    const servedProjectId = 'relayed-fleet';
+
+    let serverConfigPath: string;
+    let serverUserDataDir: string;
+    let serverPort: number;
+    let serverApp: ChildProcess | undefined;
+
+    let clientConfigPath: string;
+    let clientUserDataDir: string;
+    let clientApp: ChildProcess | undefined;
+    let clientRecord: ProcessRecord | undefined;
+    let renderer: RendererDriver | undefined;
+
+    /** The id the relay lists the serving app under; 23a reads it from the client's own `relay:hosts`. */
+    let relayServerId = '';
+
+    /** The device the server minted for the client through `--pair` (23b). */
+    let credential: { id: string; token: string } | null = null;
+    const sessionId = 'relayed-session';
+    /** Typed into the server's shell; only the shell's own output joins it to `RELAY-`. */
+    const mark = randomUUID().slice(0, 8);
+
+    const type = (data: string): Promise<unknown> => {
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      return renderer.evaluate(`window.hive.pty.write(${JSON.stringify({ sessionId, data })}); true`);
+    };
+    /** Every `pty:data` event for {@link sessionId} since 23d installed the collector. */
+    const output = async (): Promise<DataEvent[]> => {
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const events = await renderer.evaluate<DataEvent[]>('window.__relayData ?? []');
+      return events.filter((event) => event.sessionId === sessionId);
+    };
+
+    /**
+     * Whether the bytes hold a JSON object with at least one key. `{}` is left out on purpose
+     * (ruling 1): megabytes of ciphertext hold that pair of bytes by chance, and it parses.
+     */
+    const holdsJsonObject = (data: Buffer): boolean => {
+      // latin1 maps a byte to a character one to one, so ASCII JSON survives and nothing throws.
+      const text = data.toString('latin1');
+      for (const open of text.matchAll(/\{\s*"/g)) {
+        for (let end = text.indexOf('}', open.index); end !== -1; end = text.indexOf('}', end + 1)) {
+          try {
+            const value: unknown = JSON.parse(text.slice(open.index, end + 1));
+            if (typeof value === 'object' && value !== null) return true;
+          } catch {
+            // Not JSON up to this brace; try the next one.
+          }
+        }
+      }
+      return false;
+    };
+
+    /** Every way a recorded relay message can be read, as `frame N: what`. Empty is the pass. */
+    const relayLeaks = (): string[] => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(credential !== null, '23b must have paired the client');
+      // Every bearer the stub saw: on its HTTP calls, on a relay upgrade, and every refresh token an app sent back.
+      const bearers = [
+        ...stub.calls.flatMap((call) => (call.auth ? [call.auth.replace(/^Bearer /, '')] : [])),
+        ...stub.calls.flatMap((call) => (call.body['refresh_token'] ? [call.body['refresh_token']] : [])),
+        ...stub.relay.bearers,
+      ];
+      const needles = [
+        credential.token,
+        credential.token.replaceAll('-', ''),
+        hostname(),
+        `RELAY-${mark}`,
+        mark,
+        ...new Set(bearers),
+        // Under six bytes a needle turns up in ciphertext by chance.
+      ].filter((needle) => needle.length >= 6);
+      return stub.relay.frames.flatMap((frame, index) => [
+        ...(frame.binary ? [] : [`frame ${String(index)}: a text message`]),
+        ...needles
+          .filter((needle) => frame.data.includes(needle))
+          .map((needle) => `frame ${String(index)}: ${needle.slice(0, 4)}…`),
+        ...(holdsJsonObject(frame.data) ? [`frame ${String(index)}: a JSON object`] : []),
+      ]);
+    };
+
+    beforeAll(async () => {
+      const serverDir = mkdtempSync(join(tmpdir(), 'hive-live-relay-server-'));
+      serverConfigPath = join(serverDir, 'config.json');
+      serverUserDataDir = join(serverDir, 'user-data');
+      const serverProjectDir = mkdtempSync(join(tmpdir(), 'hive-live-relay-served-project-'));
+      assertScratchPath(serverConfigPath);
+      scratchConfigPaths.push(serverConfigPath);
+
+      // Loopback, on a port the client is never told: the relay is the only way in.
+      const booted = await bootServerApp(serverConfigPath, serverUserDataDir, (bootPort) => ({
+        version: CONFIG_VERSION,
+        shell: '/bin/sh',
+        claudeCommand: 'true; false',
+        projects: [{ id: servedProjectId, name: 'Relayed Fleet', path: serverProjectDir, icon: 'ph-cube' }],
+        server: {
+          bind: { host: '127.0.0.1', port: bootPort, allowedOrigins: [] },
+          devices: [],
+          relay: { enabled: true },
+        },
+      }));
+      serverApp = booted.child;
+      serverPort = booted.port;
+
+      const clientDir = mkdtempSync(join(tmpdir(), 'hive-live-relay-client-'));
+      clientConfigPath = join(clientDir, 'config.json');
+      clientUserDataDir = join(clientDir, 'user-data');
+      const clientProjectDir = mkdtempSync(join(tmpdir(), 'hive-live-relay-client-project-'));
+      assertScratchPath(clientConfigPath);
+      scratchConfigPaths.push(clientConfigPath);
+      // The relay asks every socket for a bearer, so the attaching app signs in too.
+      await signIn(clientConfigPath, clientUserDataDir);
+      writeFileSync(
+        clientConfigPath,
+        JSON.stringify(
+          {
+            version: CONFIG_VERSION,
+            shell: '/bin/sh',
+            claudeCommand: 'true; false',
+            projects: [{ id: 'relay-client-only', name: 'Client Only', path: clientProjectDir, icon: 'ph-cube' }],
+          },
+          null,
+          2,
+        ),
+        'utf8',
+      );
+      const debugPort = await freePort();
+      const spawned = spawnApp([`--remote-debugging-port=${String(debugPort)}`], clientConfigPath, clientUserDataDir);
+      clientApp = spawned.child;
+      clientRecord = spawned.record;
+      renderer = await openRenderer(debugPort, 'the app attaching through the relay');
+    }, 150_000);
+
+    afterAll(async () => {
+      renderer?.close();
+      await stopApp(clientApp);
+      await stopApp(serverApp);
+    }, 30_000);
+
+    it('23a. the serving app takes the relay, and the client sees it listed', async () => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const relay = stub.relay;
+      await waitFor(() => relay.hosts().length === 1, 'the serving app to open /relay/serve', 60_000);
+
+      const listed = await renderer.evaluate<RelayHostsResult>('window.hive.relay.hosts()');
+      assert(listed.ok, `relay:hosts refused: ${JSON.stringify(listed)}; client stderr:\n${clientRecord?.stderr || '(empty)'}`);
+      expect(listed.hosts).toHaveLength(1);
+      relayServerId = listed.hosts[0]?.serverId ?? '';
+      expect(relayServerId).toBe(relay.hosts()[0]?.serverId);
+
+      // The bearer check comes before routing: a stranger's serve socket is closed 4401 and never replaces the app's.
+      const since = relay.hosts()[0]?.since;
+      const relayServe = `${stub.url.replace(/^http/, 'ws')}${RELAY_PATH.serve}`;
+      const refusedWith = (headers: Record<string, string>): Promise<number> =>
+        new Promise((resolve, reject) => {
+          const socket = new WebSocket(relayServe, { headers });
+          socket.on('close', (code: number) => resolve(code));
+          socket.on('error', reject);
+        });
+      // Bounded: a stub that let the stranger in would hold its socket open, and that is the failure.
+      const refusal = 'the relay to refuse a serve socket with no good bearer';
+      expect(await bounded(refusedWith({}), 10_000, refusal)).toBe(RELAY_CLOSE.unauthorized);
+      expect(await bounded(refusedWith({ authorization: 'Bearer at-nope' }), 10_000, refusal)).toBe(
+        RELAY_CLOSE.unauthorized,
+      );
+      expect(relay.hosts()).toEqual([expect.objectContaining({ serverId: relayServerId, since })]);
+    }, 90_000);
+
+    it('23b. --pair on the server hands the client a credential it never writes to config.json', async () => {
+      const paired = await runOneShot(['--pair', 'Relay-Client'], serverConfigPath, serverUserDataDir);
+      expect(paired.code).toBe(0);
+      const lines = paired.stdout.trim().split('\n');
+      const token = lines[0] ?? '';
+      const deviceId = (lines[1] ?? '').replace(/^Device id: /, '');
+      expect(token).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$/u);
+      expect(deviceId).not.toBe('');
+      credential = { id: deviceId, token };
+
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const stored = await renderer.evaluate<{ paired: true } | { error: string }>(
+        `window.hive.remote.pair({ deviceId: ${JSON.stringify(deviceId)}, token: ${JSON.stringify(token)} })`,
+      );
+      expect(stored).toEqual({ paired: true });
+      expect(readFileSync(clientConfigPath, 'utf8')).not.toContain(token);
+    }, 60_000);
+
+    it('23c. set-remote through the relay attaches, and the far process answers', async () => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      assert(relayServerId !== '', '23a must have read the relay server id');
+      assert(credential !== null, '23b must have paired the client');
+
+      const started = Date.now();
+      const result = await bounded(
+        renderer.evaluate<SetRemoteResult>(
+          `window.hive.config.setRemote({ mode: 'remote', via: 'relay', relayServerId: ${JSON.stringify(relayServerId)} })`,
+        ),
+        60_000,
+        'setRemote through the relay (a hang here is the failure, not a refusal)',
+      );
+      measurements.push({ case: '23c. set-remote through the relay', elapsed: Date.now() - started, switched: result.switched });
+      const stderr = `the attaching app's stderr so far:\n${clientRecord?.stderr || '(empty)'}`;
+      expect(result.switched, stderr).toEqual({ ok: true });
+      expect(result.config.remote.via).toBe('relay');
+      expect(result.config.remote.relayServerId).toBe(relayServerId);
+
+      // Only the serving process holds this project: the call crossed the relay and was answered there.
+      const config = await renderer.evaluate<ConfigSnapshot>('window.hive.config.get()');
+      expect(config.projects.map((project) => project.id), stderr).toEqual([servedProjectId]);
+
+      // The direct listener was never dialled: the client was never told its port, and the relay carried the attach.
+      const written = readFileSync(clientConfigPath, 'utf8');
+      expect(written).not.toContain(String(serverPort));
+      // A relay block is written with no `host` at all; the snapshot reads it back as `''`.
+      expect((JSON.parse(written) as { remote: Partial<RemoteConfig> }).remote.host ?? '').toBe('');
+      expect(result.config.remote.host).toBe('');
+      expect(stub.relay.frames.length).toBeGreaterThan(0);
+    }, 90_000);
+
+    it('23d. a shell spawned on the server through the relay runs what the client types', async () => {
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      // Installed before the spawn and never reset: 23f reads the whole stream for gaps.
+      await renderer.evaluate(
+        'window.__relayData = []; window.hive.pty.onData((event) => window.__relayData.push(event)); true',
+      );
+
+      const spawned = await bounded(
+        renderer.evaluate<{ ok: boolean; error?: string }>(
+          `window.hive.pty.spawn({ sessionId: ${JSON.stringify(sessionId)}, projectId: ${JSON.stringify(servedProjectId)}, cols: 80, rows: 24 })` +
+            `.then(() => ({ ok: true })).catch((e) => ({ ok: false, error: String(e && e.message ? e.message : e) }))`,
+        ),
+        60_000,
+        'pty:spawn on the server through the relay',
+      );
+      expect(spawned).toEqual({ ok: true });
+
+      // The joined form is never typed: seeing it means the server's shell ran the command.
+      await type(`RELAY_MARK=${mark}; printf 'RELAY-%s\\n' "$RELAY_MARK"\r`);
+      await waitForAsync(
+        async () => (await output()).map((event) => event.chunk).join('').includes(`RELAY-${mark}`),
+        'the server shell to print the marker through the relay',
+        30_000,
+      );
+    }, 90_000);
+
+    it('23e. nothing the relay passed can be read', () => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(credential !== null, '23b must have paired the client');
+
+      // The detector first, against plaintext it must catch: a predicate that never fires proves nothing.
+      expect(holdsJsonObject(Buffer.from('\u0000\u0001{"kind":"attach"}\u0002'))).toBe(true);
+      expect(holdsJsonObject(Buffer.from('\u0000{}\u0001'))).toBe(false);
+
+      const frames = stub.relay.frames;
+      expect(frames.filter((frame) => frame.from === 'client').length).toBeGreaterThan(0);
+      expect(frames.filter((frame) => frame.from === 'server').length).toBeGreaterThan(0);
+      // Both apps signed in on their own and dialled the relay with their own bearer: the needles are not empty.
+      expect(stub.relay.bearers.size).toBeGreaterThanOrEqual(2);
+
+      // The channel's hello: the paired device id travels in clear, by design, and only there.
+      const hello = frames[0];
+      assert(hello !== undefined, 'the relay must have passed a first message');
+      expect(hello.from).toBe('client');
+      expect(hello.data.subarray(0, 4).toString('latin1')).toBe('HTC1');
+      expect(hello.data.includes(credential.id)).toBe(true);
+
+      expect(relayLeaks()).toEqual([]);
+      measurements.push({ case: '23e. the relay recording', frames: frames.length });
+    }, 30_000);
+
+    it('23f. cutting the relay drops the link, and the same shell answers after the reattach', async () => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const view = renderer;
+
+      // Every status is kept, not the last: a cut goes reconnecting then attached inside one backoff second.
+      await view.evaluate(
+        'window.__relayLinks = []; window.hive.remote.onLinkStatus((status) => { window.__relayLinks.push(status); }); true',
+      );
+
+      const started = Date.now();
+      expect(stub.relay.cut()).toBeGreaterThanOrEqual(3);
+      await waitForAsync(
+        async () => {
+          const links = await view.evaluate<(RemoteLinkStatus | null)[]>('window.__relayLinks');
+          const dropped = links.findIndex((status) => status?.state === 'reconnecting');
+          return dropped >= 0 && links.slice(dropped).some((status) => status?.state === 'attached');
+        },
+        'the client to drop and reattach through the relay with nobody asking it to',
+        90_000,
+      );
+      measurements.push({ case: '23f. reattach through the relay after a cut', elapsed: Date.now() - started });
+
+      // Ruling 2: the variable was set in this shell before the cut, so only that shell can print it.
+      await type(`printf 'AFTER-%s\\n' "$RELAY_MARK"\r`);
+      await waitForAsync(
+        async () => (await output()).map((event) => event.chunk).join('').includes(`AFTER-${mark}`),
+        'the shell from before the cut to answer after it',
+        30_000,
+      );
+
+      const events = await output();
+      // A gap marker is an empty chunk (the HIVE-143 resume case): the resume had everything, so none arrives.
+      expect(events.filter((event) => event.chunk === '')).toEqual([]);
+      const seqs = events.map((event) => event.seq);
+      expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    }, 180_000);
+
+    it('23g. a device revoked on the server is refused through the relay, from inside the channel', async () => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      // No second serve socket in this block: the serving app stops on 4409 until its switch goes off and on.
+
+      await renderer.evaluate(`window.hive.pty.kill(${JSON.stringify(sessionId)})`);
+      const detached = await bounded(
+        renderer.evaluate<SetRemoteResult>("window.hive.config.setRemote({ mode: 'local' })"),
+        60_000,
+        'detaching from the relayed server',
+      );
+      expect(detached.config.remote.mode).toBe('local');
+
+      const revoked = await runOneShot(['--revoke', 'Relay-Client'], serverConfigPath, serverUserDataDir);
+      expect(revoked.code).toBe(0);
+      expect(revoked.stdout).toContain('Revoked "Relay-Client"');
+
+      const before = stub.relay.frames.length;
+      const result = await bounded(
+        renderer.evaluate<SetRemoteResult>(
+          `window.hive.config.setRemote({ mode: 'remote', via: 'relay', relayServerId: ${JSON.stringify(relayServerId)} })`,
+        ),
+        60_000,
+        'setRemote through the relay with a revoked device (a hang here is the failure, not a refusal)',
+      );
+      expect(result.switched.ok).toBe(false);
+      expect(JSON.stringify(result.switched)).toMatch(/revoked/i);
+      expect(result.config.remote.mode).toBe('local');
+      // The handshake and the refusal crossed the relay: the server refused inside the channel, not the relay.
+      expect(stub.relay.frames.length).toBeGreaterThan(before);
+      // Now over the reattach and the refusal traffic too.
+      expect(relayLeaks()).toEqual([]);
+    }, 120_000);
   });
 
   describe('a call that never settles (HIVE-144)', () => {
