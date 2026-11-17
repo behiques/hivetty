@@ -27,6 +27,8 @@ import {
 } from '@shared/remote-contract';
 
 import { mintDevice } from '../../../electron/main/server/devices';
+import { CHANNEL_CLOSE_CODE } from '../../../electron/remote-channel/secure-socket';
+import { SecureTestSocket, secureOn } from '../../support/secure-test-socket';
 import type { RemoteDispatch } from '../../../electron/main/ipc/remote-dispatch';
 import type { AttachedSocket } from '../../../electron/main/ipc/socket-broadcaster';
 
@@ -64,10 +66,16 @@ const start = async (devices: readonly ServerDevice[], allowedOrigins: string[] 
   return address as string;
 };
 
-/** Attach, and resolve with the single frame the server answers. */
-const attach = (url: string, frame: unknown, headers: Record<string, string> = {}) =>
+type Credentials = { deviceId: string; token: string };
+
+/**
+ * Attach through the encrypted channel, and resolve with the single frame the server answers.
+ * The channel is keyed from the frame's own `deviceId` and `token` unless `credentials` names
+ * them: a case that sends a malformed attach on a good channel names them.
+ */
+const attach = (url: string, frame: unknown, headers: Record<string, string> = {}, credentials?: Credentials) =>
   new Promise<Record<string, unknown>>((resolve, reject) => {
-    const socket = new WebSocket(url, { headers });
+    const socket = new SecureTestSocket(url, { headers, credentials });
     socket.on('open', () => socket.send(JSON.stringify(frame)));
     socket.on('message', (data) => {
       resolve(JSON.parse(String(data)));
@@ -84,9 +92,9 @@ const attach = (url: string, frame: unknown, headers: Record<string, string> = {
  * level (it always produces well-formed, correctly masked frames), so this
  * is for cases where the *content* is what should be refused.
  */
-const attachTolerant = (url: string, frame: unknown) =>
+const attachTolerant = (url: string, frame: unknown, credentials?: Credentials) =>
   new Promise<{ code: number | null; message: Record<string, unknown> | null }>((resolve, reject) => {
-    const socket = new WebSocket(url);
+    const socket = new SecureTestSocket(url, { credentials });
     socket.on('open', () => socket.send(JSON.stringify(frame)));
     socket.on('message', (data) => {
       resolve({ code: null, message: JSON.parse(String(data)) });
@@ -145,16 +153,97 @@ describe('the attach handshake', () => {
     expect(reply.serverName).toBe('test-mini');
   });
 
-  it('refuses a wrong token as unauthorized', async () => {
+  it('closes a wrong token with 1008 and no frame at all, inside the handshake (HIVE-428)', async () => {
     const { device } = mintDevice('MacBook');
     const url = await start([device]);
-    const reply = await attach(url, {
+    const { code, message } = await attachTolerant(url, {
       kind: 'attach',
       protocol: REMOTE_PROTOCOL_VERSION,
       deviceId: device.id,
       token: 'AAAA-BBBB-CCCC-DDDD',
     });
+    expect(message).toBeNull();
+    expect(code).toBe(CHANNEL_CLOSE_CODE);
+  });
+
+  it('closes an unknown device id exactly as it closes a wrong token (HIVE-428)', async () => {
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device]);
+    const { code, message } = await attachTolerant(url, {
+      kind: 'attach',
+      protocol: REMOTE_PROTOCOL_VERSION,
+      deviceId: 'not-a-paired-device',
+      token,
+    });
+    expect(message).toBeNull();
+    expect(code).toBe(CHANNEL_CLOSE_CODE);
+  });
+
+  it('closes a device whose stored digest is not 32 bytes as unknown (HIVE-428)', async () => {
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([{ ...device, credential: { ...device.credential, digest: 'abcd' } }]);
+    const { code, message } = await attachTolerant(url, {
+      kind: 'attach',
+      protocol: REMOTE_PROTOCOL_VERSION,
+      deviceId: device.id,
+      token,
+    });
+    expect(message).toBeNull();
+    expect(code).toBe(CHANNEL_CLOSE_CODE);
+  });
+
+  it('answers a plaintext first frame with one text protocol-mismatch, then closes (HIVE-428)', async () => {
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device]);
+    const socket = new WebSocket(url);
+    const frames: { text: string; isBinary: boolean }[] = [];
+    socket.on('message', (data, isBinary) => frames.push({ text: String(data), isBinary }));
+    const closed = new Promise<void>((resolve) => socket.once('close', () => resolve()));
+    await new Promise<void>((resolve, reject) => {
+      socket.on('open', () => resolve());
+      socket.on('error', reject);
+    });
+    // An old client: today's attach frame, in the clear.
+    socket.send(JSON.stringify({ kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION - 1, deviceId: device.id, token }));
+    await closed;
+    expect(frames).toHaveLength(1);
+    expect(frames[0]?.isBinary).toBe(false);
+    expect(JSON.parse(frames[0]?.text ?? '')).toMatchObject({
+      kind: 'attach-refused',
+      code: 'protocol-mismatch',
+      protocol: REMOTE_PROTOCOL_VERSION,
+    });
+  });
+
+  it('refuses an attach naming another device than the one the channel was keyed for (HIVE-428)', async () => {
+    const mine = mintDevice('MacBook');
+    const other = mintDevice('Phone');
+    const url = await start([mine.device, other.device]);
+    const reply = await attach(
+      url,
+      { kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId: other.device.id, token: other.token },
+      {},
+      { deviceId: mine.device.id, token: mine.token },
+    );
     expect(reply).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
+  });
+
+  it('sends every frame after the handshake as binary, never text (HIVE-428)', async () => {
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device]);
+    const socket = new SecureTestSocket(url);
+    await new Promise<void>((resolve, reject) => {
+      socket.on('open', () => resolve());
+      socket.on('error', reject);
+    });
+    const accepted = new Promise<Record<string, unknown>>((resolve) =>
+      socket.once('message', (data: Buffer) => resolve(JSON.parse(String(data)) as Record<string, unknown>)),
+    );
+    socket.send(JSON.stringify({ kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId: device.id, token }));
+    expect((await accepted).kind).toBe('attach-accepted');
+    expect(socket.framesAfterHandshake.length).toBeGreaterThan(0);
+    expect(socket.framesAfterHandshake.every((frame) => frame.isBinary)).toBe(true);
+    socket.close();
   });
 
   it('refuses a revoked device as revoked, and says so', async () => {
@@ -184,9 +273,12 @@ describe('the attach handshake', () => {
   });
 
   it('refuses a call frame that arrives before an attach', async () => {
-    const { device } = mintDevice('MacBook');
+    const { device, token } = mintDevice('MacBook');
     const url = await start([device]);
-    const reply = await attach(url, { kind: 'call', id: '1', channel: 'config:get', args: [] });
+    const reply = await attach(url, { kind: 'call', id: '1', channel: 'config:get', args: [] }, {}, {
+      deviceId: device.id,
+      token,
+    });
     expect(reply).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
   });
 
@@ -284,26 +376,26 @@ describe('an unauthenticated socket is untrusted input (HIVE-142 review)', () =>
   });
 
   it('refuses an attach whose token is not a string, rather than throwing', async () => {
-    const { device } = mintDevice('MacBook');
+    const { device, token } = mintDevice('MacBook');
     const url = await start([device]);
-    const reply = await attach(url, {
-      kind: 'attach',
-      protocol: REMOTE_PROTOCOL_VERSION,
-      deviceId: device.id,
-      token: 12345,
-    });
+    const reply = await attach(
+      url,
+      { kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId: device.id, token: 12345 },
+      {},
+      { deviceId: device.id, token },
+    );
     expect(reply).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
   });
 
   it('refuses an attach whose deviceId is not a string, rather than throwing', async () => {
-    const { device } = mintDevice('MacBook');
+    const { device, token } = mintDevice('MacBook');
     const url = await start([device]);
-    const reply = await attach(url, {
-      kind: 'attach',
-      protocol: REMOTE_PROTOCOL_VERSION,
-      deviceId: { not: 'a string' },
-      token: 'AAAA-BBBB-CCCC-DDDD',
-    });
+    const reply = await attach(
+      url,
+      { kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId: { not: 'a string' }, token: 'AAAA-BBBB-CCCC-DDDD' },
+      {},
+      { deviceId: device.id, token },
+    );
     expect(reply).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
   });
 
@@ -547,17 +639,17 @@ describe('the concurrent unattached-socket cap (HIVE-143 review)', () => {
   };
 
   /** Sends a real attach on an already-open socket, and waits for the accept. */
-  const attachOn = (socket: WebSocket, deviceId: string, token: string) =>
-    new Promise<void>((resolve, reject) => {
-      socket.once('message', (data) => {
-        const reply = JSON.parse(String(data)) as { kind: string };
+  const attachOn = async (socket: WebSocket, deviceId: string, token: string): Promise<void> => {
+    const channel = await secureOn(socket, deviceId, token);
+    await new Promise<void>((resolve, reject) => {
+      channel.onMessage((text) => {
+        const reply = JSON.parse(text) as { kind: string };
         if (reply.kind === 'attach-accepted') resolve();
-        else reject(new Error(`attach was refused: ${String(data)}`));
+        else reject(new Error(`attach was refused: ${text}`));
       });
-      socket.send(
-        JSON.stringify({ kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId, token }),
-      );
+      channel.send(JSON.stringify({ kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId, token }));
     });
+  };
 
   let logged: ReturnType<typeof vi.spyOn> | null = null;
   afterEach(() => {
@@ -622,6 +714,102 @@ describe('the concurrent unattached-socket cap (HIVE-143 review)', () => {
     expect(first.readyState).toBe(WebSocket.OPEN);
     admitted.terminate();
     for (const socket of opened) socket.terminate();
+  }, 20_000);
+
+  it('admits another socket once one closes after completing only the handshake (HIVE-428)', async () => {
+    logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device]);
+    const { opened } = await fillHandshakeSlots(url);
+
+    const first = opened[0];
+    if (first === undefined) throw new Error('expected at least one open socket');
+    // Message 2 arrived, and the client hangs up before its attach frame.
+    await secureOn(first, device.id, token);
+    first.terminate();
+    const admitted = await openWhenAdmitted(url);
+
+    expect(admitted.readyState).toBe(WebSocket.OPEN);
+    admitted.terminate();
+    for (const socket of opened) socket.terminate();
+  }, 20_000);
+});
+
+/**
+ * `acceptSocket` is the entry a relayed socket takes (HIVE-428; HIVE-429 calls it). Such a socket
+ * never passed the upgrade handler, so neither its Origin guard nor its 503 ran: the cap has to
+ * hold in `acceptSocket` itself. A second `ws` server stands in for the relay here.
+ */
+describe('acceptSocket, for a socket that never passed the upgrade handler (HIVE-428)', () => {
+  const relays: WebSocketServer[] = [];
+  afterEach(async () => {
+    for (const relay of relays.splice(0)) {
+      for (const client of relay.clients) client.terminate();
+      await new Promise<void>((resolve) => relay.close(() => resolve()));
+    }
+  });
+
+  const startRelay = async (): Promise<string> => {
+    const relay = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    relays.push(relay);
+    await new Promise<void>((resolve) => relay.once('listening', () => resolve()));
+    relay.on('connection', (socket) => listener?.acceptSocket(socket, { via: 'relay' }));
+    const address = relay.address();
+    if (address === null || typeof address === 'string') throw new Error('expected a TCP address');
+    return `ws://127.0.0.1:${String(address.port)}`;
+  };
+
+  it('attaches a relayed socket exactly as a direct one', async () => {
+    const { device, token } = mintDevice('MacBook');
+    await start([device]);
+    const relayUrl = await startRelay();
+    const reply = await attach(relayUrl, {
+      kind: 'attach',
+      protocol: REMOTE_PROTOCOL_VERSION,
+      deviceId: device.id,
+      token,
+    });
+    expect(reply.kind).toBe('attach-accepted');
+  });
+
+  it('closes a relayed wrong token with 1008 and no frame, as a direct one', async () => {
+    const { device } = mintDevice('MacBook');
+    await start([device]);
+    const relayUrl = await startRelay();
+    const { code, message } = await attachTolerant(relayUrl, {
+      kind: 'attach',
+      protocol: REMOTE_PROTOCOL_VERSION,
+      deviceId: device.id,
+      token: 'AAAA-BBBB-CCCC-DDDD',
+    });
+    expect(message).toBeNull();
+    expect(code).toBe(CHANNEL_CLOSE_CODE);
+  });
+
+  it('terminates a relayed socket when the handshake slots are full, and says which route it came by', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { device } = mintDevice('MacBook');
+    await start([device]);
+    const relayUrl = await startRelay();
+
+    const opened: WebSocket[] = [];
+    const closed = new Set<WebSocket>();
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      const socket = new WebSocket(relayUrl);
+      socket.on('close', () => closed.add(socket));
+      socket.on('error', () => undefined);
+      await new Promise<void>((resolve) => {
+        socket.once('open', () => resolve());
+        socket.once('close', () => resolve());
+      });
+      opened.push(socket);
+    }
+    await until(() => closed.size > 0, 'a relayed socket past the cap to be terminated');
+
+    expect(opened.length - closed.size).toBeGreaterThan(1);
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('refused a relay socket'));
+    for (const socket of opened) socket.terminate();
+    logged.mockRestore();
   }, 20_000);
 });
 
@@ -799,7 +987,7 @@ describe('start()/stop() lifecycle', () => {
   it('resolves stop() even when a client is still attached (HIVE-142 review, I4)', async () => {
     const { device, token } = mintDevice('MacBook');
     const url = await start([device]);
-    const socket = new WebSocket(url);
+    const socket = new SecureTestSocket(url);
     await new Promise<void>((resolve, reject) => {
       socket.on('open', () => {
         socket.send(
@@ -865,7 +1053,7 @@ const attachedSocket = async (
     onDetach?: (socket: AttachedSocket) => void;
     attach?: Partial<AttachRequest>;
   } = {},
-): Promise<{ socket: WebSocket; sent: unknown[] }> => {
+): Promise<{ socket: { emit(event: string, ...args: unknown[]): boolean }; sent: unknown[] }> => {
   const dispatch: RemoteDispatch = overrides.dispatch ?? { call: vi.fn(), notify: vi.fn() };
   const onAttach = overrides.onAttach ?? vi.fn();
   const onDetach = overrides.onDetach ?? vi.fn();
@@ -885,7 +1073,7 @@ const attachedSocket = async (
   const url = await listener.start();
   expect(url).not.toBeNull();
 
-  const client = new WebSocket(url as string);
+  const client = new SecureTestSocket(url as string);
   await new Promise<void>((resolve, reject) => {
     client.on('open', () => resolve());
     client.on('error', reject);
@@ -911,19 +1099,37 @@ const attachedSocket = async (
 
   const connectionCall = emitSpy.mock.calls.find((call) => call[0] === 'connection');
   emitSpy.mockRestore();
-  const socket = connectionCall?.[1] as WebSocket;
+  const serverSocket = connectionCall?.[1] as WebSocket;
 
+  /*
+    The wire is short-circuited both ways from here on (HIVE-428): every frame is a Noise transport
+    message, so a test can no longer emit plaintext on the server's socket. A frame the test sends
+    is encrypted by the real client channel and handed straight to the server socket's own
+    `'message'`; a frame the server sends is handed straight to the client's, decrypted, and
+    recorded. Both synchronous, so a microtask flush is still enough, and both in order, so the two
+    nonce counters stay in step.
+  */
   const sent: unknown[] = [];
-  vi.spyOn(socket, 'send').mockImplementation((data: unknown) => {
-    sent.push(JSON.parse(String(data)));
+  vi.spyOn(serverSocket, 'send').mockImplementation((data: unknown) => {
+    client.raw.emit('message', data, true);
   });
+  vi.spyOn(client.raw, 'send').mockImplementation((data: unknown) => {
+    serverSocket.emit('message', data, true);
+  });
+  client.on('message', (data: Buffer) => sent.push(JSON.parse(String(data))));
 
-  const rawEmit = socket.emit.bind(socket);
-  socket.emit = ((event: string | symbol, ...args: unknown[]): boolean => {
-    const result = rawEmit(event, ...args);
-    if (event === 'close') socket.terminate();
-    return result;
-  }) as typeof socket.emit;
+  const rawEmit = serverSocket.emit.bind(serverSocket);
+  const socket = {
+    emit(event: string, ...args: unknown[]): boolean {
+      if (event === 'message') {
+        client.send(String(args[0]));
+        return true;
+      }
+      const result = rawEmit(event, ...args);
+      if (event === 'close') serverSocket.terminate();
+      return result;
+    },
+  };
 
   return { socket, sent };
 };
@@ -1070,7 +1276,7 @@ describe('post-attach frames', () => {
     });
     const url = (await listener.start()) as string;
 
-    const client = new WebSocket(url);
+    const client = new SecureTestSocket(url);
     const kinds: string[] = [];
     client.on('message', (data) => kinds.push((JSON.parse(String(data)) as { kind: string }).kind));
     const closed = new Promise<void>((resolve) => client.once('close', () => resolve()));
@@ -1276,7 +1482,7 @@ const realClient = async (
 ): Promise<{
   url: string;
   device: { id: string; token: string };
-  socket: WebSocket;
+  socket: SecureTestSocket;
   frames: Record<string, unknown>[];
   closeCode: Promise<number>;
 }> => {
@@ -1293,7 +1499,7 @@ const realClient = async (
   const url = await listener.start();
   expect(url).not.toBeNull();
 
-  const socket = new WebSocket(url as string);
+  const socket = new SecureTestSocket(url as string);
   const frames: Record<string, unknown>[] = [];
   let announceClose: (code: number) => void = () => {};
   const closeCode = new Promise<number>((resolve) => {
@@ -1447,7 +1653,7 @@ describe('frame size bounds', () => {
       with no listener — which on the main process is an uncaught exception
       (C1, HIVE-142 review), not a closed connection.
     */
-    const second = new WebSocket(url);
+    const second = new SecureTestSocket(url);
     const reply = await new Promise<Record<string, unknown>>((resolve, reject) => {
       second.on('open', () => {
         second.send(
@@ -1488,7 +1694,7 @@ describe('the attach snapshot (HIVE-144)', () => {
     });
     const url = (await listener.start()) as string;
 
-    const socket = new WebSocket(url);
+    const socket = new SecureTestSocket(url);
     await new Promise<void>((resolve, reject) => {
       socket.on('open', () => resolve());
       socket.on('error', reject);
@@ -1645,7 +1851,7 @@ describe('the attach snapshot (HIVE-144)', () => {
       onDetach: noopOnDetach,
     });
     const url = (await listener.start()) as string;
-    const socket = new WebSocket(url);
+    const socket = new SecureTestSocket(url);
     await new Promise<void>((resolve, reject) => {
       socket.on('open', () => resolve());
       socket.on('error', reject);
@@ -1730,7 +1936,7 @@ describe('a peer that closes during the snapshot window (HIVE-144 review)', () =
     });
     const url = (await listener.start()) as string;
 
-    const socket = new WebSocket(url);
+    const socket = new SecureTestSocket(url);
     await new Promise<void>((resolve, reject) => {
       socket.on('open', () => resolve());
       socket.on('error', reject);

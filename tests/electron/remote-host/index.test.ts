@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { REMOTE_PROTOCOL_VERSION } from '@shared/remote-contract';
 
-import { refuseProtocol } from '../../../electron/remote-host';
+import { refusePlaintextClient, refuseProtocol } from '../../../electron/remote-host';
 
 /**
  * The server half's only logic so far (HIVE-141).
@@ -45,5 +45,20 @@ describe('refuseProtocol', () => {
     for (const client of [0, 1, 2, 99]) {
       expect(refuseProtocol(client).protocol).toBe(REMOTE_PROTOCOL_VERSION);
     }
+  });
+});
+
+describe('refusePlaintextClient (HIVE-428)', () => {
+  it('tells a client that spoke in the clear to update, naming the protocol and the channel', () => {
+    const refusal = refusePlaintextClient();
+
+    expect(refusal).toMatchObject({
+      kind: 'attach-refused',
+      code: 'protocol-mismatch',
+      protocol: REMOTE_PROTOCOL_VERSION,
+    });
+    expect(refusal.message).toContain(String(REMOTE_PROTOCOL_VERSION));
+    expect(refusal.message).toContain('encrypted channel');
+    expect(refusal.message).toContain('Update the client');
   });
 });

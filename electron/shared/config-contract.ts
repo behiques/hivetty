@@ -793,6 +793,13 @@ export interface ServerDevice {
    * is not brute-forceable and no KDF is warranted — that is why there is no
    * salt here, rather than an omission. The plaintext exists in exactly two
    * places: stdout at mint time, and the client's own `safeStorage`.
+   *
+   * **The digest is key material (HIVE-428).** It is the encrypted channel's
+   * pre-shared key for this device: the client derives the same 32 bytes from
+   * its token (`pskOfToken`), and the server reads them from here on every
+   * handshake. Whoever holds this file's digest and sits on the path between
+   * this server and that device can impersonate the server to the device. It
+   * is not enough to attach as the device, which still needs the token itself.
    */
   credential: ServerCredential;
 }

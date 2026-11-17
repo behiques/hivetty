@@ -19,6 +19,14 @@ import {
   type ServerFrame,
 } from '@shared/remote-contract';
 
+import {
+  CHANNEL_CLOSE_CODE,
+  CHANNEL_TAG_BYTES,
+  initiate,
+  pskOfToken,
+  type SecureSocket,
+} from '../remote-channel/secure-socket';
+
 import { attachRequest } from './index';
 
 /**
@@ -126,6 +134,40 @@ export class PlaintextRefusedError extends Error {
   }
 }
 
+/** What a server from before the encrypted channel is told it is (HIVE-428). */
+export const SERVER_TOO_OLD_MESSAGE =
+  'The server is on an older HiveTTY that does not speak the encrypted channel. Update the server.';
+
+/** What a server that would not complete the channel handshake means (HIVE-428). */
+export const PAIRING_REFUSED_MESSAGE =
+  "The server did not accept this device's pairing: the token is wrong or the device is unknown there. Pair again.";
+
+/**
+ * The server answered the channel's hello in text (HIVE-428): it predates the channel.
+ *
+ * Never a credential problem, whatever that text said. An old server reads the binary hello as a
+ * malformed attach and refuses it as `unauthorized`; reading that as "pair again" would send the
+ * user to fix the one thing that is not broken.
+ */
+export class ServerTooOldError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ServerTooOldError';
+  }
+}
+
+/**
+ * The server would not complete the channel handshake (HIVE-428): it closed with
+ * `CHANNEL_CLOSE_CODE` and no message 2, or its message 2 did not verify. A wrong token and an
+ * unknown device id look identical from here on purpose, and both are cured by pairing again.
+ */
+export class PairingRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PairingRefusedError';
+  }
+}
+
 /** A handshake the server refused, with the code it refused it with. */
 export class AttachRefusedError extends Error {
   readonly code: AttachRefused['code'];
@@ -210,6 +252,13 @@ export function classifyCause(cause: unknown): CloseCause {
   }
   if (cause instanceof PlaintextRefusedError) {
     return { kind: 'terminal', code: 'plaintext-refused', message: cause.message };
+  }
+  // The same cure as an `attach-refused: unauthorized`, so the same code and the same pane.
+  if (cause instanceof PairingRefusedError) {
+    return { kind: 'terminal', code: 'unauthorized', message: cause.message };
+  }
+  if (cause instanceof ServerTooOldError) {
+    return { kind: 'terminal', code: 'server-too-old', message: cause.message };
   }
   if (cause instanceof AttachFrameTooLargeError) {
     return { kind: 'terminal', code: 'attach-frame-too-large', message: cause.message };
@@ -412,7 +461,8 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
       lookup: fencedLookup(host, resolveAddress, (cause) => {
         refusal = cause;
       }),
-      maxPayload: POST_ATTACH_FRAME_MAX_BYTES,
+      // Every frame is a Noise transport message: its plaintext, then a 16-byte tag (HIVE-428).
+      maxPayload: POST_ATTACH_FRAME_MAX_BYTES + CHANNEL_TAG_BYTES,
       /*
         `ws`'s own, covering TCP connect and the HTTP upgrade response
         (HIVE-144 review, I5). This is the half that stops the two hangs:
@@ -442,6 +492,10 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
       early: { channel: Channel; payload: unknown }[] | null;
     } | null = null;
     let closed = false;
+    /** The encrypted channel, once message 2 verified (HIVE-428). Every frame after the hello goes through it. */
+    let channel: SecureSocket | null = null;
+    /** True from the hello until `initiate` settles: a 1008 close in that window is a refused pairing. */
+    let initiating = false;
 
     /**
      * Subscribers to this connection ending, and the guard that keeps the
@@ -560,13 +614,43 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
         socket.close();
         return;
       }
-      socket.send(frame);
+
+      /*
+        The channel first (HIVE-428): the hello, then message 2, and only then
+        the attach, inside it. The size check above runs before the hello, so a
+        frame this side already knows is too large never spends a handshake.
+      */
+      initiating = true;
+      void initiate(socket, { deviceId: credential.deviceId, psk: pskOfToken(credential.token) })
+        .then((outcome) => {
+          initiating = false;
+          if (outcome.kind === 'plaintext') {
+            failHandshake(new ServerTooOldError(SERVER_TOO_OLD_MESSAGE));
+            socket.close();
+            return;
+          }
+          if (outcome.kind === 'refused') {
+            failHandshake(new PairingRefusedError(PAIRING_REFUSED_MESSAGE));
+            return;
+          }
+          // The deadline already failed this dial; a late message 2 must not send an attach.
+          if (handshakeSettled) return;
+          channel = outcome.socket;
+          channel.onMessage(onFrameText);
+          channel.send(frame);
+        })
+        .catch((cause: unknown) => {
+          initiating = false;
+          failHandshake(cause instanceof Error ? cause : new Error(String(cause)));
+          socket.close();
+        });
     });
 
-    socket.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
+    /** Every server frame past the handshake, decrypted. Today's handler, fed text. */
+    function onFrameText(text: string): void {
       let frame: unknown;
       try {
-        frame = JSON.parse(String(data));
+        frame = JSON.parse(text);
       } catch {
         // A server that cannot produce JSON is not a server this client can
         // talk to; dropping the frame is right for an attached socket, and for
@@ -658,7 +742,7 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
           }
         }
       }
-    });
+    }
 
     socket.on('error', (cause: Error) => {
       // `refusal` is fence (2) speaking: `net` gave our own error to the
@@ -672,11 +756,18 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
       announceClose(refusal ?? cause);
     });
 
-    socket.on('close', () => {
+    socket.on('close', (code?: number) => {
       closed = true;
       failHandshake(
         refusal ??
-          new Error(`The connection to ${host}:${String(port)} closed before it attached.`),
+          /*
+            A 1008 before message 2 is the server refusing the pairing (HIVE-428),
+            and this listener runs before `initiate`'s own, so it names it here.
+            Any other code mid-handshake is the network, and stays retryable.
+          */
+          (initiating && code === CHANNEL_CLOSE_CODE
+            ? new PairingRefusedError(PAIRING_REFUSED_MESSAGE)
+            : new Error(`The connection to ${host}:${String(port)} closed before it attached.`)),
       );
       const ending = new Error(`The connection to ${host}:${String(port)} closed.`);
       failAllPending(ending);
@@ -708,7 +799,8 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
           `refused here instead.`
         );
       }
-      socket.send(text);
+      // Post-attach only, so the channel exists: the accept that built this client came through it.
+      channel?.send(text);
       return null;
     };
 

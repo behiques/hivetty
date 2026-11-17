@@ -99,8 +99,10 @@ import { isThisMachineAction } from './notification-contract';
  *   and Claude Code now sends it.
  * 42 → 43 (skip permission prompts): `CliConfig` and `SetCliRequest` gained `skipPermissions`.
  * 43 → 44 (HIVE-412): `PrRecord` (on `github:prs` and `github:search-prs`) gained `reviewDecision`, `head` and `mergeable`.
+ * 44 → 45 (HIVE-428): every attach runs inside an encrypted channel (Noise NNpsk0, AES-256-GCM). A client's first frame
+ *   is the binary hello; today's JSON frames travel inside the channel unchanged. A 44 peer cannot speak to a 45 one.
  */
-export const REMOTE_PROTOCOL_VERSION = 44;
+export const REMOTE_PROTOCOL_VERSION = 45;
 
 /**
  * What a frame is for.
