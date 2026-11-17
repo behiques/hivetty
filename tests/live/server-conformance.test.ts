@@ -5107,6 +5107,49 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       return events.filter((event) => event.sessionId === sessionId);
     };
 
+    /**
+     * Whether the bytes hold a JSON object with at least one key. `{}` is left out on purpose
+     * (ruling 1): megabytes of ciphertext hold that pair of bytes by chance, and it parses.
+     */
+    const holdsJsonObject = (data: Buffer): boolean => {
+      // latin1 maps a byte to a character one to one, so ASCII JSON survives and nothing throws.
+      const text = data.toString('latin1');
+      for (const open of text.matchAll(/\{\s*"/g)) {
+        for (let end = text.indexOf('}', open.index); end !== -1; end = text.indexOf('}', end + 1)) {
+          try {
+            const value: unknown = JSON.parse(text.slice(open.index, end + 1));
+            if (typeof value === 'object' && value !== null) return true;
+          } catch {
+            // Not JSON up to this brace; try the next one.
+          }
+        }
+      }
+      return false;
+    };
+
+    /** Every way a recorded relay message can be read, as `frame N: what`. Empty is the pass. */
+    const relayLeaks = (): string[] => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(credential !== null, '23b must have paired the client');
+      const bearers = stub.calls.flatMap((call) => (call.auth ? [call.auth.replace(/^Bearer /, '')] : []));
+      const needles = [
+        credential.token,
+        credential.token.replaceAll('-', ''),
+        hostname(),
+        `RELAY-${mark}`,
+        mark,
+        ...new Set(bearers),
+        // Under six bytes a needle turns up in ciphertext by chance.
+      ].filter((needle) => needle.length >= 6);
+      return stub.relay.frames.flatMap((frame, index) => [
+        ...(frame.binary ? [] : [`frame ${String(index)}: a text message`]),
+        ...needles
+          .filter((needle) => frame.data.includes(needle))
+          .map((needle) => `frame ${String(index)}: ${needle.slice(0, 4)}…`),
+        ...(holdsJsonObject(frame.data) ? [`frame ${String(index)}: a JSON object`] : []),
+      ]);
+    };
+
     beforeAll(async () => {
       const serverDir = mkdtempSync(join(tmpdir(), 'hive-live-relay-server-'));
       serverConfigPath = join(serverDir, 'config.json');
@@ -5271,6 +5314,29 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         30_000,
       );
     }, 90_000);
+
+    it('23e. nothing the relay passed can be read', () => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(credential !== null, '23b must have paired the client');
+
+      // The detector first, against plaintext it must catch: a predicate that never fires proves nothing.
+      expect(holdsJsonObject(Buffer.from('\u0000\u0001{"kind":"attach"}\u0002'))).toBe(true);
+      expect(holdsJsonObject(Buffer.from('\u0000{}\u0001'))).toBe(false);
+
+      const frames = stub.relay.frames;
+      expect(frames.filter((frame) => frame.from === 'client').length).toBeGreaterThan(0);
+      expect(frames.filter((frame) => frame.from === 'server').length).toBeGreaterThan(0);
+
+      // The channel's hello: the paired device id travels in clear, by design, and only there.
+      const hello = frames[0];
+      assert(hello !== undefined, 'the relay must have passed a first message');
+      expect(hello.from).toBe('client');
+      expect(hello.data.subarray(0, 4).toString('latin1')).toBe('HTC1');
+      expect(hello.data.includes(credential.id)).toBe(true);
+
+      expect(relayLeaks()).toEqual([]);
+      measurements.push({ case: '23e. the relay recording', frames: frames.length });
+    }, 30_000);
   });
 
   describe('a call that never settles (HIVE-144)', () => {
