@@ -16,6 +16,8 @@ export interface RelayFrame {
 export interface StubRelay {
   /** Every message passed between a joined pair, in order. */
   frames: RelayFrame[];
+  /** Every good bearer a relay upgrade carried, so a spec can look for it in what the relay passed. */
+  bearers: Set<string>;
   /** What `GET /relay/hosts` answers. */
   hosts(): RelayHost[];
   /** Ends every relay socket with no close frame, as a relay that died would. Answers how many. */
@@ -57,6 +59,7 @@ const passed = (code: number): number =>
 export function attachStubRelay(server: Server, auth: RelayAuth): StubRelay {
   const wss = new WebSocketServer({ noServer: true });
   const frames: RelayFrame[] = [];
+  const bearers = new Set<string>();
   const waiting = new Map<string, Waiting>();
   let serve: { socket: WebSocket; since: string } | null = null;
 
@@ -120,8 +123,12 @@ export function attachStubRelay(server: Server, auth: RelayAuth): StubRelay {
     wss.handleUpgrade(req, socket, head, (ws) => {
       const token = (req.headers.authorization ?? '').replace(/^Bearer /, '');
       const [, , verb, id = ''] = path.split('/');
-      if (!auth.authorised(token)) ws.close(RELAY_CLOSE.unauthorized);
-      else if (path === RELAY_PATH.serve) onServe(ws);
+      if (!auth.authorised(token)) {
+        ws.close(RELAY_CLOSE.unauthorized);
+        return;
+      }
+      bearers.add(token);
+      if (path === RELAY_PATH.serve) onServe(ws);
       else if (verb === 'attach') onAttach(ws, id);
       else if (verb === 'accept') onAccept(ws, id);
       else ws.close(RELAY_CLOSE.notFound);
@@ -142,6 +149,7 @@ export function attachStubRelay(server: Server, auth: RelayAuth): StubRelay {
 
   return {
     frames,
+    bearers,
     hosts: () => (serve === null ? [] : [{ serverId: auth.serverId(), name: 'Test Mac', since: serve.since }]),
     cut,
     close: () => {

@@ -5131,7 +5131,12 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
     const relayLeaks = (): string[] => {
       assert(stub !== undefined, 'the stub cloud must be running');
       assert(credential !== null, '23b must have paired the client');
-      const bearers = stub.calls.flatMap((call) => (call.auth ? [call.auth.replace(/^Bearer /, '')] : []));
+      // Every bearer the stub saw: on its HTTP calls, on a relay upgrade, and every refresh token an app sent back.
+      const bearers = [
+        ...stub.calls.flatMap((call) => (call.auth ? [call.auth.replace(/^Bearer /, '')] : [])),
+        ...stub.calls.flatMap((call) => (call.body['refresh_token'] ? [call.body['refresh_token']] : [])),
+        ...stub.relay.bearers,
+      ];
       const needles = [
         credential.token,
         credential.token.replaceAll('-', ''),
@@ -5326,6 +5331,8 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       const frames = stub.relay.frames;
       expect(frames.filter((frame) => frame.from === 'client').length).toBeGreaterThan(0);
       expect(frames.filter((frame) => frame.from === 'server').length).toBeGreaterThan(0);
+      // Both apps signed in on their own and dialled the relay with their own bearer: the needles are not empty.
+      expect(stub.relay.bearers.size).toBeGreaterThanOrEqual(2);
 
       // The channel's hello: the paired device id travels in clear, by design, and only there.
       const hello = frames[0];
