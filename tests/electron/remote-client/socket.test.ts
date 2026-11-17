@@ -1304,7 +1304,11 @@ async function relayServer(
   upgrades: { url: string | undefined; authorization: string | undefined }[];
   sockets: WebSocket[];
 }> {
-  const server = new WebSocketServer({ port: 0, host: '127.0.0.1', ...(verifyClient ? { verifyClient } : {}) });
+  const server = new WebSocketServer({
+    port: 0,
+    host: '127.0.0.1',
+    ...(verifyClient ? { verifyClient } : {}),
+  });
   servers.push(server);
   const upgrades: { url: string | undefined; authorization: string | undefined }[] = [];
   const sockets: WebSocket[] = [];
@@ -1463,8 +1467,10 @@ describe('connectRemote — a relay target (HIVE-429)', () => {
   });
 
   it('an upgrade answered with HTTP 503 is a transport failure, retried', async () => {
-    const { port } = await relayServer(undefined, (_info: unknown, callback: (verified: boolean, code?: number) => void) =>
-      callback(false, 503),);
+    const refuse = (_info: unknown, callback: (verified: boolean, code?: number) => void): void => {
+      callback(false, 503);
+    };
+    const { port } = await relayServer(undefined, refuse);
 
     const failure = await connectRemote({ target: relayTarget(port), credential: CREDENTIAL }).catch(
       (error: unknown) => error,

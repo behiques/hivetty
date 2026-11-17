@@ -621,7 +621,7 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
     const deadline = setTimeout(() => {
       failHandshake(
         new Error(
-          `${label} did not complete the attach handshake within ` +
+          `${target.kind === 'direct' ? label : 'The server through the relay'} did not complete the attach handshake within ` +
             `${String(CLIENT_ATTACH_TIMEOUT_MS)}ms. It may not be a Hive, or it may not be ` +
             `reachable from here.`,
         ),
