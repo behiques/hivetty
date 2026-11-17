@@ -1770,7 +1770,10 @@ export interface RemoteLinkStatus {
   attempt: number;
   /** Epoch ms of the next retry, or `null` when no timer is pending. */
   nextAttemptAt: number | null;
-  /** Why it stopped, set only when `state` is `'disconnected'`. */
+  /**
+   * Why it stopped, when `state` is `'disconnected'`; while `'reconnecting'`, set only when the relay
+   * says the server is offline (HIVE-429).
+   */
   reason: string | null;
   /**
    * Increments on every successful **re**attach, never on a first one.

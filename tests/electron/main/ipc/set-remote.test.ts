@@ -26,7 +26,13 @@ vi.mock('../../../../electron/main/config', () => ({ getConfig, setRemote }));
 const { applySetRemote } = await import('../../../../electron/main/ipc/set-remote');
 
 /** The stored block a partial payload merges onto. */
-const stored = { mode: 'local' as const, host: 'mini.tail.ts.net', port: 7433 };
+const stored = {
+  mode: 'local' as const,
+  host: 'mini.tail.ts.net',
+  port: 7433,
+  via: 'direct' as const,
+  relayServerId: '',
+};
 
 beforeEach(() => {
   // `restoreMocks` (vitest.config.ts) restores spies; these are module-scope
@@ -39,13 +45,50 @@ beforeEach(() => {
 });
 
 describe('applySetRemote', () => {
+  describe('a relay target (HIVE-429)', () => {
+    it('hands the switcher the relay server the payload names', async () => {
+      const switchMode = vi.fn().mockResolvedValue({ ok: true });
+
+      await applySetRemote({ mode: 'remote', via: 'relay', relayServerId: 'dev_1' }, switchMode);
+
+      expect(switchMode).toHaveBeenCalledExactlyOnceWith('remote', {
+        target: { kind: 'relay', serverId: 'dev_1' },
+      });
+    });
+
+    it('reads via and the server from the stored block when the payload names only the mode', async () => {
+      getConfig.mockReturnValue({
+        remote: { ...stored, via: 'relay', relayServerId: 'dev_1' },
+        marker: 'OLD_SNAPSHOT',
+      });
+      const switchMode = vi.fn().mockResolvedValue({ ok: true });
+
+      await applySetRemote({ mode: 'remote' }, switchMode);
+
+      expect(switchMode).toHaveBeenCalledExactlyOnceWith('remote', {
+        target: { kind: 'relay', serverId: 'dev_1' },
+      });
+    });
+
+    it('writes nothing when the relay switch is refused', async () => {
+      const switchMode = vi
+        .fn()
+        .mockResolvedValue({ ok: false, reason: 'connect-failed', message: 'Choose a server first.' });
+
+      const result = await applySetRemote({ mode: 'remote', via: 'relay' }, switchMode);
+
+      expect(setRemote).not.toHaveBeenCalled();
+      expect(result.config).toEqual(expect.objectContaining({ marker: 'OLD_SNAPSHOT' }));
+    });
+  });
+
   it('switches to the requested mode against the requested target', async () => {
     const switchMode = vi.fn().mockResolvedValue({ ok: true });
 
     await applySetRemote({ mode: 'remote', host: '127.0.0.1', port: 9000 }, switchMode);
 
     expect(switchMode).toHaveBeenCalledExactlyOnceWith('remote', {
-      target: { host: '127.0.0.1', port: 9000 },
+      target: { kind: 'direct', host: '127.0.0.1', port: 9000 },
     });
   });
 
@@ -62,7 +105,7 @@ describe('applySetRemote', () => {
     await applySetRemote({ mode: 'local', host: '10.0.0.9' }, switchMode);
 
     expect(switchMode).toHaveBeenCalledExactlyOnceWith('local', {
-      target: { host: '10.0.0.9', port: 7433 },
+      target: { kind: 'direct', host: '10.0.0.9', port: 7433 },
     });
   });
 

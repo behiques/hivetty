@@ -462,7 +462,9 @@ const {
 const { remoteProxyBindingsSize, resetRemoteProxy } = await import(
   '../../../../electron/main/ipc/remote-proxy'
 );
-const { AddressRefusedError, ServerTooOldError } = await import('../../../../electron/remote-client/socket');
+const { AddressRefusedError, RELAY_SERVER_OFFLINE, RelayClosedError, ServerTooOldError } = await import(
+  '../../../../electron/remote-client/socket'
+);
 const { BACKOFF_MS } = await import('../../../../electron/main/ipc/reattach');
 const { attachedResumeTracker, attachedServerName, dialNowAttached, registerIpc, switchIpcMode } = await import(
   '../../../../electron/main/ipc/router'
@@ -1223,7 +1225,7 @@ describe('the mode switch (HIVE-144)', () => {
    * dialler that answers. Each case overrides the one thing it is about.
    */
   const opts = (over: Record<string, unknown> = {}) => ({
-    target: { host: '127.0.0.1', port: 7433 },
+    target: { kind: 'direct' as const, host: '127.0.0.1', port: 7433 },
     credential: { deviceId: 'device-1', token: 'secret' },
     connect: async () => fakeClient(),
     ...over,
@@ -1346,7 +1348,7 @@ describe('the mode switch (HIVE-144)', () => {
 
     const outcome = await switchIpcMode(
       'remote',
-      opts({ target: { host: '203.0.113.7', port: 7433 }, connect }),
+      opts({ target: { kind: 'direct' as const, host: '203.0.113.7', port: 7433 }, connect }),
     );
 
     expect(outcome).toEqual({ ok: false, reason: 'address-refused' });
@@ -1395,7 +1397,7 @@ describe('the mode switch (HIVE-144)', () => {
     const outcome = await switchIpcMode(
       'remote',
       opts({
-        target: { host: 'mini.tail1234.ts.net', port: 7433 },
+        target: { kind: 'direct' as const, host: 'mini.tail1234.ts.net', port: 7433 },
         connect: () => Promise.reject(new AddressRefusedError('it resolved to 203.0.113.7')),
       }),
     );
@@ -1411,7 +1413,7 @@ describe('the mode switch (HIVE-144)', () => {
     const outcome = await switchIpcMode(
       'remote',
       opts({
-        target: { host: 'mini.tail1234.ts.net', port: 7433 },
+        target: { kind: 'direct' as const, host: 'mini.tail1234.ts.net', port: 7433 },
         connect: () => Promise.reject(new ServerTooOldError('The server is on an older HiveTTY.')),
       }),
     );
@@ -1483,7 +1485,7 @@ describe('the mode switch (HIVE-144)', () => {
     const second = fakeClient();
     const outcome = await switchIpcMode(
       'remote',
-      opts({ target: { host: '100.64.0.9', port: 7433 }, connect: async () => second }),
+      opts({ target: { kind: 'direct' as const, host: '100.64.0.9', port: 7433 }, connect: async () => second }),
     );
 
     expect(outcome).toEqual({ ok: true });
@@ -1575,6 +1577,242 @@ describe('the mode switch (HIVE-144)', () => {
    * rather than left pointing at the dead one, and that the two teardown paths
    * this module already had are not disturbed.
    */
+  describe('a relay target, resolved per dial (HIVE-429)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** A cloud session whose account and tokens a case controls. */
+    const fakeSession = (tokens: (string | null)[] = ['t1', 't2', 't3']) => {
+      const state = { kind: 'signed-in' as string };
+      const queue = [...tokens];
+      return {
+        state,
+        session: {
+          baseUrl: 'https://cloud.test',
+          getAccessToken: vi.fn(async () => (queue.length > 0 ? (queue.shift() ?? null) : null)),
+          authedFetch: vi.fn(),
+          account: () => state as never,
+          onAccountChange: vi.fn(() => () => {}),
+        },
+      };
+    };
+
+    const relayOpts = (over: Record<string, unknown> = {}) =>
+      opts({ target: { kind: 'relay' as const, serverId: 'dev_1' }, ...over });
+
+    it('dials the relay for the chosen server with a fresh token', async () => {
+      boundLocally();
+      const { session } = fakeSession();
+      const connect = vi.fn(async () => fakeClient());
+
+      expect(await switchIpcMode('remote', relayOpts({ connect, session: () => session }))).toEqual({ ok: true });
+
+      expect(connect).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { kind: 'relay', serverId: 'dev_1', cloudUrl: 'https://cloud.test', accessToken: 't1' },
+        }),
+      );
+    });
+
+    it('refuses a relay switch with no server chosen, before dialling or unbinding anything', async () => {
+      const local = boundLocally();
+      const { session } = fakeSession();
+      const connect = vi.fn();
+
+      const outcome = await switchIpcMode(
+        'remote',
+        opts({ target: { kind: 'relay' as const, serverId: '' }, connect, session: () => session }),
+      );
+
+      expect(outcome).toEqual({ ok: false, reason: 'connect-failed', message: 'Choose a server first.' });
+      expect(connect).not.toHaveBeenCalled();
+      expect(ipcBindingsSize()).toBe(local);
+      expect(remoteProxyBindingsSize()).toBe(0);
+    });
+
+    it('refuses a relay switch while signed out, before dialling or unbinding anything', async () => {
+      const local = boundLocally();
+      const { session, state } = fakeSession();
+      state.kind = 'signed-out';
+      const connect = vi.fn();
+
+      const outcome = await switchIpcMode('remote', relayOpts({ connect, session: () => session }));
+
+      expect(outcome).toEqual({ ok: false, reason: 'connect-failed', message: 'Sign in to use the relay.' });
+      expect(connect).not.toHaveBeenCalled();
+      expect(ipcBindingsSize()).toBe(local);
+      expect(remoteProxyBindingsSize()).toBe(0);
+    });
+
+    it('refuses a relay switch the same way when there is no cloud session at all', async () => {
+      const local = boundLocally();
+      const connect = vi.fn();
+
+      const outcome = await switchIpcMode('remote', relayOpts({ connect, session: () => null }));
+
+      expect(outcome).toEqual({ ok: false, reason: 'connect-failed', message: 'Sign in to use the relay.' });
+      expect(connect).not.toHaveBeenCalled();
+      expect(ipcBindingsSize()).toBe(local);
+    });
+
+    it('does not fence a relay target by its stored host', async () => {
+      boundLocally();
+      const { session } = fakeSession();
+      // A relay target carries no host at all; a public one stored beside it is never read.
+      const outcome = await switchIpcMode('remote', relayOpts({ session: () => session }));
+
+      expect(outcome).not.toEqual({ ok: false, reason: 'address-refused' });
+      expect(outcome).toEqual({ ok: true });
+    });
+
+    it('reads a relay block from the stored config when not told a target', async () => {
+      boundLocally();
+      const { session } = fakeSession();
+      const connect = vi.fn(async () => fakeClient());
+      const remote = snapshot.remote;
+      snapshot.remote = { mode: 'remote', host: '8.8.8.8', port: 7433, via: 'relay', relayServerId: 'dev_1' };
+      try {
+        const outcome = await switchIpcMode('remote', {
+          credential: { deviceId: 'device-1', token: 'secret' },
+          connect,
+          session: () => session,
+        });
+
+        expect(outcome).toEqual({ ok: true });
+        expect(connect).toHaveBeenCalledWith(
+          expect.objectContaining({ target: expect.objectContaining({ kind: 'relay', serverId: 'dev_1' }) }),
+        );
+      } finally {
+        snapshot.remote = remote;
+      }
+    });
+
+    it('takes a fresh token for every reconnect', async () => {
+      boundLocally();
+      const { session } = fakeSession();
+      const first = fakeClient();
+      const connect = vi.fn(async () => fakeClient());
+      connect.mockResolvedValueOnce(first);
+      await switchIpcMode('remote', relayOpts({ connect, session: () => session }));
+
+      first.drop();
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS[0]);
+
+      expect(connect).toHaveBeenCalledTimes(2);
+      expect((connect.mock.calls[1] as unknown[])[0]).toMatchObject({ target: { accessToken: 't2' } });
+    });
+
+    it('stops reconnecting, saying so, once the account signs out', async () => {
+      boundLocally();
+      const { session, state } = fakeSession();
+      const broadcaster = { emit: vi.fn() };
+      const first = fakeClient();
+      const connect = vi.fn(async () => fakeClient());
+      connect.mockResolvedValueOnce(first);
+      await switchIpcMode('remote', relayOpts({ connect, broadcaster, session: () => session }));
+
+      state.kind = 'signed-out';
+      first.drop();
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS[0]);
+
+      expect(connect).toHaveBeenCalledTimes(1);
+      const last = broadcaster.emit.mock.calls.filter(([channel]) => channel === CH.remoteLinkStatus).at(-1)?.[1];
+      expect(last).toMatchObject({ state: 'disconnected', reason: 'Sign in again to use the relay.' });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(connect).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries when signed in but no token could be had', async () => {
+      boundLocally();
+      const { session } = fakeSession(['t1', null, 't3']);
+      const broadcaster = { emit: vi.fn() };
+      const first = fakeClient();
+      const connect = vi.fn(async () => fakeClient());
+      connect.mockResolvedValueOnce(first);
+      await switchIpcMode('remote', relayOpts({ connect, broadcaster, session: () => session }));
+
+      first.drop();
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS[0]);
+      // No token: no dial, and another attempt is scheduled.
+      expect(connect).toHaveBeenCalledTimes(1);
+      const last = broadcaster.emit.mock.calls.filter(([channel]) => channel === CH.remoteLinkStatus).at(-1)?.[1];
+      expect(last).toMatchObject({ state: 'reconnecting', attempt: 2 });
+
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS[1]);
+      expect(connect).toHaveBeenCalledTimes(2);
+      expect((connect.mock.calls[1] as unknown[])[0]).toMatchObject({ target: { accessToken: 't3' } });
+    });
+
+    it('retries when the token request itself rejects', async () => {
+      boundLocally();
+      const { session } = fakeSession();
+      const first = fakeClient();
+      const connect = vi.fn(async () => fakeClient());
+      connect.mockResolvedValueOnce(first);
+      await switchIpcMode('remote', relayOpts({ connect, session: () => session }));
+
+      session.getAccessToken.mockRejectedValueOnce(new Error('offline'));
+      first.drop();
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS[0]);
+      expect(connect).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS[1]);
+      expect(connect).toHaveBeenCalledTimes(2);
+    });
+
+    it('answers connect-failed and rebinds local when the first dial has no token', async () => {
+      const local = boundLocally();
+      const { session } = fakeSession([null]);
+      const connect = vi.fn();
+
+      const outcome = await switchIpcMode('remote', relayOpts({ connect, session: () => session }));
+
+      expect(outcome).toEqual({
+        ok: false,
+        reason: 'connect-failed',
+        message: 'Could not reach HiveTTY to authorize the relay.',
+      });
+      expect(connect).not.toHaveBeenCalled();
+      expect(ipcBindingsSize()).toBe(local);
+      expect(remoteProxyBindingsSize()).toBe(0);
+    });
+
+    it('a relay that says the server is offline is carried on the reconnecting status', async () => {
+      boundLocally();
+      const { session } = fakeSession();
+      const broadcaster = { emit: vi.fn() };
+      const first = fakeClient();
+      const connect = vi.fn(async (): Promise<ReturnType<typeof fakeClient>> => {
+        throw new RelayClosedError(4404);
+      });
+      connect.mockResolvedValueOnce(first);
+      await switchIpcMode('remote', relayOpts({ connect, broadcaster, session: () => session }));
+
+      first.drop();
+      await vi.advanceTimersByTimeAsync(BACKOFF_MS[0]);
+
+      const last = broadcaster.emit.mock.calls.filter(([channel]) => channel === CH.remoteLinkStatus).at(-1)?.[1];
+      expect(last).toMatchObject({ state: 'reconnecting', reason: RELAY_SERVER_OFFLINE });
+    });
+
+    it('a direct target still dials its address and keeps its pre-check', async () => {
+      boundLocally();
+      const connect = vi.fn(async () => fakeClient());
+
+      await switchIpcMode('remote', opts({ connect }));
+      expect(connect).toHaveBeenCalledWith(
+        expect.objectContaining({ target: { kind: 'direct' as const, host: '127.0.0.1', port: 7433 } }),
+      );
+      expect(
+        await switchIpcMode('remote', opts({ target: { kind: 'direct' as const, host: '8.8.8.8', port: 7433 }, connect })),
+      ).toEqual({ ok: false, reason: 'address-refused' });
+    });
+  });
+
   describe('a socket that drops after a successful attach', () => {
     // The backoff is the subject of every case here, and waiting out even the
     // first step for real would be a second of wall-clock per assertion.
