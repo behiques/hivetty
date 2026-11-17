@@ -887,6 +887,19 @@ export const DEFAULT_REMOTE: RemoteConfig = {
   relayServerId: '',
 };
 
+/** HIVE-429. What `attachedServer` names on a relay block, whose `host` is never dialled. */
+export const RELAY_ATTACHED_NAME = 'a server through the relay';
+
+/**
+ * `ConfigSnapshot.attachedServer` from a resolved block: the one derivation `loadConfig` and
+ * `writeConfig` share. A relay block names the relay, since its `host` is unused and often empty.
+ */
+export function attachedServerOf(remote: RemoteConfig): { name: string; host: string } | null {
+  if (remote.mode !== 'remote') return null;
+  if (remote.via === 'relay') return { name: RELAY_ATTACHED_NAME, host: '' };
+  return { name: remote.host, host: remote.host };
+}
+
 /** The block's keys, for the parser's exact-key check. */
 export const REMOTE_KEYS: readonly (keyof RemoteConfig)[] = [
   'mode',

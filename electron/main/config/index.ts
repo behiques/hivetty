@@ -10,6 +10,7 @@ import {
   type SetCliSessionsRequest,
 } from '@shared/cli-contract';
 import {
+  attachedServerOf,
   DEFAULT_BIND,
   DEFAULT_CLAUDE_COMMAND,
   DEFAULT_IMPORT_LOGIN_ENV,
@@ -209,7 +210,7 @@ export function loadConfig(): ConfigSnapshot {
     // `remote.host` is the only handle the file carries for the far end — see
     // `ConfigSnapshot.attachedServer`'s own doc comment for why this is a
     // config-derived control's readout, not the header chip's runtime one.
-    attachedServer: remote.mode === 'remote' ? { name: remote.host, host: remote.host } : null,
+    attachedServer: attachedServerOf(remote),
     // Defaults *under* whatever the file named, exactly as `jira` and
     // `receiver` do above (HIVE-124). A plain spread suffices here too.
     slack: { ...DEFAULT_SLACK, ...parsed.slack },

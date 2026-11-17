@@ -11,6 +11,7 @@ import {
   CONFIG_PATH_ENV,
   DEFAULT_REMOTE,
   isRemoteTarget,
+  RELAY_ATTACHED_NAME,
 } from '../../../../electron/shared/config-contract';
 import { parseSetRemoteRequest } from '../../../../electron/shared/guards';
 
@@ -182,6 +183,14 @@ describe('the remote block on a real snapshot', () => {
         host: 'mini.tail1234.ts.net',
       });
     });
+
+    it('names the relay, not the unused host, on a relay block (HIVE-429)', () => {
+      seed(
+        '{\n  "version": 2,\n  "remote": { "mode": "remote", "via": "relay", "relayServerId": "dev_1", "host": "100.64.0.1" }\n}\n',
+      );
+
+      expect(reloadConfig().attachedServer).toEqual({ name: RELAY_ATTACHED_NAME, host: '' });
+    });
   });
 });
 
@@ -228,6 +237,14 @@ describe('setRemote', () => {
       name: '100.64.0.1',
       host: '100.64.0.1',
     });
+  });
+
+  it('names the relay on the snapshot a relay attach write returns (HIVE-429)', () => {
+    seed('{\n  "version": 2\n}\n');
+
+    const snapshot = setRemote({ mode: 'remote', via: 'relay', relayServerId: 'dev_1' });
+
+    expect(snapshot.attachedServer).toEqual({ name: RELAY_ATTACHED_NAME, host: '' });
   });
 
   it('names nothing when the write switches back to local mode', () => {

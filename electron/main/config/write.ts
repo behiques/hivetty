@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path';
 
 import { resolveClis } from '@shared/cli-contract';
 import {
+  attachedServerOf,
   CONFIG_VERSION,
   DEFAULT_BIND,
   DEFAULT_CLAUDE_COMMAND,
@@ -346,8 +347,7 @@ export function writeConfig(
       ...(validated.account === undefined ? {} : { account: validated.account }),
       // `remote.host` is the only handle the file carries for the far end —
       // see `ConfigSnapshot.attachedServer`'s own doc comment.
-      attachedServer:
-        remote.mode === 'remote' ? { name: remote.host, host: remote.host } : null,
+      attachedServer: attachedServerOf(remote),
       /*
         Resolved here as well as in `loadConfig` (HIVE-124), for the same
         reason `receiver` is: this snapshot is the one every mutating verb
