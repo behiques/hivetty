@@ -19,6 +19,8 @@ import type { AttachedSocket } from '../../../../electron/main/ipc/socket-broadc
  * The layers themselves stay real: `fsWatch` and `deliver` are wrapped, not
  * replaced, and `sessions` is this file's fake with one more method.
  */
+const relayAccepts = vi.hoisted(() => vi.fn());
+
 const surfaceReleases = vi.hoisted(() => ({
   watcher: vi.fn(),
   delivery: vi.fn(),
@@ -372,6 +374,7 @@ vi.mock('@remote-host/listener', async (importOriginal) => {
           return null;
         },
         stop: async () => {},
+        acceptSocket: relayAccepts,
         get boundHost() {
           return null;
         },
@@ -447,6 +450,7 @@ vi.mock('../../../../electron/main/sessions', () => ({
 
 const { CH } = await import('../../../../electron/shared/ipc-contract');
 const {
+  acceptRelaySocket,
   ipcBindingsSize,
   registerIpcHandlers,
   remoteRegistrySize,
@@ -510,6 +514,23 @@ afterEach(() => {
   resetRemoteProxy();
   resetIpcHandlers();
   resetServerModeForTest();
+});
+
+describe('acceptRelaySocket (HIVE-429)', () => {
+  it('hands a relayed socket to the listener as a relay socket', () => {
+    registerIpcHandlers();
+    const socket = { terminate: vi.fn() };
+    acceptRelaySocket(socket as never);
+    expect(relayAccepts).toHaveBeenCalledWith(socket, { via: 'relay' });
+    expect(socket.terminate).not.toHaveBeenCalled();
+  });
+
+  it('terminates the socket when there is no listener', () => {
+    const socket = { terminate: vi.fn() };
+    acceptRelaySocket(socket as never);
+    expect(relayAccepts).not.toHaveBeenCalled();
+    expect(socket.terminate).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('remote composition (HIVE-143)', () => {

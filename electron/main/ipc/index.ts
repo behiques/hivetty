@@ -17,6 +17,7 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
 } from 'electron';
+import type { WebSocket } from 'ws';
 
 import { SNAPSHOT_READ_BUDGET_MS, createRemoteListener } from '@remote-host/listener';
 import {
@@ -1459,6 +1460,12 @@ export function fleetIsIdle(): boolean {
  */
 export function startRemoteListener(): Promise<string | null> {
   return remoteListener ? remoteListener.start() : Promise.resolve(null);
+}
+
+/** A socket the relay joined to a client (HIVE-429): the same handshake and attach as a direct one. */
+export function acceptRelaySocket(socket: WebSocket): void {
+  if (remoteListener) remoteListener.acceptSocket(socket, { via: 'relay' });
+  else socket.terminate();
 }
 
 /**

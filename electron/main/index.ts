@@ -11,11 +11,12 @@ import { applyDevDockIcon } from './app-icon';
 import { primaryWindow } from './aux-windows';
 import { bringForward } from './background';
 import { parseInvocation } from './cli';
-import { getConfig } from './config';
+import { getConfig, onConfigChange } from './config';
 import { startLoginEnvImport } from './config/login-env';
 import { configPath, switchToDevHiveDir } from './config/paths';
 import { installContentSecurityPolicy } from './csp';
 import {
+  acceptRelaySocket,
   fleetIsIdle,
   remoteListenerBindError,
   remoteListenerBoundAddress,
@@ -23,10 +24,20 @@ import {
 } from './ipc';
 import { createWindowBroadcaster } from './ipc/broadcaster';
 import { registerIpc, switchIpcMode } from './ipc/router';
-import { ACCOUNT_CALLS, LICENCE_CALLS, licence, onLicenceChange, runAccountCommand, startLicence } from './licence';
+import {
+  ACCOUNT_CALLS,
+  cloudSession,
+  LICENCE_CALLS,
+  licence,
+  onLicenceChange,
+  runAccountCommand,
+  startLicence,
+} from './licence';
 import { installDeepLinks } from './licence/deep-link';
+import { entitled } from './licence/entitled';
 import { startWhenLicensed } from './licence/serve-gate';
 import { registerLifecycle } from './lifecycle';
+import { startRelay } from './relay';
 import { bindUntilBound } from './server/bind-retry';
 import {
   pairDevice,
@@ -37,7 +48,7 @@ import {
 import { fileBackedIo, serverDeviceStore } from './server/file-backed-io';
 import { runOneShot } from './server/one-shot';
 import { claimServerLock, hiveLockPath } from './server/server-lock';
-import { setServerMode } from './server-mode';
+import { isServerMode, setServerMode } from './server-mode';
 import { onShutdown } from './shutdown';
 import { createServerTray } from './tray';
 import { runHeadlessUpdate, runUnattended, startUpdateChecks } from './updates';
@@ -193,6 +204,20 @@ if (!app.requestSingleInstanceLock()) {
       },
       broadcastDeviceCode: (code) => createWindowBroadcaster().emit(CH.accountDeviceCode, code),
     });
+    /*
+      HIVE-429: the managed relay's gate, built in every process so `relay:status` always has an answer. It
+      runs the serve loop only on a Mac that booted in server mode, with the switch on, signed in and entitled.
+    */
+    const relay = startRelay({
+      enabled: () => getConfig().server.relay.enabled,
+      onConfigChange: (listener) => onConfigChange(() => listener()),
+      serverMode: isServerMode,
+      session: cloudSession,
+      entitled: () => entitled('relay'),
+      onLicenceChange: (listener) => onLicenceChange(() => listener()),
+      accept: acceptRelaySocket,
+    });
+    onShutdown(() => relay.stop());
     deepLinks.attach((url) => void licence.handleCallback(url));
   });
   /**

@@ -113,6 +113,17 @@ describe('the boot path of a served machine', () => {
     expect(source.indexOf('const licence = startLicence(')).toBeLessThan(source.indexOf('startWhenLicensed('));
   });
 
+  it('starts the relay gate once, after the licence, and stops it on shutdown (HIVE-429)', () => {
+    expect(count('startRelay({')).toBe(1);
+    expect(source.indexOf('const licence = startLicence(')).toBeLessThan(source.indexOf('startRelay({'));
+    expect(source).toContain('onShutdown(() => relay.stop())');
+    expect(source.indexOf('startRelay({')).toBeLessThan(source.indexOf('onShutdown(() => relay.stop())'));
+    expect(source).toContain('accept: acceptRelaySocket');
+    expect(source).toContain('session: cloudSession');
+    expect(source).toContain('serverMode: isServerMode');
+    expect(source).toContain("entitled: () => entitled('relay')");
+  });
+
   it('makes the updater unattended behind the server lock, before the updater is built', () => {
     // The config decides, not `--server`: a one-off trial run has a person at
     // it and no launchd behind it.

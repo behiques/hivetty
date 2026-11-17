@@ -37,6 +37,8 @@ import { startTrial } from './trial';
  */
 
 let client: AuthClient | null = null;
+/** The cloud base `startLicence` resolved, kept for the relay's URL (HIVE-429). */
+let cloudBase: string | null = null;
 let licenceState: LicenceStateMachine | null = null;
 /** The browser, as `startLicence` was given it: Manage billing and invoice links open through it. */
 let openExternal: (url: string) => Promise<void> = () => Promise.reject(new Error('the licence has not started'));
@@ -123,6 +125,7 @@ export function startLicence(
     if (account.kind === 'signed-out') seenOrgs.clear();
   });
   client = next;
+  cloudBase = built.baseUrl;
   next.start();
 
   // HIVE-267. After `next.start()`, so the launch reads the restored account.
@@ -167,6 +170,7 @@ export function startLicence(
 /** Test-only. */
 export function resetLicence(): void {
   client = null;
+  cloudBase = null;
   licenceState?.dispose();
   licenceState = null;
   licenceListeners.clear();
@@ -180,6 +184,29 @@ export function resetLicence(): void {
 /** Main's one read of the licence (HIVE-267; HIVE-268's single licence read). */
 export function licence(): LicenceState {
   return licenceState?.state() ?? { kind: 'unlicensed' };
+}
+
+/** The signed-in cloud session, for callers outside this directory that speak to the cloud (the relay). */
+export interface CloudSession {
+  baseUrl: string;
+  getAccessToken(): Promise<string | null>;
+  authedFetch(path: string, init?: RequestInit): Promise<Response>;
+  account(): AccountState;
+  onAccountChange(listener: (state: AccountState) => void): () => void;
+}
+
+/** `null` before `startLicence`. The relay (HIVE-429) reads the base and a fresh token through it. */
+export function cloudSession(): CloudSession | null {
+  const held = client;
+  const baseUrl = cloudBase;
+  if (held === null || baseUrl === null) return null;
+  return {
+    baseUrl,
+    getAccessToken: () => held.getAccessToken(),
+    authedFetch: (path, init) => held.authedFetch(path, init),
+    account: () => held.state(),
+    onAccountChange: (listener) => held.onChange(listener),
+  };
 }
 
 export function onLicenceChange(listener: (state: LicenceState) => void): () => void {
