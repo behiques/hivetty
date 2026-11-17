@@ -42,7 +42,7 @@ import {
   type RemoteLinkStatus,
 } from '../../electron/shared/ipc-contract';
 import { type HiveNotification } from '../../electron/shared/notification-contract';
-import { type RelayHostsResult } from '../../electron/shared/relay-contract';
+import { RELAY_CLOSE, RELAY_PATH, type RelayHostsResult } from '../../electron/shared/relay-contract';
 import {
   CALL_DEADLINE_MS,
   CALL_TIMEOUT_CODE,
@@ -5156,6 +5156,23 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       expect(listed.hosts).toHaveLength(1);
       relayServerId = listed.hosts[0]?.serverId ?? '';
       expect(relayServerId).toBe(relay.hosts()[0]?.serverId);
+
+      // The bearer check comes before routing: a stranger's serve socket is closed 4401 and never replaces the app's.
+      const since = relay.hosts()[0]?.since;
+      const relayServe = `${stub.url.replace(/^http/, 'ws')}${RELAY_PATH.serve}`;
+      const refusedWith = (headers: Record<string, string>): Promise<number> =>
+        new Promise((resolve, reject) => {
+          const socket = new WebSocket(relayServe, { headers });
+          socket.on('close', (code: number) => resolve(code));
+          socket.on('error', reject);
+        });
+      // Bounded: a stub that let the stranger in would hold its socket open, and that is the failure.
+      const refusal = 'the relay to refuse a serve socket with no good bearer';
+      expect(await bounded(refusedWith({}), 10_000, refusal)).toBe(RELAY_CLOSE.unauthorized);
+      expect(await bounded(refusedWith({ authorization: 'Bearer at-nope' }), 10_000, refusal)).toBe(
+        RELAY_CLOSE.unauthorized,
+      );
+      expect(relay.hosts()).toEqual([expect.objectContaining({ serverId: relayServerId, since })]);
     }, 90_000);
   });
 
