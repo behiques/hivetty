@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { LookupFunction } from 'node:net';
 
-import { WebSocketServer, type WebSocket } from 'ws';
+import { WebSocket, WebSocketServer, type ServerOptions } from 'ws';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CH, type Channel } from '@shared/ipc-contract';
@@ -35,10 +35,14 @@ import {
   PRE_SUBSCRIBE_BUFFER,
   PairingRefusedError,
   AddressRefusedError,
+  RELAY_SERVER_OFFLINE,
+  RelayClosedError,
+  RelayTargetError,
   RemoteCallError,
   ServerTooOldError,
   classifyCause,
   connectRemote,
+  type ConnectRemoteDeps,
   type RemoteClient,
 } from '../../../electron/remote-client/socket';
 
@@ -213,8 +217,15 @@ interface Dial {
   socket: FakeSocket | null;
 }
 
+/**
+ * A direct dial's overrides, spelled as the host and port they name (HIVE-429 moved them under
+ * `target`); `target` itself overrides both, for a relay dial.
+ */
+type DialOverrides = Partial<ConnectRemoteDeps> & { host?: string; port?: number };
+
 /** Starts a connection against a {@link FakeSocket}, capturing the instance. */
-function dial(overrides: Partial<Parameters<typeof connectRemote>[0]> = {}, mode: ServerMode = 'hive'): Dial {
+function dial(overrides: DialOverrides = {}, mode: ServerMode = 'hive'): Dial {
+  const { host = '127.0.0.1', port = 7433, ...rest } = overrides;
   let made: FakeSocket | null = null;
   // A `function`, not an arrow: vitest 4 refuses to let an arrow implementation
   // be called with `new`, and this mock stands in for a constructor.
@@ -224,11 +235,10 @@ function dial(overrides: Partial<Parameters<typeof connectRemote>[0]> = {}, mode
   });
 
   const promise = connectRemote({
-    host: '127.0.0.1',
-    port: 7433,
+    target: { kind: 'direct', host, port },
     credential: CREDENTIAL,
     WebSocketCtor: ctor as unknown as typeof WebSocket,
-    ...overrides,
+    ...rest,
   });
   // Swallowed here only so a rejection a test asserts on later is not an
   // unhandled rejection in the meantime; every test still awaits `promise`.
@@ -239,7 +249,7 @@ function dial(overrides: Partial<Parameters<typeof connectRemote>[0]> = {}, mode
 
 /** Dials, completes the handshake, and returns the attached client. */
 async function attachedClient(
-  overrides: Partial<Parameters<typeof connectRemote>[0]> = {},
+  overrides: DialOverrides = {},
   frame: AttachAccepted = accepted(),
 ): Promise<{ client: RemoteClient; socket: FakeSocket }> {
   const { promise, socket } = dial(overrides);
@@ -339,8 +349,7 @@ describe('connectRemote — the resolved-address fence', () => {
     const { port, connections } = await realServer();
 
     const client = await connectRemote({
-      host: 'mini.tail1234.ts.net',
-      port,
+      target: { kind: 'direct', host: 'mini.tail1234.ts.net', port },
       credential: CREDENTIAL,
       resolveAddress: resolverAnswering('127.0.0.1'),
     });
@@ -354,8 +363,7 @@ describe('connectRemote — the resolved-address fence', () => {
     const { port, connections } = await realServer();
 
     const attempt = connectRemote({
-      host: 'mini.tail1234.ts.net',
-      port,
+      target: { kind: 'direct', host: 'mini.tail1234.ts.net', port },
       credential: CREDENTIAL,
       // The only difference from the test above. A hostile local resolver
       // answering a `.ts.net` name with its own address is the attack; the
@@ -1279,5 +1287,201 @@ describe('classifyCause', () => {
   it('treats anything else as worth retrying', () => {
     expect(classifyCause(new Error('ECONNREFUSED'))).toMatchObject({ kind: 'transport' });
     expect(classifyCause('not even an error')).toMatchObject({ kind: 'transport' });
+  });
+});
+
+/**
+ * A stand-in for the cloud relay on loopback (HIVE-429): a real `ws` server that records each
+ * upgrade's path and authorization, then does whatever `onSocket` says with the socket. By default it
+ * is the far Hive itself, which is what the relay hands bytes to: the channel and the attach run
+ * through it unchanged.
+ */
+async function relayServer(
+  onSocket?: (socket: WebSocket) => void,
+  verifyClient?: ServerOptions['verifyClient'],
+): Promise<{
+  port: number;
+  upgrades: { url: string | undefined; authorization: string | undefined }[];
+  sockets: WebSocket[];
+}> {
+  const server = new WebSocketServer({ port: 0, host: '127.0.0.1', ...(verifyClient ? { verifyClient } : {}) });
+  servers.push(server);
+  const upgrades: { url: string | undefined; authorization: string | undefined }[] = [];
+  const sockets: WebSocket[] = [];
+  server.on('connection', (socket, request) => {
+    upgrades.push({ url: request.url, authorization: request.headers.authorization });
+    sockets.push(socket);
+    if (onSocket !== undefined) {
+      onSocket(socket);
+      return;
+    }
+    void respond(socket, { pskFor: () => pskOfToken(CREDENTIAL.token) }).then((outcome) => {
+      if (outcome.kind !== 'secure') return;
+      outcome.socket.onMessage((text) => {
+        const frame = JSON.parse(text) as { kind: string; id?: string };
+        if (frame.kind === 'call') {
+          outcome.socket.send(JSON.stringify({ kind: 'result', id: frame.id, payload: 'pong' }));
+          return;
+        }
+        outcome.socket.send(JSON.stringify(accepted()));
+      });
+    });
+  });
+  await new Promise<void>((done) => server.on('listening', () => done()));
+  const address = server.address();
+  if (address === null || typeof address === 'string') throw new Error('no port');
+  return { port: address.port, upgrades, sockets };
+}
+
+/** A ctor that records what it was handed and builds a real `ws` client from it. */
+function recordingCtor(): {
+  ctor: typeof WebSocket;
+  made: { url: string; options: Record<string, unknown> }[];
+} {
+  const made: { url: string; options: Record<string, unknown> }[] = [];
+  const ctor = function recording(url: string, options: Record<string, unknown>) {
+    made.push({ url, options });
+    return new WebSocket(url, options);
+  } as unknown as typeof WebSocket;
+  return { ctor, made };
+}
+
+const relayTarget = (port: number, overrides: object = {}): ConnectRemoteDeps['target'] => ({
+  kind: 'relay',
+  serverId: 'dev_1',
+  cloudUrl: `http://127.0.0.1:${String(port)}`,
+  accessToken: 'tok',
+  ...overrides,
+});
+
+describe('connectRemote — a relay target (HIVE-429)', () => {
+  it('dials the relay attach route with the bearer token and no address fence, and attaches through it', async () => {
+    const { port, upgrades } = await relayServer();
+    const { ctor, made } = recordingCtor();
+    const resolveAddress = vi.fn() as unknown as LookupFunction;
+
+    const client = await connectRemote({
+      target: relayTarget(port),
+      credential: CREDENTIAL,
+      WebSocketCtor: ctor,
+      resolveAddress,
+    });
+    clients.push(client);
+
+    expect(made).toHaveLength(1);
+    expect(made[0].url).toBe(`ws://127.0.0.1:${String(port)}/relay/attach/dev_1`);
+    expect((made[0].options.headers as Record<string, string>).authorization).toBe('Bearer tok');
+    expect(made[0].options.lookup).toBeUndefined();
+    expect(made[0].options.family).toBeUndefined();
+    expect(made[0].options.maxPayload).toBe(POST_ATTACH_FRAME_MAX_BYTES + CHANNEL_TAG_BYTES);
+    expect(made[0].options.handshakeTimeout).toBe(CLIENT_ATTACH_TIMEOUT_MS);
+    expect(upgrades).toEqual([{ url: '/relay/attach/dev_1', authorization: 'Bearer tok' }]);
+    expect(resolveAddress).not.toHaveBeenCalled();
+    expect(client.serverName()).toBe('mini');
+    await expect(client.call(CH.configGet, undefined)).resolves.toBe('pong');
+  });
+
+  it('never consults the resolver for a relay target', () => {
+    const resolveAddress = vi.fn() as unknown as LookupFunction;
+    const { socket } = dial({ target: relayTarget(7433), resolveAddress });
+
+    expect(socket?.options.lookup).toBeUndefined();
+    expect(resolveAddress).not.toHaveBeenCalled();
+  });
+
+  it('refuses a cloud base that is neither TLS nor loopback before any socket exists', async () => {
+    const { promise, ctor } = dial({ target: relayTarget(0, { cloudUrl: 'http://example.com' }) });
+
+    expect(ctor).not.toHaveBeenCalled();
+    await expect(promise).rejects.toBeInstanceOf(RelayTargetError);
+    expect(classifyCause(await promise.catch((cause: unknown) => cause))).toMatchObject({
+      kind: 'terminal',
+      code: 'relay-target',
+    });
+  });
+
+  it('refuses a server id that is not a relay id before any socket exists', async () => {
+    const { promise, ctor } = dial({ target: relayTarget(0, { serverId: 'a/b' }) });
+
+    expect(ctor).not.toHaveBeenCalled();
+    await expect(promise).rejects.toBeInstanceOf(RelayTargetError);
+  });
+
+  it.each([
+    [4401, { kind: 'terminal', code: 'relay-sign-in' }],
+    [4403, { kind: 'terminal', code: 'relay-locked' }],
+    [4404, { kind: 'transport', code: 'relay-server-offline', message: RELAY_SERVER_OFFLINE }],
+    [4408, { kind: 'transport', code: 'transport' }],
+    [4429, { kind: 'transport', code: 'transport' }],
+  ])('a %i close before the handshake is a RelayClosedError classified as listed', async (code, cause) => {
+    const { port } = await relayServer((socket) => socket.close(code));
+
+    const failure = await connectRemote({ target: relayTarget(port), credential: CREDENTIAL }).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(RelayClosedError);
+    expect((failure as RelayClosedError).code).toBe(code);
+    expect(classifyCause(failure)).toMatchObject(cause);
+  });
+
+  it('tells onClose the server is offline when a live relay connection closes with 4404', async () => {
+    const { port, sockets } = await relayServer();
+    const client = await connectRemote({ target: relayTarget(port), credential: CREDENTIAL });
+    clients.push(client);
+    const heard = new Promise((done) => client.onClose(done));
+
+    sockets[0].close(4404);
+
+    expect(await heard).toEqual({
+      kind: 'transport',
+      code: 'relay-server-offline',
+      message: RELAY_SERVER_OFFLINE,
+    });
+  });
+
+  it('a live relay connection closed with 1001 is an ordinary drop', async () => {
+    const { port, sockets } = await relayServer();
+    const client = await connectRemote({ target: relayTarget(port), credential: CREDENTIAL });
+    clients.push(client);
+    const heard = new Promise((done) => client.onClose(done));
+
+    sockets[0].close(1001);
+
+    expect(await heard).toMatchObject({ kind: 'transport', code: 'transport' });
+    expect(((await heard) as { message: string }).message).toContain('the server through the relay');
+  });
+
+  it('a 1008 during the handshake through the relay is still a refused pairing', async () => {
+    const { port } = await relayServer((socket) => {
+      socket.once('message', () => socket.close(CHANNEL_CLOSE_CODE));
+    });
+
+    await expect(
+      connectRemote({ target: relayTarget(port), credential: CREDENTIAL }),
+    ).rejects.toBeInstanceOf(PairingRefusedError);
+  });
+
+  it('an upgrade answered with HTTP 503 is a transport failure, retried', async () => {
+    const { port } = await relayServer(undefined, (_info: unknown, callback: (verified: boolean, code?: number) => void) =>
+      callback(false, 503),);
+
+    const failure = await connectRemote({ target: relayTarget(port), credential: CREDENTIAL }).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).not.toBeInstanceOf(RelayClosedError);
+    expect(classifyCause(failure)).toMatchObject({ kind: 'transport', code: 'transport' });
+  });
+
+  it('a direct target closed with 4404 is a plain transport error, not a relay verdict', async () => {
+    const { promise, socket } = dial();
+    socket?.emit('open');
+    socket?.emit('close', 4404);
+
+    const failure = await promise.catch((error: unknown) => error);
+    expect(failure).not.toBeInstanceOf(RelayClosedError);
+    expect(classifyCause(failure)).toMatchObject({ kind: 'transport', code: 'transport' });
+    expect(String(failure)).toContain('127.0.0.1:7433');
   });
 });

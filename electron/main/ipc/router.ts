@@ -667,8 +667,7 @@ export async function switchIpcMode(
     */
     resumeTracker = createResumeTracker();
     client = await dial({
-      host: target.host,
-      port: target.port,
+      target: { kind: 'direct', host: target.host, port: target.port },
       credential,
     });
     registerIpc('remote', { client, broadcaster: pushes, resumeTracker });
@@ -743,8 +742,7 @@ function armReattach(
       */
       const resumeFrom = resumeTracker === null ? undefined : composeResumeFrom(resumeTracker);
       return dial({
-        host: target.host,
-        port: target.port,
+        target: { kind: 'direct', host: target.host, port: target.port },
         credential,
         ...(resumeFrom === undefined ? {} : { resumeFrom }),
       });
