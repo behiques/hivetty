@@ -57,7 +57,9 @@ describe('readRelayHosts', () => {
 
     const result = await readRelayHosts(authedFetch);
 
-    expect(result.ok && result.hosts).toHaveLength(16);
+    expect(result.ok && result.hosts.map((host) => host.serverId)).toEqual(
+      Array.from({ length: 16 }, (_, index) => `dev_${String(index)}`),
+    );
   });
 
   it.each([
