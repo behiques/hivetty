@@ -76,6 +76,9 @@ electron/
   preload/               the bridge
   pty-host/              terminals
   mcp-host/              the hive MCP server
+  remote-host/           server mode's listener (the server half)
+  remote-client/         attach to a server (the laptop half)
+  remote-channel/        the encrypted channel both halves attach through
   shared/                contracts both sides import
 tests/                   mirrors src/ and electron/
 ```
@@ -92,6 +95,7 @@ Enforced by ESLint, proven by `pnpm verify:boundaries`. The full table is in
 - Only `appearance-store` persists, to `localStorage`.
 - No raw hex in components: colour comes from `--cc-*` tokens (the terminal from the theme's
   JS palette).
+- `electron/remote-channel/` is a leaf: `remote-host/` and `remote-client/` import it, and it imports `node:*` and its own files only.
 - Only `electron/main/harness/` may import an adapter, and an adapter never imports sessions, IPC, notifications or plans.
 
 ## Where to read next

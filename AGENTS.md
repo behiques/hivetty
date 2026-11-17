@@ -151,8 +151,9 @@ one still fires.
 | `electron/main/**` | `src/**` |
 | `electron/preload/**` | `src/**`, `electron/main/**` |
 | **`electron/pty-host/**`, `electron/mcp-host/**`** | `src/**`, `electron/main/**`, `electron/preload/**` |
+| **`electron/remote-channel/**`** | `src/**`, `electron/main/**`, `electron/preload/**`, `electron/remote-host/**`, `electron/remote-client/**` |
 | `electron/main/harness/**` | `electron/main/{sessions,ipc,notifications,plans}/**` |
-| `src/**` | `electron/main/**`, `electron/preload/**`, `electron/pty-host/**`, `electron/mcp-host/**` |
+| `src/**` | `electron/main/**`, `electron/preload/**`, `electron/pty-host/**`, `electron/mcp-host/**`, `electron/remote-channel/**` |
 
 Nothing outside `electron/main/harness/**` imports `electron/main/harness/claude-code/**`; everyone else goes through the
 registry ([`docs/harness-architecture.md`](docs/harness-architecture.md)). `electron/shared/**` is the **only** module both
