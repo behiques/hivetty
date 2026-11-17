@@ -8641,23 +8641,35 @@ const REPO_SLUG = /^[\w.-]+\/[\w.-]+$/;
 /**
  * The session a ledger entry says opened a PR, and that PR, or `null`.
  *
- * Two entries say it. A session's `ask` to the shipper (every hive flow hands
+ * Three entries say it. A session's `ask` to the shipper (every hive flow hands
  * its PR over that way, with `meta: { pr, repo }`), and the `event` main writes
  * when a session's hooks show `gh pr create` printing a PR URL. That one counts
  * only from the overmind: any party can append an `event`, so a session could
  * otherwise claim another's PR.
+ *
+ * The third is an `answer` closing a session's own ask, from the party that ask
+ * went to (HIVE-430): the builder opens a build's draft in its own worktree and
+ * asks the shipper itself, so only its answer names the session. The session
+ * is the ask's `from`, found through `askOf`, never the answer's `to`, which a
+ * caller may set.
  */
-export function prClaimOf(entry: LedgerEntry): { session: string; pr: SessionPrRecord } | null {
+export function prClaimOf(
+  entry: LedgerEntry,
+  askOf: (id: string) => LedgerEntry | undefined = () => undefined,
+): { session: string; pr: SessionPrRecord } | null {
   const number = wholeNumberOf(entry.meta?.['pr']);
   const slug = entry.meta?.['repo'];
   if (number === undefined || number < 1 || typeof slug !== 'string' || !REPO_SLUG.test(slug)) return null;
   const opened = entry.meta?.['prOpened'];
+  const asked = entry.kind === 'answer' && entry.thread !== undefined ? askOf(entry.thread) : undefined;
   const session =
     entry.kind === 'ask' && entry.to === 'shipper'
       ? entry.from
       : entry.kind === 'event' && entry.from === OVERMIND && typeof opened === 'string'
         ? opened
-        : null;
+        : asked?.kind === 'ask' && asked.to === entry.from
+          ? asked.from
+          : null;
   if (session === null) return null;
   return {
     session,
@@ -8779,8 +8791,9 @@ export function resolveSessionPrs(
  */
 function claimSessionPrs(state: HiveState, entries: readonly LedgerEntry[]): SessionPrRequest[] {
   const notes = new Map<string, SessionPrRecord[]>();
+  const askOf = (id: string) => state.ledger.find((item) => item.id === id) ?? entries.find((item) => item.id === id);
   for (const entry of entries) {
-    const claim = prClaimOf(entry);
+    const claim = prClaimOf(entry, askOf);
     if (claim === null) continue;
     const id = currentSessionIn(state, claim.session);
     const entity = state.entities[id];
@@ -8845,14 +8858,16 @@ function learnSessionPrs(
     if (live === null) continue;
 
     /*
-      A branch is not a session. Another session on this branch in this
-      checkout could as well have opened it, so the sweep guesses for neither,
-      and a PR another session owns is never guessed onto this one. The
-      opener's own receipt records it (`prClaimOf`).
+      A branch is not a session. Another live session in this checkout could
+      as well have opened it, so the sweep guesses for neither, and a PR
+      another session owns is never guessed onto this one. The opener's own
+      receipt records it (`prClaimOf`). The peer's branch is not compared: a
+      branch belongs to the checkout, and a peer's last report of it can be
+      stale (HIVE-430).
     */
     const shared = state.order.some((other) => {
       const peer = other === id ? undefined : state.entities[other];
-      return peer !== undefined && isSession(peer) && peer.branch === entity.branch && peer.cwd === entity.cwd;
+      return peer !== undefined && isSession(peer) && !isEnded(peer.status) && peer.cwd === entity.cwd;
     });
     if (shared || ownedBy(state, live.url, id)) continue;
 
