@@ -15,7 +15,8 @@ import {
 import type { LocalRemoteState, RemoteLinkStatus } from '@shared/ipc-contract';
 import { useHiveStore } from '@stores/hive-store';
 import { signIn } from '@lib/account';
-import type { RelayServeStatus } from '@shared/relay-contract';
+import type { RelayHostsResult, RelayServeStatus } from '@shared/relay-contract';
+import { listRelayHosts } from '@lib/relay';
 import type { EntitlementView } from '@hooks/use-entitlement';
 import {
   DEFAULT_REMOTE,
@@ -27,6 +28,11 @@ import {
 vi.mock('@lib/account', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@lib/account')>()),
   signIn: vi.fn(() => Promise.resolve(null)),
+}));
+
+vi.mock('@lib/relay', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@lib/relay')>()),
+  listRelayHosts: vi.fn(() => Promise.resolve({ ok: true, hosts: [] })),
 }));
 
 vi.mock('@lib/project-config', () => ({
@@ -774,7 +780,7 @@ describe('ServerModeGroup', () => {
 
       expect(setRemoteConfig).not.toHaveBeenCalled();
       // HIVE-428: a public address is the relay's, and the hint says so by name.
-      expect(screen.getByText(/connect through relay/i)).toBeInTheDocument();
+      expect(screen.getByText(/use connect through relay/i)).toBeInTheDocument();
       expect(screen.getByText(/local network/i)).toBeInTheDocument();
       expect(screen.queryByText(/plaintext/i)).not.toBeInTheDocument();
     });
@@ -1062,7 +1068,7 @@ describe('ServerModeGroup', () => {
       await userEvent.click(screen.getByRole('switch', { name: 'Attach to a server' }));
       await userEvent.click(screen.getByRole('button', { name: /^attach$/i }));
 
-      const banner = await screen.findByText(/connect through relay/i);
+      const banner = await screen.findByText(/use connect through relay/i);
       // Not merely the field's hint: a dedicated, bordered box, the same
       // shape `live-sessions` renders at.
       expect(banner.closest('div')).toHaveClass('border-red');
@@ -1768,6 +1774,248 @@ describe('ServerModeGroup', () => {
    * the user from finding that out by clicking. Both directions, because the
    * two switches sit side by side and either one can be flipped first.
    */
+  describe('Connect through relay (HIVE-429)', () => {
+    /** 09:14 in whatever timezone the suite runs in, so the label is the same everywhere. */
+    const SINCE = new Date(2026, 10, 17, 9, 14).toISOString();
+    const STUDIO = { serverId: 'dev_1', name: 'Studio mini', since: SINCE };
+    const LAPTOP = { serverId: 'dev_2', name: 'Laptop', since: 'not a date' };
+    const LOCKED: EntitlementView = {
+      allowed: false,
+      reason: 'Relay is in Solo and above',
+      plan: 'Solo',
+      upgradeUrl: '/account/plan',
+    };
+
+    const renderAttach = (
+      overrides: {
+        remote?: Partial<RemoteConfig>;
+        relayLock?: EntitlementView;
+        link?: RemoteLinkStatus | null;
+        attachedServerName?: string | null;
+        localRemote?: LocalRemoteState | null;
+      } = {},
+    ) =>
+      render(
+        <ServerModeGroup
+          enabled={false}
+          bind={DEFAULT_BIND}
+          devices={[]}
+          // `mode: 'remote'` opens the Attach block on mount, as a failed boot attach leaves it.
+          remote={{ ...REMOTE_TARGET, mode: 'remote', ...overrides.remote }}
+          localRemote={overrides.localRemote ?? null}
+          attachedServer={null}
+          attachedServerName={overrides.attachedServerName ?? null}
+          serving={false}
+          link={overrides.link ?? null}
+          relayLock={overrides.relayLock ?? { allowed: true }}
+        />,
+      );
+    const viaSwitch = () => screen.getByRole('switch', { name: 'Connect through relay' });
+    const picker = () => screen.getByRole('combobox', { name: 'Server' });
+    const hostsAnswer = (result: RelayHostsResult) => vi.mocked(listRelayHosts).mockResolvedValue(result);
+
+    beforeEach(() => {
+      vi.mocked(listRelayHosts).mockReset().mockResolvedValue({ ok: true, hosts: [STUDIO] });
+    });
+
+    it('renders the switch above the address fields, off for a direct block', () => {
+      renderAttach();
+
+      expect(viaSwitch()).not.toBeChecked();
+      expect(
+        screen.getByText('Reach a server of yours on any network. Both machines are signed in to the same HiveTTY account.'),
+      ).toBeInTheDocument();
+      const address = screen.getByLabelText('Server address');
+      expect(viaSwitch().compareDocumentPosition(address) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(listRelayHosts).not.toHaveBeenCalled();
+    });
+
+    it('writes via and nothing else on toggle, and swaps the address fields for the picker', async () => {
+      renderAttach();
+
+      await userEvent.click(viaSwitch());
+
+      expect(setRemoteConfig).toHaveBeenCalledExactlyOnceWith({ via: 'relay' });
+      expect(screen.queryByLabelText('Server address')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Port')).not.toBeInTheDocument();
+      expect(picker()).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Device id')).toBeInTheDocument();
+      expect(screen.getByLabelText('Pairing token')).toBeInTheDocument();
+      expect(
+        screen.getByText('Your Macs with "Reachable through HiveTTY relay" on. Names come from Account › Devices.'),
+      ).toBeInTheDocument();
+    });
+
+    it('reads the list when the switch turns on, on mount with relay, and on Refresh', async () => {
+      const { unmount } = renderAttach();
+      await userEvent.click(viaSwitch());
+      await waitFor(() => expect(listRelayHosts).toHaveBeenCalledTimes(1));
+      unmount();
+
+      vi.mocked(listRelayHosts).mockClear();
+      renderAttach({ remote: { via: 'relay' } });
+      await waitFor(() => expect(listRelayHosts).toHaveBeenCalledTimes(1));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+      await waitFor(() => expect(listRelayHosts).toHaveBeenCalledTimes(2));
+    });
+
+    it('labels each server with its name and the local time it came online', async () => {
+      hostsAnswer({ ok: true, hosts: [STUDIO, LAPTOP] });
+      renderAttach({ remote: { via: 'relay' } });
+
+      expect(await screen.findByRole('option', { name: 'Studio mini · online since 09:14' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Laptop · online' })).toBeInTheDocument();
+    });
+
+    it('writes the chosen server', async () => {
+      hostsAnswer({ ok: true, hosts: [STUDIO, LAPTOP] });
+      renderAttach({ remote: { via: 'relay' } });
+      await screen.findByRole('option', { name: 'Laptop · online' });
+
+      await userEvent.selectOptions(picker(), 'dev_2');
+
+      expect(setRemoteConfig).toHaveBeenCalledExactlyOnceWith({ relayServerId: 'dev_2' });
+    });
+
+    it('keeps a saved server that is not online as "Saved server · offline", selected', async () => {
+      renderAttach({ remote: { via: 'relay', relayServerId: 'dev_9' } });
+
+      const saved = await screen.findByRole('option', { name: 'Saved server · offline' });
+      expect(saved).toBeInTheDocument();
+      expect(picker()).toHaveValue('dev_9');
+    });
+
+    it('with nothing online and nothing saved, the picker is disabled and says what to turn on', async () => {
+      hostsAnswer({ ok: true, hosts: [] });
+      renderAttach({ remote: { via: 'relay' } });
+
+      expect(await screen.findByRole('option', { name: 'No server online' })).toBeInTheDocument();
+      expect(picker()).toBeDisabled();
+      expect(screen.getAllByRole('option')).toHaveLength(1);
+      expect(
+        screen.getByText('Turn on "Reachable through HiveTTY relay" on the server, signed in to this account.'),
+      ).toBeInTheDocument();
+    });
+
+    it.each([
+      [{ ok: false, reason: 'signed-out' } as const, 'Sign in to list your servers.'],
+      [{ ok: false, reason: 'unavailable' } as const, 'Could not reach HiveTTY. Check your connection and refresh.'],
+    ])('says why when the list could not be read: %j', async (result, sentence) => {
+      hostsAnswer(result);
+      renderAttach({ remote: { via: 'relay' } });
+
+      expect(await screen.findByText(sentence)).toBeInTheDocument();
+    });
+
+    it('a cloud that says the plan has no relay shows the locked row', async () => {
+      hostsAnswer({ ok: false, reason: 'not-entitled' });
+      renderAttach({ remote: { via: 'relay' } });
+
+      await waitFor(() => expect(viaSwitch()).toBeDisabled());
+      expect(viaSwitch()).not.toBeChecked();
+      expect(screen.getByRole('button', { name: 'Upgrade' })).toBeInTheDocument();
+    });
+
+    it('is shown locked, never hidden, when the plan has no relay', () => {
+      renderAttach({ relayLock: LOCKED });
+
+      expect(viaSwitch()).toBeDisabled();
+      expect(viaSwitch()).not.toBeChecked();
+      expect(screen.getByText(/Relay is in Solo and above/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Upgrade' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Server address')).toBeInTheDocument();
+    });
+
+    it('disables Attach until a server is chosen', async () => {
+      hostsAnswer({ ok: true, hosts: [] });
+      const { unmount } = renderAttach({ remote: { via: 'relay' } });
+      await screen.findByRole('option', { name: 'No server online' });
+      expect(screen.getByRole('button', { name: /^attach$/i })).toBeDisabled();
+      unmount();
+
+      hostsAnswer({ ok: true, hosts: [STUDIO] });
+      renderAttach({ remote: { via: 'relay', relayServerId: 'dev_1' } });
+      await screen.findByRole('option', { name: 'Studio mini · online since 09:14' });
+      expect(screen.getByRole('button', { name: /^attach$/i })).toBeEnabled();
+    });
+
+    it('attaches through the relay with via and the chosen server', async () => {
+      renderAttach({ remote: { via: 'relay', relayServerId: 'dev_1' } });
+      await screen.findByRole('option', { name: 'Studio mini · online since 09:14' });
+
+      await userEvent.click(screen.getByRole('button', { name: /^attach$/i }));
+
+      expect(setRemoteConfig).toHaveBeenCalledExactlyOnceWith({
+        mode: 'remote',
+        via: 'relay',
+        relayServerId: 'dev_1',
+      });
+    });
+
+    it('a direct attach says via direct too', async () => {
+      renderAttach();
+
+      await userEvent.click(screen.getByRole('button', { name: /^attach$/i }));
+
+      expect(setRemoteConfig).toHaveBeenCalledExactlyOnceWith({
+        mode: 'remote',
+        host: 'mini.tail1234.ts.net',
+        port: 7433,
+        via: 'direct',
+      });
+    });
+
+    it('says the server is offline in place of "The connection dropped." while reconnecting', () => {
+      const reconnecting = (reason: string | null): RemoteLinkStatus => ({
+        state: 'reconnecting',
+        serverName: 'mini',
+        attempt: 2,
+        nextAttemptAt: null,
+        reason,
+        epoch: 0,
+        lost: 0,
+      });
+      const { unmount } = renderAttach({ attachedServerName: 'mini', link: reconnecting('The server is offline.') });
+      expect(screen.getByText(/The server is offline\./)).toBeInTheDocument();
+      expect(screen.queryByText(/The connection dropped\./)).not.toBeInTheDocument();
+      unmount();
+
+      renderAttach({ attachedServerName: 'mini', link: reconnecting(null) });
+      expect(screen.getByText(/The connection dropped\./)).toBeInTheDocument();
+    });
+
+    it('ignores a list that lands after a newer request', async () => {
+      let first: (result: RelayHostsResult) => void = () => undefined;
+      vi.mocked(listRelayHosts)
+        .mockImplementationOnce(() => new Promise((done) => (first = done)))
+        .mockResolvedValueOnce({ ok: true, hosts: [LAPTOP] });
+      renderAttach({ remote: { via: 'relay' } });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+      expect(await screen.findByRole('option', { name: 'Laptop · online' })).toBeInTheDocument();
+
+      await act(async () => {
+        first({ ok: true, hosts: [STUDIO] });
+        await Promise.resolve();
+      });
+      expect(screen.queryByRole('option', { name: 'Studio mini · online since 09:14' })).not.toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Laptop · online' })).toBeInTheDocument();
+    });
+
+    it('brings the address fields back, with their values, when the switch turns off', async () => {
+      renderAttach({ remote: { via: 'relay', host: '192.168.1.20', port: 7500 } });
+      expect(screen.queryByLabelText('Server address')).not.toBeInTheDocument();
+
+      await userEvent.click(viaSwitch());
+
+      expect(setRemoteConfig).toHaveBeenCalledExactlyOnceWith({ via: 'direct' });
+      expect(screen.getByLabelText('Server address')).toHaveValue('192.168.1.20');
+      expect(screen.getByLabelText('Port')).toHaveValue('7500');
+    });
+  });
+
   describe('the relay switch (HIVE-429)', () => {
     const renderRelay = (
       overrides: {
