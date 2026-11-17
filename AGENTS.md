@@ -150,8 +150,7 @@ one still fires.
 | `src/**`, `electron/**` | `tests/**` (test scaffolding never ships) |
 | `electron/main/**` | `src/**` |
 | `electron/preload/**` | `src/**`, `electron/main/**` |
-| **`electron/pty-host/**`, `electron/mcp-host/**`** | `src/**`, `electron/main/**`, `electron/preload/**` |
-| **`electron/remote-channel/**`** | `src/**`, `electron/main/**`, `electron/preload/**`, `electron/remote-host/**`, `electron/remote-client/**` |
+| **`electron/pty-host/**`, `electron/mcp-host/**`, `electron/remote-channel/**`** | `src/**`, `electron/main/**`, `electron/preload/**`; `remote-channel` also `electron/remote-host/**`, `electron/remote-client/**` |
 | `electron/main/harness/**` | `electron/main/{sessions,ipc,notifications,plans}/**` |
 | `src/**` | `electron/main/**`, `electron/preload/**`, `electron/pty-host/**`, `electron/mcp-host/**`, `electron/remote-channel/**` |
 
