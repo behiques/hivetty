@@ -5344,6 +5344,44 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       expect(relayLeaks()).toEqual([]);
       measurements.push({ case: '23e. the relay recording', frames: frames.length });
     }, 30_000);
+
+    it('23f. cutting the relay drops the link, and the same shell answers after the reattach', async () => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const view = renderer;
+
+      // Every status is kept, not the last: a cut goes reconnecting then attached inside one backoff second.
+      await view.evaluate(
+        'window.__relayLinks = []; window.hive.remote.onLinkStatus((status) => { window.__relayLinks.push(status); }); true',
+      );
+
+      const started = Date.now();
+      expect(stub.relay.cut()).toBeGreaterThanOrEqual(3);
+      await waitForAsync(
+        async () => {
+          const links = await view.evaluate<(RemoteLinkStatus | null)[]>('window.__relayLinks');
+          const dropped = links.findIndex((status) => status?.state === 'reconnecting');
+          return dropped >= 0 && links.slice(dropped).some((status) => status?.state === 'attached');
+        },
+        'the client to drop and reattach through the relay with nobody asking it to',
+        90_000,
+      );
+      measurements.push({ case: '23f. reattach through the relay after a cut', elapsed: Date.now() - started });
+
+      // Ruling 2: the variable was set in this shell before the cut, so only that shell can print it.
+      await type(`printf 'AFTER-%s\\n' "$RELAY_MARK"\r`);
+      await waitForAsync(
+        async () => (await output()).map((event) => event.chunk).join('').includes(`AFTER-${mark}`),
+        'the shell from before the cut to answer after it',
+        30_000,
+      );
+
+      const events = await output();
+      // A gap marker is an empty chunk (the HIVE-143 resume case): the resume had everything, so none arrives.
+      expect(events.filter((event) => event.chunk === '')).toEqual([]);
+      const seqs = events.map((event) => event.seq);
+      expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    }, 180_000);
   });
 
   describe('a call that never settles (HIVE-144)', () => {
