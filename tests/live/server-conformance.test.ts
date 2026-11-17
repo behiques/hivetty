@@ -42,6 +42,7 @@ import {
   type RemoteLinkStatus,
 } from '../../electron/shared/ipc-contract';
 import { type HiveNotification } from '../../electron/shared/notification-contract';
+import { type RelayHostsResult } from '../../electron/shared/relay-contract';
 import {
   CALL_DEADLINE_MS,
   CALL_TIMEOUT_CODE,
@@ -5069,6 +5070,93 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         await quietly(() => a.close());
       }
     }, 240_000);
+  });
+
+  describe('two built apps that meet only through the relay (HIVE-286)', () => {
+    const servedProjectId = 'relayed-fleet';
+
+    let serverConfigPath: string;
+    let serverUserDataDir: string;
+    let serverApp: ChildProcess | undefined;
+
+    let clientConfigPath: string;
+    let clientUserDataDir: string;
+    let clientApp: ChildProcess | undefined;
+    let clientRecord: ProcessRecord | undefined;
+    let renderer: RendererDriver | undefined;
+
+    /** The id the relay lists the serving app under; 23a reads it from the client's own `relay:hosts`. */
+    let relayServerId = '';
+
+    beforeAll(async () => {
+      const serverDir = mkdtempSync(join(tmpdir(), 'hive-live-relay-server-'));
+      serverConfigPath = join(serverDir, 'config.json');
+      serverUserDataDir = join(serverDir, 'user-data');
+      const serverProjectDir = mkdtempSync(join(tmpdir(), 'hive-live-relay-served-project-'));
+      assertScratchPath(serverConfigPath);
+      scratchConfigPaths.push(serverConfigPath);
+
+      // Loopback, on a port the client is never told: the relay is the only way in.
+      const booted = await bootServerApp(serverConfigPath, serverUserDataDir, (bootPort) => ({
+        version: CONFIG_VERSION,
+        shell: '/bin/sh',
+        claudeCommand: 'true; false',
+        projects: [{ id: servedProjectId, name: 'Relayed Fleet', path: serverProjectDir, icon: 'ph-cube' }],
+        server: {
+          bind: { host: '127.0.0.1', port: bootPort, allowedOrigins: [] },
+          devices: [],
+          relay: { enabled: true },
+        },
+      }));
+      serverApp = booted.child;
+
+      const clientDir = mkdtempSync(join(tmpdir(), 'hive-live-relay-client-'));
+      clientConfigPath = join(clientDir, 'config.json');
+      clientUserDataDir = join(clientDir, 'user-data');
+      const clientProjectDir = mkdtempSync(join(tmpdir(), 'hive-live-relay-client-project-'));
+      assertScratchPath(clientConfigPath);
+      scratchConfigPaths.push(clientConfigPath);
+      // The relay asks every socket for a bearer, so the attaching app signs in too.
+      await signIn(clientConfigPath, clientUserDataDir);
+      writeFileSync(
+        clientConfigPath,
+        JSON.stringify(
+          {
+            version: CONFIG_VERSION,
+            shell: '/bin/sh',
+            claudeCommand: 'true; false',
+            projects: [{ id: 'relay-client-only', name: 'Client Only', path: clientProjectDir, icon: 'ph-cube' }],
+          },
+          null,
+          2,
+        ),
+        'utf8',
+      );
+      const debugPort = await freePort();
+      const spawned = spawnApp([`--remote-debugging-port=${String(debugPort)}`], clientConfigPath, clientUserDataDir);
+      clientApp = spawned.child;
+      clientRecord = spawned.record;
+      renderer = await openRenderer(debugPort, 'the app attaching through the relay');
+    }, 150_000);
+
+    afterAll(async () => {
+      renderer?.close();
+      await stopApp(clientApp);
+      await stopApp(serverApp);
+    }, 30_000);
+
+    it('23a. the serving app takes the relay, and the client sees it listed', async () => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const relay = stub.relay;
+      await waitFor(() => relay.hosts().length === 1, 'the serving app to open /relay/serve', 60_000);
+
+      const listed = await renderer.evaluate<RelayHostsResult>('window.hive.relay.hosts()');
+      assert(listed.ok, `relay:hosts refused: ${JSON.stringify(listed)}; client stderr:\n${clientRecord?.stderr || '(empty)'}`);
+      expect(listed.hosts).toHaveLength(1);
+      relayServerId = listed.hosts[0]?.serverId ?? '';
+      expect(relayServerId).toBe(relay.hosts()[0]?.serverId);
+    }, 90_000);
   });
 
   describe('a call that never settles (HIVE-144)', () => {

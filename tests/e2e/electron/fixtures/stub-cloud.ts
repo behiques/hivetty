@@ -3,6 +3,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 
 import { FEATURE_PLANS, PLAN_ORDER, type PlanKey } from '@shared/feature-plans';
+import { RELAY_PATH } from '@shared/relay-contract';
+
+import { attachStubRelay, type StubRelay } from './stub-relay';
 
 export interface StubCall {
   method: string;
@@ -50,6 +53,8 @@ export interface StubCloud {
   env: { HIVETTY_CLOUD_URL: string; HIVETTY_LEASE_KEYS: string };
   calls: StubCall[];
   controls: StubControls;
+  /** HIVE-286: the stub relay on this server. Idle unless an app dials `/relay/*`. */
+  relay: StubRelay;
   close(): Promise<void>;
 }
 
@@ -287,18 +292,28 @@ export async function startStubCloud(): Promise<StubCloud> {
       if (unauthorised(req, res)) return;
       return state.billing ? send(res, 200, state.billing) : send(res, 404, { error: 'not_found' });
     }
+    if (req.method === 'GET' && path === RELAY_PATH.hosts) {
+      if (unauthorised(req, res)) return;
+      return send(res, 200, relay.hosts());
+    }
     send(res, 404, { error: 'not_found' });
   };
 
   const server = createServer((req, res) => {
     route(req, res).catch((cause: unknown) => send(res, 500, { error: String(cause) }));
   });
+  const relay = attachStubRelay(server, {
+    authorised: (token) => !state.revoked && state.access.has(token),
+    serverId: () => state.deviceId,
+  });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   url = `http://127.0.0.1:${String(port)}`;
 
+  // An upgraded relay socket is not one of the server's HTTP connections, and close() waits for it.
   const closeServer = (): Promise<void> =>
     new Promise((resolve) => {
+      relay.cut();
       server.closeAllConnections();
       server.close(() => resolve());
     });
@@ -330,6 +345,10 @@ export async function startStubCloud(): Promise<StubCloud> {
     env: { HIVETTY_CLOUD_URL: url, HIVETTY_LEASE_KEYS: JSON.stringify([jwk]) },
     calls,
     controls,
-    close: closeServer,
+    relay,
+    close: () => {
+      relay.close();
+      return closeServer();
+    },
   };
 }
