@@ -18,6 +18,7 @@ import {
   BRIDGE_PLANS_KEYS,
   BRIDGE_PTY_KEYS,
   BRIDGE_REMOTE_KEYS,
+  BRIDGE_RELAY_KEYS,
   BRIDGE_SERVER_KEYS,
   BRIDGE_SESSION_KEYS,
   BRIDGE_SHIPPED_KEYS,
@@ -117,6 +118,8 @@ const server = () =>
   exposed.server as Record<string, (...args: unknown[]) => unknown>;
 const remote = () =>
   exposed.remote as Record<string, (...args: unknown[]) => unknown>;
+const relay = () =>
+  exposed.relay as Record<string, (...args: unknown[]) => unknown>;
 const session = () =>
   exposed.session as Record<string, (...args: unknown[]) => unknown>;
 const ledger = () =>
@@ -151,6 +154,8 @@ describe('exposed surface', () => {
      * touches no credential, only reports what the socket one opened is doing.
      */
     expect(Object.keys(remote()).sort()).toEqual([...BRIDGE_REMOTE_KEYS].sort());
+    // HIVE-429: this machine's relay status, a read and its push.
+    expect(Object.keys(relay()).sort()).toEqual([...BRIDGE_RELAY_KEYS].sort());
     expect(Object.keys(shipped()).sort()).toEqual([...BRIDGE_SHIPPED_KEYS].sort());
     expect(Object.keys(integrations()).sort()).toEqual([
       ...BRIDGE_INTEGRATIONS_KEYS,
@@ -1060,6 +1065,20 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
     (account().onChanged as (cb: unknown) => () => void)(callback);
     listeners.get(CH.accountChanged)?.[0]?.({}, { kind: 'signing-in' });
     expect(callback).toHaveBeenCalledWith({ kind: 'signing-in' });
+  });
+});
+
+describe('the relay status verbs (HIVE-429)', () => {
+  it('relay.status invokes relay:status', async () => {
+    await (relay().status as () => Promise<unknown>)();
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.relayStatus);
+  });
+
+  it('relay.onStatus hands the pushed status over, payload only', () => {
+    const callback = vi.fn();
+    (relay().onStatus as (cb: unknown) => () => void)(callback);
+    listeners.get(CH.relayStatusChanged)?.[0]?.({}, { state: 'connecting' });
+    expect(callback).toHaveBeenCalledWith({ state: 'connecting' });
   });
 });
 

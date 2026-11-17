@@ -3,9 +3,12 @@ import { useState } from 'react';
 
 import { Button } from '@components/ui/button';
 import { Hint } from '@components/ui/hint';
+import { UpgradeLink } from '@components/ui/lock';
 import { Switch } from '@components/ui/switch';
 import { TextField } from '@components/ui/text-field';
 import { SettingsGroup } from '@features/shared/components/settings-group';
+import type { EntitlementView } from '@hooks/use-entitlement';
+import { signIn } from '@lib/account';
 import {
   forgetRemoteDevice,
   pairDevice,
@@ -27,6 +30,7 @@ import {
   type SwitchOutcome,
 } from '@shared/config-contract';
 import type { LocalRemoteState, RemoteLinkStatus } from '@shared/ipc-contract';
+import type { RelayServeStatus } from '@shared/relay-contract';
 import { useApplyModeChange } from '@stores/hive-store';
 
 /**
@@ -196,8 +200,107 @@ const SERVE_ROSTER_ATTACHED_HINT =
  * second to animate a number nobody is watching.
  */
 function nextTryIn(at: number): string {
-  const seconds = Math.max(1, Math.ceil((at - Date.now()) / 1_000));
+  const seconds = secondsUntil(at);
   return `next try in ${String(seconds)} second${seconds === 1 ? '' : 's'}`;
+}
+
+/** Whole seconds to `at`, never under one: {@link nextTryIn}'s rounding, shared with the relay's line. */
+function secondsUntil(at: number): number {
+  return Math.max(1, Math.ceil((at - Date.now()) / 1_000));
+}
+
+const RELAY_LABEL = 'Reachable through HiveTTY relay';
+const RELAY_DESCRIPTION =
+  'Your paired devices reach this Mac from any network. This Mac dials out to the relay, so nothing connects in. The relay carries encrypted traffic it cannot read.';
+
+/** The relay's one status line (HIVE-429): a dot and a sentence, `null` for `off`. Colours are tokens. */
+function relayLine(status: RelayServeStatus): { dot: string; sentence: string; signIn?: true } | null {
+  switch (status.state) {
+    case 'connecting':
+      return { dot: 'bg-subtle', sentence: 'Connecting to the relay…' };
+    case 'connected': {
+      const time =
+        status.since === undefined
+          ? null
+          : new Date(status.since).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return { dot: 'bg-green', sentence: time === null ? 'Connected to the relay.' : `Connected to the relay since ${time}.` };
+    }
+    case 'reconnecting':
+      return {
+        dot: 'bg-amber',
+        sentence:
+          status.nextAttemptAt === undefined
+            ? 'The relay connection dropped. Trying again.'
+            : `The relay connection dropped. Next try in ${String(secondsUntil(status.nextAttemptAt))} s.`,
+      };
+    case 'sign-in':
+      return { dot: 'bg-red', sentence: 'Sign in again to use the relay.', signIn: true };
+    case 'locked':
+      return { dot: 'bg-red', sentence: 'Your plan does not include the relay.' };
+    case 'replaced':
+      return {
+        dot: 'bg-red',
+        sentence: 'Another HiveTTY on this Mac took over the relay. Turn this off and on to take it back.',
+      };
+    case 'pending-launch':
+      return { dot: 'bg-subtle', sentence: 'Starts at next launch, with serving.' };
+    case 'off':
+      return null;
+  }
+}
+
+/**
+ * "Reachable through HiveTTY relay" and its status line (HIVE-429), inside the open Serve block. Locked, it is
+ * shown off and disabled with the reason and Upgrade, never hidden. The `role="status"` region is always mounted
+ * so a screen reader hears each change.
+ */
+function RelaySwitch({
+  enabled,
+  status,
+  lock,
+  attached,
+}: {
+  enabled: boolean;
+  status: RelayServeStatus;
+  lock: EntitlementView;
+  attached: boolean;
+}) {
+  const locked = !lock.allowed;
+  const line = enabled && !locked ? relayLine(status) : null;
+  return (
+    <div className="flex flex-col gap-1">
+      <Switch
+        label={RELAY_LABEL}
+        description={
+          lock.allowed ? (
+            RELAY_DESCRIPTION
+          ) : (
+            <>
+              {lock.reason} · <UpgradeLink />
+            </>
+          )
+        }
+        checked={enabled && !locked}
+        disabled={attached || locked}
+        onCheckedChange={(next) => {
+          void setServerConfig({ relay: { enabled: next } });
+        }}
+      />
+      <div role="status" aria-label="Relay status">
+        {line === null ? null : (
+          <div className="flex items-center gap-2 text-ui-sm text-muted">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${line.dot}`} />
+            <span>{line.sentence}</span>
+            {line.signIn ? (
+              <button type="button" className="text-brand hover:underline" onClick={() => void signIn()}>
+                Sign in
+              </button>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -345,6 +448,15 @@ interface ServerModeGroupProps {
    * attached has no link to describe, which is also every local-mode test.
    */
   link?: RemoteLinkStatus | null;
+  /**
+   * The resolved `server.relay` from the snapshot (HIVE-429). Optional, defaulting off, as `link` is: every
+   * pane rendered without it is one with the relay off.
+   */
+  relay?: { enabled: boolean };
+  /** This machine's own relay serving state, from `useRelayStatus()` (HIVE-429). */
+  relayStatus?: RelayServeStatus;
+  /** `useEntitlement('relay')` (HIVE-429): locked, the switch shows the reason and Upgrade. */
+  relayLock?: EntitlementView;
 }
 
 export function ServerModeGroup({
@@ -357,6 +469,9 @@ export function ServerModeGroup({
   attachedServerName,
   serving,
   link = null,
+  relay = { enabled: false },
+  relayStatus = { state: 'off' },
+  relayLock = { allowed: true },
 }: ServerModeGroupProps) {
   /**
    * Whether a socket is open right now — the one question the attach half
@@ -917,6 +1032,8 @@ export function ServerModeGroup({
             placeholder="None"
             hint={originsInvalid ? ORIGINS_INVALID : ORIGINS_HINT}
           />
+
+          <RelaySwitch enabled={relay.enabled} status={relayStatus} lock={relayLock} attached={attached} />
         </>
       ) : null}
 

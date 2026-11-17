@@ -1340,6 +1340,28 @@ describe('parseSetReceiverRequest and the bind (HIVE-134)', () => {
  * see its own doc comment for why.
  */
 describe('parseSetServerRequest (HIVE-142)', () => {
+  it('accepts relay.enabled (HIVE-429)', () => {
+    expect(parseSetServerRequest({ relay: { enabled: true } })).toEqual({ relay: { enabled: true } });
+    expect(parseSetServerRequest({ enabled: true, relay: { enabled: false } })).toEqual({
+      enabled: true,
+      relay: { enabled: false },
+    });
+  });
+
+  it('refuses a relay that is not an object, or whose enabled is not a boolean (HIVE-429)', () => {
+    for (const relay of [true, 'on', null, []]) {
+      expect(() => parseSetServerRequest({ relay })).toThrow(/setServer\.relay/);
+    }
+    for (const enabled of ['true', 1, null]) {
+      expect(() => parseSetServerRequest({ relay: { enabled } })).toThrow(/setServer\.relay\.enabled/);
+    }
+    expect(() => parseSetServerRequest({ relay: { address: 'x' } })).toThrow(/setServer\.relay/);
+  });
+
+  it('treats an empty relay as nothing to change (HIVE-429)', () => {
+    expect(() => parseSetServerRequest({ relay: {} })).toThrow(/nothing to change/);
+  });
+
   it('accepts enabled alone', () => {
     expect(parseSetServerRequest({ enabled: true })).toEqual({ enabled: true });
     expect(parseSetServerRequest({ enabled: false })).toEqual({ enabled: false });

@@ -770,10 +770,20 @@ export interface ServerDevice {
   credential: ServerCredential;
 }
 
+/**
+ * The managed relay, serving side (HIVE-429). With `enabled`, a Mac that booted in server mode, signed in
+ * and entitled to `relay`, holds the cloud's `/relay/serve`, so paired devices reach it from any network.
+ * The relay's address is the cloud the app signs in to; there is no address field.
+ */
+export interface ServerRelayConfig {
+  enabled: boolean;
+}
+
 export interface ServerConfig {
   enabled: boolean;
   bind: ServerBindConfig;
   devices: readonly ServerDevice[];
+  relay: ServerRelayConfig;
 }
 
 export const DEFAULT_SERVER: ServerConfig = {
@@ -781,10 +791,14 @@ export const DEFAULT_SERVER: ServerConfig = {
   // 7434, one above The Hive's default, so both can serve on one Mac (HIVE-242).
   bind: { host: '127.0.0.1', port: 7434, allowedOrigins: [] },
   devices: [],
+  relay: { enabled: false },
 };
 
 /** The block's keys, for the parser's exact-key check. */
-export const SERVER_KEYS: readonly (keyof ServerConfig)[] = ['enabled', 'bind', 'devices'];
+export const SERVER_KEYS: readonly (keyof ServerConfig)[] = ['enabled', 'bind', 'devices', 'relay'];
+
+/** The nested relay block's keys, for the same check one level down (HIVE-429). */
+export const SERVER_RELAY_KEYS = ['enabled'] as const satisfies readonly (keyof ServerRelayConfig)[];
 
 /** The nested bind block's keys, for the same check one level down. */
 export const SERVER_BIND_KEYS: readonly (keyof ServerBindConfig)[] = [
@@ -1853,7 +1867,7 @@ export function emptySnapshot(
     // itself — the same reason `loadConfig` and `writeConfig` give it one:
     // one shared array instance handed to every empty snapshot is exactly
     // what `readServerDevicesFromDisk`'s own doc comment warns against.
-    server: { ...DEFAULT_SERVER, devices: [] },
+    server: { ...DEFAULT_SERVER, devices: [], relay: { ...DEFAULT_SERVER.relay } },
     // No array field to worry about the way `server.devices` is — a plain
     // spread is the whole story.
     remote: { ...DEFAULT_REMOTE },
@@ -2149,6 +2163,13 @@ export interface SetServerRequest {
    * host reset the port.
    */
   bind?: Partial<ServerBindConfig>;
+
+  /**
+   * The managed relay switch (HIVE-429). Absent leaves it untouched; merged
+   * one level down, as `bind` is, so a key this build has not heard of
+   * survives the write.
+   */
+  relay?: Partial<ServerRelayConfig>;
 
   /**
    * The full paired-device roster. Absent leaves it untouched.

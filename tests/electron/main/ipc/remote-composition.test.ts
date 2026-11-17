@@ -13,6 +13,9 @@ import { SNAPSHOT_CHANNELS, WINDOW_BOUND, type ResumePoint } from '../../../../e
 import type { ResumeResult } from '../../../../electron/main/ipc/pty';
 import type { AttachedSocket } from '../../../../electron/main/ipc/socket-broadcaster';
 
+/** The listener's `acceptSocket`, as `acceptRelaySocket` reaches it (HIVE-429). */
+const relayAccepts = vi.hoisted(() => vi.fn());
+
 /**
  * The three per-surface releases a dropped surface owes (HIVE-145), spied on
  * where `ipc/index.ts` wires them to `surfaces.onGone` (HIVE-140 audit, gap 2).
@@ -372,6 +375,7 @@ vi.mock('@remote-host/listener', async (importOriginal) => {
           return null;
         },
         stop: async () => {},
+        acceptSocket: relayAccepts,
         get boundHost() {
           return null;
         },
@@ -447,6 +451,7 @@ vi.mock('../../../../electron/main/sessions', () => ({
 
 const { CH } = await import('../../../../electron/shared/ipc-contract');
 const {
+  acceptRelaySocket,
   ipcBindingsSize,
   registerIpcHandlers,
   remoteRegistrySize,
@@ -512,6 +517,33 @@ afterEach(() => {
   resetServerModeForTest();
 });
 
+describe('acceptRelaySocket (HIVE-429)', () => {
+  it('hands a relayed socket to the listener as a relay socket', () => {
+    registerIpcHandlers();
+    const socket = { terminate: vi.fn() };
+    acceptRelaySocket(socket as never);
+    expect(relayAccepts).toHaveBeenCalledWith(socket, { via: 'relay' });
+    expect(socket.terminate).not.toHaveBeenCalled();
+  });
+
+  it('answers relay:status locally from the relay gate', async () => {
+    registerIpcHandlers();
+    const handler = handledChannels.get(CH.relayStatus);
+    expect(handler).toBeDefined();
+    const mainFrame = { url: 'file:///out/renderer/index.html' };
+    await expect(
+      Promise.resolve(handler?.({ senderFrame: mainFrame, sender: { mainFrame } }, undefined)),
+    ).resolves.toEqual({ state: 'off' });
+  });
+
+  it('terminates the socket when there is no listener', () => {
+    const socket = { terminate: vi.fn() };
+    acceptRelaySocket(socket as never);
+    expect(relayAccepts).not.toHaveBeenCalled();
+    expect(socket.terminate).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('remote composition (HIVE-143)', () => {
   it('records nothing before registerIpcHandlers runs', () => {
     expect(sizeBeforeRegistration).toBe(0);
@@ -544,7 +576,7 @@ describe('remote composition (HIVE-143)', () => {
       elsewhere, by the real `ipcMain.handle` refusing a second handler for a
       channel — not by this number.
     */
-    expect(remoteRegistrySize()).toBe(167);
+    expect(remoteRegistrySize()).toBe(168);
   });
 
   it('re-registers every channel after a reset without throwing (HIVE-144)', () => {
@@ -1125,12 +1157,12 @@ describe('handlers that dereference the Electron event', () => {
 describe('the mode switch (HIVE-144)', () => {
   /**
    * Both modes bind the same channels: every `call` and every `notify` in the
-   * contract, and no `event` — 167 of them. Written once here because the two
+   * contract, and no `event` — 168 of them. Written once here because the two
    * surfaces agreeing on this number is itself the invariant. `remote-proxy
-   * .test.ts` and the registry case above own the question of whether 167 is
+   * .test.ts` and the registry case above own the question of whether 168 is
    * still the right number; this file only asks whether the two agree.
    */
-  const BOUND_CHANNELS = 167;
+  const BOUND_CHANNELS = 168;
 
   /**
    * `assertSender` compares `senderFrame` to `sender.mainFrame` by identity,

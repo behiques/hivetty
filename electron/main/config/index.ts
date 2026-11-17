@@ -195,6 +195,8 @@ export function loadConfig(): ConfigSnapshot {
       ...parsed.server,
       bind: { ...DEFAULT_SERVER.bind, ...parsed.server?.bind },
       devices: parsed.server?.devices ?? [],
+      // One level down, as `bind` is (HIVE-429): a file naming only an unknown relay key keeps `enabled`.
+      relay: { ...DEFAULT_SERVER.relay, ...parsed.server?.relay },
     },
     // Defaults *under* whatever the file named, exactly as `jira` and
     // `receiver` do above (HIVE-144) — a plain spread suffices, since `remote`
@@ -1116,6 +1118,17 @@ function serverMutation(request: SetServerRequest): Mutation {
     }
 
     if (request.devices !== undefined) current.devices = request.devices;
+
+    // One level down, exactly as `bind` above (HIVE-429).
+    if (request.relay !== undefined) {
+      const currentRelay =
+        typeof current.relay === 'object' &&
+        current.relay !== null &&
+        !Array.isArray(current.relay)
+          ? { ...(current.relay as Record<string, unknown>) }
+          : {};
+      current.relay = { ...currentRelay, ...request.relay };
+    }
 
     return { ...draft, server: current };
   };

@@ -172,6 +172,7 @@ import type {
 } from '@shared/notification-contract';
 import type { OrgSummary } from '@shared/orgs';
 import type { PlanChangedEvent, PlansSnapshot } from '@shared/plan-contract';
+import type { RelayServeStatus } from '@shared/relay-contract';
 import type {
   SessionBranchEvent,
   SessionClearedEvent,
@@ -436,6 +437,12 @@ const bridge: HiveBridge = {
     // HIVE-265: the attached server's licence, and its relayed push.
     licence: (): Promise<HostLicence> => ipcRenderer.invoke(CH.serverLicence) as Promise<HostLicence>,
     onLicence: (callback: (state: HostLicence) => void) => subscribe<HostLicence>(CH.serverLicenceChanged, callback),
+  },
+  // HIVE-429. This machine's managed-relay serving state, and its push.
+  relay: {
+    status: (): Promise<RelayServeStatus> => ipcRenderer.invoke(CH.relayStatus) as Promise<RelayServeStatus>,
+    onStatus: (callback: (status: RelayServeStatus) => void) =>
+      subscribe<RelayServeStatus>(CH.relayStatusChanged, callback),
   },
   // HIVE-144. Storing and forgetting the credential this machine was handed
   // to attach outward, as a client, to someone else's server. Its own

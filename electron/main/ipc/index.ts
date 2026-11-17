@@ -17,6 +17,7 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
 } from 'electron';
+import type { WebSocket } from 'ws';
 
 import { SNAPSHOT_READ_BUDGET_MS, createRemoteListener } from '@remote-host/listener';
 import {
@@ -331,6 +332,7 @@ import {
 import { badgeDock, clearDockBadge } from '../notifications/dock-badge';
 import { createBuilderProgress, type BuilderProgress } from '../plans';
 import { registerPtyHost } from '../pty-host';
+import { onRelayStatus, relayStatus } from '../relay';
 import {
   keepMine,
   resetShipped,
@@ -846,6 +848,8 @@ let stopDisplayWake: (() => void) | null = null;
 let stopSuspender: (() => void) | null = null;
 /** HIVE-265: the `server:licence-changed` relay's subscription, stopped beside the suspender's. */
 let stopHostLicence: (() => void) | null = null;
+/** HIVE-429: the `relay:status-changed` push's subscription, stopped beside the host licence's. */
+let stopRelayStatus: (() => void) | null = null;
 /**
  * The session history (HIVE-87), or `null` before registration.
  *
@@ -1461,6 +1465,12 @@ export function startRemoteListener(): Promise<string | null> {
   return remoteListener ? remoteListener.start() : Promise.resolve(null);
 }
 
+/** A socket the relay joined to a client (HIVE-429): the same handshake and attach as a direct one. */
+export function acceptRelaySocket(socket: WebSocket): void {
+  if (remoteListener) remoteListener.acceptSocket(socket, { via: 'relay' });
+  else socket.terminate();
+}
+
 /**
  * `host:port`, for the tray's informational item — both pieces sourced from
  * what the listener actually bound, not composed from a separate config read
@@ -2057,6 +2067,8 @@ export function registerIpcHandlers(
   handle(CH.licencePaused, () => LICENCE_CALLS[CH.licencePaused]());
   // HIVE-265: forwarded, not process-local; a client attached here reads this machine's licence, as counts.
   handle(CH.serverLicence, () => hostLicence());
+  // HIVE-429: this machine's own relay serving state; bound local only, answered locally when attached.
+  handle(CH.relayStatus, () => relayStatus());
   // HIVE-265: the gate's Quit. window.close() would leave the app running in the dock.
   handle(CH.appQuit, () => app.quit());
 
@@ -3608,6 +3620,9 @@ export function registerIpcHandlers(
   */
   stopHostLicence?.();
   stopHostLicence = onLicenceChange(() => send(CH.serverLicenceChanged, hostLicence()));
+  // HIVE-429: through `send`; the socket broadcaster holds it back, as a local-only event.
+  stopRelayStatus?.();
+  stopRelayStatus = onRelayStatus((status) => send(CH.relayStatusChanged, status));
 
   /*
     A wake, or a display coming back, is when Claude Code loses its size and
@@ -6033,6 +6048,8 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
   stopSuspender = null;
   stopHostLicence?.();
   stopHostLicence = null;
+  stopRelayStatus?.();
+  stopRelayStatus = null;
   installSuspender(null);
   sessions?.dispose();
   sessions = null;

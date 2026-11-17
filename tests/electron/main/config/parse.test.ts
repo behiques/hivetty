@@ -717,6 +717,48 @@ describe('parseConfig — per-project container block (HIVE-133)', () => {
   });
 });
 
+describe('the server relay block (HIVE-429)', () => {
+  it('reads nothing on a file that names no relay', () => {
+    const parsed = parseConfig(JSON.stringify({ version: 2, server: { enabled: true } }), 'config');
+    expect(parsed.server?.relay).toBeUndefined();
+    expect(parsed.errors).toEqual([]);
+  });
+
+  it('reads relay.enabled', () => {
+    const parsed = parseConfig(JSON.stringify({ version: 2, server: { relay: { enabled: true } } }), 'config');
+    expect(parsed.server?.relay).toEqual({ enabled: true });
+    expect(parsed.errors).toEqual([]);
+  });
+
+  it('salvages a non-boolean enabled to nothing, with a warning', () => {
+    const parsed = parseConfig(JSON.stringify({ version: 2, server: { relay: { enabled: 'yes' } } }), 'config');
+    expect(parsed.server?.relay?.enabled).toBeUndefined();
+    expect(parsed.errors.join(' ')).toContain('server.relay.enabled');
+    expect(parsed.fatal).toBe(false);
+  });
+
+  it('reports an unknown key under relay, as one under bind is', () => {
+    const parsed = parseConfig(
+      JSON.stringify({ version: 2, server: { relay: { enabled: true, address: 'x' } } }),
+      'config',
+    );
+    expect(parsed.errors).toContain('config.server.relay: unknown key "address" — ignored');
+    expect(parsed.server?.relay).toEqual({ enabled: true });
+  });
+
+  it('drops a relay that is not an object', () => {
+    const parsed = parseConfig(JSON.stringify({ version: 2, server: { relay: true } }), 'config');
+    expect(parsed.server?.relay).toBeUndefined();
+    expect(parsed.errors.join(' ')).toContain('server.relay: expected an object');
+  });
+
+  it('drops a relay carrying a forbidden key', () => {
+    const parsed = parseConfig('{"version":2,"server":{"relay":{"__proto__":{},"enabled":true}}}', 'config');
+    expect(parsed.server?.relay).toBeUndefined();
+    expect(parsed.errors.join(' ')).toContain('server.relay: forbidden key');
+  });
+});
+
 describe('the server block (HIVE-142)', () => {
   it('defaults to disabled on a file that names no server', () => {
     const parsed = parseConfig(JSON.stringify({ version: 2 }), 'config');

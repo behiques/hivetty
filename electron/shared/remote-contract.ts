@@ -101,8 +101,10 @@ import { isThisMachineAction } from './notification-contract';
  * 43 → 44 (HIVE-412): `PrRecord` (on `github:prs` and `github:search-prs`) gained `reviewDecision`, `head` and `mergeable`.
  * 44 → 45 (HIVE-428): every attach runs inside an encrypted channel (Noise NNpsk0, AES-256-GCM). A client's first frame
  *   is the binary hello; today's JSON frames travel inside the channel unchanged. A 44 peer cannot speak to a 45 one.
+ * 45 → 46 (HIVE-429): `relay:status` (call) and `relay:status-changed` (event), both this machine's own and never
+ *   carried on the socket.
  */
-export const REMOTE_PROTOCOL_VERSION = 45;
+export const REMOTE_PROTOCOL_VERSION = 46;
 
 /**
  * What a frame is for.
@@ -301,6 +303,9 @@ export const FRAME_KIND = {
   [CH.appQuit]: 'call',
   [CH.serverLicence]: 'call',
   [CH.serverLicenceChanged]: 'event',
+  // HIVE-429: process-local and local-only; graded so the renderer can call and subscribe, not so a socket can.
+  [CH.relayStatus]: 'call',
+  [CH.relayStatusChanged]: 'event',
   [CH.accountOrgs]: 'call',
   [CH.accountSwitchOrg]: 'call',
   [CH.accountBilling]: 'call',
@@ -647,6 +652,9 @@ export const CHANNEL_AUTHORIZATION = {
   // HIVE-265: counts only, the one licence fact that crosses the socket.
   [CH.serverLicence]: 'read',
   [CH.serverLicenceChanged]: 'read',
+  // HIVE-429: a read of this machine's relay state, and its push.
+  [CH.relayStatus]: 'read',
+  [CH.relayStatusChanged]: 'read',
   [CH.accountOrgs]: 'read',
   [CH.accountSwitchOrg]: 'execute',
   [CH.accountBilling]: 'read',
@@ -1041,6 +1049,8 @@ const PROCESS_LOCAL_REFUSALS = {
     "account:open-billing opens the answering machine's browser on its own account's billing. A server refuses to open its own account's billing on a peer's say-so; the asking machine opens its own.",
   [CH.accountOpenInvoice]:
     "account:open-invoice opens an invoice in the answering machine's browser. A server refuses to open its own account's invoices on a peer's say-so; the asking machine opens its own.",
+  [CH.relayStatus]:
+    'relay:status describes the machine you are sitting at, so it is answered there and never by a server.',
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**
@@ -1080,6 +1090,8 @@ export const LOCAL_ONLY_EVENTS: readonly Channel[] = [
   CH.accountChanged,
   CH.accountDeviceCode,
   CH.licenceChanged,
+  // HIVE-429: a serving Mac that is also attached somewhere must not paint its relay state on a client.
+  CH.relayStatusChanged,
 ];
 
 /** Whether `channel` is a push this process raises about itself. */

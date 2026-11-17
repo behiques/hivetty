@@ -166,6 +166,7 @@ import type {
 } from './notification-contract';
 import type { OrgSummary } from './orgs';
 import type { PlanChangedEvent, PlansSnapshot } from './plan-contract';
+import type { RelayServeStatus } from './relay-contract';
 import type {
   SessionBranchEvent,
   SessionClearedEvent,
@@ -926,6 +927,10 @@ export const CH = {
   serverLicence: 'server:licence',
   /** Push: the server's licence changed. Relayed to attached clients. */
   serverLicenceChanged: 'server:licence-changed',
+  /** HIVE-429: this machine's own managed-relay serving state. Process-local: never answered by a server. */
+  relayStatus: 'relay:status',
+  /** HIVE-429: push, the serving relay state changed. Local-only, never from a socket. */
+  relayStatusChanged: 'relay:status-changed',
   /** HIVE-291: this account's orgs, from the cloud; `[]` when it cannot say. Process-local. */
   accountOrgs: 'account:orgs',
   /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. Process-local. */
@@ -2439,6 +2444,14 @@ export interface HiveBridge {
    * one feature and confuse whoever has to reason about which side of a
    * connection they are looking at.
    */
+  /**
+   * The managed relay, serving side (HIVE-429): this machine's own state,
+   * whatever it is attached to. Both are answered by this process, never a server.
+   */
+  relay: {
+    status(): Promise<RelayServeStatus>;
+    onStatus(callback: (status: RelayServeStatus) => void): () => void;
+  };
   remote: {
     /**
      * Store the `deviceId`/`token` pair a `server.pair` call on the *other*

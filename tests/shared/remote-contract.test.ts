@@ -81,7 +81,7 @@ const MAIN_ONLY: ReadonlyMap<string, FrameKind> = new Map([
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(201);
+    expect(entries).toHaveLength(203);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -175,11 +175,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 161 call, 6 notify and 34 event', () => {
+  it('splits 162 call, 6 notify and 35 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 161, notify: 6, event: 34 });
+    expect(tally).toEqual({ call: 162, notify: 6, event: 35 });
   });
 
   /**
@@ -193,7 +193,7 @@ describe('remote contract: frame kinds match the preload bridge', () => {
    * that forwarded only `EVENT_CHANNELS` would show an empty inbox on a busy
    * server, so the asymmetry is asserted rather than left to be rediscovered.
    */
-  it('covers EVENT_CHANNELS and the nine pushes it omits', () => {
+  it('covers EVENT_CHANNELS and the ten pushes it omits', () => {
     for (const channel of EVENT_CHANNELS) expect(frameKindOf(channel)).toBe('event');
 
     const listed: ReadonlySet<string> = new Set(EVENT_CHANNELS);
@@ -212,6 +212,8 @@ describe('remote contract: frame kinds match the preload bridge', () => {
       'notifications:new',
       'notifications:read',
       'notifications:toast',
+      // HIVE-429: local-only, like remote:link-status; this machine's own relay serving state.
+      'relay:status-changed',
       /*
         HIVE-150, and it belongs on this list for a reason none of the others
         share: the rest are simply not carried in `EVENT_CHANNELS`, while this
@@ -246,6 +248,7 @@ describe('remote contract: frame kinds match the preload bridge', () => {
       CH.accountChanged,
       CH.accountDeviceCode,
       CH.licenceChanged,
+      CH.relayStatusChanged,
     ]);
     // The channels a server may genuinely push are not caught by it.
     expect(isLocalOnlyEvent(CH.ptyData)).toBe(false);
@@ -265,11 +268,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 201 as 84 read, 52 mutate and 65 execute', () => {
+  it('grades the 203 as 86 read, 52 mutate and 65 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 84, mutate: 52, execute: 65 });
+    expect(tally).toEqual({ read: 86, mutate: 52, execute: 65 });
   });
 
   /**
@@ -630,7 +633,7 @@ describe('remote contract: the version handshake', () => {
   });
 
   it('is protocol 3: 2 carried a generation (HIVE-144), 3 caught up on unbumped channels (HIVE-140 audit)', () => {
-    expect(REMOTE_PROTOCOL_VERSION).toBe(45);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(46);
   });
 });
 
@@ -681,7 +684,7 @@ describe('remote contract: the attach snapshot (HIVE-144)', () => {
     expect(EVENT_CHANNELS).toContain(CH.changedFilesChanged);
     expect(frameKindOf(CH.changedFilesChanged)).toBe('event');
     expect(frameKindOf(CH.changedFilesList)).toBe('call');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(45);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(46);
   });
 
   it('snapshots the plans so a reattaching client sees the current plan (HIVE-179)', () => {
@@ -792,7 +795,7 @@ describe('WINDOW_BOUND', () => {
  * admitted and nobody had applied it to.
  */
 describe('PROCESS_LOCAL', () => {
-  it('names exactly thirty channels', () => {
+  it('names exactly thirty-one channels', () => {
     expect([...PROCESS_LOCAL].sort()).toEqual(
       [
         CH.appInfo,
@@ -825,6 +828,7 @@ describe('PROCESS_LOCAL', () => {
         CH.accountRevokeDevice,
         CH.accountOpenBilling,
         CH.accountOpenInvoice,
+        CH.relayStatus,
       ].sort(),
     );
   });
@@ -879,6 +883,17 @@ describe('PROCESS_LOCAL', () => {
     server, which minted them — that is why the far end can never answer these
     two, not merely why it should not.
   */
+  it('answers relay:status locally and grades both relay channels as reads (HIVE-429)', () => {
+    expect(isProcessLocal(CH.relayStatus)).toBe(true);
+    expect(frameKindOf(CH.relayStatus)).toBe('call');
+    expect(frameKindOf(CH.relayStatusChanged)).toBe('event');
+    expect(CHANNEL_AUTHORIZATION[CH.relayStatus]).toBe('read');
+    expect(CHANNEL_AUTHORIZATION[CH.relayStatusChanged]).toBe('read');
+    expect(isLocalOnlyEvent(CH.relayStatusChanged)).toBe(true);
+    expect(CH.relayStatus).toBe('relay:status');
+    expect(CH.relayStatusChanged).toBe('relay:status-changed');
+  });
+
   it('answers remote:pair and remote:forget locally, because a credential is this machine\'s identity', () => {
     expect(isProcessLocal(CH.remotePair)).toBe(true);
     expect(isProcessLocal(CH.remoteForget)).toBe(true);

@@ -92,6 +92,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     jira: Object.keys(window.hive!.jira).sort(),
     server: Object.keys(window.hive!.server).sort(),
     remote: Object.keys(window.hive!.remote).sort(),
+    relay: Object.keys(window.hive!.relay).sort(),
     updates: Object.keys(window.hive!.updates).sort(),
     ui: Object.keys(window.hive!.ui).sort(),
     cli: Object.keys(window.hive!.cli).sort(),
@@ -359,6 +360,8 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'notifications',
     'plans',
     'pty',
+    // HIVE-429 adds `relay`: this machine's relay serving state, read and pushed, asserted below.
+    'relay',
     /**
      * HIVE-144 adds `remote`. What a web page can now do that it could not
      * before: store the device credential a `server.pair` mint on some
@@ -474,6 +477,8 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * payload, so the page cannot point it anywhere, and a server refuses it.
    */
   expect(surface.remote).toEqual(['dialNow', 'forget', 'onLinkStatus', 'pair']);
+  // HIVE-429: this machine's relay serving state, read and pushed; no payload, nothing to point anywhere.
+  expect(surface.relay).toEqual(['onStatus', 'status']);
   // HIVE-367: cliSkills lists the user's own CLI skills by name, read-only.
   expect(surface.skills).toEqual([
     'cliSkills',

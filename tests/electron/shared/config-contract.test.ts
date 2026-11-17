@@ -6,8 +6,11 @@ import {
   DEFAULT_BIND,
   DEFAULT_RECEIVER,
   DEFAULT_REMOTE,
+  DEFAULT_SERVER,
   RECEIVER_KEYS,
   REMOTE_KEYS,
+  SERVER_KEYS,
+  SERVER_RELAY_KEYS,
   emptySnapshot,
   isLoopbackHost,
   isOrigin,
@@ -17,6 +20,18 @@ import {
   isTailnetHost,
   DEFAULT_DISABLED_SESSION_PLUGINS,
 } from '../../../electron/shared/config-contract';
+
+describe('the server relay block (HIVE-429)', () => {
+  it('defaults the relay off and names it a server key', () => {
+    expect(DEFAULT_SERVER.relay).toEqual({ enabled: false });
+    expect([...SERVER_KEYS]).toContain('relay');
+    expect([...SERVER_RELAY_KEYS]).toEqual(['enabled']);
+  });
+
+  it('gives the empty snapshot the relay default', () => {
+    expect(emptySnapshot('/home/dev/.hive/config.json').server.relay).toEqual({ enabled: false });
+  });
+});
 
 describe('the receiver bind block', () => {
   it('defaults to the behaviour that shipped before it existed', () => {

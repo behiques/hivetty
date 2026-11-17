@@ -73,6 +73,7 @@ electron/
   main/                  config, sessions, hooks, ledger, agents, integrations, server
   main/harness/          the port, and an adapter each: claude-code/, codex/, copilot/
   main/licence/          sign-in, the lease and its entitlements, devices, billing
+  main/relay/            the managed relay: the serve loop and its gate
   preload/               the bridge
   pty-host/              terminals
   mcp-host/              the hive MCP server

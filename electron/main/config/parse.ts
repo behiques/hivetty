@@ -18,6 +18,7 @@ import {
   SERVER_BIND_KEYS,
   SERVER_DEVICE_KEYS,
   SERVER_KEYS,
+  SERVER_RELAY_KEYS,
   SLACK_KEYS,
   SUPPORTED_CONFIG_VERSIONS,
   isAbsoluteContainerPath,
@@ -40,6 +41,7 @@ import {
   type RemoteConfig,
   type RemoteMode,
   type ServerBindConfig,
+  type ServerRelayConfig,
   type ServerConfig,
   type ServerDevice,
   type SlackConfig,
@@ -198,7 +200,7 @@ export interface ParsedConfig {
    * device this file cannot describe, so the whole entry is dropped rather
    * than salvaged.
    */
-  server?: Partial<Omit<ServerConfig, 'bind'>> & { bind?: Partial<ServerBindConfig> };
+  server?: Partial<Omit<ServerConfig, 'bind' | 'relay'>> & { bind?: Partial<ServerBindConfig>; relay?: Partial<ServerRelayConfig> };
   /**
    * HIVE-144's remote block, exactly as the file declared it.
    *
@@ -1152,6 +1154,39 @@ function optionalDevices(
 }
 
 /**
+ * HIVE-429's nested `server.relay` block: {@link optionalServerBind}'s pattern,
+ * an exact-key check one level down and then per-field salvage.
+ */
+function optionalServerRelay(
+  record: Record<string, unknown>,
+  label: string,
+  errors: string[],
+): Partial<ServerRelayConfig> | undefined {
+  const value = record.relay;
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) {
+    errors.push(`${label}.relay: expected an object — ignored`);
+    return undefined;
+  }
+
+  const at = `${label}.relay`;
+
+  for (const key of Object.keys(value)) {
+    if (FORBIDDEN_KEYS.has(key)) {
+      errors.push(`${at}: forbidden key "${key}" — relay ignored`);
+      return undefined;
+    }
+  }
+
+  if (!checkKeys(value, SERVER_RELAY_KEYS, at, errors)) return undefined;
+
+  const relay: Partial<ServerRelayConfig> = {};
+  const enabled = optionalBoolean(value, 'enabled', at, errors);
+  if (enabled !== null) relay.enabled = enabled;
+  return relay;
+}
+
+/**
  * HIVE-142's server block.
  *
  * Structurally {@link optionalReceiver}'s twin: a malformed block is reported
@@ -1163,7 +1198,7 @@ function optionalServer(
   label: string,
   errors: string[],
 ):
-  | (Partial<Omit<ServerConfig, 'bind'>> & { bind?: Partial<ServerBindConfig> })
+  | (Partial<Omit<ServerConfig, 'bind' | 'relay'>> & { bind?: Partial<ServerBindConfig>; relay?: Partial<ServerRelayConfig> })
   | undefined {
   const value = record.server;
   if (value === undefined) return undefined;
@@ -1183,7 +1218,7 @@ function optionalServer(
 
   if (!checkKeys(value, SERVER_KEYS, at, errors)) return undefined;
 
-  const server: Partial<Omit<ServerConfig, 'bind'>> & { bind?: Partial<ServerBindConfig> } = {};
+  const server: Partial<Omit<ServerConfig, 'bind' | 'relay'>> & { bind?: Partial<ServerBindConfig>; relay?: Partial<ServerRelayConfig> } = {};
 
   const enabled = optionalBoolean(value, 'enabled', at, errors);
   if (enabled !== null) server.enabled = enabled;
@@ -1193,6 +1228,9 @@ function optionalServer(
 
   const devices = optionalDevices(value, at, errors);
   if (devices !== undefined) server.devices = devices;
+
+  const relay = optionalServerRelay(value, at, errors);
+  if (relay !== undefined) server.relay = relay;
 
   return server;
 }

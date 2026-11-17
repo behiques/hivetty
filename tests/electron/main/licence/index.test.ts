@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CH } from '../../../../electron/shared/ipc-contract';
 import {
   ACCOUNT_CALLS,
+  cloudSession,
   LICENCE_CALLS,
   licence,
   onLicenceChange,
@@ -34,6 +35,45 @@ describe('licence composition', () => {
   afterEach(() => {
     resetLicence();
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('has no cloud session before startLicence, one after it, and none after a reset (HIVE-429)', async () => {
+    expect(cloudSession()).toBeNull();
+    const fetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    const client = startLicence({
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
+      safeStorage,
+      openExternal: vi.fn().mockResolvedValue(undefined),
+      env: { HIVETTY_CLOUD_URL: 'http://127.0.0.1:4010' },
+      fetch,
+      broadcast: vi.fn(),
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
+    });
+
+    const session = cloudSession();
+    expect(session?.baseUrl).toBe('http://127.0.0.1:4010');
+    expect(session?.account()).toEqual(client.state());
+
+    const getAccessToken = vi.spyOn(client, 'getAccessToken').mockResolvedValue('tok-9');
+    await expect(session?.getAccessToken()).resolves.toBe('tok-9');
+    expect(getAccessToken).toHaveBeenCalledTimes(1);
+
+    const response = new Response('ok');
+    const authedFetch = vi.spyOn(client, 'authedFetch').mockResolvedValue(response);
+    await expect(session?.authedFetch('/relay/hosts', { method: 'GET' })).resolves.toBe(response);
+    expect(authedFetch).toHaveBeenCalledWith('/relay/hosts', { method: 'GET' });
+
+    const listener = vi.fn();
+    const onChange = vi.spyOn(client, 'onChange');
+    const unsubscribe = session?.onAccountChange(listener);
+    expect(onChange).toHaveBeenCalledWith(listener);
+    expect(typeof unsubscribe).toBe('function');
+
+    resetLicence();
+    expect(cloudSession()).toBeNull();
   });
 
   it('answers signed-out and refuses sign-in before it starts', async () => {
