@@ -641,6 +641,8 @@ async function bootServerApp(
    */
   expect: 'listening' | 'refusing' = 'listening',
 ): Promise<BootedApp> {
+  // HIVE-428: a profile serves nothing until it holds a licence. Once, before the retry loop: the profile keeps it.
+  await signIn(configPath, userDataDir);
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const port = await freePort();
@@ -722,6 +724,62 @@ function runOneShot(
       record.code = code;
       record.signal = signal;
       resolve({ code, stdout: record.stdout, stderr: record.stderr });
+    });
+  });
+}
+
+/**
+ * Signs the profile in through the `--login` one-shot against the stub cloud
+ * (HIVE-428), so a `--server` launch on it holds a licence and binds. Same
+ * environment and arguments as {@link runOneShot}. When the one-shot prints
+ * its device code the stub is told to approve it; resolves once it exits 0
+ * having printed `Signed in as` (`electron/main/licence/account-command.ts`),
+ * and rejects with its stdout and stderr on anything else, or after 30s.
+ */
+function signIn(configPath: string, userDataDir: string, timeoutMs = 30_000): Promise<void> {
+  assertScratchPath(configPath);
+  const env = stubEnv();
+  return new Promise((resolve, reject) => {
+    const args = ['--login'];
+    const fullArgs = [MAIN_ENTRY, ...args, `--user-data-dir=${userDataDir}`, '--use-mock-keychain'];
+    const child = spawn(electronBinary, fullArgs, {
+      env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, ...env }),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const record: ProcessRecord = {
+      label: 'one-shot --login',
+      args: fullArgs,
+      code: null,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    };
+    processLog.push(record);
+    const output = (): string => `stdout:\n${record.stdout || '(empty)'}\nstderr:\n${record.stderr || '(empty)'}`;
+
+    let approved = false;
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`--login timed out after ${String(timeoutMs)}ms. ${output()}`));
+    }, timeoutMs);
+    child.stdout?.on('data', (chunk: Buffer) => {
+      record.stdout += chunk.toString();
+      if (!approved && record.stdout.includes('enter the code')) {
+        approved = true;
+        stub?.controls.approveDeviceCode();
+      }
+    });
+    child.stderr?.on('data', (chunk: Buffer) => (record.stderr += chunk.toString()));
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on('exit', (code, signal) => {
+      clearTimeout(timer);
+      record.code = code;
+      record.signal = signal;
+      if (code === 0 && record.stdout.includes('Signed in as')) resolve();
+      else reject(new Error(`--login exited ${String(code)} (${String(signal)}). ${output()}`));
     });
   });
 }
@@ -1627,6 +1685,32 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       await stopApp(child);
     }
   }, 30_000);
+
+  it('a signed-in served app binds', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hive-live-server-licensed-'));
+    const configPath = join(dir, 'config.json');
+    const userDataDir = join(dir, 'user-data');
+    assertScratchPath(configPath);
+    scratchConfigPaths.push(configPath);
+    const port = await freePort();
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        version: CONFIG_VERSION,
+        shell: '/bin/sh',
+        projects: [],
+        server: { bind: { host: '127.0.0.1', port, allowedOrigins: [] }, devices: [] },
+      }),
+      'utf8',
+    );
+    await signIn(configPath, userDataDir);
+    const { child } = spawnApp(['--server'], configPath, userDataDir);
+    try {
+      await waitForListener('127.0.0.1', port, 30_000);
+    } finally {
+      await stopApp(child);
+    }
+  }, 90_000);
 
   describe('the handshake, the CLI in a second process, and the token never on disk', () => {
     let dir: string;
