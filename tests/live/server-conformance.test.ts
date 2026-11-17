@@ -1,6 +1,7 @@
 // @vitest-environment node
 import assert from 'node:assert/strict';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -5077,6 +5078,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
 
     let serverConfigPath: string;
     let serverUserDataDir: string;
+    let serverPort: number;
     let serverApp: ChildProcess | undefined;
 
     let clientConfigPath: string;
@@ -5087,6 +5089,23 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
 
     /** The id the relay lists the serving app under; 23a reads it from the client's own `relay:hosts`. */
     let relayServerId = '';
+
+    /** The device the server minted for the client through `--pair` (23b). */
+    let credential: { id: string; token: string } | null = null;
+    const sessionId = 'relayed-session';
+    /** Typed into the server's shell; only the shell's own output joins it to `RELAY-`. */
+    const mark = randomUUID().slice(0, 8);
+
+    const type = (data: string): Promise<unknown> => {
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      return renderer.evaluate(`window.hive.pty.write(${JSON.stringify({ sessionId, data })}); true`);
+    };
+    /** Every `pty:data` event for {@link sessionId} since 23d installed the collector. */
+    const output = async (): Promise<DataEvent[]> => {
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const events = await renderer.evaluate<DataEvent[]>('window.__relayData ?? []');
+      return events.filter((event) => event.sessionId === sessionId);
+    };
 
     beforeAll(async () => {
       const serverDir = mkdtempSync(join(tmpdir(), 'hive-live-relay-server-'));
@@ -5109,6 +5128,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         },
       }));
       serverApp = booted.child;
+      serverPort = booted.port;
 
       const clientDir = mkdtempSync(join(tmpdir(), 'hive-live-relay-client-'));
       clientConfigPath = join(clientDir, 'config.json');
@@ -5173,6 +5193,83 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         RELAY_CLOSE.unauthorized,
       );
       expect(relay.hosts()).toEqual([expect.objectContaining({ serverId: relayServerId, since })]);
+    }, 90_000);
+
+    it('23b. --pair on the server hands the client a credential it never writes to config.json', async () => {
+      const paired = await runOneShot(['--pair', 'Relay-Client'], serverConfigPath, serverUserDataDir);
+      expect(paired.code).toBe(0);
+      const lines = paired.stdout.trim().split('\n');
+      const token = lines[0] ?? '';
+      const deviceId = (lines[1] ?? '').replace(/^Device id: /, '');
+      expect(token).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$/u);
+      expect(deviceId).not.toBe('');
+      credential = { id: deviceId, token };
+
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      const stored = await renderer.evaluate<{ paired: true } | { error: string }>(
+        `window.hive.remote.pair({ deviceId: ${JSON.stringify(deviceId)}, token: ${JSON.stringify(token)} })`,
+      );
+      expect(stored).toEqual({ paired: true });
+      expect(readFileSync(clientConfigPath, 'utf8')).not.toContain(token);
+    }, 60_000);
+
+    it('23c. set-remote through the relay attaches, and the far process answers', async () => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      assert(relayServerId !== '', '23a must have read the relay server id');
+      assert(credential !== null, '23b must have paired the client');
+
+      const started = Date.now();
+      const result = await bounded(
+        renderer.evaluate<SetRemoteResult>(
+          `window.hive.config.setRemote({ mode: 'remote', via: 'relay', relayServerId: ${JSON.stringify(relayServerId)} })`,
+        ),
+        60_000,
+        'setRemote through the relay (a hang here is the failure, not a refusal)',
+      );
+      measurements.push({ case: '23c. set-remote through the relay', elapsed: Date.now() - started, switched: result.switched });
+      const stderr = `the attaching app's stderr so far:\n${clientRecord?.stderr || '(empty)'}`;
+      expect(result.switched, stderr).toEqual({ ok: true });
+      expect(result.config.remote.via).toBe('relay');
+      expect(result.config.remote.relayServerId).toBe(relayServerId);
+
+      // Only the serving process holds this project: the call crossed the relay and was answered there.
+      const config = await renderer.evaluate<ConfigSnapshot>('window.hive.config.get()');
+      expect(config.projects.map((project) => project.id), stderr).toEqual([servedProjectId]);
+
+      // The direct listener was never dialled: the client was never told its port, and the relay carried the attach.
+      const written = readFileSync(clientConfigPath, 'utf8');
+      expect(written).not.toContain(String(serverPort));
+      // A relay block is written with no `host` at all; the snapshot reads it back as `''`.
+      expect((JSON.parse(written) as { remote: Partial<RemoteConfig> }).remote.host ?? '').toBe('');
+      expect(result.config.remote.host).toBe('');
+      expect(stub.relay.frames.length).toBeGreaterThan(0);
+    }, 90_000);
+
+    it('23d. a shell spawned on the server through the relay runs what the client types', async () => {
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      // Installed before the spawn and never reset: 23f reads the whole stream for gaps.
+      await renderer.evaluate(
+        'window.__relayData = []; window.hive.pty.onData((event) => window.__relayData.push(event)); true',
+      );
+
+      const spawned = await bounded(
+        renderer.evaluate<{ ok: boolean; error?: string }>(
+          `window.hive.pty.spawn({ sessionId: ${JSON.stringify(sessionId)}, projectId: ${JSON.stringify(servedProjectId)}, cols: 80, rows: 24 })` +
+            `.then(() => ({ ok: true })).catch((e) => ({ ok: false, error: String(e && e.message ? e.message : e) }))`,
+        ),
+        60_000,
+        'pty:spawn on the server through the relay',
+      );
+      expect(spawned).toEqual({ ok: true });
+
+      // The joined form is never typed: seeing it means the server's shell ran the command.
+      await type(`RELAY_MARK=${mark}; printf 'RELAY-%s\\n' "$RELAY_MARK"\r`);
+      await waitForAsync(
+        async () => (await output()).map((event) => event.chunk).join('').includes(`RELAY-${mark}`),
+        'the server shell to print the marker through the relay',
+        30_000,
+      );
     }, 90_000);
   });
 
