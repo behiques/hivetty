@@ -238,7 +238,6 @@ describe('a ledger claim records the PR as the session\'s own', () => {
     it.each([
       ['on a thread another session opened', () => buildAsk('sess-99'), {}],
       ['from a party the ask did not go to', () => buildAsk(id), { from: 'fixer' }],
-      ['whose to names the session but whose thread is not its own', () => buildAsk('sess-99'), { to: id }],
       ['without a PR number', () => buildAsk(id), { meta: { repo: 'behiques/hivetty-cloud' } }],
     ] as const)('credits nothing for an answer %s', (_label, ask, fields) => {
       const other = useHiveStore.getState().spawnSession('hivetty-cloud');
@@ -247,6 +246,13 @@ describe('a ledger claim records the PR as the session\'s own', () => {
 
       expect(useHiveStore.getState().entities[id]).not.toHaveProperty('prs');
       expect(useHiveStore.getState().entities[other]).not.toHaveProperty('prs');
+    });
+
+    it("credits the ask's asker, whatever the answer's to says", () => {
+      useHiveStore.getState().ledgerAppend(buildAsk(id));
+      useHiveStore.getState().ledgerAppend(built({ to: 'sess-99' }));
+
+      expect(useHiveStore.getState().entities[id]).toMatchObject({ prs: [pr(45, { owned: true })] });
     });
 
     it('credits nothing when the ask is not in the mirror', () => {
