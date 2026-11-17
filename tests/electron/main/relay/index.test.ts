@@ -175,6 +175,29 @@ describe('startRelay', () => {
     expect(ctx.loop.start).toHaveBeenCalledTimes(2);
   });
 
+  it.each([
+    ['signing out and back in', { account: SIGNED_OUT }, { account: SIGNED_IN }, { state: 'sign-in' }],
+    [
+      'losing and regaining the entitlement',
+      { entitled: 'Relay is in Solo and above' },
+      { entitled: null },
+      { state: 'locked', reason: 'Relay is in Solo and above' },
+    ],
+  ] as const)('shows replaced again, still held, after %s', (_name, lose, regain, between) => {
+    const ctx = start();
+    ctx.loopDeps().onStatus({ state: 'replaced' });
+    Object.assign(ctx.state, lose);
+    ctx.fireAccount();
+    ctx.fireLicence();
+    expect(relayStatus()).toEqual(between);
+
+    Object.assign(ctx.state, regain);
+    ctx.fireAccount();
+    ctx.fireLicence();
+    expect(relayStatus()).toEqual({ state: 'replaced' });
+    expect(ctx.loop.start).toHaveBeenCalledTimes(1);
+  });
+
   it('publishes an unchanged resting status once', () => {
     const heard: RelayServeStatus[] = [];
     const unsubscribe = onRelayStatus((status) => heard.push(status));

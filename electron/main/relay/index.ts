@@ -96,7 +96,9 @@ export function startRelay(deps: RelayDeps): { stop(): void } {
     if (!deps.enabled()) replaced = false;
     const rest = resting();
     if (rest === null) {
-      if (!running && !replaced) {
+      // A sign-in or locked rest may have been published over the hold; the hold is what the person must act on.
+      if (replaced) publish({ state: 'replaced' });
+      else if (!running) {
         running = true;
         serve.start();
       }
