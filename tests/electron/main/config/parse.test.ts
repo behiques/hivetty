@@ -766,6 +766,39 @@ describe('the server block (HIVE-142)', () => {
     },
   );
 
+  /**
+   * HIVE-428: the server binds loopback, the local network or a Tailscale address, never a public
+   * one. An existing config whose host is now outside that set loses it exactly as a refused host
+   * always has: the host is dropped, the server listens nowhere until it is fixed, and the reason
+   * names the set.
+   */
+  it.each(['8.8.8.8', 'example.com', 'mini'])(
+    'refuses %s as a bind host, names the allowed set, and keeps the rest (HIVE-428)',
+    (host) => {
+      const parsed = parseConfig(
+        JSON.stringify({ version: 2, server: { enabled: true, bind: { host } } }),
+        'config',
+      );
+      expect(parsed.server?.bind?.host).toBeUndefined();
+      expect(parsed.server?.enabled).toBe(true);
+      expect(parsed.fatal).toBe(false);
+      const refusal = serverBindRefusal(parsed.errors);
+      expect(refusal).toMatch(/^config\.server\.bind\.host: /);
+      expect(refusal).toMatch(/local network/);
+      expect(refusal).toMatch(/Tailscale/);
+    },
+  );
+
+  it('allows a LAN address and an mDNS name as the bind host (HIVE-428)', () => {
+    for (const host of ['192.168.1.20', 'mini.local']) {
+      const parsed = parseConfig(
+        JSON.stringify({ version: 2, server: { bind: { host } } }),
+        'config',
+      );
+      expect(parsed.server?.bind?.host).toBe(host);
+    }
+  });
+
   it('allows loopback, for single-machine testing', () => {
     const parsed = parseConfig(
       JSON.stringify({ version: 2, server: { bind: { host: '127.0.0.1' } } }),

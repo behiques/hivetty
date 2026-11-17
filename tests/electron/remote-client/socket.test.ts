@@ -419,6 +419,29 @@ describe('connectRemote — the resolved-address fence', () => {
    * would proceed. `node:dns` does not do that; the fence does not get to
    * assume it.
    */
+  it('refuses a .local name whose answer is public, and passes one whose answer is on the LAN (HIVE-428)', () => {
+    const graded = (address: string): LookupResult => {
+      const { socket } = dial({ host: 'mini.local', resolveAddress: resolverAnswering(address) });
+      const lookup = socket?.options.lookup;
+      if (lookup === undefined) throw new Error('no lookup was handed to the socket');
+      let result: LookupResult | null = null;
+      lookup(
+        'mini.local',
+        { family: 4 } as Parameters<LookupFunction>[1],
+        ((error: Error | null, resolved: unknown) => {
+          result = { error, resolved };
+        }) as unknown as Parameters<LookupFunction>[2],
+      );
+      if (result === null) throw new Error('the lookup never called back');
+      return result;
+    };
+
+    expect(graded('192.168.1.20')).toEqual({ error: null, resolved: '192.168.1.20' });
+    const publicAnswer = graded('8.8.8.8');
+    expect(publicAnswer.error).not.toBeNull();
+    expect(publicAnswer.error?.message).toContain('8.8.8.8');
+  });
+
   it('answers net exactly once, even when the resolver calls back twice', () => {
     const twice: LookupFunction = ((_hostname, _options, callback) => {
       callback(null, '203.0.113.7', 4);

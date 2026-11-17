@@ -1014,7 +1014,7 @@ function optionalServerBind(
       // the server listen nowhere (`serverBindRefusal`), and this line is the
       // reason the tray shows for it.
       errors.push(
-        `${at}.host: expected a hostname or an IPv4 address — the server will not listen until it is fixed`,
+        `${at}.host: expected loopback, a local network address or a Tailscale address — the server will not listen until it is fixed`,
       );
     }
   }

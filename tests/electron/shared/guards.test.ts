@@ -1407,6 +1407,13 @@ describe('parseSetServerRequest (HIVE-142)', () => {
     }
   });
 
+  it('refuses a public bind host, naming the allowed set, and accepts a LAN one (HIVE-428)', () => {
+    for (const host of ['8.8.8.8', 'example.com']) {
+      expect(() => parseSetServerRequest({ bind: { host } })).toThrow(/setServer\.bind\.host: .*local network/);
+    }
+    expect(parseSetServerRequest({ bind: { host: '192.168.1.20' } })).toEqual({ bind: { host: '192.168.1.20' } });
+  });
+
   it('refuses a port that is not one', () => {
     for (const port of [-1, 70_000, 1.5, '8080', null]) {
       expect(() => parseSetServerRequest({ bind: { port } })).toThrow(
