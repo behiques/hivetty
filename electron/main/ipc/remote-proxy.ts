@@ -18,6 +18,7 @@ import { activateOnThisMachine } from '../notifications/activate-here';
 import { notificationDelivery } from '../notifications/delivery';
 import { badgeDock, clearDockBadgeWithLastWindow } from '../notifications/dock-badge';
 import { createRemoteToasts, type RemoteToasts } from '../notifications/remote-toast';
+import { relayStatus } from '../relay';
 import { checkForUpdatesInteractively, updateStatus } from '../updates';
 
 
@@ -176,6 +177,9 @@ function localAnswerFor(
       return () => LICENCE_CALLS[channel]();
     case CH.appQuit:
       return () => app.quit();
+    /* HIVE-429. This machine's own relay state; imported for `CH.updatesStatus`'s reason. */
+    case CH.relayStatus:
+      return () => relayStatus();
     default:
       return null;
   }

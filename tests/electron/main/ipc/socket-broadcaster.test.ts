@@ -104,6 +104,15 @@ describe('createSocketBroadcaster', () => {
 
     expect(only.send).not.toHaveBeenCalled();
   });
+
+  it('holds back this machine\'s relay status (HIVE-429)', () => {
+    const only = socket();
+    const broadcaster = createSocketBroadcaster(() => [only]);
+
+    broadcaster.emit(CH.relayStatusChanged, { state: 'connected', since: 1 });
+
+    expect(only.send).not.toHaveBeenCalled();
+  });
 });
 
 describe('createFanOutBroadcaster', () => {
