@@ -319,6 +319,16 @@ async function waitForListener(host: string, port: number, deadlineMs: number): 
   throw new Error(`timed out waiting for ${host}:${String(port)} to accept connections`);
 }
 
+/** Polls a raw TCP connect across `windowMs`; true if any attempt was accepted. The negative of {@link waitForListener}, over the same window, so a late bind is seen. */
+async function acceptsWithin(host: string, port: number, windowMs: number): Promise<boolean> {
+  try {
+    await waitForListener(host, port, windowMs);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** A loopback TCP relay in front of a served app, see {@link openRelay}. */
 interface Relay {
   port: number;
@@ -1670,21 +1680,14 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
     );
     const { child } = spawnApp(['--server'], configPath, userDataDir);
     try {
-      await delay(5_000);
-      const accepted = await new Promise<boolean>((resolve) => {
-        const socket = netConnect({ host: '127.0.0.1', port }, () => {
-          socket.end();
-          resolve(true);
-        });
-        socket.on('error', () => resolve(false));
-      });
-      expect(accepted).toBe(false);
+      // The signed-in sibling allows 30s to bind; a refusal is only proven over the same window.
+      expect(await acceptsWithin('127.0.0.1', port, 30_000)).toBe(false);
       // Still running: a closed port from an app that crashed would prove nothing about the gate.
       expect(child.exitCode).toBeNull();
     } finally {
       await stopApp(child);
     }
-  }, 30_000);
+  }, 50_000);
 
   it('a signed-in served app binds', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'hive-live-server-licensed-'));
