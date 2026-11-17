@@ -2,6 +2,7 @@
 import { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as realWs from 'ws';
 import type { WebSocket } from 'ws';
 
 import { BACKOFF_MS } from '../../../../electron/main/ipc/reattach';
@@ -10,6 +11,8 @@ import { CHANNEL_TAG_BYTES } from '../../../../electron/remote-channel/secure-so
 import { CLIENT_ATTACH_TIMEOUT_MS } from '../../../../electron/remote-client/socket';
 import { RELAY_PATH, incomingFrame, type RelayServeStatus } from '../../../../electron/shared/relay-contract';
 import { POST_ATTACH_FRAME_MAX_BYTES } from '../../../../electron/shared/remote-contract';
+
+vi.mock('ws', () => ({ WebSocket: vi.fn(function (this: object) { Object.assign(this, { on: vi.fn(), close: vi.fn() }); }) }));
 
 interface FakeOptions {
   headers: { authorization: string };
@@ -351,20 +354,56 @@ describe('createRelayServe', () => {
     expect(ctx.last()?.state).toBe('connected');
   });
 
-  it('dials with the real ws constructor by default', async () => {
-    // The real default: a loopback port nobody listens on fails the dial, which retries.
-    const statuses: RelayServeStatus[] = [];
-    vi.useRealTimers();
-    const serve = createRelayServe({
-      url: (path) => `ws://127.0.0.1:1${path}`,
-      token: () => Promise.resolve('tok'),
-      accept: vi.fn(),
-      onStatus: (status) => statuses.push(status),
-    });
+  it('uses ws’s WebSocket when no constructor is injected', async () => {
+    const { serve } = setup({ WebSocketCtor: undefined });
     serve.start();
-    await vi.waitFor(() => {
-      expect(statuses.at(-1)?.state).toBe('reconnecting');
+    await flush();
+    expect(realWs.WebSocket).toHaveBeenCalledWith(url(RELAY_PATH.serve), {
+      headers: { authorization: 'Bearer tok-1' },
+      handshakeTimeout: CLIENT_ATTACH_TIMEOUT_MS,
     });
     serve.stop();
+  });
+
+  it('builds no accept socket for an offer whose serve connection dropped while its token was outstanding', async () => {
+    const ctx = await connected();
+    sockets[0]?.emit('message', Buffer.from(incomingFrame('c1')), false);
+    sockets[0]?.emit('close', 1012);
+    await flush();
+    expect(sockets).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sockets).toHaveLength(2);
+    expect(sockets[1]?.url).toBe(url(RELAY_PATH.serve));
+    expect(ctx.accept).not.toHaveBeenCalled();
+  });
+
+  it('closes, never hands over, an accept socket that opens after its serve connection dropped', async () => {
+    const ctx = await connected();
+    sockets[0]?.emit('message', Buffer.from(incomingFrame('c1')), false);
+    await flush();
+    sockets[0]?.emit('close', 1012);
+    sockets[1]?.emit('open');
+    expect(ctx.accept).not.toHaveBeenCalled();
+    expect(sockets[1]?.close).toHaveBeenCalledWith(1001);
+  });
+
+  it('builds no accept socket for an offer outstanding across a halt', async () => {
+    const ctx = await connected();
+    sockets[0]?.emit('message', Buffer.from(incomingFrame('c1')), false);
+    sockets[0]?.emit('close', 4401);
+    await flush();
+    expect(sockets).toHaveLength(1);
+    expect(ctx.accept).not.toHaveBeenCalled();
+  });
+
+  it('ignores a late ping from a dropped connection', async () => {
+    await connected();
+    sockets[0]?.emit('close', 1012);
+    sockets[0]?.emit('ping');
+    await vi.advanceTimersByTimeAsync(1_000);
+    sockets[1]?.emit('open');
+    await vi.advanceTimersByTimeAsync(SILENT_AFTER_MS);
+    expect(sockets[0]?.terminate).not.toHaveBeenCalled();
+    expect(sockets[1]?.terminate).toHaveBeenCalledTimes(1);
   });
 });

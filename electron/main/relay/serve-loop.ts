@@ -43,7 +43,7 @@ export function createRelayServe(deps: RelayServeDeps): RelayServe {
   const { url, token, accept, onStatus, WebSocketCtor = WebSocket, now = Date.now } = deps;
 
   const accepted = new Set<WebSocket>();
-  /** Bumped by stop, start and a halt, so a callback from an earlier connection finds it is stale. */
+  /** Bumped by stop, start and every end of a serve connection, so a callback from an earlier one is stale. */
   let generation = 0;
   let attempt = 0;
   let serve: WebSocket | null = null;
@@ -137,16 +137,17 @@ export function createRelayServe(deps: RelayServeDeps): RelayServe {
     const end = (code?: number): void => {
       if (ended || mine !== generation) return;
       ended = true;
+      // Every end, not only a halt: an offer still waiting on its token belongs to this dead connection.
+      generation += 1;
       serve = null;
       stopWatchdog();
       dropAccepted();
       const halted = code === undefined ? undefined : HALT[code];
       if (halted !== undefined) {
-        generation += 1;
         onStatus({ state: halted });
         return;
       }
-      schedule(mine);
+      schedule(generation);
     };
 
     socket.on('open', () => {
