@@ -229,7 +229,8 @@ export function responder({ prologue, psk, ephemeral = freshEphemeral() }: Hands
       state.mixHash(remote);
       state.mixKey(remote);
       const payload = state.decryptAndHash(message.subarray(DH_LEN));
-      re = remote;
+      // A copy, and only once message 1 verified: a failed read leaves nothing writeMessage2 can use.
+      re = Buffer.from(remote);
       return payload;
     },
     writeMessage2(payload = EMPTY) {

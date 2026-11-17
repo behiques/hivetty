@@ -104,6 +104,17 @@ describe('Noise NNpsk0 with fresh keys', () => {
 
   it('refuses a wrong pre-shared key on message 1', () => {
     expect(() => handshake({ psk: Buffer.alloc(32, 1), responderPsk: Buffer.alloc(32, 2) })).toThrow(NoiseError);
+    const message1 = initiator({ prologue: Buffer.from('p'), psk: Buffer.alloc(32, 1) }).writeMessage1();
+    expect(() => responder({ prologue: Buffer.from('p'), psk: Buffer.alloc(32, 2) }).readMessage1(message1)).toThrow(
+      NoiseError,
+    );
+  });
+
+  it('refuses to write message 2 after message 1 failed to verify', () => {
+    const message1 = initiator({ prologue: Buffer.from('p'), psk: Buffer.alloc(32, 1) }).writeMessage1();
+    const resp = responder({ prologue: Buffer.from('p'), psk: Buffer.alloc(32, 2) });
+    expect(() => resp.readMessage1(message1)).toThrow(NoiseError);
+    expect(() => resp.writeMessage2()).toThrow(NoiseError);
   });
 
   it('refuses a wrong prologue on message 1', () => {
