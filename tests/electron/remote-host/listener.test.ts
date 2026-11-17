@@ -203,16 +203,20 @@ describe('the attach handshake', () => {
       socket.on('open', () => resolve());
       socket.on('error', reject);
     });
-    // An old client: today's attach frame, in the clear.
-    socket.send(JSON.stringify({ kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION - 1, deviceId: device.id, token }));
+    // A well-formed attach at this very protocol, with the real token, in the clear: the frame the
+    // old path would have accepted. Nothing but the channel's own refusal may come back.
+    socket.send(JSON.stringify({ kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId: device.id, token }));
     await closed;
     expect(frames).toHaveLength(1);
     expect(frames[0]?.isBinary).toBe(false);
-    expect(JSON.parse(frames[0]?.text ?? '')).toMatchObject({
+    const reply = JSON.parse(frames[0]?.text ?? '') as Record<string, unknown>;
+    expect(reply).toMatchObject({
       kind: 'attach-refused',
       code: 'protocol-mismatch',
       protocol: REMOTE_PROTOCOL_VERSION,
     });
+    expect(String(reply.message)).toContain('encrypted channel');
+    expect(noopOnAttach).not.toHaveBeenCalled();
   });
 
   it('refuses an attach naming another device than the one the channel was keyed for (HIVE-428)', async () => {
@@ -546,6 +550,28 @@ describe('an unauthenticated socket is untrusted input (HIVE-142 review)', () =>
     expect([1006, 1009]).toContain(code);
   }, 20_000);
 
+  it('drops a socket that completed the channel handshake but never sends its attach, after the deadline (HIVE-428)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { device, token } = mintDevice('MacBook');
+      const url = await start([device]);
+      const socket = new WebSocket(url);
+      await new Promise<void>((resolve, reject) => {
+        socket.on('open', () => resolve());
+        socket.on('error', reject);
+      });
+      await secureOn(socket, device.id, token);
+
+      const closed = new Promise<void>((resolve) => socket.once('close', () => resolve()));
+      await vi.advanceTimersByTimeAsync(ATTACH_HANDSHAKE_TIMEOUT_MS + 1_000);
+      await closed;
+
+      expect(socket.readyState).toBe(WebSocket.CLOSED);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('drops a socket that never sends an attach frame, after the handshake deadline', async () => {
     // Fake timers, not a real wait — the deadline itself is the behaviour
     // under test, and `listener.ts`'s `setTimeout` is a global the fake
@@ -714,6 +740,28 @@ describe('the concurrent unattached-socket cap (HIVE-143 review)', () => {
     expect(first.readyState).toBe(WebSocket.OPEN);
     admitted.terminate();
     for (const socket of opened) socket.terminate();
+  }, 20_000);
+
+  it('counts a socket past message 2 but short of its attach against the cap (HIVE-428)', async () => {
+    logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device]);
+
+    const secured: WebSocket[] = [];
+    let refusal: Error | null = null;
+    for (let attempt = 0; attempt < 64 && refusal === null; attempt += 1) {
+      try {
+        const socket = await openSilent(url);
+        await secureOn(socket, device.id, token);
+        secured.push(socket);
+      } catch (cause) {
+        refusal = cause as Error;
+      }
+    }
+
+    expect(secured.length).toBeGreaterThan(1);
+    expect(refusal?.message).toContain('503');
+    for (const socket of secured) socket.terminate();
   }, 20_000);
 
   it('admits another socket once one closes after completing only the handshake (HIVE-428)', async () => {
