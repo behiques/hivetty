@@ -55,6 +55,7 @@ import {
   type ResumePoint,
   type ServerFrame,
 } from '../../electron/shared/remote-contract';
+import { startStubCloud, type StubCloud } from '../e2e/electron/fixtures/stub-cloud';
 
 /**
  * Server-mode conformance (HIVE-142): the eight acceptance criteria plus the
@@ -213,6 +214,20 @@ import {
  * before applying the ones this file actually wants — so an ambient
  * `HIVE_CONFIG_PATH`, or a leftover `HIVE_LIVE_*_PROOF`, cannot leak into a
  * child and make this suite pass for the wrong reason.
+ *
+ * ## Every launch is licensed against a stub cloud (HIVE-428)
+ *
+ * Since HIVE-265 a served app binds nothing until it holds a licence
+ * (`electron/main/licence/serve-gate.ts`), and a scrubbed environment gives it
+ * none. So the outermost `beforeAll` starts one e2e stub cloud
+ * (`tests/e2e/electron/fixtures/stub-cloud.ts`) for the whole file, on the
+ * `team` plan, and every process {@link spawnApp} and {@link runOneShot} start
+ * gets, after the scrub, the stub's two variables: `HIVETTY_CLOUD_URL` (where
+ * the app signs in and fetches its lease) and `HIVETTY_LEASE_KEYS` (the public
+ * key that lease verifies against). Both also get `--use-mock-keychain`, so the
+ * account one launch stores on a `--user-data-dir` is readable by the next
+ * launch on that profile, with no Keychain prompt to hang a headless run. Each
+ * served profile signs in through the `--login` one-shot before it serves.
  *
  * ## Evidence
  *
@@ -501,6 +516,15 @@ interface ProcessRecord {
 
 const processLog: ProcessRecord[] = [];
 
+/** The stub cloud every launch signs in and leases against — started by the outermost `beforeAll`, see the header's HIVE-428 section. */
+let stub: StubCloud | undefined;
+
+/** The stub's environment, for a spawn. Throws if the outermost `beforeAll` has not started it. */
+function stubEnv(): StubCloud['env'] {
+  if (!stub) throw new Error('the stub cloud is not running: the outermost beforeAll starts it');
+  return stub.env;
+}
+
 /** Every scratch `config.json` path this run wrote to — part of the evidence, and a second, independent confirmation that none of them is one of {@link REAL_CONFIG_PATHS}. */
 const scratchConfigPaths: string[] = [];
 
@@ -531,10 +555,10 @@ function spawnApp(
   userDataDir: string,
 ): { child: ChildProcess; record: ProcessRecord } {
   assertScratchPath(configPath);
-  const args = [MAIN_ENTRY, `--user-data-dir=${userDataDir}`, ...extraArgs];
+  const args = [MAIN_ENTRY, `--user-data-dir=${userDataDir}`, '--use-mock-keychain', ...extraArgs];
   const child = spawn(electronBinary, args, {
     // HIVE_BACKGROUND: the launch never takes the person's focus or the Dock (`electron/main/background.ts`).
-    env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, HIVE_E2E: '1', HIVE_BACKGROUND: '1' }),
+    env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, HIVE_E2E: '1', HIVE_BACKGROUND: '1', ...stubEnv() }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -666,9 +690,9 @@ function runOneShot(
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   assertScratchPath(configPath);
   return new Promise((resolve, reject) => {
-    const fullArgs = [MAIN_ENTRY, ...args, `--user-data-dir=${userDataDir}`];
+    const fullArgs = [MAIN_ENTRY, ...args, `--user-data-dir=${userDataDir}`, '--use-mock-keychain'];
     const child = spawn(electronBinary, fullArgs, {
-      env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath }),
+      env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, ...stubEnv() }),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -1491,6 +1515,9 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       throw new Error(`${MAIN_ENTRY} is missing. Run \`pnpm desktop:build\` before \`pnpm test:server\`.`);
     }
     evidenceDir = mkdtempSync(join(tmpdir(), 'hive-live-server-evidence-'));
+    // HIVE-428: one stub cloud for the file; `team` so every lease it issues is licensed.
+    stub = await startStubCloud();
+    stub.controls.setPlan('team');
 
     /*
       Case 22's clock starts here — see {@link DeadlineRun} for why it is
@@ -1540,6 +1567,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
   afterAll(async () => {
     deadlineRun?.client.close();
     await stopApp(deadlineRun?.app);
+    await stub?.close();
     const findingPath = join(evidenceDir, 'finding.json');
     writeFileSync(
       findingPath,
@@ -1557,6 +1585,47 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       'utf8',
     );
     console.info('EVIDENCE ', findingPath);
+  }, 30_000);
+
+  /*
+    The gate every other case depends on (HIVE-265, `serve-gate.ts`): a profile
+    that has never held a lease serves nothing. This profile is never signed in,
+    so its `--server` must leave the port closed — which is why every served
+    profile below signs in first.
+  */
+  it('a served app with no licence does not bind', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hive-live-server-unlicensed-'));
+    const configPath = join(dir, 'config.json');
+    const userDataDir = join(dir, 'user-data');
+    assertScratchPath(configPath);
+    scratchConfigPaths.push(configPath);
+    const port = await freePort();
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        version: CONFIG_VERSION,
+        shell: '/bin/sh',
+        projects: [],
+        server: { bind: { host: '127.0.0.1', port, allowedOrigins: [] }, devices: [] },
+      }),
+      'utf8',
+    );
+    const { child } = spawnApp(['--server'], configPath, userDataDir);
+    try {
+      await delay(5_000);
+      const accepted = await new Promise<boolean>((resolve) => {
+        const socket = netConnect({ host: '127.0.0.1', port }, () => {
+          socket.end();
+          resolve(true);
+        });
+        socket.on('error', () => resolve(false));
+      });
+      expect(accepted).toBe(false);
+      // Still running: a closed port from an app that crashed would prove nothing about the gate.
+      expect(child.exitCode).toBeNull();
+    } finally {
+      await stopApp(child);
+    }
   }, 30_000);
 
   describe('the handshake, the CLI in a second process, and the token never on disk', () => {
