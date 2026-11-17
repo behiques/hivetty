@@ -411,6 +411,34 @@ describe('refreshPrs', () => {
       expect(noteSessionPr).not.toHaveBeenCalled();
     });
 
+    /**
+     * A branch belongs to the checkout, not to a session (HIVE-430): one
+     * session switched the shared checkout's branch while its peer still held
+     * a stale `main`, and the sweep pinned a stranger's PR to the switcher.
+     */
+    it('learns nothing for a session whose checkout holds another live session, whatever branch that peer last reported', async () => {
+      const a = withSession({ cwd: '/repo' });
+      const b = withSession({ cwd: '/repo', branch: 'main' });
+      readPullRequests.mockResolvedValue(ok());
+
+      await useHiveStore.getState().refreshPrs();
+
+      expect(useHiveStore.getState().entities[a]).not.toHaveProperty('prs');
+      expect(useHiveStore.getState().entities[b]).not.toHaveProperty('prs');
+      expect(noteSessionPr).not.toHaveBeenCalled();
+    });
+
+    it('still learns when the only other session in its checkout has ended', async () => {
+      const a = withSession({ cwd: '/repo' });
+      const b = withSession({ cwd: '/repo', branch: 'main' });
+      useHiveStore.getState().finishSession(b, true);
+      readPullRequests.mockResolvedValue(ok());
+
+      await useHiveStore.getState().refreshPrs();
+
+      expect(useHiveStore.getState().entities[a]).toMatchObject({ prs: [{ number: 482 }] });
+    });
+
     it('still learns for a session alone on the branch in its checkout', async () => {
       const a = withSession({ cwd: '/repo/.worktrees/hero' });
       withSession({ cwd: '/repo' });

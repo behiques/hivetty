@@ -112,7 +112,9 @@ you write names its path, and a wake that continues a job reads it right after
    before anything that ends the turn. The answer's shape: the first line is
    the status and the PR URL; then `Gates:` (each command, its last line, the
    Node it ran under), `Not run:`, `Deviations:`, `Rulings:`, `Env:`,
-   `Evidence:`.
+   `Evidence:`. Its `meta: { pr, repo, ticket, stage: "build" }`, `pr` a
+   number and `repo` `owner/name`: that is what puts the PR on the asking
+   session's PR tab.
 8. `ship: yes` → `ledger_ask to: shipper` last, with the whole intake shape
    below: `Ship PR #<N> on <owner>/<repo>`, `repo: <the
    project checkout path>`, `worktree: <your worktree>`, `ticket:`,

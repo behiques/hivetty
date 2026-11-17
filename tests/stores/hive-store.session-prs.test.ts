@@ -191,6 +191,71 @@ describe('a ledger claim records the PR as the session\'s own', () => {
     expect(noteSessionPr).not.toHaveBeenCalled();
   });
 
+  /**
+   * A build's PRs (HIVE-430): the builder opens the draft in its own worktree
+   * and asks the shipper itself, so neither the hooks nor an ask name the
+   * session. Its answer closing the session's own build ask does.
+   */
+  describe("an agent's answer on the session's own ask", () => {
+    const BUILD_ASK = '20261117-112641-0001';
+    const buildAsk = (from: string, id = BUILD_ASK) => entry({ id, from, to: 'builder', body: 'Build HIVE-428' });
+    const built = (fields: Partial<LedgerEntry> = {}) =>
+      entry({
+        id: '20261117-113806-0001',
+        from: 'builder',
+        to: id,
+        kind: 'answer',
+        thread: BUILD_ASK,
+        meta: { pr: 45, repo: 'behiques/hivetty-cloud', stage: 'build' },
+        ...fields,
+      });
+
+    it('records the PR as owned on a live append', () => {
+      useHiveStore.getState().ledgerAppend(buildAsk(id));
+      useHiveStore.getState().ledgerAppend(built());
+
+      expect(useHiveStore.getState().entities[id]).toMatchObject({ prs: [pr(45, { owned: true })] });
+      expect(noteSessionPr).toHaveBeenCalledWith({ entityId: id, prs: [pr(45, { owned: true })] });
+    });
+
+    it('records it from a snapshot holding both the ask and the answer', () => {
+      useHiveStore.getState().hydrateLedger([buildAsk(id), built()]);
+
+      expect(useHiveStore.getState().entities[id]).toMatchObject({ prs: [pr(45, { owned: true })] });
+    });
+
+    it('two builds give two PRs, in the order they opened', () => {
+      useHiveStore.getState().ledgerAppend(buildAsk(id));
+      useHiveStore.getState().ledgerAppend(built());
+      useHiveStore.getState().ledgerAppend(buildAsk(id, '20261117-113826-0001'));
+      useHiveStore
+        .getState()
+        .ledgerAppend(built({ id: '20261117-124744-0001', thread: '20261117-113826-0001', meta: { pr: 46, repo: 'behiques/hivetty-cloud' } }));
+
+      expect(useHiveStore.getState().entities[id]).toMatchObject({ prs: [pr(45, { owned: true }), pr(46, { owned: true })] });
+    });
+
+    it.each([
+      ['on a thread another session opened', () => buildAsk('sess-99'), {}],
+      ['from a party the ask did not go to', () => buildAsk(id), { from: 'fixer' }],
+      ['whose to names the session but whose thread is not its own', () => buildAsk('sess-99'), { to: id }],
+      ['without a PR number', () => buildAsk(id), { meta: { repo: 'behiques/hivetty-cloud' } }],
+    ] as const)('credits nothing for an answer %s', (_label, ask, fields) => {
+      const other = useHiveStore.getState().spawnSession('hivetty-cloud');
+      useHiveStore.getState().ledgerAppend(ask());
+      useHiveStore.getState().ledgerAppend(built(fields));
+
+      expect(useHiveStore.getState().entities[id]).not.toHaveProperty('prs');
+      expect(useHiveStore.getState().entities[other]).not.toHaveProperty('prs');
+    });
+
+    it('credits nothing when the ask is not in the mirror', () => {
+      useHiveStore.getState().ledgerAppend(built());
+
+      expect(useHiveStore.getState().entities[id]).not.toHaveProperty('prs');
+    });
+  });
+
   it('ignores a claim naming no session', () => {
     const before = useHiveStore.getState().entities;
     useHiveStore.getState().ledgerAppend(ask('shipper'));

@@ -139,8 +139,10 @@ requested or with a verdict; **Open threads**, each unresolved thread as
 then **Open on GitHub** and **Show in PRs**. The details re-read once a minute,
 only while the tab is showing.
 
-The tab and its strip icon appear when the sweep first matches a PR to the
-session's branch; the panel does not switch to it. Both carry a dot in the PR's
+The tab and its strip icon appear once the session has a PR: one it opened or
+handed to the shipper, one the builder opened for its build ask (as soon as the
+draft exists, HIVE-430), or one the sweep matches to its branch while no other
+live session shares its checkout. The panel does not switch to it. Both carry a dot in the PR's
 flap tone: amber when it needs you, green while it moves, grey for a draft,
 parked or remembered PR, brand once merged. A PR the sweep can no longer see
 (remembered) shows its number, "last seen" and Open on GitHub only.
