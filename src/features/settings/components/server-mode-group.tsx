@@ -818,6 +818,17 @@ export function ServerModeGroup({
   const [serverDraft, setServerDraft] = useState(target?.relayServerId ?? DEFAULT_REMOTE.relayServerId);
   /** The cloud answered `not-entitled` to the server list: locked, as a locked plan is. */
   const [cloudLocked, setCloudLocked] = useState(false);
+  /*
+    Lifted whenever the plan's own answer changes (self review, borderline 4): the picker that would
+    re-ask the cloud is unmounted while locked, so nothing else could ever clear it short of a remount.
+    Keyed by value, since `useEntitlement` derives a fresh object on every render.
+  */
+  const lockKey = relayLock.allowed ? 'allowed' : `locked:${relayLock.reason}`;
+  const [seenLockKey, setSeenLockKey] = useState(lockKey);
+  if (lockKey !== seenLockKey) {
+    setSeenLockKey(lockKey);
+    setCloudLocked(false);
+  }
   const relayLocked = !relayLock.allowed || cloudLocked;
   /** Connect through relay is on, and usable: the picker replaces the address fields. */
   const relayOn = viaDraft === 'relay' && !relayLocked;
@@ -865,6 +876,25 @@ export function ServerModeGroup({
    * obviously not loopback, LAN or tailnet — a bare hostname, a public IPv4
    * literal, anything with a scheme or a port baked in.
    */
+  /**
+   * A no-mode write of how this machine reaches its server (HIVE-429, self review). Awaited: a refused
+   * or failed write puts the via and server drafts back to the block it was made against and says why,
+   * rather than leaving the switch or picker showing a value `config.json` does not hold.
+   */
+  const [targetError, setTargetError] = useState<string | null>(null);
+  const commitTarget = (request: Parameters<typeof setRemoteConfig>[0]) => {
+    const saved = target;
+    setTargetError(null);
+    void setRemoteConfig(request).then(({ switched }) => {
+      if (switched.ok) return;
+      setTargetError(switched.reason === 'connect-failed' ? switched.message : 'The change was refused.');
+      if (saved !== null) {
+        setViaDraft(saved.via);
+        setServerDraft(saved.relayServerId);
+      }
+    });
+  };
+
   const commitRemoteHost = () => {
     const next = remoteHostDraft.trim();
     if (next === '' || !isRemoteTarget(next)) {
@@ -885,7 +915,13 @@ export function ServerModeGroup({
       showing a value `config.json` did not hold, which is the exact defect this
       story set out to remove.
     */
-    if (target === null || next === target.host) return;
+    if (target === null) return;
+    // A `direct` the switch is still holding as a draft rides along: see `commitTarget`.
+    if (viaDraft === 'direct' && target.via !== 'direct') {
+      commitTarget({ host: next, via: 'direct' });
+      return;
+    }
+    if (next === target.host) return;
     /*
       Write only, and now actually so (HIVE-144 review, I6).
 
@@ -1368,10 +1404,22 @@ export function ServerModeGroup({
                 const via = next ? 'relay' : 'direct';
                 setViaDraft(via);
                 if (switchResult) setSwitchResult(null);
-                // A write with no `mode`: it never dials (`applySetRemote`).
-                void setRemoteConfig({ via });
+                setTargetError(null);
+                /*
+                  A write with no `mode`: it never dials (`applySetRemote`). On a remote block it is
+                  written only when the block stays dialable (self review, block and borderline 3):
+                  `direct` needs a stored address, or `setRemote`'s fence refuses it, and `relay` needs a
+                  stored server, or the next boot attach is refused. Otherwise it stays a draft, and the
+                  address commit or the picker writes it together with what it was missing.
+                */
+                const dialable = via === 'relay' ? target.relayServerId !== '' : isRemoteTarget(target.host);
+                if (target.mode !== 'remote' || dialable) commitTarget({ via });
               }}
             />
+          )}
+
+          {targetError === null ? null : (
+            <p className="text-ui-sm text-red">Could not save: {targetError}</p>
           )}
 
           {target === null ? null : relayOn ? (
@@ -1380,7 +1428,10 @@ export function ServerModeGroup({
               onChoose={(serverId) => {
                 setServerDraft(serverId);
                 if (switchResult) setSwitchResult(null);
-                void setRemoteConfig({ relayServerId: serverId });
+                // A `relay` the switch is holding as a draft is written with the server it was waiting for.
+                commitTarget(
+                  target.via === 'relay' ? { relayServerId: serverId } : { via: 'relay', relayServerId: serverId },
+                );
               }}
               onLocked={setCloudLocked}
             />

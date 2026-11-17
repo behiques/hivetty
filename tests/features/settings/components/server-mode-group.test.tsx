@@ -1831,7 +1831,7 @@ describe('ServerModeGroup', () => {
     });
 
     it('writes via and nothing else on toggle, and swaps the address fields for the picker', async () => {
-      renderAttach();
+      renderAttach({ remote: { relayServerId: 'dev_1' } });
 
       await userEvent.click(viaSwitch());
 
@@ -2013,6 +2013,90 @@ describe('ServerModeGroup', () => {
       expect(setRemoteConfig).toHaveBeenCalledExactlyOnceWith({ via: 'direct' });
       expect(screen.getByLabelText('Server address')).toHaveValue('192.168.1.20');
       expect(screen.getByLabelText('Port')).toHaveValue('7500');
+    });
+
+    /*
+      Self review, block: a relay attach stores no host, so `{ via: 'direct' }` alone onto a remote
+      block is refused by `setRemote`'s fence. The switch holds `direct` as a draft until an address
+      is committed, and the address commit carries `via` with it.
+    */
+    it('turning the switch off after a relay attach waits for an address, then writes both', async () => {
+      renderAttach({ remote: { via: 'relay', relayServerId: 'dev_1', host: '' } });
+
+      await userEvent.click(viaSwitch());
+
+      expect(setRemoteConfig).not.toHaveBeenCalled();
+      expect(viaSwitch()).not.toBeChecked();
+      await userEvent.type(screen.getByLabelText('Server address'), '192.168.1.20');
+      await userEvent.tab();
+      expect(setRemoteConfig).toHaveBeenCalledExactlyOnceWith({ host: '192.168.1.20', via: 'direct' });
+    });
+
+    // Self review, borderline 3: `via: 'relay'` with no server on a remote block fails the next boot attach.
+    it('turning the switch on with no server chosen waits for the picker, then writes both', async () => {
+      hostsAnswer({ ok: true, hosts: [STUDIO] });
+      renderAttach();
+
+      await userEvent.click(viaSwitch());
+
+      expect(setRemoteConfig).not.toHaveBeenCalled();
+      await screen.findByRole('option', { name: 'Studio mini · online since 09:14' });
+      await userEvent.selectOptions(picker(), 'dev_1');
+      expect(setRemoteConfig).toHaveBeenCalledExactlyOnceWith({ via: 'relay', relayServerId: 'dev_1' });
+    });
+
+    // Self review, borderline 2: a refused write puts the switch back and says why.
+    it('puts the switch back and shows the reason when the via write fails', async () => {
+      vi.mocked(setRemoteConfig).mockResolvedValue({
+        switched: { ok: false, reason: 'connect-failed', message: 'The request could not be sent.' },
+        changed: null,
+      });
+      renderAttach({ remote: { relayServerId: 'dev_1' } });
+
+      await userEvent.click(viaSwitch());
+
+      await waitFor(() => expect(viaSwitch()).not.toBeChecked());
+      expect(screen.getByText('Could not save: The request could not be sent.')).toBeInTheDocument();
+      expect(screen.getByLabelText('Server address')).toBeInTheDocument();
+    });
+
+    it('puts the saved server back and shows the reason when the server write fails', async () => {
+      hostsAnswer({ ok: true, hosts: [STUDIO, LAPTOP] });
+      vi.mocked(setRemoteConfig).mockResolvedValue({
+        switched: { ok: false, reason: 'connect-failed', message: 'The request could not be sent.' },
+        changed: null,
+      });
+      renderAttach({ remote: { via: 'relay', relayServerId: 'dev_1' } });
+      await screen.findByRole('option', { name: 'Laptop · online' });
+
+      await userEvent.selectOptions(picker(), 'dev_2');
+
+      await waitFor(() => expect(picker()).toHaveValue('dev_1'));
+      expect(screen.getByText('Could not save: The request could not be sent.')).toBeInTheDocument();
+    });
+
+    // Self review, borderline 4: the cloud's lock lifts when the plan answer changes.
+    it('lifts the cloud lock when the plan entitlement changes', async () => {
+      hostsAnswer({ ok: false, reason: 'not-entitled' });
+      const props = {
+        enabled: false,
+        bind: DEFAULT_BIND,
+        devices: [],
+        remote: { ...REMOTE_TARGET, mode: 'remote' as const, via: 'relay' as const },
+        localRemote: null,
+        attachedServer: null,
+        attachedServerName: null,
+        serving: false,
+        link: null,
+      };
+      const { rerender } = render(<ServerModeGroup {...props} relayLock={{ allowed: true }} />);
+      await waitFor(() => expect(viaSwitch()).toBeDisabled());
+
+      rerender(<ServerModeGroup {...props} relayLock={LOCKED} />);
+      hostsAnswer({ ok: true, hosts: [STUDIO] });
+      rerender(<ServerModeGroup {...props} relayLock={{ allowed: true }} />);
+
+      expect(viaSwitch()).toBeEnabled();
     });
   });
 
