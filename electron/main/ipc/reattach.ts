@@ -93,6 +93,8 @@ export function createReattachLoop(deps: ReattachDeps): ReattachLoop {
     user a moment after they asked to work locally.
   */
   let generation = 0;
+  /** The reason the last `reconnecting` carried, so Try now and a wake restate it rather than dropping it. */
+  let lastReason: string | null = null;
 
   const emit = (status: Omit<RemoteLinkStatus, 'serverName' | 'epoch' | 'lost'>): void => {
     onStatus({ ...status, serverName, epoch });
@@ -105,6 +107,7 @@ export function createReattachLoop(deps: ReattachDeps): ReattachLoop {
 
   const finish = (): void => {
     running = false;
+    lastReason = null;
     generation += 1;
     stopTimer();
     stopWake?.();
@@ -118,6 +121,7 @@ export function createReattachLoop(deps: ReattachDeps): ReattachLoop {
   const schedule = (reason: string | null = null): void => {
     const wait = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
     attempt += 1;
+    lastReason = reason;
     emit({ state: 'reconnecting', attempt, nextAttemptAt: now() + wait, reason });
     stopTimer();
     timer = setTimeout(() => {
@@ -180,7 +184,7 @@ export function createReattachLoop(deps: ReattachDeps): ReattachLoop {
       sleep — a countdown to a moment that has already passed, next to an
       attempt number that is about to restart anyway.
     */
-    emit({ state: 'reconnecting', attempt: 1, nextAttemptAt: now(), reason: null });
+    emit({ state: 'reconnecting', attempt: 1, nextAttemptAt: now(), reason: lastReason });
     void dial(generation);
   };
 

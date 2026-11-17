@@ -492,6 +492,15 @@ describe('createReattachLoop', () => {
       ]);
     });
 
+    it('keeps saying the server is offline when Try now restarts the schedule', () => {
+      const h = harness(() => new Promise<never>(() => {}));
+
+      h.loop.begin({ kind: 'transport', code: 'relay-server-offline', message: RELAY_SERVER_OFFLINE });
+      h.loop.dialNow();
+
+      expect(h.statuses.at(-1)).toMatchObject({ state: 'reconnecting', attempt: 1, reason: RELAY_SERVER_OFFLINE });
+    });
+
     it('stops with the sign-in sentence when a reconnect is refused 4401', async () => {
       const h = harness(async () => {
         throw new RelayClosedError(4401);
