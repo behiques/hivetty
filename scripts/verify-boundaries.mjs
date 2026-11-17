@@ -452,6 +452,46 @@ const CASES = [
         "import { client } from '../../electron/remote-client/probe-target';\nexport const probe = client;\n",
     },
   },
+  /**
+   * The encrypted channel is a leaf (HIVE-428). Both remote halves import it; it imports neither,
+   * and nothing above it either, so the cipher can never pick up a dependency on main or a socket.
+   */
+  {
+    name: 'zone: electron/remote-channel/ may not import electron/main/ (HIVE-428)',
+    rule: 'import/no-restricted-paths',
+    files: {
+      'electron/main/probe-target.ts': 'export const main = 1;\n',
+      'electron/remote-channel/probe.ts':
+        "import { main } from '../main/probe-target';\nexport const probe = main;\n",
+    },
+  },
+  {
+    name: 'zone: electron/remote-channel/ may not import electron/remote-host/ (HIVE-428)',
+    rule: 'import/no-restricted-paths',
+    files: {
+      'electron/remote-host/probe-target.ts': 'export const host = 1;\n',
+      'electron/remote-channel/probe.ts':
+        "import { host } from '../remote-host/probe-target';\nexport const probe = host;\n",
+    },
+  },
+  {
+    name: 'zone: src/ may not import electron/remote-channel/ (HIVE-428)',
+    rule: 'import/no-restricted-paths',
+    files: {
+      'electron/remote-channel/probe-target.ts': 'export const channel = 1;\n',
+      'src/utils/probe.ts':
+        "import { channel } from '../../electron/remote-channel/probe-target';\nexport const probe = channel;\n",
+    },
+  },
+  {
+    name: 'zone: electron/preload/ may not import electron/remote-channel/ (HIVE-428)',
+    rule: 'import/no-restricted-paths',
+    files: {
+      'electron/remote-channel/probe-target.ts': 'export const channel = 1;\n',
+      'electron/preload/probe.ts':
+        "import { channel } from '../remote-channel/probe-target';\nexport const probe = channel;\n",
+    },
+  },
   {
     name: 'PascalCase folder name is rejected under electron/ too',
     rule: 'check-file/folder-naming-convention',

@@ -52,3 +52,21 @@ export function refuseProtocol(clientProtocol: number): AttachRefused {
       `server speaks ${String(REMOTE_PROTOCOL_VERSION)}. Update the ${side}.`,
   };
 }
+
+/**
+ * The refusal sent, in text, to a client whose first frame was text (HIVE-428).
+ *
+ * That client predates the encrypted channel, so it can read nothing else. This is the one
+ * plaintext frame a server sends, and it carries no secret: the protocol this server speaks and
+ * which side to update.
+ */
+export function refusePlaintextClient(): AttachRefused {
+  return {
+    kind: 'attach-refused',
+    code: 'protocol-mismatch',
+    protocol: REMOTE_PROTOCOL_VERSION,
+    message:
+      `This server speaks protocol ${String(REMOTE_PROTOCOL_VERSION)}, ` +
+      'and only over the encrypted channel. Update the client.',
+  };
+}

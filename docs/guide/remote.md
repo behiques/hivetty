@@ -14,19 +14,20 @@ This page is the overview. The step-by-step runbook is [Server mode](../server-m
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/diagrams/remote-topology.dark.svg">
-  <img src="../assets/diagrams/remote-topology.light.svg" alt="A server Mac holds sessions, agents and the ledger; laptops attach to its listener over Tailscale">
+  <img src="../assets/diagrams/remote-topology.light.svg" alt="A server Mac holds sessions, agents and the ledger; laptops attach to its listener over the local network or Tailscale, through an encrypted channel">
 </picture>
 
-Same version on both ends, one Tailscale network. Tailscale is the first line of defence;
-device tokens are the second.
+Same version on both ends, and a private network between them: the same local network, or one
+Tailscale tailnet to attach from anywhere. Every attach runs inside an end-to-end encrypted
+channel keyed by the device's pairing secret; device tokens decide who gets in.
 
 ## Serve from an always-on Mac
 
 Short version (the runbook has every command):
 
-1. Keep the server Mac awake and logged in: automatic login, `pmset` sleep off, Tailscale
-   key expiry off.
-2. Add a `server` block to its config with the server's Tailscale address:
+1. Keep the server Mac awake and logged in: automatic login, `pmset` sleep off, and, if you use
+   Tailscale, key expiry off.
+2. Add a `server` block to its config with the server's local-network or Tailscale address:
 
 ```json
 "server": {
@@ -37,7 +38,9 @@ Short version (the runbook has every command):
 
 3. Start it at login with a LaunchAgent, so it restarts itself and after updates.
 
-`0.0.0.0` is refused on purpose: bind the tailnet address only. **Serve this machine** in
+`0.0.0.0` and public addresses are refused on purpose: bind the server's local-network or Tailscale
+address. Every attach is end-to-end encrypted, so Tailscale is needed only to attach from outside the
+server's local network. **Serve this machine** in
 **Settings › Server mode** edits the same block.
 
 ## Pair a device
@@ -58,7 +61,10 @@ the config.
 **Settings › Server mode › Attach to a server**: enter the server address, port, device id and
 token, then **Attach**. The token is stored encrypted (via the Keychain) in `remote-credential.bin`, in the app's data folder.
 
-You cannot attach while sessions are running locally; the refusal lists them.
+You cannot attach while sessions are running locally; the refusal lists them. The address must be
+loopback, on your local network, or a Tailscale address; a server anywhere else is reached through the
+relay. A server on an older HiveTTY is named as one: update it. A wrong token ends the attach with
+"Pair again".
 
 ## When the connection drops
 

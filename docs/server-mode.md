@@ -7,21 +7,25 @@ time zones away.
 
 One binary, two modes. The server Mac runs the same app with a `server` block
 in its config; it opens no window, shows a menu-bar item, and listens on a WebSocket
-bound to its Tailscale address. The laptop runs the same app with a `remote`
-block and routes every IPC call to that socket instead of to its own process.
+bound to an address on its local network or its tailnet. The laptop runs the same
+app with a `remote` block and routes every IPC call to that socket instead of to
+its own process. Every attach runs inside an end-to-end encrypted channel, keyed
+by a fresh X25519 exchange and the device's pairing secret.
 
 This document takes a Mac from fresh out of the box to attachable, and to a server that
 survives a reboot with nobody touching it. Follow it top to bottom once. After
 that the machine looks after itself.
 
 > **TL;DR**
-> - One binary: a `server` block makes a Mac serve on its Tailscale address; a `remote`
->   block makes a laptop a window onto it.
-> - It needs automatic login plus a LaunchAgent (the Keychain), `pmset autorestart`, and
->   Tailscale with key expiry off.
+> - One binary: a `server` block makes a Mac serve on a local-network or Tailscale address;
+>   a `remote` block makes a laptop a window onto it.
+> - Every attach is end-to-end encrypted. Tailscale is optional: you need it only to attach
+>   from outside the server's local network.
+> - It needs automatic login plus a LaunchAgent (the Keychain) and `pmset autorestart`;
+>   with Tailscale, key expiry off.
 > - `hivetty --pair`, `--devices` and `--revoke` manage device tokens; only hashes are stored.
 > - `hivetty --login` and `--logout` sign the server in and out of HiveTTY over SSH, with a code.
-> - The hook receiver stays on loopback. Exposure rests on Tailscale first, then tokens.
+> - The hook receiver stays on loopback. The server never binds a public address.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/diagrams/fd-server.dark.svg">
@@ -43,16 +47,21 @@ that the machine looks after itself.
 
 ## Before you start
 
-- **The same version on both ends.** The first frame carries
+- **The same version on both ends.** The attach frame carries
   `REMOTE_PROTOCOL_VERSION` (`electron/shared/remote-contract.ts`). A mismatch
-  is refused with a message naming both versions and which side to update.
+  is refused with a message naming both versions and which side to update. A
+  client or server from before the encrypted channel (protocol 44 and older)
+  cannot speak to this one at all: an old client is told, in one plain-text
+  frame, to update; a new client attaching to an old server says the server is
+  on an older HiveTTY.
   `scripts/remote-protocol.lock.json` pins the channel set to that version, so
   `pnpm verify:boundaries` fails a channel change that did not bump it.
-- **Tailscale on the server and on every client, in one tailnet.** It is the
-  primary security control, not a convenience. See [Exposure](#exposure).
+- **A private network between the two.** The same local network is enough. To
+  attach from anywhere else, put the server and every client in one Tailscale
+  tailnet. See [Reaching it from anywhere](#reaching-it-from-anywhere).
 - **Claude Code installed and logged in on the server.** Sessions run there, so
   `claude` has to work in the server's own shell.
-- **Measure the floor first.** `ssh` into the server over Tailscale from wherever
+- **Measure the floor first.** `ssh` into the server from wherever
   "remote" actually means for you, and type. Echo in an attached terminal costs
   one round trip over the same link; nothing in this design beats that.
 
@@ -83,7 +92,8 @@ digest of each, in the config file, and needs no keychain to check one.
 2. **Turn on automatic login.** System Settings, Users & Groups, *Automatically
    log in as*, pick the account that will run the server. macOS refuses this
    while FileVault is on, so FileVault has to be off: that is the cost of an
-   unattended boot, and the reason the tailnet and the device tokens matter.
+   unattended boot, and the reason the private-network bind and the device
+   tokens matter.
    Automatic login unlocks the login keychain as long as the keychain password
    is still the account password; if you ever changed one without the other,
    fix that now (Keychain Access, *Change Password for Keychain "login"*).
@@ -98,8 +108,15 @@ digest of each, in the config file, and needs no keychain to check one.
    `caffeinate -i` does), so this line covers the minutes before it starts and
    any time it is not running. `autorestart 1` is the one that matters for a
    power cut: without it the server Mac stays off until someone presses the button.
-4. **Install Tailscale, log in, and let it launch at login.** Then read the
-   server's tailnet address:
+4. **Pick the address clients will dial.** On one local network, that is the
+   server's LAN address:
+
+   ```sh
+   ipconfig getifaddr en0
+   ```
+
+   To attach from outside that network, **install Tailscale, log in, and let it
+   launch at login**, then read the server's tailnet address instead:
 
    ```sh
    /Applications/Tailscale.app/Contents/MacOS/Tailscale ip -4
@@ -107,6 +124,8 @@ digest of each, in the config file, and needs no keychain to check one.
 
    In the Tailscale admin console, **disable key expiry** for the server Mac, or it
    drops off the tailnet when its node key expires and every client with it.
+   Give a LAN server a fixed address (a DHCP reservation on the router), or a
+   client's saved address goes stale the next time the lease changes.
 5. **Install the `hivetty` command**, so the one-shot commands below work over
    SSH:
 
@@ -140,9 +159,14 @@ machine*, from a screen-sharing session):
   file, which is for trying it out, not for the deployment. A `--server` run
   does not update itself either: only `enabled: true` means launchd is behind
   the process.
-- **`bind.host`** is the server's Tailscale address from step 4. `0.0.0.0` is
-  refused in every spelling (`0`, `0x0`, `000.000.000.000` included); loopback
-  is allowed so the link can be tried on one machine. A refused or malformed
+- **`bind.host`** is the address from step 4: a private IPv4 address
+  (`10.x`, `172.16.x` to `172.31.x`, `192.168.x`, `169.254.x`), a `.local`
+  name, a Tailscale address (`100.64.0.0/10` or a `*.ts.net` name), or
+  loopback so the link can be tried on one machine. A public address is
+  refused, and so is `0.0.0.0` in every spelling (`0`, `0x0`,
+  `000.000.000.000` included). IPv4 only. Prefer the literal to a name: a
+  `.local` or `.ts.net` name is resolved by the OS when the server binds, and
+  the literal is what you meant. A refused or malformed
   host does not stop the app, and it does not quietly bind loopback either:
   the server listens nowhere, the menu reads *Not serving* with the reason,
   and the log says the same once. Fix the block and restart the agent.
@@ -212,7 +236,7 @@ What each part is for:
   the bundle, and launchd restarts a long-running job at once; the delay lets
   the swap finish before the new binary starts. At login it also gives
   Tailscale a head start, though nothing depends on that: a bind that fails
-  because the tailnet address is not up yet is retried, after 5 s and then
+  because the address is not up yet is retried, after 5 s and then
   doubling to once a minute, until it lands.
 - **Do not also add HiveTTY to Login Items.** Two copies at login means one
   loses the single-instance lock and quits, and launchd relaunches it every
@@ -255,10 +279,17 @@ hivetty --revoke "MacBook"   # cut one device off, at once
 On the client: Settings, Machines, Server mode, *Attach to a server*. Fill in *Server
 address* (the exact `bind.host`), *Port*, *Device id* and *Pairing token*, then
 *Attach*. The token goes into the client's own keychain, never into its config
-file. Two refusals you may meet:
+file, and it only ever crosses the network inside the encrypted channel.
+Refusals you may meet:
 
-- **A plaintext socket to anything but loopback or a tailnet address** (a
-  `100.64.0.0/10` address or a `*.ts.net` name) is refused before it dials.
+- **An address that is not loopback, on the local network, or a Tailscale
+  address** is refused before it dials, and so is a `.local` or `.ts.net` name
+  that resolves to a public address. A server elsewhere is reached through the
+  relay (HIVE-429, *Connect through relay*), never directly.
+- **A wrong token or an unknown device id** ends the encrypted handshake before
+  anything else is said; the two look identical on purpose. Pair again.
+- **A server on an older HiveTTY** is named as one. Update the server; pairing
+  again would not help.
 - **Attaching while local sessions are running** is refused and lists them, so
   nothing is left running unseen on the laptop.
 
@@ -440,24 +471,33 @@ leaves.
 
 ## Reaching it from anywhere
 
-**Tailscale is the tunnel.** Nothing else is needed to attach from outside the
-server's local network: no port forward on the router, no public server, no
-ngrok. Tailscale connects the two machines peer to peer over WireGuard and
-punches through NAT on both ends. When no direct path exists (a strict hotel
-or carrier network), it relays the traffic through its DERP servers. The relay
-sees only WireGuard ciphertext. Either way the client dials the same `100.x`
-address, from home, from a hotspot, or from four time zones away.
+**Direct attach stays on a private network.** The client dials loopback, an
+address on the local network, or a Tailscale address, and nothing else. It
+checks the host before it dials and the address DNS returned before it
+connects (`isRemoteTarget` and `isLanHost`, `electron/shared/config-contract.ts`),
+so an ngrok hostname, a public DNS name or a forwarded public IP is refused
+before a byte leaves the laptop, and so is a `.local` name a hostile resolver
+answers with a public address. The relay is the only route off a private
+network. [Exposure](#exposure) says why that stays so.
+
+**On one local network** nothing else is needed: bind the server's LAN address
+and dial it.
+
+**From anywhere else, Tailscale is the tunnel**: no port forward on the
+router, no public server, no ngrok. Tailscale connects the two machines peer
+to peer and punches through NAT on both ends. When no direct path exists (a
+strict hotel or carrier network), it relays the traffic through its DERP
+servers. Either way the client dials the same `100.x` address, from home, from
+a hotspot, or from four time zones away.
 
 A relayed link works but adds latency. `tailscale ping <server>` on the client
 says whether the path is direct or `via DERP`.
 
-**The app will not reach the server any other way.** The client dials plain
-`ws://`, with no TLS of its own, because WireGuard carries the encryption. So
-before it dials, it refuses any host that is not loopback, a `100.64.0.0/10`
-literal or a `*.ts.net` name, and it checks the resolved address too
-(`isTailnetHost`, `electron/shared/config-contract.ts`). An ngrok hostname, a
-public DNS name or a forwarded public IP is refused before a byte leaves the
-laptop. [Exposure](#exposure) says why that stays so.
+**The encryption is the app's own, on every route.** Each attach runs a Noise
+handshake (`Noise_NNpsk0_25519_AESGCM_SHA256`, `electron/remote-channel/`)
+keyed by a fresh X25519 exchange and the device's pairing secret, and every
+frame after it is AES-256-GCM. A WireGuard tunnel underneath is a second layer,
+not the one this link relies on.
 
 ### Headscale instead of Tailscale's coordination server
 
@@ -468,7 +508,7 @@ laptop at it (`tailscale up --login-server https://<your-headscale>`). The
 WireGuard mesh and the app work as above, with two limits:
 
 - **Dial the `100.x` literal, never a MagicDNS name.** The client admits names
-  ending in `.ts.net` only. Headscale's MagicDNS uses the `base_domain` you
+  ending in `.ts.net` or `.local` only. Headscale's MagicDNS uses the `base_domain` you
   configure, so a name like `mini.hive.example` is refused. Set `bind.host` on
   the server and *Server address* on the client to the same `100.x` address.
 - **Keep the IPv4 prefix inside `100.64.0.0/10`.** That is Headscale's default.
@@ -483,25 +523,40 @@ DERP server and drop the default map.
 
 The controls, in order of how much they carry:
 
-1. **Tailscale.** Bind the tailnet address only. Use a Tailscale ACL to limit
-   which of your devices can reach port 7434 at all. No port forward, no public
-   DNS, no ngrok: those put a remote execution endpoint on the internet behind
-   auth this app wrote itself. `ssh -L` over the tailnet is a good break-glass
-   path.
+1. **The encrypted channel.** Every attach runs inside it. A peer without a
+   device's pairing secret cannot complete the handshake, and the server sends
+   it nothing at all: a wrong token and an unknown device id end the same way,
+   with a close and no frame. Nobody on the path reads or changes a frame.
 2. **Device tokens.** One per device, compared in constant time, revocable one
-   at a time with `--revoke`. A laptop that joins the tailnet, or is stolen, is
-   not trusted by being there.
-3. **The refusals above.**
+   at a time with `--revoke`. A revoked device still completes the handshake and
+   is then refused, inside the channel, as revoked. A laptop that joins your
+   network, or is stolen, is not trusted by being there.
+3. **The address refusals.** The server binds loopback, the local network or
+   the tailnet, never a public address or every interface. The client dials the
+   same set. No port forward, no public DNS, no ngrok: those put a remote
+   execution endpoint on the internet.
+4. **A Tailscale ACL, if you use Tailscale.** Limit which of your devices can
+   reach port 7434 at all. `ssh -L` over the tailnet is a good break-glass path.
 
-What an unauthenticated peer on the tailnet can cost the server: a first frame is
-held to 8 KiB (`ATTACH_FRAME_MAX_BYTES`), but a socket's receiver is built with
-the post-attach ceiling of 8 MiB (`POST_ATTACH_FRAME_MAX_BYTES`), at most eight
+What the channel does not do:
+
+- **The digest in the server's config is key material.** It is the channel's
+  pre-shared key for that device. Whoever holds the server's `config.json` and
+  sits on the path between the server and that device can pretend to be the
+  server to it. Guard the file as you would the token.
+- **Old builds are refused, not downgraded to.** A client or server from before
+  the channel is told to update; nothing falls back to an unencrypted socket.
+
+What an unauthenticated peer on your network can cost the server: the
+channel's hello and the attach frame after it are held to 8 KiB
+(`ATTACH_FRAME_MAX_BYTES`), but a socket's receiver is built with the
+post-attach ceiling of 8 MiB (`POST_ATTACH_FRAME_MAX_BYTES`), at most eight
 sockets may be mid-handshake at once (more get a 503), and each has 5 s to
-attach before it is closed. So strangers can make the server buffer about
-64 MiB for a few seconds, and nothing past that. Attached sockets are not
-capped in number; only paired devices get there. That bound is why the bind
-address matters: on the tailnet it is a small exposure, on every interface it
-would not be.
+complete the handshake and attach before it is closed. So strangers can make
+the server buffer about 64 MiB for a few seconds, and nothing past that.
+Attached sockets are not capped in number; only paired devices get there. That
+bound is why the bind address matters: on a private network it is a small
+exposure, on every interface it would not be.
 
 The hook receiver stays on loopback. Everything that calls it (the sessions,
 the agents, any containers) runs on the server.
@@ -513,9 +568,11 @@ bytes at normal flush sizes.
 
 | Symptom | Cause and fix |
 | --- | --- |
-| The menu reads *Not serving* | Either `bind.host` is not an address of this machine yet (Tailscale still starting), which retries by itself, or the config refused it (a wildcard, or not a valid host), which the reason names and which waits for you to fix the block. If it never lands, check `Tailscale ip -4` against the config. |
+| The menu reads *Not serving* | Either `bind.host` is not an address of this machine yet (Tailscale still starting, or the LAN address changed), which retries by itself, or the config refused it (a wildcard, a public address, or not a valid host), which the reason names and which waits for you to fix the block. If it never lands, check `ipconfig getifaddr en0` or `Tailscale ip -4` against the config. |
 | Client gets a 403 | It dialed a name the server did not bind. Use the exact `bind.host` string. The server's log names the refused host. |
 | Client says the versions differ | Update whichever side the message names. |
+| Client says the server is on an older HiveTTY | The server predates the encrypted channel. Update the server. |
+| Client says to pair again | The server did not accept this device's pairing: the token is wrong, or the device was never paired there. Run `hivetty --pair` on the server and enter the new token. |
 | Jira or Slack shows signed out after a reboot | The login keychain is locked: automatic login is off, or the keychain password differs from the account password. |
 | Log says another server is already running for this config | Two copies started. Remove HiveTTY from Login Items; keep only the LaunchAgent. |
 | Server never updates | Something is always live. Check for a long-lived session or a busy agent schedule, or update by hand. |

@@ -19,6 +19,14 @@ import {
   type ServerFrame,
 } from '@shared/remote-contract';
 
+import {
+  CHANNEL_CLOSE_CODE,
+  CHANNEL_TAG_BYTES,
+  initiate,
+  pskOfToken,
+  type SecureSocket,
+} from '../remote-channel/secure-socket';
+
 import { attachRequest } from './index';
 
 /**
@@ -30,26 +38,26 @@ import { attachRequest } from './index';
  * It knows nothing about sessions, the store, or what any channel means — it
  * moves frames. `electron/main/**`'s router is what gives them meaning.
  *
- * ## The two fences, and why one of them is not enough
+ * ## The channel, and the two fences
  *
- * There is no TLS in this story. The device credential
- * (`electron/remote-client/token-store.ts`) crosses this socket in the clear,
- * so the socket's confidentiality is entirely whatever network it crosses —
- * which makes "what will this app dial?" a security decision rather than a
- * convenience check. Two guards answer it, and they fail closed independently:
+ * Every attach runs inside an end-to-end encrypted channel (HIVE-428,
+ * `electron/remote-channel/`): a Noise NNpsk0 handshake keyed by a fresh
+ * X25519 exchange and the device's pairing secret, then AES-256-GCM on every
+ * frame. The device credential (`electron/remote-client/token-store.ts`) only
+ * ever crosses inside it, and a peer that does not hold the pairing secret
+ * cannot complete the handshake.
+ *
+ * The fences now keep a direct dial on a private network; the relay is the
+ * only route off one. They fail closed independently:
  *
  * 1. **The string.** {@link isRemoteTarget} on `host`, before a socket object
- *    exists at all. Loopback never leaves the machine; a Tailscale address
- *    never leaves Tailscale's own WireGuard mesh. Anything else is a route
- *    across the open internet.
+ *    exists at all: loopback, the local network, or a Tailscale address.
  *
- * 2. **The resolved address.** A MagicDNS name such as `mini.tail1234.ts.net`
- *    satisfies (1) as a *string*, and is then handed to whatever resolver the
- *    OS has. If Tailscale is not up — a laptop on a café network, a tailnet
- *    that has not come back after a sleep — an attacker who controls local DNS
- *    answers that name with their own address and is handed the credential.
+ * 2. **The resolved address.** A name such as `mini.local` or
+ *    `mini.tail1234.ts.net` satisfies (1) as a *string*, and is then handed to
+ *    whatever resolver the OS has, which can answer it with a public address.
  *    **No string-level predicate can see that**, because the string is genuinely
- *    a `.ts.net` name; the address behind it is the thing that changed. So a
+ *    a private name; the address behind it is the thing that changed. So a
  *    custom `lookup` is passed down to `net.createConnection` and re-runs the
  *    same predicate on the address DNS actually returned, refusing before the
  *    TCP connection is made.
@@ -111,18 +119,52 @@ import { attachRequest } from './index';
 export const CLIENT_ATTACH_TIMEOUT_MS = 10_000;
 
 /**
- * A plaintext socket this app will not open, from either fence.
+ * An address a direct attach will not dial, from either fence (HIVE-428).
  *
  * One class, two messages, deliberately: the caller's remedy is the same —
- * check the address, bring the tailnet up — and the distinction between "the
- * name is wrong" and "the name resolved somewhere wrong" belongs in the
- * sentence a human reads, not in a code a `catch` branches on. The messages
- * are distinguishable, and the tests assert on them.
+ * check the address, or reach the server through the relay — and the
+ * distinction between "the name is wrong" and "the name resolved somewhere
+ * wrong" belongs in the sentence a human reads, not in a code a `catch`
+ * branches on. The messages are distinguishable, and the tests assert on them.
  */
-export class PlaintextRefusedError extends Error {
+export class AddressRefusedError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'PlaintextRefusedError';
+    this.name = 'AddressRefusedError';
+  }
+}
+
+/** What a server from before the encrypted channel is told it is (HIVE-428). */
+export const SERVER_TOO_OLD_MESSAGE =
+  'The server is on an older HiveTTY that does not speak the encrypted channel. Update the server.';
+
+/** What a server that would not complete the channel handshake means (HIVE-428). */
+export const PAIRING_REFUSED_MESSAGE =
+  "The server did not accept this device's pairing: the token is wrong or the device is unknown there. Pair again.";
+
+/**
+ * The server answered the channel's hello in text (HIVE-428): it predates the channel.
+ *
+ * Never a credential problem, whatever that text said. An old server reads the binary hello as a
+ * malformed attach and refuses it as `unauthorized`; reading that as "pair again" would send the
+ * user to fix the one thing that is not broken.
+ */
+export class ServerTooOldError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ServerTooOldError';
+  }
+}
+
+/**
+ * The server would not complete the channel handshake (HIVE-428): it closed with
+ * `CHANNEL_CLOSE_CODE` and no message 2, or its message 2 did not verify. A wrong token and an
+ * unknown device id look identical from here on purpose, and both are cured by pairing again.
+ */
+export class PairingRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PairingRefusedError';
   }
 }
 
@@ -187,7 +229,7 @@ export interface CloseCause {
   /**
    * The server's own refusal code where there is one (`unauthorized`,
    * `revoked`, `protocol-mismatch`), this side's where it refused first
-   * (`plaintext-refused`, `attach-frame-too-large`), or `transport`.
+   * (`address-refused`, `attach-frame-too-large`, `server-too-old`), or `transport`.
    */
   code: string;
   message: string;
@@ -208,8 +250,15 @@ export function classifyCause(cause: unknown): CloseCause {
   if (cause instanceof AttachRefusedError) {
     return { kind: 'terminal', code: cause.code, message: cause.message };
   }
-  if (cause instanceof PlaintextRefusedError) {
-    return { kind: 'terminal', code: 'plaintext-refused', message: cause.message };
+  if (cause instanceof AddressRefusedError) {
+    return { kind: 'terminal', code: 'address-refused', message: cause.message };
+  }
+  // The same cure as an `attach-refused: unauthorized`, so the same code and the same pane.
+  if (cause instanceof PairingRefusedError) {
+    return { kind: 'terminal', code: 'unauthorized', message: cause.message };
+  }
+  if (cause instanceof ServerTooOldError) {
+    return { kind: 'terminal', code: 'server-too-old', message: cause.message };
   }
   if (cause instanceof AttachFrameTooLargeError) {
     return { kind: 'terminal', code: 'attach-frame-too-large', message: cause.message };
@@ -307,7 +356,7 @@ interface Pending {
 function fencedLookup(
   host: string,
   resolve: LookupFunction,
-  refuse: (cause: PlaintextRefusedError) => void,
+  refuse: (cause: AddressRefusedError) => void,
 ): LookupFunction {
   return (hostname, options, callback) => {
     /*
@@ -336,10 +385,11 @@ function fencedLookup(
       const answers = Array.isArray(address) ? address : [{ address, family: family ?? 4 }];
       const offending = answers.find((answer) => !isRemoteTarget(answer.address));
       if (offending !== undefined) {
-        const cause = new PlaintextRefusedError(
-          `Refusing to open a plaintext socket to "${host}": it resolved to ` +
-            `${offending.address}, which is neither loopback nor inside the ` +
-            `100.64.0.0/10 tailnet range. Bring Tailscale up, or check the address.`,
+        const cause = new AddressRefusedError(
+          `Refusing to attach directly to "${host}": it resolved to ` +
+            `${offending.address}, which is not loopback, on the local network, or a ` +
+            `Tailscale address. Check the address, or reach a server elsewhere with ` +
+            `"Connect through relay".`,
         );
         refuse(cause);
         callback(cause, '', 4);
@@ -386,16 +436,16 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
   */
   if (!isRemoteTarget(host)) {
     return Promise.reject(
-      new PlaintextRefusedError(
-        `Refusing to open a plaintext socket to "${host}": it is neither ` +
-          `loopback nor a tailnet address, and this connection carries a device ` +
-          `credential in the clear.`,
+      new AddressRefusedError(
+        `Refusing to attach directly to "${host}": it is not loopback, on the ` +
+          `local network, or a Tailscale address. A server elsewhere is reached ` +
+          `with "Connect through relay".`,
       ),
     );
   }
 
   return new Promise<RemoteClient>((resolveConnection, rejectConnection) => {
-    let refusal: PlaintextRefusedError | null = null;
+    let refusal: AddressRefusedError | null = null;
 
     /*
       `lookup` is absent from `@types/ws`'s `ClientOptions`, which models the
@@ -412,7 +462,8 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
       lookup: fencedLookup(host, resolveAddress, (cause) => {
         refusal = cause;
       }),
-      maxPayload: POST_ATTACH_FRAME_MAX_BYTES,
+      // Every frame is a Noise transport message: its plaintext, then a 16-byte tag (HIVE-428).
+      maxPayload: POST_ATTACH_FRAME_MAX_BYTES + CHANNEL_TAG_BYTES,
       /*
         `ws`'s own, covering TCP connect and the HTTP upgrade response
         (HIVE-144 review, I5). This is the half that stops the two hangs:
@@ -442,6 +493,10 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
       early: { channel: Channel; payload: unknown }[] | null;
     } | null = null;
     let closed = false;
+    /** The encrypted channel, once message 2 verified (HIVE-428). Every frame after the hello goes through it. */
+    let channel: SecureSocket | null = null;
+    /** True from the hello until `initiate` settles: a 1008 close in that window is a refused pairing. */
+    let initiating = false;
 
     /**
      * Subscribers to this connection ending, and the guard that keeps the
@@ -560,13 +615,43 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
         socket.close();
         return;
       }
-      socket.send(frame);
+
+      /*
+        The channel first (HIVE-428): the hello, then message 2, and only then
+        the attach, inside it. The size check above runs before the hello, so a
+        frame this side already knows is too large never spends a handshake.
+      */
+      initiating = true;
+      void initiate(socket, { deviceId: credential.deviceId, psk: pskOfToken(credential.token) })
+        .then((outcome) => {
+          initiating = false;
+          if (outcome.kind === 'plaintext') {
+            failHandshake(new ServerTooOldError(SERVER_TOO_OLD_MESSAGE));
+            socket.close();
+            return;
+          }
+          if (outcome.kind === 'refused') {
+            failHandshake(new PairingRefusedError(PAIRING_REFUSED_MESSAGE));
+            return;
+          }
+          // The deadline already failed this dial; a late message 2 must not send an attach.
+          if (handshakeSettled) return;
+          channel = outcome.socket;
+          channel.onMessage(onFrameText);
+          channel.send(frame);
+        })
+        .catch((cause: unknown) => {
+          initiating = false;
+          failHandshake(cause instanceof Error ? cause : new Error(String(cause)));
+          socket.close();
+        });
     });
 
-    socket.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
+    /** Every server frame past the handshake, decrypted. Today's handler, fed text. */
+    function onFrameText(text: string): void {
       let frame: unknown;
       try {
-        frame = JSON.parse(String(data));
+        frame = JSON.parse(text);
       } catch {
         // A server that cannot produce JSON is not a server this client can
         // talk to; dropping the frame is right for an attached socket, and for
@@ -658,7 +743,7 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
           }
         }
       }
-    });
+    }
 
     socket.on('error', (cause: Error) => {
       // `refusal` is fence (2) speaking: `net` gave our own error to the
@@ -672,11 +757,18 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
       announceClose(refusal ?? cause);
     });
 
-    socket.on('close', () => {
+    socket.on('close', (code?: number) => {
       closed = true;
       failHandshake(
         refusal ??
-          new Error(`The connection to ${host}:${String(port)} closed before it attached.`),
+          /*
+            A 1008 before message 2 is the server refusing the pairing (HIVE-428),
+            and this listener runs before `initiate`'s own, so it names it here.
+            Any other code mid-handshake is the network, and stays retryable.
+          */
+          (initiating && code === CHANNEL_CLOSE_CODE
+            ? new PairingRefusedError(PAIRING_REFUSED_MESSAGE)
+            : new Error(`The connection to ${host}:${String(port)} closed before it attached.`)),
       );
       const ending = new Error(`The connection to ${host}:${String(port)} closed.`);
       failAllPending(ending);
@@ -708,7 +800,8 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
           `refused here instead.`
         );
       }
-      socket.send(text);
+      // Post-attach only, so the channel exists: the accept that built this client came through it.
+      channel?.send(text);
       return null;
     };
 

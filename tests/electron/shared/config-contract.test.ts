@@ -11,7 +11,9 @@ import {
   emptySnapshot,
   isLoopbackHost,
   isOrigin,
+  isLanHost,
   isRemoteTarget,
+  isServerBindHost,
   isTailnetHost,
   DEFAULT_DISABLED_SESSION_PLUGINS,
 } from '../../../electron/shared/config-contract';
@@ -263,5 +265,70 @@ describe('the plugins a Hive session does not load (HIVE-176)', () => {
     const first = emptySnapshot('/home/dev/.hive/config.json');
     expect(first.disabledSessionPlugins).toEqual(['workstream', 'superpowers']);
     expect(first.disabledSessionPlugins).not.toBe(DEFAULT_DISABLED_SESSION_PLUGINS);
+  });
+});
+
+/**
+ * Loopback, LAN or tailnet (HIVE-428). Direct attach and the server's own bind take the same set:
+ * every attach is encrypted now, so the address rule is no longer what keeps the credential
+ * private; it keeps direct attach on a private network, and the relay is the only route off one.
+ * IPv4 only, as before: no IPv6 literal is admitted.
+ */
+describe('loopback, LAN or tailnet (HIVE-428)', () => {
+  const ACCEPTED = [
+    '127.0.0.1',
+    'localhost',
+    '10.0.0.5',
+    '10.255.255.255',
+    '172.16.0.1',
+    '172.31.255.255',
+    '192.168.1.20',
+    '169.254.10.10',
+    'mini.local',
+    'Mini.LOCAL',
+    '100.64.0.1',
+    'mini.tail1234.ts.net',
+  ];
+  const REFUSED = [
+    '8.8.8.8',
+    '172.15.255.255',
+    '172.32.0.0',
+    '192.169.0.1',
+    '169.253.0.1',
+    '11.0.0.1',
+    '10.0.0.256',
+    '10.0.0',
+    '010.0.0.1',
+    'example.com',
+    'mini',
+    'mini.localdomain',
+    'local',
+    '0.0.0.0',
+    '0',
+    '0x0',
+    '::1',
+    'fe80::1',
+    'fd00::1',
+    '',
+    ' 10.0.0.5',
+    '[10.0.0.5]',
+  ];
+
+  it.each(ACCEPTED)('accepts %s as a direct attach target and as a bind host', (host) => {
+    expect(isRemoteTarget(host)).toBe(true);
+    expect(isServerBindHost(host)).toBe(true);
+  });
+
+  it.each(REFUSED)('refuses %j as a direct attach target and as a bind host', (host) => {
+    expect(isRemoteTarget(host)).toBe(false);
+    expect(isServerBindHost(host)).toBe(false);
+  });
+
+  it('names the LAN half on its own: mDNS and the private IPv4 ranges, nothing else', () => {
+    expect(isLanHost('192.168.0.1')).toBe(true);
+    expect(isLanHost('studio.local')).toBe(true);
+    expect(isLanHost('100.64.0.1')).toBe(false);
+    expect(isLanHost('127.0.0.1')).toBe(false);
+    expect(isLanHost('8.8.8.8')).toBe(false);
   });
 });

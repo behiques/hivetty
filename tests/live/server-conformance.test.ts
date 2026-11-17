@@ -56,6 +56,7 @@ import {
   type ServerFrame,
 } from '../../electron/shared/remote-contract';
 import { startStubCloud, type StubCloud } from '../e2e/electron/fixtures/stub-cloud';
+import { SecureTestSocket } from '../support/secure-test-socket';
 
 /**
  * Server-mode conformance (HIVE-142): the eight acceptance criteria plus the
@@ -81,8 +82,14 @@ import { startStubCloud, type StubCloud } from '../e2e/electron/fixtures/stub-cl
  *
  * 1. Boots with `--server`, binds loopback, opens no window.
  * 2. A raw `ws` client completes the handshake and is accepted.
- * 3. A wrong token, a revoked token and a disallowed `Origin` are each
- *    refused, asserting the refusal code.
+ *    Since HIVE-428 every attach runs inside the encrypted channel, so the
+ *    built app completing a handshake here is also the proof that X25519 and
+ *    AES-256-GCM exist in Electron's crypto (an `Unknown cipher` failure means
+ *    a wrong cipher name reached the build).
+ * 3. A wrong token and an unknown device id end the handshake with close code
+ *    1008 and no frame at all; a revoked device completes the handshake and is
+ *    refused `revoked` inside the channel; a disallowed `Origin` is refused at
+ *    the upgrade.
  * 4. A forced protocol mismatch names both versions, and no frame follows.
  * 5. A call frame on an unattached socket is refused.
  * 6. `--pair` in a second process is seen by the running server with no
@@ -172,8 +179,9 @@ import { startStubCloud, type StubCloud } from '../e2e/electron/fixtures/stub-cl
  *     `SNAPSHOT_CHANNELS` read against a server that has a project, a
  *     ledger and live sessions, not an empty object that would satisfy
  *     "has a `snapshot` key".
- * 20. A **v1** client — a genuinely older build, not `VERSION + 1` — is
- *     refused `protocol-mismatch` and gets no frame afterwards.
+ * 20. A **v1** client — a genuinely older build, not `VERSION + 1` — speaks
+ *     in the clear, and is answered with the one text frame a server sends:
+ *     `protocol-mismatch`, naming the encrypted channel, and then a close.
  * 21. **Two real built apps.** One serves; the other boots with a window,
  *     is handed a credential minted by the first, and flips itself into
  *     remote mode through the very IPC channel that switch unbinds. Driven
@@ -794,10 +802,11 @@ function signIn(configPath: string, userDataDir: string, timeoutMs = 30_000): Pr
   });
 }
 
-/** What one attach attempt resolved to: a parsed frame, the HTTP status an upgrade was refused with, or (logged, never returned to a caller — see `attach`'s `'error'` handler) the message a raw socket error carried. */
+/** What one attach attempt resolved to: a parsed frame, the HTTP status an upgrade was refused with, the close code of a socket that closed with no frame (HIVE-428: a refused channel handshake), or (logged, never returned to a caller — see `attach`'s `'error'` handler) the message a raw socket error carried. */
 interface AttachOutcome {
   httpStatus?: number;
   frame?: Record<string, unknown>;
+  closed?: number;
   error?: string;
 }
 
@@ -822,9 +831,12 @@ function attach(
   url: string,
   frame: unknown,
   headers: Record<string, string> = {},
+  credentials?: { deviceId: string; token: string },
 ): Promise<AttachOutcome> {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(url, { headers });
+    // Through the encrypted channel (HIVE-428), keyed from the frame's own deviceId and token
+    // unless `credentials` names the channel's outright.
+    const socket = new SecureTestSocket(url, { headers, credentials });
     let settled = false;
     const settle = (outcome: AttachOutcome): void => {
       if (settled) return;
@@ -834,21 +846,21 @@ function attach(
     };
 
     socket.on('open', () => socket.send(JSON.stringify(frame)));
-    socket.on('message', (data) => {
+    socket.on('message', (data: Buffer) => {
       settle({ frame: JSON.parse(String(data)) as Record<string, unknown> });
       socket.close();
     });
     // Fires instead of `error` only because this handler is registered —
     // exactly the refusal an disallowed Origin produces (a 403 at the upgrade,
     // never a JSON frame).
-    socket.on('unexpected-response', (_req, res) => {
+    socket.on('unexpected-response', (_req: unknown, res: { statusCode?: number; resume(): void }) => {
       settle({ httpStatus: res.statusCode });
       res.resume();
     });
-    // A close with nothing ever received — the handshake-timeout drop, most
-    // likely — resolves empty rather than hanging the test.
-    socket.on('close', () => settle({}));
-    socket.on('error', (err) => {
+    // A close with nothing ever received — a refused channel handshake (1008)
+    // or the handshake-timeout drop — resolves with its code rather than hanging the test.
+    socket.on('close', (code: number) => settle({ closed: code }));
+    socket.on('error', (err: Error) => {
       if (settled) return;
       settled = true;
       // The one outcome `settle` never produces, because a caller expecting
@@ -1354,7 +1366,7 @@ async function openClient(
     stallAfter?: number;
   } = {},
 ): Promise<LiveClient> {
-  const socket = new WebSocket(url);
+  const socket = new SecureTestSocket(url);
   const events: EventFrame[] = [];
   const ptyEvents: DataEvent[] = [];
   const pending = new Map<string, (frame: ResultFrame | ErrorFrame) => void>();
@@ -1777,14 +1789,26 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       expect(outcome.frame).toMatchObject({ kind: 'attach-accepted' });
     });
 
-    it('3a. refuses a wrong token, naming it unauthorized', async () => {
+    it('3a. ends a wrong token with close 1008 and no frame, inside the channel handshake (HIVE-428)', async () => {
       const outcome = await attach(url, {
         kind: 'attach',
         protocol: REMOTE_PROTOCOL_VERSION,
         deviceId: active.device.id,
         token: 'ZZZZ-ZZZZ-ZZZZ-ZZZZ',
       });
-      expect(outcome.frame).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
+      expect(outcome.frame).toBeUndefined();
+      expect(outcome.closed).toBe(1008);
+    });
+
+    it('3d. ends an unknown device id exactly as a wrong token: close 1008, no frame (HIVE-428)', async () => {
+      const outcome = await attach(url, {
+        kind: 'attach',
+        protocol: REMOTE_PROTOCOL_VERSION,
+        deviceId: 'never-paired-here',
+        token: active.token,
+      });
+      expect(outcome.frame).toBeUndefined();
+      expect(outcome.closed).toBe(1008);
     });
 
     it('3b. refuses a revoked device presenting its own correct token, naming it revoked', async () => {
@@ -1819,7 +1843,8 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       const clientProtocol = REMOTE_PROTOCOL_VERSION + 1;
       const messages: Record<string, unknown>[] = [];
       await new Promise<void>((resolve, reject) => {
-        const socket = new WebSocket(url);
+        // A future client still speaks the channel; the mismatch is read inside it.
+        const socket = new SecureTestSocket(url);
         socket.on('open', () =>
           socket.send(
             JSON.stringify({
@@ -1830,7 +1855,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
             }),
           ),
         );
-        socket.on('message', (data) => messages.push(JSON.parse(String(data)) as Record<string, unknown>));
+        socket.on('message', (data: Buffer) => messages.push(JSON.parse(String(data)) as Record<string, unknown>));
         socket.on('close', () => resolve());
         socket.on('error', reject);
       });
@@ -1878,15 +1903,18 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       });
 
       // One frame, and only one, after the socket has fully closed — a v1
-      // client is refused, not downgraded to.
+      // client is refused, not downgraded to. Since HIVE-428 it is refused for
+      // speaking in the clear at all, before its version is ever read: the one
+      // text frame a server sends names the channel, not the client's number.
       expect(messages).toHaveLength(1);
-      expect(messages[0]).toMatchObject({ kind: 'attach-refused', code: 'protocol-mismatch' });
+      expect(messages[0]).toMatchObject({
+        kind: 'attach-refused',
+        code: 'protocol-mismatch',
+        protocol: REMOTE_PROTOCOL_VERSION,
+      });
       const message = String(messages[0]?.['message']);
       expect(message).toContain(String(REMOTE_PROTOCOL_VERSION));
-      // `\b1\b`, not `toContain('1')`: the server's own version is in this
-      // same sentence, and a bare substring check would pass on the `1` inside
-      // a two-digit version long after this case stopped meaning anything.
-      expect(message).toMatch(/\b1\b/u);
+      expect(message).toContain('encrypted channel');
       /*
         An explicit bound rather than Vitest's 5s default. This case waits on
         the socket **closing**, and the failure mode when a version stops being
@@ -1898,12 +1926,12 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
     }, 20_000);
 
     it('5. refuses a call frame that arrives on an unattached socket', async () => {
-      const outcome = await attach(url, {
-        kind: 'call',
-        id: 'req-1',
-        channel: 'config:get',
-        payload: {},
-      });
+      const outcome = await attach(
+        url,
+        { kind: 'call', id: 'req-1', channel: 'config:get', payload: {} },
+        {},
+        { deviceId: active.device.id, token: active.token },
+      );
       expect(outcome.frame).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
     });
 

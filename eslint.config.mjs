@@ -368,6 +368,7 @@ export default tseslint.config(
                 */
                 './electron/remote-host/**/*',
                 './electron/remote-client/**/*',
+                './electron/remote-channel/**/*',
               ],
               message:
                 'preload is a bridge, not a participant. It may import electron/shared/ only.',
@@ -381,6 +382,7 @@ export default tseslint.config(
                 './electron/mcp-host/**/*',
                 './electron/remote-host/**/*',
                 './electron/remote-client/**/*',
+                './electron/remote-channel/**/*',
               ],
               message:
                 'The renderer may only see @shared. Reaching into electron/main/ or electron/preload/ would bundle main-process code into the renderer.',
@@ -477,6 +479,27 @@ export default tseslint.config(
               ],
               message:
                 'The remote client runs on the laptop. It may not import the renderer, the bridge, or the host half — the two halves must stay separable onto two machines.',
+            },
+            /**
+             * THE CHANNEL IS A LEAF (HIVE-428).
+             *
+             * `electron/remote-channel/` holds the Noise handshake and the
+             * framing every attach runs inside. Both remote halves import it,
+             * so it may import neither, nor anything above them: it sees
+             * `node:*` and its own files, which is what lets the same cipher
+             * code run on both machines and be proven against a vector alone.
+             */
+            {
+              target: './electron/remote-channel/**/*',
+              from: [
+                './src/**/*',
+                './electron/main/**/*',
+                './electron/preload/**/*',
+                './electron/remote-host/**/*',
+                './electron/remote-client/**/*',
+              ],
+              message:
+                'The encrypted channel is a leaf. It may import node:* and its own files only — never main, the bridge, the renderer, or either remote half.',
             },
             /**
              * ADAPTERS DON'T REACH THE CORE (HIVE-233).

@@ -1548,19 +1548,16 @@ export function parseSetReceiverRequest(input: unknown): SetReceiverRequest {
 /**
  * `server.bind.host` (HIVE-142).
  *
- * Shares {@link isHostAlias}'s per-label allowlist with `assertHostAlias`, via
- * {@link isServerBindHost}, and refuses exactly one value neither `assertHostAlias`
- * nor the receiver's own bind refuse: `0.0.0.0`. A served machine is always
- * reachable at a Tailscale address, so binding every interface is a wider
- * surface with nothing to buy for it — see {@link isServerBindHost}'s own
- * doc comment.
+ * Validated by {@link isServerBindHost}: loopback, the local network or a
+ * Tailscale address (HIVE-428). A server never binds `0.0.0.0` or a public
+ * address — see {@link isServerBindHost}'s own doc comment.
  */
 function assertServerBindHost(value: unknown, label: string): string {
   const raw = assertString(value, label).trim();
   if (raw.length === 0) return fail(`${label}: must not be empty`);
   if (!isServerBindHost(raw)) {
     return fail(
-      `${label}: expected a hostname or IPv4 address — not 0.0.0.0, which exposes every interface`,
+      `${label}: expected loopback, a local network address or a Tailscale address — never 0.0.0.0 or a public address`,
     );
   }
   return raw;

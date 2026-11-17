@@ -968,7 +968,7 @@ export function serverBindRefusal(errors: readonly string[]): string | null {
  * Structurally {@link optionalBind}'s twin, with two differences the shape
  * forces: `host` is checked against {@link isServerBindHost}, not
  * {@link isHostAlias}, and `0.0.0.0` gets its own message naming the value
- * rather than the generic "expected a hostname" — see
+ * rather than the generic one naming the allowed set — see
  * {@link isServerBindHost}'s doc comment for why the wildcard is refused here
  * and not for the receiver. `port` gets the same treatment for `0`: unlike
  * {@link ReceiverBindConfig.port}, `server.bind.port` cannot be OS-assigned —
@@ -1014,7 +1014,7 @@ function optionalServerBind(
       // the server listen nowhere (`serverBindRefusal`), and this line is the
       // reason the tray shows for it.
       errors.push(
-        `${at}.host: expected a hostname or an IPv4 address — the server will not listen until it is fixed`,
+        `${at}.host: expected loopback, a local network address or a Tailscale address — the server will not listen until it is fixed`,
       );
     }
   }
@@ -1290,7 +1290,7 @@ function optionalRemote(
       remote.host = host;
     } else {
       errors.push(
-        `${at}.host: must be loopback or a tailnet address — this socket is plaintext, so anything else would send a credential to the open internet — using the default`,
+        `${at}.host: must be loopback, a local network address or a Tailscale address — a server elsewhere is reached through the relay — using the default`,
       );
     }
   }

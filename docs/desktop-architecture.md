@@ -138,6 +138,17 @@ keeps its one gate. Pushes go out through a second `Broadcaster`
 broadcaster so a server that does have a window attached keeps painting
 locally too.
 
+Those frames travel inside an encrypted channel (HIVE-428, protocol 45). The
+leaf `electron/remote-channel/` holds a `Noise_NNpsk0_25519_AESGCM_SHA256`
+handshake on `node:crypto` (`noise.ts`) and the framing over a WebSocket
+(`secure-socket.ts`); `remote-host/listener.ts` runs the responder half in
+`acceptSocket` (the one entry for a direct socket and, with HIVE-429, a
+relayed one) and `remote-client/socket.ts` the initiator half. The pre-shared
+key is the device token's SHA-256, which the server already stored as the
+device's digest. Today's JSON frames are unchanged inside the channel; the only
+text frame a server sends is the `protocol-mismatch` refusal to a client whose
+first frame was text.
+
 `sandbox: true` has a consequence worth stating outright, because it has cost a
 session once: **the preload has no Node APIs.** A `node:` import there does not
 fail gracefully or fail only the feature that added it — it throws while the

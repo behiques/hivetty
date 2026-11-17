@@ -1238,7 +1238,7 @@ export function setRemote(request: SetRemoteRequest): ConfigSnapshot {
       // the moment the file is reloaded.
       if (current.mode === 'remote' && !isRemoteTarget(current.host)) {
         throw new WriteRefused(
-          `remote.host must be loopback or a tailnet address before mode can be "remote" — this socket is plaintext, so anything else would send a credential to the open internet`,
+          `remote.host must be loopback, a local network address or a Tailscale address before mode can be "remote" — a server elsewhere is reached through the relay`,
         );
       }
 

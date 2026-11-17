@@ -678,61 +678,27 @@ export const BIND_KEYS: readonly (keyof ReceiverBindConfig)[] = [
 export const WILDCARD_BIND = '0.0.0.0';
 
 /**
- * One `inet_aton`-style numeral, split on `.` — decimal (`0`, `00`), hex
- * (`0x0`, `0X00`), or a dotted-quad label (`000`) — checked for whether it can
- * only ever mean zero.
- *
- * `HOST_ALIAS_LABEL` already restricts each label to letters, digits and
- * inner hyphens, so this only has to ask "if the kernel reads this label as a
- * legacy numeric host part, is the value zero" — it never has to reject a
- * shape `isHostAlias` would not have admitted in the first place.
- */
-function isZeroIPv4Label(label: string): boolean {
-  const hex = /^0[xX]([0-9a-fA-F]+)$/.exec(label);
-  if (hex) return /^0+$/.test(hex[1] ?? '');
-  return /^[0-9]+$/.test(label) && /^0+$/.test(label);
-}
-
-/**
- * Whether `value` is *any* legacy numeral spelling of the IPv4 wildcard —
- * `0`, `00`, `0x0`, `000.000.000.000`, and every other combination of decimal,
- * octal and hex zeroes `inet_aton` folds to `0.0.0.0` (HIVE-142 review, I1).
- *
- * `dns.lookup` and `net.Server.listen` both resolve every one of these to
- * `0.0.0.0` on this machine (verified against this host, HIVE-142 review) —
- * the literal string `'0.0.0.0'` is only the one spelling a person is likely
- * to type by hand, not the complete set the kernel treats the same way. A
- * legacy numeral address has at most four dot-separated fields (`inet_aton`
- * has no fifth-field form), so anything longer is left to the ordinary
- * hostname/IPv4 rules below rather than treated as numeric at all. Every
- * field has to fold to zero — the weighted sum of several fields is zero only
- * if every term is, since none of the per-field weights can be negative.
- */
-function isNumericWildcard(value: string): boolean {
-  const labels = value.split('.');
-  return labels.length <= 4 && labels.every(isZeroIPv4Label);
-}
-
-/**
  * Whether a value may be `server.bind.host`.
  *
- * `isHostAlias` for shape — one predicate, not two — and one rejection beside
- * it. `ReceiverBindConfig.host` accepts `0.0.0.0` deliberately, because a user
- * whose container runtime names no bridge has nothing else to write. That
- * reasoning does not transfer: a served machine is reached at a Tailscale
- * address, which is always nameable, so the wildcard here is a wider surface
- * with nothing to buy for it.
+ * Exactly the set a client may dial directly ({@link isRemoteTarget}):
+ * loopback, the local network, or a Tailscale address (HIVE-428). A server
+ * never binds a public address; the relay is the only route off a private
+ * network. `ReceiverBindConfig.host` accepts `0.0.0.0` deliberately, because a
+ * user whose container runtime names no bridge has nothing else to write. That
+ * reasoning does not transfer: a served machine is reached at a nameable
+ * address, so the wildcard here is a wider surface with nothing to buy for it.
  *
- * The rejection is every numeral spelling of that wildcard
- * ({@link isNumericWildcard}), not only the literal `'0.0.0.0'` — see that
- * function's own doc comment for why `0`, `00`, `0x0` and
- * `000.000.000.000` all have to be refused here too, in the one predicate
- * every validation surface (the file reader, the IPC guard, and the Settings
- * pane) calls, rather than in each of them separately.
+ * Every numeral spelling of that wildcard (`0`, `00`, `0x0`,
+ * `000.000.000.000`, all of which `inet_aton` folds to `0.0.0.0`; HIVE-142
+ * review, I1) falls outside the set by construction: none is loopback, a
+ * private range written in canonical octets, a `.local` name or a tailnet
+ * address. That is why the dedicated wildcard check this predicate used to
+ * carry is gone, and why its test cases stay, as refusals. It remains the one
+ * predicate every validation surface (the file reader, the IPC guard, and the
+ * Settings pane) calls.
  */
 export function isServerBindHost(value: unknown): value is string {
-  if (!isHostAlias(value)) return false;
-  return !isNumericWildcard(value);
+  return isRemoteTarget(value);
 }
 
 /**
@@ -793,6 +759,13 @@ export interface ServerDevice {
    * is not brute-forceable and no KDF is warranted — that is why there is no
    * salt here, rather than an omission. The plaintext exists in exactly two
    * places: stdout at mint time, and the client's own `safeStorage`.
+   *
+   * **The digest is key material (HIVE-428).** It is the encrypted channel's
+   * pre-shared key for this device: the client derives the same 32 bytes from
+   * its token (`pskOfToken`), and the server reads them from here on every
+   * handshake. Whoever holds this file's digest and sits on the path between
+   * this server and that device can impersonate the server to the device. It
+   * is not enough to attach as the device, which still needs the token itself.
    */
   credential: ServerCredential;
 }
@@ -1068,7 +1041,7 @@ export function isHostAlias(value: unknown): value is string {
  * That was inert while this predicate only classified a *bind* address — a
  * nonsense host was refused by the OS at bind time either way. HIVE-144 gave it
  * a second job through {@link isRemoteTarget}, where it decides what this app
- * will **dial with a device credential over a plaintext socket**, and a loose
+ * will **dial with a device credential**, and a loose
  * octet there is the exfiltration path `TAILNET_V4` documents: a typo plus a
  * `search` suffix plus a resolver that hijacks NXDOMAIN sends the credential to
  * an arbitrary public address, with this predicate having called it loopback.
@@ -1138,8 +1111,8 @@ const TAILNET_V4 =
  * remains is the two spellings Tailscale actually assigns: a MagicDNS name
  * (`mini.tail1234.ts.net`) and a CGNAT literal ({@link TAILNET_V4}). A bare
  * hostname like `mini.local` is neither — mDNS resolves it to whatever
- * answers on the local LAN right now, off the tailnet entirely — and must be
- * refused.
+ * answers on the local LAN right now, off the tailnet entirely — so this
+ * predicate refuses it; it is {@link isLanHost}'s case (HIVE-428).
  */
 export function isTailnetHost(value: string): boolean {
   if (!isHostAlias(value)) return false;
@@ -1148,16 +1121,38 @@ export function isTailnetHost(value: string): boolean {
 }
 
 /**
- * Whether a plaintext socket may be opened to `value` (HIVE-144).
+ * The private IPv4 ranges a LAN uses: RFC 1918 (10/8, 172.16/12, 192.168/16)
+ * and link-local 169.254/16. Every octet is bounded 0-255 for the reason
+ * {@link TAILNET_V4} documents: a string that is not an IPv4 literal goes to
+ * the resolver as a hostname. No alternative admits a leading zero, so
+ * `010.0.0.1` (octal to `inet_aton`) is refused rather than misread.
+ */
+const LAN_V4 =
+  /^(10\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)|172\.(1[6-9]|2\d|3[01])|192\.168|169\.254)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+/**
+ * Whether a value is an address on a local network (HIVE-428): an mDNS name
+ * (`*.local`) or a private IPv4 literal ({@link LAN_V4}). IPv4 only, as the
+ * rest of this file is.
+ */
+export function isLanHost(value: string): boolean {
+  if (!isHostAlias(value)) return false;
+  if (value.toLowerCase().endsWith('.local')) return true;
+  return LAN_V4.test(value);
+}
+
+/**
+ * Whether a direct attach may dial `value` (HIVE-144, widened by HIVE-428).
  *
- * **This is a security boundary, not a convenience check.** The socket
- * {@link RemoteConfig} describes carries a device credential in the clear —
- * there is no TLS in this story, so the socket's confidentiality is entirely
- * whatever network it crosses. Loopback never leaves this machine. A tailnet
- * address never leaves Tailscale's own WireGuard mesh, which is encrypted and
- * authenticated below this layer. Anything else is a route across the open
- * internet, and a host that wrongly satisfies this predicate is that
- * credential handed to whoever controls the address it names.
+ * **The rule: direct attach stays on a private network; the relay is the only
+ * route off one.** Every attach now runs inside an end-to-end encrypted
+ * channel (`electron/remote-channel/`), so this predicate is no longer what
+ * keeps the device credential confidential. It keeps a direct dial on
+ * loopback, the local network ({@link isLanHost}) or the tailnet
+ * ({@link isTailnetHost}); a public address is reached through the relay
+ * instead. `fencedLookup` (`electron/remote-client/socket.ts`) re-runs it on
+ * the resolved address, so a `.local` or `.ts.net` name that resolves to a
+ * public address is still refused at connect.
  *
  * `isHostAlias` for shape first — exactly as {@link isServerBindHost} does —
  * *before* either branch below, not merely inside {@link isTailnetHost}.
@@ -1172,13 +1167,13 @@ export function isTailnetHost(value: string): boolean {
  * Task 5's `setRemote` IPC verb validates a payload of unknown shape through
  * this same predicate, so the signature has to widen for that caller anyway.
  *
- * `isLoopbackHost(value) || isTailnetHost(value)` — deliberately an "or" of
- * two independently-reasoned predicates rather than one merged rule, so each
- * keeps its own doc comment and its own tests.
+ * `isLoopbackHost(value) || isLanHost(value) || isTailnetHost(value)` —
+ * deliberately an "or" of independently-reasoned predicates rather than one
+ * merged rule, so each keeps its own doc comment and its own tests.
  */
 export function isRemoteTarget(value: unknown): value is string {
   if (!isHostAlias(value)) return false;
-  return isLoopbackHost(value) || isTailnetHost(value);
+  return isLoopbackHost(value) || isLanHost(value) || isTailnetHost(value);
 }
 
 /**
@@ -2216,9 +2211,10 @@ export interface SetRemoteRequest {
  *   sessions this window is running. {@link sessions} names them so the pane
  *   can list them rather than saying "some are live"; the order is the order
  *   they were opened.
- * - `plaintext-refused` — the address is neither loopback nor a tailnet
- *   address, or a `.ts.net` name resolved to something that is not. One arm
- *   for both fences, matching `PlaintextRefusedError`'s own "one class, two
+ * - `address-refused` (HIVE-428) — the address is
+ *   not loopback, on the local network, or a Tailscale address, or a private
+ *   name resolved to something that is not. One arm
+ *   for both fences, matching `AddressRefusedError`'s own "one class, two
  *   messages" reasoning: the remedy is the same sentence either way, and it
  *   belongs in the pane's hint beside the address field rather than in a code
  *   this union asks a caller to branch on.
@@ -2231,7 +2227,9 @@ export interface SetRemoteRequest {
 export type SwitchOutcome =
   | { ok: true }
   | { ok: false; reason: 'live-sessions'; sessions: readonly string[] }
-  | { ok: false; reason: 'plaintext-refused' }
+  | { ok: false; reason: 'address-refused' }
+  /** The server predates the encrypted channel (HIVE-428): update the server, never pair again. */
+  | { ok: false; reason: 'server-too-old' }
   | { ok: false; reason: 'connect-failed'; message: string };
 
 /**

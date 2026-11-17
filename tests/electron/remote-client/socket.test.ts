@@ -22,12 +22,21 @@ import {
 } from '@shared/remote-contract';
 
 import {
+  CHANNEL_CLOSE_CODE,
+  CHANNEL_TAG_BYTES,
+  pskOfToken,
+  respond,
+  type SecureSocket,
+} from '../../../electron/remote-channel/secure-socket';
+import {
   AttachFrameTooLargeError,
   AttachRefusedError,
   CLIENT_ATTACH_TIMEOUT_MS,
   PRE_SUBSCRIBE_BUFFER,
-  PlaintextRefusedError,
+  PairingRefusedError,
+  AddressRefusedError,
   RemoteCallError,
+  ServerTooOldError,
   classifyCause,
   connectRemote,
   type RemoteClient,
@@ -66,28 +75,93 @@ function accepted(overrides: Partial<AttachAccepted> = {}): AttachAccepted {
   };
 }
 
+/** How the fake's far end answers the hello (HIVE-428). */
+type ServerMode =
+  /** A current Hive: the real responder, keyed for {@link CREDENTIAL}. */
+  | 'hive'
+  /** A Hive that does not know this pairing: it closes with 1008 and says nothing. */
+  | 'unpaired'
+  /** A Hive from before the channel: it answers the binary hello with a text refusal. */
+  | 'old-server'
+  /** Nothing answers at all. */
+  | 'silent';
+
 /**
- * The `ws` surface `connectRemote` actually uses, with the frames a test feeds
- * it delivered through the same `'message'` event a socket would.
+ * The far end of a {@link FakeSocket}: a `RawSocket` the real `respond` runs on, so the client's
+ * handshake is checked by the same code a server uses rather than by a stub of it.
+ */
+class ServerEnd extends EventEmitter {
+  private readonly client: FakeSocket;
+
+  constructor(client: FakeSocket) {
+    super();
+    this.client = client;
+  }
+
+  send(data: Buffer | string): void {
+    const isBinary = typeof data !== 'string';
+    this.client.emit('message', isBinary ? data : Buffer.from(data), isBinary);
+  }
+
+  close(code?: number): void {
+    this.client.emit('close', code ?? 1000);
+  }
+
+  terminate(): void {
+    this.client.emit('close', 1006);
+  }
+}
+
+/**
+ * The `ws` surface `connectRemote` actually uses, with a real channel responder on the far end
+ * (HIVE-428). `sent` is what the far end decrypted, in order, so a test reads the attach and every
+ * frame after it as text, exactly as before the channel; `wire` is every raw frame.
  */
 class FakeSocket extends EventEmitter {
   readonly sent: string[] = [];
+  readonly wire: (Buffer | string)[] = [];
   closeCalls = 0;
   terminateCalls = 0;
   readonly url: string;
   readonly options: { lookup?: LookupFunction; family?: number; maxPayload?: number };
+  private readonly server = new ServerEnd(this);
+  private serverChannel: SecureSocket | null = null;
+  private readonly queued: string[] = [];
 
   constructor(
     url: string,
     options: { lookup?: LookupFunction; family?: number; maxPayload?: number },
+    mode: ServerMode = 'hive',
   ) {
     super();
     this.url = url;
     this.options = options;
+    if (mode === 'old-server') {
+      this.server.once('message', () =>
+        this.server.send(
+          JSON.stringify({
+            kind: 'attach-refused',
+            code: 'unauthorized',
+            protocol: REMOTE_PROTOCOL_VERSION - 1,
+            message: 'Malformed first frame.',
+          } satisfies AttachRefused),
+        ),
+      );
+    }
+    if (mode === 'hive' || mode === 'unpaired') {
+      const key = pskOfToken(mode === 'hive' ? CREDENTIAL.token : 'some other pairing');
+      void respond(this.server, { pskFor: () => key }).then((outcome) => {
+        if (outcome.kind !== 'secure') return;
+        this.serverChannel = outcome.socket;
+        outcome.socket.onMessage((text) => this.sent.push(text));
+        for (const text of this.queued.splice(0)) outcome.socket.send(text);
+      });
+    }
   }
 
-  send(data: string): void {
-    this.sent.push(data);
+  send(data: Buffer | string): void {
+    this.wire.push(data);
+    this.server.emit('message', data, typeof data !== 'string');
   }
 
   close(): void {
@@ -105,9 +179,15 @@ class FakeSocket extends EventEmitter {
     this.emit('close');
   }
 
-  /** Delivers a server frame as a `Buffer`, which is what `ws` hands a listener. */
+  /** Delivers a server frame through the channel; held until the channel exists. */
   deliver(frame: unknown): void {
-    this.emit('message', Buffer.from(JSON.stringify(frame)));
+    this.deliverText(JSON.stringify(frame));
+  }
+
+  /** Delivers raw text through the channel, for a frame that is not JSON. */
+  deliverText(text: string): void {
+    if (this.serverChannel === null) this.queued.push(text);
+    else this.serverChannel.send(text);
   }
 
   /** The attach frame this client sent, parsed. */
@@ -121,6 +201,11 @@ class FakeSocket extends EventEmitter {
   }
 }
 
+/** Lets the handshake's promise reactions run: the hello, message 2, and the attach after it. */
+const settle = async (): Promise<void> => {
+  for (let turn = 0; turn < 5; turn += 1) await Promise.resolve();
+};
+
 interface Dial {
   promise: Promise<RemoteClient>;
   ctor: ReturnType<typeof vi.fn>;
@@ -129,12 +214,12 @@ interface Dial {
 }
 
 /** Starts a connection against a {@link FakeSocket}, capturing the instance. */
-function dial(overrides: Partial<Parameters<typeof connectRemote>[0]> = {}): Dial {
+function dial(overrides: Partial<Parameters<typeof connectRemote>[0]> = {}, mode: ServerMode = 'hive'): Dial {
   let made: FakeSocket | null = null;
   // A `function`, not an arrow: vitest 4 refuses to let an arrow implementation
   // be called with `new`, and this mock stands in for a constructor.
   const ctor = vi.fn(function fakeCtor(url: string, options: Record<string, unknown>) {
-    made = new FakeSocket(url, options);
+    made = new FakeSocket(url, options, mode);
     return made;
   });
 
@@ -201,7 +286,10 @@ async function realServer(): Promise<{ port: number; connections: () => number }
   let connections = 0;
   server.on('connection', (socket) => {
     connections += 1;
-    socket.on('message', () => socket.send(JSON.stringify(accepted())));
+    void respond(socket, { pskFor: () => pskOfToken(CREDENTIAL.token) }).then((outcome) => {
+      if (outcome.kind !== 'secure') return;
+      outcome.socket.onMessage(() => outcome.socket.send(JSON.stringify(accepted())));
+    });
   });
   await new Promise<void>((done) => server.on('listening', () => done()));
   const address = server.address();
@@ -210,14 +298,14 @@ async function realServer(): Promise<{ port: number; connections: () => number }
 }
 
 describe('connectRemote — the string fence', () => {
-  it('refuses a plaintext socket to a non-tailnet address before connecting', async () => {
+  it('refuses a public address before connecting, pointing at the relay (HIVE-428)', async () => {
     const { promise, ctor } = dial({ host: '203.0.113.7' });
 
     // The point is that no socket is opened at all — asserted before the await,
     // so a fence that stopped running fails here rather than as a five-second
     // timeout on a promise nothing will ever settle.
     expect(ctor).not.toHaveBeenCalled();
-    await expect(promise).rejects.toBeInstanceOf(PlaintextRefusedError);
+    await expect(promise).rejects.toBeInstanceOf(AddressRefusedError);
   });
 
   /**
@@ -238,7 +326,7 @@ describe('connectRemote — the string fence', () => {
    */
   it('refuses an address one below the tailnet range and accepts the first one inside it', async () => {
     const below = dial({ host: '100.63.255.255' });
-    await expect(below.promise).rejects.toBeInstanceOf(PlaintextRefusedError);
+    await expect(below.promise).rejects.toBeInstanceOf(AddressRefusedError);
     expect(below.ctor).not.toHaveBeenCalled();
 
     const inside = dial({ host: '100.64.0.1' });
@@ -275,7 +363,7 @@ describe('connectRemote — the resolved-address fence', () => {
       resolveAddress: resolverAnswering('203.0.113.7'),
     });
 
-    await expect(attempt).rejects.toBeInstanceOf(PlaintextRefusedError);
+    await expect(attempt).rejects.toBeInstanceOf(AddressRefusedError);
     await expect(attempt).rejects.toThrow('203.0.113.7');
     expect(connections()).toBe(0);
   });
@@ -311,7 +399,7 @@ describe('connectRemote — the resolved-address fence', () => {
     expect(graded('100.127.255.255')).toEqual({ error: null, resolved: '100.127.255.255' });
 
     const outside = graded('100.128.0.0');
-    expect(outside.error).toBeInstanceOf(PlaintextRefusedError);
+    expect(outside.error).toBeInstanceOf(AddressRefusedError);
     expect(outside.error?.message).toContain('100.128.0.0');
 
     // The `all: true` shape `dns.lookup` uses when no family is pinned reaches
@@ -320,7 +408,30 @@ describe('connectRemote — the resolved-address fence', () => {
       error: null,
       resolved: [{ address: '100.64.0.5', family: 4 }],
     });
-    expect(graded('203.0.113.7', { all: true }).error).toBeInstanceOf(PlaintextRefusedError);
+    expect(graded('203.0.113.7', { all: true }).error).toBeInstanceOf(AddressRefusedError);
+  });
+
+  it('refuses a .local name whose answer is public, and passes one whose answer is on the LAN (HIVE-428)', () => {
+    const graded = (address: string): LookupResult => {
+      const { socket } = dial({ host: 'mini.local', resolveAddress: resolverAnswering(address) });
+      const lookup = socket?.options.lookup;
+      if (lookup === undefined) throw new Error('no lookup was handed to the socket');
+      let result: LookupResult | null = null;
+      lookup(
+        'mini.local',
+        { family: 4 } as Parameters<LookupFunction>[1],
+        ((error: Error | null, resolved: unknown) => {
+          result = { error, resolved };
+        }) as unknown as Parameters<LookupFunction>[2],
+      );
+      if (result === null) throw new Error('the lookup never called back');
+      return result;
+    };
+
+    expect(graded('192.168.1.20')).toEqual({ error: null, resolved: '192.168.1.20' });
+    const publicAnswer = graded('8.8.8.8');
+    expect(publicAnswer.error).not.toBeNull();
+    expect(publicAnswer.error?.message).toContain('8.8.8.8');
   });
 
   /**
@@ -347,7 +458,7 @@ describe('connectRemote — the resolved-address fence', () => {
     }) as unknown as Parameters<LookupFunction>[2]);
 
     expect(answers).toHaveLength(1);
-    expect(answers[0].error).toBeInstanceOf(PlaintextRefusedError);
+    expect(answers[0].error).toBeInstanceOf(AddressRefusedError);
   });
 
   it('pins the lookup to IPv4 so every answer it grades is a dotted quad', () => {
@@ -424,6 +535,122 @@ describe('connectRemote — the handshake', () => {
 });
 
 /**
+ * The encrypted channel, from the client's side (HIVE-428). Every attach runs inside it, so what
+ * matters here is how each way a handshake can end reaches the caller: an old server is named as
+ * one, never as a credential problem; a server that does not know this pairing is a pairing
+ * problem, which is terminal; anything else stays a transport failure worth dialling again.
+ */
+describe('connectRemote — the encrypted channel', () => {
+  it('sends the hello as one binary frame, and the attach only inside the channel', async () => {
+    const { socket } = await attachedClient();
+
+    expect(Buffer.isBuffer(socket.wire[0])).toBe(true);
+    expect((socket.wire[0] as Buffer).subarray(0, 4).toString('ascii')).toBe('HTC1');
+    expect(socket.wire.every((frame) => Buffer.isBuffer(frame))).toBe(true);
+    // The token never crosses in the clear: no raw frame contains it.
+    expect(socket.wire.some((frame) => frame.includes(CREDENTIAL.token))).toBe(false);
+    expect(socket.attachFrame().token).toBe(CREDENTIAL.token);
+  });
+
+  it('rejects with ServerTooOldError when the server answers the hello in text', async () => {
+    const { promise, socket } = dial({}, 'old-server');
+    socket?.emit('open');
+
+    await expect(promise).rejects.toBeInstanceOf(ServerTooOldError);
+    await expect(promise).rejects.toThrow(/older HiveTTY/);
+    // Whatever the old server said, it is not read as a credential refusal.
+    await expect(promise).rejects.not.toBeInstanceOf(AttachRefusedError);
+    expect(socket?.closeCalls).toBe(1);
+    expect(socket?.sent).toEqual([]);
+  });
+
+  it('rejects with PairingRefusedError when the server closes the handshake with 1008', async () => {
+    const { promise, socket } = dial({}, 'unpaired');
+    socket?.emit('open');
+
+    await expect(promise).rejects.toBeInstanceOf(PairingRefusedError);
+    await expect(promise).rejects.toThrow(/Pair again/);
+    expect(socket?.sent).toEqual([]);
+  });
+
+  it('rejects with PairingRefusedError when message 2 does not verify, and closes with 1008', async () => {
+    const { promise, socket } = dial({}, 'silent');
+    const closes: unknown[] = [];
+    if (socket === null) throw new Error('expected a socket');
+    socket.close = () => {
+      socket.closeCalls += 1;
+      closes.push('closed');
+      socket.emit('close', CHANNEL_CLOSE_CODE);
+    };
+    socket.emit('open');
+    socket.emit('message', Buffer.alloc(48, 7), true);
+
+    await expect(promise).rejects.toBeInstanceOf(PairingRefusedError);
+    expect(socket.closeCalls).toBe(1);
+  });
+
+  it('treats a close mid-handshake with any other code as a transport drop, worth dialling again', async () => {
+    const { promise, socket } = dial({}, 'silent');
+    socket?.emit('open');
+    socket?.emit('close', 1006);
+
+    const cause = await promise.catch((error: unknown) => error);
+    expect(cause).not.toBeInstanceOf(PairingRefusedError);
+    expect(classifyCause(cause).kind).toBe('transport');
+  });
+
+  it('fails the attach, having sent nothing, for a stored device id over 255 bytes', async () => {
+    const { promise, socket } = dial({ credential: { deviceId: 'd'.repeat(256), token: 's3cret' } });
+    socket?.emit('open');
+
+    await expect(promise).rejects.toThrow(/device id/);
+    expect(socket?.wire).toEqual([]);
+    expect(socket?.closeCalls).toBe(1);
+  });
+
+  it('sends no attach when message 2 arrives after its own deadline already failed the dial', async () => {
+    vi.useFakeTimers();
+    const { promise, socket } = dial({}, 'silent');
+    if (socket === null) throw new Error('expected a socket');
+    // Capture the hello a real responder would answer, but hold the answer.
+    const server = new EventEmitter() as EventEmitter & { send(data: Buffer): void; close(): void; terminate(): void };
+    let heldMessage2: Buffer | null = null;
+    server.send = (data: Buffer) => {
+      heldMessage2 = data;
+    };
+    server.close = () => undefined;
+    server.terminate = () => undefined;
+    void respond(server, { pskFor: () => pskOfToken(CREDENTIAL.token) });
+    socket.emit('open');
+    server.emit('message', socket.wire[0], true);
+    socket.terminate = () => {
+      socket.terminateCalls += 1;
+    };
+
+    await vi.advanceTimersByTimeAsync(CLIENT_ATTACH_TIMEOUT_MS);
+    await expect(promise).rejects.toThrow(/did not complete the attach handshake/);
+
+    expect(heldMessage2).not.toBeNull();
+    socket.emit('message', heldMessage2, true);
+    await settle();
+    expect(socket.wire).toHaveLength(1);
+  });
+
+  it('classifies a refused pairing as terminal and unauthorized, and an old server as its own terminal cause', () => {
+    expect(classifyCause(new PairingRefusedError('pair again'))).toEqual({
+      kind: 'terminal',
+      code: 'unauthorized',
+      message: 'pair again',
+    });
+    expect(classifyCause(new ServerTooOldError('update'))).toEqual({
+      kind: 'terminal',
+      code: 'server-too-old',
+      message: 'update',
+    });
+  });
+});
+
+/**
  * The client's own attach deadline (HIVE-144 review, I5).
  *
  * Nothing bounded this dial. `ClientOptions` carried `family`, `lookup` and
@@ -472,8 +699,8 @@ describe('connectRemote — the attach deadline', () => {
 
   /**
    * The failure has to read as `connect-failed` in the pane, which is what
-   * `outcomeFor` in `router.ts` makes of any non-`PlaintextRefusedError` — so
-   * this must not be a `PlaintextRefusedError`, and it must carry a sentence
+   * `outcomeFor` in `router.ts` makes of any non-`AddressRefusedError` — so
+   * this must not be a `AddressRefusedError`, and it must carry a sentence
    * worth showing.
    */
   it('fails with an ordinary error naming the address and the budget', async () => {
@@ -483,7 +710,7 @@ describe('connectRemote — the attach deadline', () => {
 
     await vi.advanceTimersByTimeAsync(CLIENT_ATTACH_TIMEOUT_MS);
 
-    await expect(promise).rejects.not.toBeInstanceOf(PlaintextRefusedError);
+    await expect(promise).rejects.not.toBeInstanceOf(AddressRefusedError);
     await expect(promise).rejects.toThrow(/100\.64\.1\.2:7433/);
     await expect(promise).rejects.toThrow(new RegExp(String(CLIENT_ATTACH_TIMEOUT_MS)));
   });
@@ -673,7 +900,7 @@ describe('connectRemote — the frame ceiling', () => {
   it('asks ws for the same ceiling it enforces on its own sends', () => {
     const { socket } = dial();
 
-    expect(socket?.options.maxPayload).toBe(POST_ATTACH_FRAME_MAX_BYTES);
+    expect(socket?.options.maxPayload).toBe(POST_ATTACH_FRAME_MAX_BYTES + CHANNEL_TAG_BYTES);
   });
 
   /**
@@ -789,7 +1016,7 @@ describe('connectRemote — events', () => {
     const listener = vi.fn();
     client.onEvent(listener);
 
-    socket.emit('message', Buffer.from('{not json'));
+    socket.deliverText('{not json');
 
     expect(listener).not.toHaveBeenCalled();
   });
@@ -1017,9 +1244,9 @@ describe('classifyCause', () => {
       claimed it was reconnecting — the address is wrong, and no amount of
       waiting changes an address.
     */
-    expect(classifyCause(new PlaintextRefusedError('nope'))).toMatchObject({
+    expect(classifyCause(new AddressRefusedError('nope'))).toMatchObject({
       kind: 'terminal',
-      code: 'plaintext-refused',
+      code: 'address-refused',
     });
   });
 
