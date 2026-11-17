@@ -40,6 +40,7 @@ import {
   type ReceiverConfig,
   type RemoteConfig,
   type RemoteMode,
+  type RemoteVia,
   type ServerBindConfig,
   type ServerRelayConfig,
   type ServerConfig,
@@ -62,6 +63,7 @@ import {
   RETIRED_SESSION_KEYS,
   isNotificationDelivery,
 } from '@shared/notification-contract';
+import { RELAY_ID } from '@shared/relay-contract';
 import { ticketWorkflowOf } from '@shared/ticket-workflow';
 
 /**
@@ -1236,6 +1238,7 @@ function optionalServer(
 }
 
 const REMOTE_MODES: readonly RemoteMode[] = ['local', 'remote'];
+const REMOTE_VIAS: readonly RemoteVia[] = ['direct', 'relay'];
 
 function optionalAccount(
   record: Record<string, unknown>,
@@ -1316,13 +1319,34 @@ function optionalRemote(
     }
   }
 
+  // HIVE-429: read before `host`, because a relay block's `host` is not dialled and so not fenced.
+  let via: RemoteVia | undefined;
+  if (value.via !== undefined) {
+    if (REMOTE_VIAS.includes(value.via as RemoteVia)) {
+      via = value.via as RemoteVia;
+      remote.via = via;
+    } else {
+      errors.push(`${at}.via: expected "direct" or "relay" — using the default`);
+    }
+  }
+
+  const relayServerId = value.relayServerId;
+  if (relayServerId !== undefined) {
+    if (typeof relayServerId === 'string' && (relayServerId === '' || RELAY_ID.test(relayServerId))) {
+      remote.relayServerId = relayServerId;
+    } else {
+      errors.push(`${at}.relayServerId: expected "" or a relay id — using the default`);
+    }
+  }
+
   const host = value.host;
   if (host !== undefined) {
     if (typeof host !== 'string') {
       errors.push(`${at}.host: expected a string — using the default`);
-    } else if (mode !== 'remote') {
+    } else if (mode !== 'remote' || via === 'relay') {
       // Ruling 3 (HIVE-144): unvalidated outside remote mode, so the empty
-      // default every never-attached install carries is not an error.
+      // default every never-attached install carries is not an error. Nor on a
+      // relay block (HIVE-429), which dials the relay and never `host`.
       remote.host = host;
     } else if (isRemoteTarget(host)) {
       remote.host = host;

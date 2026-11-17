@@ -25,7 +25,9 @@ import { parseSetRemoteRequest } from '../../../../electron/shared/guards';
  * two agree.
  */
 
-const resolved = (parsed: { remote?: { mode?: string; host?: string; port?: number } }) => ({
+const resolved = (parsed: {
+  remote?: { mode?: string; host?: string; port?: number; via?: string; relayServerId?: string };
+}) => ({
   ...DEFAULT_REMOTE,
   ...parsed.remote,
 });
@@ -34,7 +36,13 @@ const doc = (extra: object) => JSON.stringify({ version: 2, projects: [], ...ext
 
 describe('remote resolution', () => {
   it('defaults to local mode with no target', () => {
-    expect(DEFAULT_REMOTE).toEqual({ mode: 'local', host: '', port: 7434 });
+    expect(DEFAULT_REMOTE).toEqual({
+      mode: 'local',
+      host: '',
+      port: 7434,
+      via: 'direct',
+      relayServerId: '',
+    });
   });
 
   it('a file with no block resolves to the default', () => {
@@ -48,6 +56,8 @@ describe('remote resolution', () => {
       mode: 'remote',
       host: DEFAULT_REMOTE.host,
       port: DEFAULT_REMOTE.port,
+      via: DEFAULT_REMOTE.via,
+      relayServerId: DEFAULT_REMOTE.relayServerId,
     });
   });
 
@@ -67,7 +77,7 @@ describe('remote resolution', () => {
   it('a local mode with an empty host resolves with no error', () => {
     const parsed = parseConfig(doc({ remote: { mode: 'local', host: '' } }), 'config');
 
-    expect(resolved(parsed)).toEqual({ mode: 'local', host: '', port: DEFAULT_REMOTE.port });
+    expect(resolved(parsed)).toEqual({ ...DEFAULT_REMOTE, mode: 'local', host: '' });
     expect(parsed.errors).toEqual([]);
   });
 
@@ -130,6 +140,8 @@ describe('the remote block on a real snapshot', () => {
       mode: 'remote',
       host: DEFAULT_REMOTE.host,
       port: DEFAULT_REMOTE.port,
+      via: DEFAULT_REMOTE.via,
+      relayServerId: DEFAULT_REMOTE.relayServerId,
     });
   });
 
@@ -195,6 +207,8 @@ describe('setRemote', () => {
       mode: 'remote',
       host: '100.64.0.1',
       port: DEFAULT_REMOTE.port,
+      via: DEFAULT_REMOTE.via,
+      relayServerId: DEFAULT_REMOTE.relayServerId,
     });
     expect(onDisk().remote).toEqual({ mode: 'remote', host: '100.64.0.1' });
   });
@@ -294,7 +308,7 @@ describe('setRemote', () => {
 
     const snapshot = setRemote({ mode: 'local', host: '' });
 
-    expect(snapshot.remote).toEqual({ mode: 'local', host: '', port: DEFAULT_REMOTE.port });
+    expect(snapshot.remote).toEqual({ ...DEFAULT_REMOTE, mode: 'local', host: '' });
     expect(snapshot.errors).toEqual([]);
     expect(onDisk().remote).toEqual({ mode: 'local', host: '' });
   });
@@ -424,5 +438,131 @@ describe('setRemote', () => {
       host: '100.64.1.2',
       port: 7433,
     });
+  });
+});
+
+/**
+ * HIVE-429: `via` and `relayServerId`. A relay target is not dialled at `host`, so the address
+ * fence on `host` applies only to a direct block.
+ */
+describe('remote.via and remote.relayServerId (HIVE-429)', () => {
+  it('a file without them reads direct with no server', () => {
+    expect(resolved(parseConfig(doc({ remote: { mode: 'local' } }), 'config'))).toMatchObject({
+      via: 'direct',
+      relayServerId: '',
+    });
+  });
+
+  it('both round-trip', () => {
+    const parsed = parseConfig(
+      doc({ remote: { mode: 'local', via: 'relay', relayServerId: 'dev_1' } }),
+      'config',
+    );
+
+    expect(parsed.errors).toEqual([]);
+    expect(resolved(parsed)).toMatchObject({ via: 'relay', relayServerId: 'dev_1' });
+  });
+
+  it('a via that is neither value salvages to direct and says so', () => {
+    const parsed = parseConfig(doc({ remote: { via: 'tunnel', host: 'x' } }), 'config');
+
+    expect(resolved(parsed).via).toBe('direct');
+    expect(resolved(parsed).host).toBe('x');
+    expect(parsed.errors.join(' ')).toContain('remote.via');
+  });
+
+  it('a relayServerId that is not a relay id salvages to empty and says so', () => {
+    const parsed = parseConfig(doc({ remote: { relayServerId: 'a/b', port: 7433 } }), 'config');
+
+    expect(resolved(parsed).relayServerId).toBe('');
+    expect(resolved(parsed).port).toBe(7433);
+    expect(parsed.errors.join(' ')).toContain('remote.relayServerId');
+  });
+
+  it('a relay block in remote mode keeps a public host, because it is not dialled', () => {
+    const parsed = parseConfig(
+      doc({ remote: { mode: 'remote', via: 'relay', relayServerId: 'dev_1', host: '8.8.8.8' } }),
+      'config',
+    );
+
+    expect(parsed.errors).toEqual([]);
+    expect(resolved(parsed)).toMatchObject({ mode: 'remote', via: 'relay', host: '8.8.8.8' });
+  });
+
+  it('the same block with via direct is fenced as today', () => {
+    const parsed = parseConfig(
+      doc({ remote: { mode: 'remote', via: 'direct', host: '8.8.8.8' } }),
+      'config',
+    );
+
+    expect(resolved(parsed).host).toBe(DEFAULT_REMOTE.host);
+    expect(parsed.errors.join(' ')).toContain('remote.host');
+  });
+
+  it('setRemote({ via }) changes only via', () => {
+    seed(
+      '{\n  "version": 2,\n  "remote": { "mode": "local", "host": "100.64.0.1", "port": 7433, "relayServerId": "dev_1" }\n}\n',
+    );
+
+    const snapshot = setRemote({ via: 'relay' });
+
+    expect(snapshot.remote).toEqual({
+      mode: 'local',
+      host: '100.64.0.1',
+      port: 7433,
+      via: 'relay',
+      relayServerId: 'dev_1',
+    });
+  });
+
+  it('setRemote({ relayServerId }) changes only the server', () => {
+    seed(
+      '{\n  "version": 2,\n  "remote": { "mode": "local", "host": "100.64.0.1", "via": "relay" }\n}\n',
+    );
+
+    const snapshot = setRemote({ relayServerId: 'dev_1' });
+
+    expect(snapshot.remote).toEqual({
+      mode: 'local',
+      host: '100.64.0.1',
+      port: DEFAULT_REMOTE.port,
+      via: 'relay',
+      relayServerId: 'dev_1',
+    });
+  });
+
+  it('setRemote lets remote mode stand on a relay block with an empty host', () => {
+    seed('{\n  "version": 2\n}\n');
+
+    const snapshot = setRemote({ mode: 'remote', via: 'relay', relayServerId: 'dev_1' });
+
+    expect(snapshot.remote).toMatchObject({ mode: 'remote', via: 'relay', host: '' });
+  });
+
+  it('setRemote still refuses remote mode on a direct block with no usable host', () => {
+    seed('{\n  "version": 2\n}\n');
+
+    const snapshot = setRemote({ mode: 'remote', via: 'direct' });
+
+    expect(snapshot.errors.join(' ')).toContain('remote.host');
+    expect(onDisk().remote).toBeUndefined();
+  });
+
+  it('parseSetRemoteRequest accepts each field alone', () => {
+    expect(parseSetRemoteRequest({ via: 'relay' })).toEqual({ via: 'relay' });
+    expect(parseSetRemoteRequest({ via: 'direct' })).toEqual({ via: 'direct' });
+    expect(parseSetRemoteRequest({ relayServerId: 'dev_1' })).toEqual({ relayServerId: 'dev_1' });
+    expect(parseSetRemoteRequest({ relayServerId: '' })).toEqual({ relayServerId: '' });
+  });
+
+  it('parseSetRemoteRequest refuses a via that is neither value', () => {
+    expect(() => parseSetRemoteRequest({ via: 'tunnel' })).toThrow(/setRemote\.via/);
+  });
+
+  it('parseSetRemoteRequest refuses a relayServerId that is not a relay id', () => {
+    expect(() => parseSetRemoteRequest({ relayServerId: 'a/b' })).toThrow(
+      /setRemote\.relayServerId/,
+    );
+    expect(() => parseSetRemoteRequest({ relayServerId: 7 })).toThrow(/setRemote\.relayServerId/);
   });
 });

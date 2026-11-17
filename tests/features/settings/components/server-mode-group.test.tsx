@@ -76,9 +76,9 @@ const REVOKED_DEVICE: ServerDevice = {
 };
 
 /** A committed, valid attach target — a Tailscale MagicDNS name. */
-const REMOTE_TARGET: RemoteConfig = { mode: 'local', host: 'mini.tail1234.ts.net', port: 7433 };
+const REMOTE_TARGET: RemoteConfig = { mode: 'local', host: 'mini.tail1234.ts.net', port: 7433, via: 'direct', relayServerId: '' };
 
-const ATTACHED_REMOTE: RemoteConfig = { mode: 'remote', host: 'mini.tail1234.ts.net', port: 7433 };
+const ATTACHED_REMOTE: RemoteConfig = { mode: 'remote', host: 'mini.tail1234.ts.net', port: 7433, via: 'direct', relayServerId: '' };
 
 describe('ServerModeGroup', () => {
   beforeEach(() => {
@@ -1190,7 +1190,7 @@ describe('ServerModeGroup', () => {
       non-null `attachedServerName`, which is the only thing that tells this
       component a socket is open.
     */
-    const SERVER_ANSWERED_REMOTE: RemoteConfig = { mode: 'local', host: '', port: 7433 };
+    const SERVER_ANSWERED_REMOTE: RemoteConfig = { mode: 'local', host: '', port: 7433, via: 'direct', relayServerId: '' };
 
     it('opens the panel on an attached client whose snapshot comes from the server', () => {
       render(
@@ -1316,7 +1316,7 @@ describe('ServerModeGroup', () => {
           bind={DEFAULT_BIND}
           devices={[]}
           remote={SERVER_ANSWERED_REMOTE}
-          localRemote={{ mode: 'remote', host: 'mini.tail1234.ts.net', port: 7433, paired: false }}
+          localRemote={{ mode: 'remote', host: 'mini.tail1234.ts.net', port: 7433, via: 'direct', relayServerId: '', paired: false }}
           attachedServer={null}
           attachedServerName="mini"
           serving={false}
@@ -1344,7 +1344,7 @@ describe('ServerModeGroup', () => {
           bind={DEFAULT_BIND}
           devices={[]}
           remote={SERVER_ANSWERED_REMOTE}
-          localRemote={{ mode: 'remote', host: '100.101.102.103', port: 7500, paired: false }}
+          localRemote={{ mode: 'remote', host: '100.101.102.103', port: 7500, via: 'direct', relayServerId: '', paired: false }}
           attachedServer={null}
           attachedServerName="mini"
           serving={false}
@@ -1379,7 +1379,7 @@ describe('ServerModeGroup', () => {
           enabled={false}
           bind={DEFAULT_BIND}
           devices={[]}
-          remote={{ mode: 'local', host: 'server-side.ts.net', port: 7433 }}
+          remote={{ mode: 'local', host: 'server-side.ts.net', port: 7433, via: 'direct', relayServerId: '' }}
           localRemote={null}
           attachedServer={null}
           attachedServerName="mini"
@@ -1411,8 +1411,8 @@ describe('ServerModeGroup', () => {
           enabled={false}
           bind={DEFAULT_BIND}
           devices={[]}
-          remote={{ mode: 'local', host: 'studio.tail1234.ts.net', port: 7434 }}
-          localRemote={{ mode: 'remote', host: 'mini.tail1234.ts.net', port: 9000, paired: false }}
+          remote={{ mode: 'local', host: 'studio.tail1234.ts.net', port: 7434, via: 'direct', relayServerId: '' }}
+          localRemote={{ mode: 'remote', host: 'mini.tail1234.ts.net', port: 9000, via: 'direct', relayServerId: '', paired: false }}
           attachedServer={null}
           attachedServerName="mini"
           serving={false}
@@ -1433,8 +1433,8 @@ describe('ServerModeGroup', () => {
           enabled={false}
           bind={DEFAULT_BIND}
           devices={[]}
-          remote={{ mode: 'local', host: 'studio.tail1234.ts.net', port: 7433 }}
-          localRemote={{ mode: 'remote', host: 'mini.tail1234.ts.net', port: 9000, paired: false }}
+          remote={{ mode: 'local', host: 'studio.tail1234.ts.net', port: 7433, via: 'direct', relayServerId: '' }}
+          localRemote={{ mode: 'remote', host: 'mini.tail1234.ts.net', port: 9000, via: 'direct', relayServerId: '', paired: false }}
           attachedServer={null}
           attachedServerName="mini"
           serving={false}
@@ -1456,8 +1456,8 @@ describe('ServerModeGroup', () => {
           enabled={false}
           bind={DEFAULT_BIND}
           devices={[]}
-          remote={{ mode: 'local', host: 'studio.tail1234.ts.net', port: 7433 }}
-          localRemote={{ mode: 'remote', host: 'mini.tail1234.ts.net', port: 9000, paired: false }}
+          remote={{ mode: 'local', host: 'studio.tail1234.ts.net', port: 7433, via: 'direct', relayServerId: '' }}
+          localRemote={{ mode: 'remote', host: 'mini.tail1234.ts.net', port: 9000, via: 'direct', relayServerId: '', paired: false }}
           attachedServer={null}
           attachedServerName="mini"
           serving={false}
@@ -2250,7 +2250,7 @@ describe('ServerModeGroup', () => {
         const { unmount } = renderAttached(link({ state }), {
           mode: 'remote',
           host: 'mini.tail1234.ts.net',
-          port: 7433,
+          port: 7433, via: 'direct', relayServerId: '',
           paired: false,
         });
 

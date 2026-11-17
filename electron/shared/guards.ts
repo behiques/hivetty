@@ -119,6 +119,7 @@ import {
   NOTIFICATION_DELIVERIES,
   isNotificationDelivery,
 } from './notification-contract';
+import { RELAY_ID } from './relay-contract';
 import {
   SESSION_NAME_DISPLAY_MAX,
   SESSION_NAME_MAX,
@@ -1718,7 +1719,7 @@ export function parseRevokeDeviceRequest(input: unknown): DeviceNameRequest {
  * verb that ever writes one, and it writes to `safeStorage`, never here.
  */
 export function parseSetRemoteRequest(input: unknown): SetRemoteRequest {
-  const raw = assertShape(input, [], 'setRemote', ['mode', 'host', 'port']);
+  const raw = assertShape(input, [], 'setRemote', ['mode', 'host', 'port', 'via', 'relayServerId']);
 
   let mode: RemoteMode | undefined;
   if (raw.mode !== undefined) {
@@ -1735,6 +1736,23 @@ export function parseSetRemoteRequest(input: unknown): SetRemoteRequest {
       : {}),
     ...(raw.port !== undefined ? { port: assertPort(raw.port, 'setRemote.port') } : {}),
   };
+
+  // HIVE-429: how remote mode reaches the server, and which relay server.
+  if (raw.via !== undefined) {
+    if (raw.via !== 'direct' && raw.via !== 'relay') {
+      return fail(`setRemote.via: expected "direct" or "relay"`);
+    }
+    request.via = raw.via;
+  }
+  if (raw.relayServerId !== undefined) {
+    if (
+      typeof raw.relayServerId !== 'string' ||
+      (raw.relayServerId !== '' && !RELAY_ID.test(raw.relayServerId))
+    ) {
+      return fail('setRemote.relayServerId: expected "" or a relay id');
+    }
+    request.relayServerId = raw.relayServerId;
+  }
 
   if (Object.keys(request).length === 0) {
     return fail('setRemote: nothing to change');

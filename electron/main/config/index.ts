@@ -1239,6 +1239,8 @@ export function setRemote(request: SetRemoteRequest): ConfigSnapshot {
       if (request.mode !== undefined) current.mode = request.mode;
       if (request.host !== undefined) current.host = request.host;
       if (request.port !== undefined) current.port = request.port;
+      if (request.via !== undefined) current.via = request.via;
+      if (request.relayServerId !== undefined) current.relayServerId = request.relayServerId;
 
       // The invariant, checked once against the merged result — see this
       // function's own doc comment. `current.mode === 'remote'` rather than
@@ -1249,7 +1251,9 @@ export function setRemote(request: SetRemoteRequest): ConfigSnapshot {
       // reader have to agree on what "effectively remote" means, or a value
       // this function let through could still be refused, or the reverse,
       // the moment the file is reloaded.
-      if (current.mode === 'remote' && !isRemoteTarget(current.host)) {
+      // A relay block (HIVE-429) dials the relay, never `host`, so `host` is not fenced there;
+      // `optionalRemote` skips the same check on the same condition.
+      if (current.mode === 'remote' && current.via !== 'relay' && !isRemoteTarget(current.host)) {
         throw new WriteRefused(
           `remote.host must be loopback, a local network address or a Tailscale address before mode can be "remote" — a server elsewhere is reached through the relay`,
         );
