@@ -411,14 +411,6 @@ describe('connectRemote — the resolved-address fence', () => {
     expect(graded('203.0.113.7', { all: true }).error).toBeInstanceOf(PlaintextRefusedError);
   });
 
-  /**
-   * `resolveAddress` is an injectable dependency, so "the resolver answers
-   * once" is a property of its caller, not of this file. Without the latch a
-   * resolver that answered twice — refused, then good — would record the
-   * refusal and then hand `net` the second answer anyway, and the connection
-   * would proceed. `node:dns` does not do that; the fence does not get to
-   * assume it.
-   */
   it('refuses a .local name whose answer is public, and passes one whose answer is on the LAN (HIVE-428)', () => {
     const graded = (address: string): LookupResult => {
       const { socket } = dial({ host: 'mini.local', resolveAddress: resolverAnswering(address) });
@@ -442,6 +434,14 @@ describe('connectRemote — the resolved-address fence', () => {
     expect(publicAnswer.error?.message).toContain('8.8.8.8');
   });
 
+  /**
+   * `resolveAddress` is an injectable dependency, so "the resolver answers
+   * once" is a property of its caller, not of this file. Without the latch a
+   * resolver that answered twice — refused, then good — would record the
+   * refusal and then hand `net` the second answer anyway, and the connection
+   * would proceed. `node:dns` does not do that; the fence does not get to
+   * assume it.
+   */
   it('answers net exactly once, even when the resolver calls back twice', () => {
     const twice: LookupFunction = ((_hostname, _options, callback) => {
       callback(null, '203.0.113.7', 4);

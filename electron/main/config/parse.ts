@@ -968,7 +968,7 @@ export function serverBindRefusal(errors: readonly string[]): string | null {
  * Structurally {@link optionalBind}'s twin, with two differences the shape
  * forces: `host` is checked against {@link isServerBindHost}, not
  * {@link isHostAlias}, and `0.0.0.0` gets its own message naming the value
- * rather than the generic "expected a hostname" — see
+ * rather than the generic one naming the allowed set — see
  * {@link isServerBindHost}'s doc comment for why the wildcard is refused here
  * and not for the receiver. `port` gets the same treatment for `0`: unlike
  * {@link ReceiverBindConfig.port}, `server.bind.port` cannot be OS-assigned —

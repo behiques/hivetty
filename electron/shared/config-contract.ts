@@ -1111,8 +1111,8 @@ const TAILNET_V4 =
  * remains is the two spellings Tailscale actually assigns: a MagicDNS name
  * (`mini.tail1234.ts.net`) and a CGNAT literal ({@link TAILNET_V4}). A bare
  * hostname like `mini.local` is neither — mDNS resolves it to whatever
- * answers on the local LAN right now, off the tailnet entirely — and must be
- * refused.
+ * answers on the local LAN right now, off the tailnet entirely — so this
+ * predicate refuses it; it is {@link isLanHost}'s case (HIVE-428).
  */
 export function isTailnetHost(value: string): boolean {
   if (!isHostAlias(value)) return false;
