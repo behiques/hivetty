@@ -239,6 +239,33 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  * launch on that profile, with no Keychain prompt to hang a headless run. Each
  * served profile signs in through the `--login` one-shot before it serves.
  *
+ * ## Two apps that meet only through the relay (HIVE-286)
+ *
+ * Cases 23a to 23g boot a serving app with `server.relay.enabled` and an
+ * ordinary attaching app, and the client is never told the server's port: the
+ * only route between them is a stub relay on the same stub cloud
+ * (`tests/e2e/electron/fixtures/stub-relay.ts`), which speaks the paths,
+ * control frame, close codes and ping of `electron/shared/relay-contract.ts`
+ * and records every message it passes. The block pairs, attaches through the
+ * relay, types into the server's shell, cuts the relay and watches the link
+ * come back by itself, then revokes the device and sees the refusal cross the
+ * relay from inside the encrypted channel. Three readings a reader would
+ * otherwise question:
+ *
+ * - "Nothing the relay passed can be read" looks for the pairing token, every
+ *   bearer the stub saw, the hostname and the typed marker, and for a JSON
+ *   object with at least one key. `{}` alone is not counted: ciphertext holds
+ *   those two bytes by chance, and they parse.
+ * - "The marker survives the cut" means the same shell resumed with no gap
+ *   marker: a variable set in that shell before the cut is printed after it.
+ *   The client's on-screen terminal buffer is not read.
+ * - The stub lists one server, under the stub cloud's one device id. Both apps
+ *   share it, because the app refuses a lease whose `device` is not its own.
+ *
+ * The relay's own refusals (rate limit, accept timeout, entitlement, size cap,
+ * the re-check sweep) are not in the stub; the cloud's suite (HIVE-285) proves
+ * them.
+ *
  * ## Evidence
  *
  * A `vitest run` off a TTY (a background shell) prints totals only, so a
@@ -5382,6 +5409,40 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       const seqs = events.map((event) => event.seq);
       expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
     }, 180_000);
+
+    it('23g. a device revoked on the server is refused through the relay, from inside the channel', async () => {
+      assert(stub !== undefined, 'the stub cloud must be running');
+      assert(renderer !== undefined, 'the client app must have a renderer');
+      // No second serve socket in this block: the serving app stops on 4409 until its switch goes off and on.
+
+      await renderer.evaluate(`window.hive.pty.kill(${JSON.stringify(sessionId)})`);
+      const detached = await bounded(
+        renderer.evaluate<SetRemoteResult>("window.hive.config.setRemote({ mode: 'local' })"),
+        60_000,
+        'detaching from the relayed server',
+      );
+      expect(detached.config.remote.mode).toBe('local');
+
+      const revoked = await runOneShot(['--revoke', 'Relay-Client'], serverConfigPath, serverUserDataDir);
+      expect(revoked.code).toBe(0);
+      expect(revoked.stdout).toContain('Revoked "Relay-Client"');
+
+      const before = stub.relay.frames.length;
+      const result = await bounded(
+        renderer.evaluate<SetRemoteResult>(
+          `window.hive.config.setRemote({ mode: 'remote', via: 'relay', relayServerId: ${JSON.stringify(relayServerId)} })`,
+        ),
+        60_000,
+        'setRemote through the relay with a revoked device (a hang here is the failure, not a refusal)',
+      );
+      expect(result.switched.ok).toBe(false);
+      expect(JSON.stringify(result.switched)).toMatch(/revoked/i);
+      expect(result.config.remote.mode).toBe('local');
+      // The handshake and the refusal crossed the relay: the server refused inside the channel, not the relay.
+      expect(stub.relay.frames.length).toBeGreaterThan(before);
+      // Now over the reattach and the refusal traffic too.
+      expect(relayLeaks()).toEqual([]);
+    }, 120_000);
   });
 
   describe('a call that never settles (HIVE-144)', () => {
