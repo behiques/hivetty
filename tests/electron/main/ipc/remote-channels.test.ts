@@ -278,12 +278,12 @@ describe('config:set-remote (HIVE-144, Ruling 19)', () => {
   });
 
   it('leaves the file untouched when the target is refused as plaintext', async () => {
-    outcome = { ok: false, reason: 'plaintext-refused' };
+    outcome = { ok: false, reason: 'address-refused' };
 
     const result = await setRemoteVerb({ mode: 'remote', host: '203.0.113.7' });
 
     expect(onDisk()).not.toHaveProperty('remote');
-    expect(result).toMatchObject({ switched: { ok: false, reason: 'plaintext-refused' } });
+    expect(result).toMatchObject({ switched: { ok: false, reason: 'address-refused' } });
   });
 
   it('leaves the file untouched when the connection fails', async () => {

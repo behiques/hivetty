@@ -1290,7 +1290,7 @@ function optionalRemote(
       remote.host = host;
     } else {
       errors.push(
-        `${at}.host: must be loopback or a tailnet address — this socket is plaintext, so anything else would send a credential to the open internet — using the default`,
+        `${at}.host: must be loopback, a local network address or a Tailscale address — a server elsewhere is reached through the relay — using the default`,
       );
     }
   }

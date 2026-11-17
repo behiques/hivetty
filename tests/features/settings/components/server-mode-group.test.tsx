@@ -187,8 +187,40 @@ describe('ServerModeGroup', () => {
 
       expect(setServerConfig).not.toHaveBeenCalled();
       expect(
-        screen.getByText(/hostname or an ipv4 address/i),
+        screen.getByText(/no scheme, port or path/i),
       ).toBeInTheDocument();
+    });
+
+    it('refuses a public bind address, naming the set it must be in (HIVE-428)', async () => {
+      render(<ServerModeGroup enabled bind={DEFAULT_BIND} devices={[]} remote={DEFAULT_REMOTE} localRemote={null}
+      attachedServer={null}
+      attachedServerName={null}
+      serving={false}
+    />);
+
+      const field = screen.getByLabelText(/bind address/i);
+      await userEvent.clear(field);
+      await userEvent.type(field, '8.8.8.8');
+      await userEvent.tab();
+
+      expect(setServerConfig).not.toHaveBeenCalled();
+      expect(screen.getByText(/never a public address/i)).toBeInTheDocument();
+      expect(screen.getByText(/local network/i)).toBeInTheDocument();
+    });
+
+    it('commits a LAN bind address on blur (HIVE-428)', async () => {
+      render(<ServerModeGroup enabled bind={DEFAULT_BIND} devices={[]} remote={DEFAULT_REMOTE} localRemote={null}
+      attachedServer={null}
+      attachedServerName={null}
+      serving={false}
+    />);
+
+      const field = screen.getByLabelText(/bind address/i);
+      await userEvent.clear(field);
+      await userEvent.type(field, '192.168.1.20');
+      await userEvent.tab();
+
+      expect(setServerConfig).toHaveBeenCalledWith({ bind: { host: '192.168.1.20' } });
     });
 
     /**
@@ -733,9 +765,33 @@ describe('ServerModeGroup', () => {
       await userEvent.tab();
 
       expect(setRemoteConfig).not.toHaveBeenCalled();
-      expect(
-        screen.getByText(/must be a loopback or tailnet address/i),
-      ).toBeInTheDocument();
+      // HIVE-428: a public address is the relay's, and the hint says so by name.
+      expect(screen.getByText(/connect through relay/i)).toBeInTheDocument();
+      expect(screen.getByText(/local network/i)).toBeInTheDocument();
+      expect(screen.queryByText(/plaintext/i)).not.toBeInTheDocument();
+    });
+
+    it('commits a LAN address on blur (HIVE-428)', async () => {
+      render(
+        <ServerModeGroup
+          enabled={false}
+          bind={DEFAULT_BIND}
+          devices={[]}
+          remote={DEFAULT_REMOTE}
+          localRemote={null}
+          attachedServer={null}
+          attachedServerName={null}
+          serving={false}
+        />,
+      );
+
+      await userEvent.click(screen.getByRole('switch', { name: 'Attach to a server' }));
+      const field = screen.getByLabelText(/server address/i);
+      await userEvent.clear(field);
+      await userEvent.type(field, '192.168.1.20');
+      await userEvent.tab();
+
+      expect(setRemoteConfig).toHaveBeenCalledWith({ host: '192.168.1.20' });
     });
 
     it('commits a valid address on blur, without switching mode', async () => {
@@ -976,9 +1032,9 @@ describe('ServerModeGroup', () => {
      * bordered box `live-sessions` does, and the field's own hint goes back
      * to its ordinary copy rather than hiding the refusal inside it.
      */
-    it('gives plaintext-refused the same visual weight as the other refusals', async () => {
+    it('gives address-refused the same visual weight as the other refusals', async () => {
       vi.mocked(setRemoteConfig).mockResolvedValue({
-        switched: { ok: false, reason: 'plaintext-refused' },
+        switched: { ok: false, reason: 'address-refused' },
         changed: null,
       });
 
@@ -998,7 +1054,7 @@ describe('ServerModeGroup', () => {
       await userEvent.click(screen.getByRole('switch', { name: 'Attach to a server' }));
       await userEvent.click(screen.getByRole('button', { name: /^attach$/i }));
 
-      const banner = await screen.findByText(/must be a loopback or tailnet address/i);
+      const banner = await screen.findByText(/connect through relay/i);
       // Not merely the field's hint: a dedicated, bordered box, the same
       // shape `live-sessions` renders at.
       expect(banner.closest('div')).toHaveClass('border-red');
@@ -1007,6 +1063,35 @@ describe('ServerModeGroup', () => {
       expect(
         screen.getByLabelText(/server address/i),
       ).toHaveAccessibleDescription(/100\.64\.0\.0\/10/);
+    });
+
+    it('names an old server as one, in its own banner (HIVE-428)', async () => {
+      vi.mocked(setRemoteConfig).mockResolvedValue({
+        switched: { ok: false, reason: 'server-too-old' },
+        changed: null,
+      });
+
+      render(
+        <ServerModeGroup
+          enabled={false}
+          bind={DEFAULT_BIND}
+          devices={[]}
+          remote={REMOTE_TARGET}
+          localRemote={null}
+          attachedServer={null}
+          attachedServerName={null}
+          serving={false}
+        />,
+      );
+
+      await userEvent.click(screen.getByRole('switch', { name: 'Attach to a server' }));
+      await userEvent.click(screen.getByRole('button', { name: /^attach$/i }));
+
+      const banner = await screen.findByText(
+        'The server is on an older HiveTTY that does not speak the encrypted channel. Update the server.',
+      );
+      expect(banner.closest('div')).toHaveClass('border-red');
+      expect(screen.queryByText(/pair again/i)).not.toBeInTheDocument();
     });
 
     /**

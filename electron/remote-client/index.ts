@@ -4,7 +4,7 @@ import { REMOTE_PROTOCOL_VERSION, type AttachRequest, type ResumePoint } from '@
  * The client half of server mode (HIVE-144).
  *
  * The connection itself lives in `./socket.ts` — `connectRemote`,
- * `PlaintextRefusedError` and the rest are exported from there, and callers
+ * `AddressRefusedError` and the rest are exported from there, and callers
  * import that module directly rather than a barrel here. Deliberately not
  * re-exported: `socket.ts` needs {@link attachRequest}, so a barrel in this
  * file would be `index -> socket -> index`, which `import/no-cycle` fails and

@@ -680,7 +680,7 @@ test('the attach address field refuses a public address, and writes nothing', as
   await field.blur();
 
   await expect(
-    page.getByText(/must be a loopback or tailnet address/i),
+    page.getByText(/connect through relay/i),
   ).toBeVisible();
 
   /*

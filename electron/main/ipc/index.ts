@@ -4680,9 +4680,8 @@ export function registerIpcHandlers(
    * ## Validate, then switch, then write only on success (Ruling 19)
    *
    * `parseSetRemoteRequest` checks the payload's shape. `switchMode` checks
-   * the target — a plaintext socket carries this machine's device credential,
-   * so an unvalidated host is a credential handed to whoever answers — and
-   * only then dials. `setRemote` runs last, and only when the switch
+   * the target — direct attach stays on loopback, the local network or the
+   * tailnet (HIVE-428) — and only then dials. `setRemote` runs last, and only when the switch
    * succeeded.
    *
    * The order is the whole point. Writing first and being refused would leave

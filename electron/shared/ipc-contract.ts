@@ -2324,8 +2324,9 @@ export interface HiveBridge {
      * {@link SetRemoteResult} rather than a bare snapshot (HIVE-144): a
      * listening socket cannot be moved without a relaunch, but *attaching*
      * applies immediately. So this verb also performs the switch, and the
-     * switch can be refused — while local sessions are live, over a plaintext
-     * target, or because the far machine did not answer. `switched` is what
+     * switch can be refused — while local sessions are live, over an address
+     * direct attach does not dial, because the server predates the encrypted
+     * channel, or because the far machine did not answer. `switched` is what
      * happened; `config` is the file as it now stands, which is the old one
      * untouched whenever `switched` is not `ok` (Ruling 19).
      */

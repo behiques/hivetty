@@ -34,7 +34,7 @@ import {
   CLIENT_ATTACH_TIMEOUT_MS,
   PRE_SUBSCRIBE_BUFFER,
   PairingRefusedError,
-  PlaintextRefusedError,
+  AddressRefusedError,
   RemoteCallError,
   ServerTooOldError,
   classifyCause,
@@ -298,14 +298,14 @@ async function realServer(): Promise<{ port: number; connections: () => number }
 }
 
 describe('connectRemote — the string fence', () => {
-  it('refuses a plaintext socket to a non-tailnet address before connecting', async () => {
+  it('refuses a public address before connecting, pointing at the relay (HIVE-428)', async () => {
     const { promise, ctor } = dial({ host: '203.0.113.7' });
 
     // The point is that no socket is opened at all — asserted before the await,
     // so a fence that stopped running fails here rather than as a five-second
     // timeout on a promise nothing will ever settle.
     expect(ctor).not.toHaveBeenCalled();
-    await expect(promise).rejects.toBeInstanceOf(PlaintextRefusedError);
+    await expect(promise).rejects.toBeInstanceOf(AddressRefusedError);
   });
 
   /**
@@ -326,7 +326,7 @@ describe('connectRemote — the string fence', () => {
    */
   it('refuses an address one below the tailnet range and accepts the first one inside it', async () => {
     const below = dial({ host: '100.63.255.255' });
-    await expect(below.promise).rejects.toBeInstanceOf(PlaintextRefusedError);
+    await expect(below.promise).rejects.toBeInstanceOf(AddressRefusedError);
     expect(below.ctor).not.toHaveBeenCalled();
 
     const inside = dial({ host: '100.64.0.1' });
@@ -363,7 +363,7 @@ describe('connectRemote — the resolved-address fence', () => {
       resolveAddress: resolverAnswering('203.0.113.7'),
     });
 
-    await expect(attempt).rejects.toBeInstanceOf(PlaintextRefusedError);
+    await expect(attempt).rejects.toBeInstanceOf(AddressRefusedError);
     await expect(attempt).rejects.toThrow('203.0.113.7');
     expect(connections()).toBe(0);
   });
@@ -399,7 +399,7 @@ describe('connectRemote — the resolved-address fence', () => {
     expect(graded('100.127.255.255')).toEqual({ error: null, resolved: '100.127.255.255' });
 
     const outside = graded('100.128.0.0');
-    expect(outside.error).toBeInstanceOf(PlaintextRefusedError);
+    expect(outside.error).toBeInstanceOf(AddressRefusedError);
     expect(outside.error?.message).toContain('100.128.0.0');
 
     // The `all: true` shape `dns.lookup` uses when no family is pinned reaches
@@ -408,7 +408,7 @@ describe('connectRemote — the resolved-address fence', () => {
       error: null,
       resolved: [{ address: '100.64.0.5', family: 4 }],
     });
-    expect(graded('203.0.113.7', { all: true }).error).toBeInstanceOf(PlaintextRefusedError);
+    expect(graded('203.0.113.7', { all: true }).error).toBeInstanceOf(AddressRefusedError);
   });
 
   it('refuses a .local name whose answer is public, and passes one whose answer is on the LAN (HIVE-428)', () => {
@@ -458,7 +458,7 @@ describe('connectRemote — the resolved-address fence', () => {
     }) as unknown as Parameters<LookupFunction>[2]);
 
     expect(answers).toHaveLength(1);
-    expect(answers[0].error).toBeInstanceOf(PlaintextRefusedError);
+    expect(answers[0].error).toBeInstanceOf(AddressRefusedError);
   });
 
   it('pins the lookup to IPv4 so every answer it grades is a dotted quad', () => {
@@ -699,8 +699,8 @@ describe('connectRemote — the attach deadline', () => {
 
   /**
    * The failure has to read as `connect-failed` in the pane, which is what
-   * `outcomeFor` in `router.ts` makes of any non-`PlaintextRefusedError` — so
-   * this must not be a `PlaintextRefusedError`, and it must carry a sentence
+   * `outcomeFor` in `router.ts` makes of any non-`AddressRefusedError` — so
+   * this must not be a `AddressRefusedError`, and it must carry a sentence
    * worth showing.
    */
   it('fails with an ordinary error naming the address and the budget', async () => {
@@ -710,7 +710,7 @@ describe('connectRemote — the attach deadline', () => {
 
     await vi.advanceTimersByTimeAsync(CLIENT_ATTACH_TIMEOUT_MS);
 
-    await expect(promise).rejects.not.toBeInstanceOf(PlaintextRefusedError);
+    await expect(promise).rejects.not.toBeInstanceOf(AddressRefusedError);
     await expect(promise).rejects.toThrow(/100\.64\.1\.2:7433/);
     await expect(promise).rejects.toThrow(new RegExp(String(CLIENT_ATTACH_TIMEOUT_MS)));
   });
@@ -1244,9 +1244,9 @@ describe('classifyCause', () => {
       claimed it was reconnecting — the address is wrong, and no amount of
       waiting changes an address.
     */
-    expect(classifyCause(new PlaintextRefusedError('nope'))).toMatchObject({
+    expect(classifyCause(new AddressRefusedError('nope'))).toMatchObject({
       kind: 'terminal',
-      code: 'plaintext-refused',
+      code: 'address-refused',
     });
   });
 

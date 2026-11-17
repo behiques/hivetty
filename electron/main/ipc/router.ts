@@ -4,7 +4,8 @@ import { isRemoteTarget, type SwitchOutcome } from '@shared/config-contract';
 import { CH, type AppInfo, type RemoteLinkStatus } from '@shared/ipc-contract';
 
 import {
-  PlaintextRefusedError,
+  AddressRefusedError,
+  ServerTooOldError,
   connectRemote,
   type ConnectRemoteDeps,
   type RemoteClient,
@@ -457,10 +458,12 @@ function configuredTarget(): { host: string; port: number } {
 /**
  * Which arm of {@link SwitchOutcome} a failed dial lands on.
  *
- * `PlaintextRefusedError` — from either of `connectRemote`'s two fences, the
+ * `AddressRefusedError` — from either of `connectRemote`'s two fences, the
  * host string and the address DNS actually returned — is the one failure whose
- * remedy is "fix the address, or bring the tailnet up", and the settings pane
- * says that beside the address field. Everything else is `connect-failed`:
+ * remedy is "fix the address, or connect through relay", and the settings pane
+ * says that beside the address field. `ServerTooOldError` (HIVE-428) is the
+ * other with its own arm: the server predates the encrypted channel, and the
+ * remedy is updating it, which no message from that server could say. Everything else is `connect-failed`:
  * `AttachRefusedError` (the server refused the handshake — a revoked
  * credential, a protocol mismatch), `AttachFrameTooLargeError` (a `resumeFrom`
  * that outgrew `ATTACH_FRAME_MAX_BYTES`, which this client refuses to send
@@ -468,10 +471,11 @@ function configuredTarget(): { host: string; port: number } {
  * credential), and the ordinary transport failures — `ECONNREFUSED`, a
  * handshake timeout, a socket closed mid-attach. Those three have three
  * different remedies and no useful shared code, which is exactly why this arm
- * carries the message and `plaintext-refused` does not.
+ * carries the message and `address-refused` does not.
  */
 function outcomeFor(cause: unknown): SwitchOutcome {
-  if (cause instanceof PlaintextRefusedError) return { ok: false, reason: 'plaintext-refused' };
+  if (cause instanceof AddressRefusedError) return { ok: false, reason: 'address-refused' };
+  if (cause instanceof ServerTooOldError) return { ok: false, reason: 'server-too-old' };
   return {
     ok: false,
     reason: 'connect-failed',
@@ -623,10 +627,10 @@ export async function switchIpcMode(
     same predicate itself and would refuse anyway — but by then this function
     has already unbound the local surface, and a refusal is supposed to cost
     nothing. This is also the check that keeps `config:set-remote` from
-    dialling an address it has not validated: the socket is plaintext, so a
-    wrong host is a device credential handed to whoever answers.
+    dialling an address it has not validated: direct attach stays on a
+    private network, and the relay is the only route off one (HIVE-428).
   */
-  if (!isRemoteTarget(target.host)) return { ok: false, reason: 'plaintext-refused' };
+  if (!isRemoteTarget(target.host)) return { ok: false, reason: 'address-refused' };
 
   // Step 2.
   unbindEverything();

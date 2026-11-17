@@ -88,9 +88,10 @@ const GRANT =
 const SWITCH_DESCRIPTION = `${GRANT} Takes effect at next launch.`;
 
 const BIND_HINT =
-  'Where this Hive listens for a paired device — a hostname or an IPv4 address reachable from the other side, such as a Tailscale address.';
-const BIND_INVALID = 'A hostname or an IPv4 address only — no scheme, port or path.';
-const BIND_WILDCARD = `${WILDCARD_BIND} binds every interface on this machine. Name the address a device actually reaches instead — your Tailscale address is usually right.`;
+  'Where this Hive listens for a paired device: loopback, an address on your local network (such as 192.168.1.20 or mini.local), or a Tailscale address. A device elsewhere connects through the relay.';
+const BIND_INVALID =
+  'Loopback, a local network address or a Tailscale address only — never a public address, and no scheme, port or path.';
+const BIND_WILDCARD = `${WILDCARD_BIND} binds every interface on this machine. Name the address a device actually reaches instead — your local network or Tailscale address.`;
 const PORT_HINT = `Leave empty for the default (${DEFAULT_SERVER.bind.port}). Fixed, not OS-assigned — a paired device has to be told this number ahead of time.`;
 const PORT_INVALID = 'A port from 1 to 65535, or empty for the default. 0 asks the OS for a free port, which a paired device could never be told in advance.';
 const ORIGINS_HINT =
@@ -112,16 +113,20 @@ const ORIGINS_INVALID = 'Each entry is a scheme and a host, as in https://exampl
 const ATTACH_GRANT = "Drive another machine's sessions from this one.";
 const ATTACH_SWITCH_DESCRIPTION = `${ATTACH_GRANT} Applies immediately.`;
 const ATTACH_HOST_HINT =
-  'A loopback address, or a Tailscale address on this tailnet — a MagicDNS name or a 100.64.0.0/10 address.';
+  'A loopback address, an address on your local network (192.168.x.x, 10.x.x.x or a .local name), or a Tailscale address — a MagicDNS name or a 100.64.0.0/10 address.';
 /**
  * Shared by two refusals with the identical remedy (matching
  * `isRemoteTarget`'s own "one class, two messages" reasoning): a shape this
- * client can reject on sight, and `plaintext-refused` — the server's own
- * refusal for a `.ts.net` name that resolved to something that is not, which
- * this predicate cannot see without a DNS lookup this renderer never makes.
+ * client can reject on sight, and `address-refused` — the client's own
+ * refusal for a private name that resolved to a public address, which this
+ * predicate cannot see without a DNS lookup this renderer never makes
+ * (HIVE-428).
  */
 const ATTACH_HOST_INVALID =
-  'Must be a loopback or tailnet address. A plaintext socket to anything else is refused.';
+  'Must be loopback, on your local network, or a Tailscale address. To reach a server anywhere else, use Connect through relay.';
+/** An attach refused because the server predates the encrypted channel (HIVE-428). */
+const SERVER_TOO_OLD =
+  'The server is on an older HiveTTY that does not speak the encrypted channel. Update the server.';
 const ATTACH_PORT_HINT = `The port the server is listening on (default ${DEFAULT_REMOTE.port}).`;
 const ATTACH_PORT_INVALID = 'A port from 1 to 65535.';
 /**
@@ -615,10 +620,10 @@ export function ServerModeGroup({
    * check only, the same boundary {@link isRemoteTarget} draws. It cannot see
    * a `.ts.net` name that resolves off-tailnet (that needs the DNS lookup
    * `connectRemote` does on the real attach attempt, which is what
-   * `plaintext-refused` from {@link switchResult} reports instead), but it
+   * `address-refused` from {@link switchResult} reports instead), but it
    * does stop the address field from ever writing something that is
-   * obviously not loopback or tailnet — a bare hostname, an IPv4 literal
-   * outside both ranges, anything with a scheme or a port baked in.
+   * obviously not loopback, LAN or tailnet — a bare hostname, a public IPv4
+   * literal, anything with a scheme or a port baked in.
    */
   const commitRemoteHost = () => {
     const next = remoteHostDraft.trim();
@@ -1094,7 +1099,7 @@ export function ServerModeGroup({
                 if (switchResult) setSwitchResult(null);
               }}
               onCommit={commitRemoteHost}
-              // `plaintext-refused` no longer forks this hint (Fix round 1,
+              // `address-refused` no longer forks this hint (Fix round 1,
               // item 5) — it gets its own bordered banner below, at the same
               // weight `live-sessions` renders at, rather than hiding inside
               // the ordinary field hint every ordinary validation failure
@@ -1228,7 +1233,7 @@ export function ServerModeGroup({
             ) : null}
 
             {/*
-              Fix round 1, item 5 (Minor, M2). `plaintext-refused` used to land
+              Fix round 1, item 5 (Minor, M2). `address-refused` used to land
               only as a hint-text swap beneath the address field, still showing
               a client-side-valid address — the weakest-rendered of the four
               arms, on the exact mistake (a public address) this whole fence
@@ -1236,10 +1241,22 @@ export function ServerModeGroup({
               `live-sessions` does, not merely the ordinary field hint every
               other validation failure in this file uses.
             */}
-            {switchResult && !switchResult.ok && switchResult.reason === 'plaintext-refused' ? (
+            {switchResult && !switchResult.ok && switchResult.reason === 'address-refused' ? (
               <div className="flex items-start gap-2 rounded-md border border-red bg-red-soft px-3 py-2.5">
                 <WarningCircle size={14} className="mt-px shrink-0 text-red" />
                 <p className="text-ui-sm text-ink">{ATTACH_HOST_INVALID}</p>
+              </div>
+            ) : null}
+
+            {/*
+              HIVE-428: a server from before the encrypted channel. Its own
+              banner, at the same weight, because the remedy is on the other
+              machine and is never "pair again", whatever that server said.
+            */}
+            {switchResult && !switchResult.ok && switchResult.reason === 'server-too-old' ? (
+              <div className="flex items-start gap-2 rounded-md border border-red bg-red-soft px-3 py-2.5">
+                <WarningCircle size={14} className="mt-px shrink-0 text-red" />
+                <p className="text-ui-sm text-ink">{SERVER_TOO_OLD}</p>
               </div>
             ) : null}
 

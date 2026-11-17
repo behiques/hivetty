@@ -1041,7 +1041,7 @@ export function isHostAlias(value: unknown): value is string {
  * That was inert while this predicate only classified a *bind* address — a
  * nonsense host was refused by the OS at bind time either way. HIVE-144 gave it
  * a second job through {@link isRemoteTarget}, where it decides what this app
- * will **dial with a device credential over a plaintext socket**, and a loose
+ * will **dial with a device credential**, and a loose
  * octet there is the exfiltration path `TAILNET_V4` documents: a typo plus a
  * `search` suffix plus a resolver that hijacks NXDOMAIN sends the credential to
  * an arbitrary public address, with this predicate having called it loopback.
@@ -2211,9 +2211,10 @@ export interface SetRemoteRequest {
  *   sessions this window is running. {@link sessions} names them so the pane
  *   can list them rather than saying "some are live"; the order is the order
  *   they were opened.
- * - `plaintext-refused` — the address is neither loopback nor a tailnet
- *   address, or a `.ts.net` name resolved to something that is not. One arm
- *   for both fences, matching `PlaintextRefusedError`'s own "one class, two
+ * - `address-refused` (HIVE-428) — the address is
+ *   not loopback, on the local network, or a Tailscale address, or a private
+ *   name resolved to something that is not. One arm
+ *   for both fences, matching `AddressRefusedError`'s own "one class, two
  *   messages" reasoning: the remedy is the same sentence either way, and it
  *   belongs in the pane's hint beside the address field rather than in a code
  *   this union asks a caller to branch on.
@@ -2226,7 +2227,9 @@ export interface SetRemoteRequest {
 export type SwitchOutcome =
   | { ok: true }
   | { ok: false; reason: 'live-sessions'; sessions: readonly string[] }
-  | { ok: false; reason: 'plaintext-refused' }
+  | { ok: false; reason: 'address-refused' }
+  /** The server predates the encrypted channel (HIVE-428): update the server, never pair again. */
+  | { ok: false; reason: 'server-too-old' }
   | { ok: false; reason: 'connect-failed'; message: string };
 
 /**

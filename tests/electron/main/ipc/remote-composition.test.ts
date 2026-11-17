@@ -457,7 +457,7 @@ const {
 const { remoteProxyBindingsSize, resetRemoteProxy } = await import(
   '../../../../electron/main/ipc/remote-proxy'
 );
-const { PlaintextRefusedError } = await import('../../../../electron/remote-client/socket');
+const { AddressRefusedError, ServerTooOldError } = await import('../../../../electron/remote-client/socket');
 const { BACKOFF_MS } = await import('../../../../electron/main/ipc/reattach');
 const { attachedResumeTracker, attachedServerName, dialNowAttached, registerIpc, switchIpcMode } = await import(
   '../../../../electron/main/ipc/router'
@@ -1317,7 +1317,7 @@ describe('the mode switch (HIVE-144)', () => {
       opts({ target: { host: '203.0.113.7', port: 7433 }, connect }),
     );
 
-    expect(outcome).toEqual({ ok: false, reason: 'plaintext-refused' });
+    expect(outcome).toEqual({ ok: false, reason: 'address-refused' });
     /*
       Never dialled. A refusal that cost a TCP connection has already told
       whoever holds that address that this machine is here and looking for a
@@ -1353,22 +1353,38 @@ describe('the mode switch (HIVE-144)', () => {
    * `connectRemote`'s second fence: the host is a legitimate `.ts.net` string,
    * and the resolver answered with an address that is not a tailnet one. It
    * cannot be caught before the dial — the string is genuinely fine — so it
-   * arrives as a rejection, and it must still read as `plaintext-refused`
+   * arrives as a rejection, and it must still read as `address-refused`
    * rather than as a generic failure, because the remedy is the address field
    * and the tailnet, not a retry.
    */
-  it('reports a refusal the resolver made as plaintext-refused, and rebinds local', async () => {
+  it('reports a refusal the resolver made as address-refused, and rebinds local', async () => {
     const local = boundLocally();
 
     const outcome = await switchIpcMode(
       'remote',
       opts({
         target: { host: 'mini.tail1234.ts.net', port: 7433 },
-        connect: () => Promise.reject(new PlaintextRefusedError('it resolved to 203.0.113.7')),
+        connect: () => Promise.reject(new AddressRefusedError('it resolved to 203.0.113.7')),
       }),
     );
 
-    expect(outcome).toEqual({ ok: false, reason: 'plaintext-refused' });
+    expect(outcome).toEqual({ ok: false, reason: 'address-refused' });
+    expect(ipcBindingsSize()).toBe(local);
+    expect(remoteProxyBindingsSize()).toBe(0);
+  });
+
+  it('reports a server from before the encrypted channel as server-too-old, and rebinds local (HIVE-428)', async () => {
+    const local = boundLocally();
+
+    const outcome = await switchIpcMode(
+      'remote',
+      opts({
+        target: { host: 'mini.tail1234.ts.net', port: 7433 },
+        connect: () => Promise.reject(new ServerTooOldError('The server is on an older HiveTTY.')),
+      }),
+    );
+
+    expect(outcome).toEqual({ ok: false, reason: 'server-too-old' });
     expect(ipcBindingsSize()).toBe(local);
     expect(remoteProxyBindingsSize()).toBe(0);
   });

@@ -38,26 +38,26 @@ import { attachRequest } from './index';
  * It knows nothing about sessions, the store, or what any channel means — it
  * moves frames. `electron/main/**`'s router is what gives them meaning.
  *
- * ## The two fences, and why one of them is not enough
+ * ## The channel, and the two fences
  *
- * There is no TLS in this story. The device credential
- * (`electron/remote-client/token-store.ts`) crosses this socket in the clear,
- * so the socket's confidentiality is entirely whatever network it crosses —
- * which makes "what will this app dial?" a security decision rather than a
- * convenience check. Two guards answer it, and they fail closed independently:
+ * Every attach runs inside an end-to-end encrypted channel (HIVE-428,
+ * `electron/remote-channel/`): a Noise NNpsk0 handshake keyed by a fresh
+ * X25519 exchange and the device's pairing secret, then AES-256-GCM on every
+ * frame. The device credential (`electron/remote-client/token-store.ts`) only
+ * ever crosses inside it, and a peer that does not hold the pairing secret
+ * cannot complete the handshake.
+ *
+ * The fences now keep a direct dial on a private network; the relay is the
+ * only route off one. They fail closed independently:
  *
  * 1. **The string.** {@link isRemoteTarget} on `host`, before a socket object
- *    exists at all. Loopback never leaves the machine; a Tailscale address
- *    never leaves Tailscale's own WireGuard mesh. Anything else is a route
- *    across the open internet.
+ *    exists at all: loopback, the local network, or a Tailscale address.
  *
- * 2. **The resolved address.** A MagicDNS name such as `mini.tail1234.ts.net`
- *    satisfies (1) as a *string*, and is then handed to whatever resolver the
- *    OS has. If Tailscale is not up — a laptop on a café network, a tailnet
- *    that has not come back after a sleep — an attacker who controls local DNS
- *    answers that name with their own address and is handed the credential.
+ * 2. **The resolved address.** A name such as `mini.local` or
+ *    `mini.tail1234.ts.net` satisfies (1) as a *string*, and is then handed to
+ *    whatever resolver the OS has, which can answer it with a public address.
  *    **No string-level predicate can see that**, because the string is genuinely
- *    a `.ts.net` name; the address behind it is the thing that changed. So a
+ *    a private name; the address behind it is the thing that changed. So a
  *    custom `lookup` is passed down to `net.createConnection` and re-runs the
  *    same predicate on the address DNS actually returned, refusing before the
  *    TCP connection is made.
@@ -119,18 +119,18 @@ import { attachRequest } from './index';
 export const CLIENT_ATTACH_TIMEOUT_MS = 10_000;
 
 /**
- * A plaintext socket this app will not open, from either fence.
+ * An address a direct attach will not dial, from either fence (HIVE-428).
  *
  * One class, two messages, deliberately: the caller's remedy is the same —
- * check the address, bring the tailnet up — and the distinction between "the
- * name is wrong" and "the name resolved somewhere wrong" belongs in the
- * sentence a human reads, not in a code a `catch` branches on. The messages
- * are distinguishable, and the tests assert on them.
+ * check the address, or reach the server through the relay — and the
+ * distinction between "the name is wrong" and "the name resolved somewhere
+ * wrong" belongs in the sentence a human reads, not in a code a `catch`
+ * branches on. The messages are distinguishable, and the tests assert on them.
  */
-export class PlaintextRefusedError extends Error {
+export class AddressRefusedError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'PlaintextRefusedError';
+    this.name = 'AddressRefusedError';
   }
 }
 
@@ -229,7 +229,7 @@ export interface CloseCause {
   /**
    * The server's own refusal code where there is one (`unauthorized`,
    * `revoked`, `protocol-mismatch`), this side's where it refused first
-   * (`plaintext-refused`, `attach-frame-too-large`), or `transport`.
+   * (`address-refused`, `attach-frame-too-large`, `server-too-old`), or `transport`.
    */
   code: string;
   message: string;
@@ -250,8 +250,8 @@ export function classifyCause(cause: unknown): CloseCause {
   if (cause instanceof AttachRefusedError) {
     return { kind: 'terminal', code: cause.code, message: cause.message };
   }
-  if (cause instanceof PlaintextRefusedError) {
-    return { kind: 'terminal', code: 'plaintext-refused', message: cause.message };
+  if (cause instanceof AddressRefusedError) {
+    return { kind: 'terminal', code: 'address-refused', message: cause.message };
   }
   // The same cure as an `attach-refused: unauthorized`, so the same code and the same pane.
   if (cause instanceof PairingRefusedError) {
@@ -356,7 +356,7 @@ interface Pending {
 function fencedLookup(
   host: string,
   resolve: LookupFunction,
-  refuse: (cause: PlaintextRefusedError) => void,
+  refuse: (cause: AddressRefusedError) => void,
 ): LookupFunction {
   return (hostname, options, callback) => {
     /*
@@ -385,10 +385,11 @@ function fencedLookup(
       const answers = Array.isArray(address) ? address : [{ address, family: family ?? 4 }];
       const offending = answers.find((answer) => !isRemoteTarget(answer.address));
       if (offending !== undefined) {
-        const cause = new PlaintextRefusedError(
-          `Refusing to open a plaintext socket to "${host}": it resolved to ` +
-            `${offending.address}, which is neither loopback nor inside the ` +
-            `100.64.0.0/10 tailnet range. Bring Tailscale up, or check the address.`,
+        const cause = new AddressRefusedError(
+          `Refusing to attach directly to "${host}": it resolved to ` +
+            `${offending.address}, which is not loopback, on the local network, or a ` +
+            `Tailscale address. Check the address, or reach a server elsewhere with ` +
+            `"Connect through relay".`,
         );
         refuse(cause);
         callback(cause, '', 4);
@@ -435,16 +436,16 @@ export function connectRemote(deps: ConnectRemoteDeps): Promise<RemoteClient> {
   */
   if (!isRemoteTarget(host)) {
     return Promise.reject(
-      new PlaintextRefusedError(
-        `Refusing to open a plaintext socket to "${host}": it is neither ` +
-          `loopback nor a tailnet address, and this connection carries a device ` +
-          `credential in the clear.`,
+      new AddressRefusedError(
+        `Refusing to attach directly to "${host}": it is not loopback, on the ` +
+          `local network, or a Tailscale address. A server elsewhere is reached ` +
+          `with "Connect through relay".`,
       ),
     );
   }
 
   return new Promise<RemoteClient>((resolveConnection, rejectConnection) => {
-    let refusal: PlaintextRefusedError | null = null;
+    let refusal: AddressRefusedError | null = null;
 
     /*
       `lookup` is absent from `@types/ws`'s `ClientOptions`, which models the

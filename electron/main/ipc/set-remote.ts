@@ -105,7 +105,7 @@ export async function applySetRemote(
     attach so the next launch retries — which is exactly when the user is
     looking at these fields to fix the address. So an address or port **blur**
     called `switchIpcMode('remote')`: local IPC unbound, a socket dialled, no
-    "Attaching…" anywhere, and the outcome `void`ed, so `plaintext-refused`,
+    "Attaching…" anywhere, and the outcome `void`ed, so `address-refused`,
     `live-sessions` and `connect-failed` were all invisible. On success the
     window attached on a blur — the live connection behind a toggle that
     Ruling 27 put behind the Attach button precisely to prevent.
