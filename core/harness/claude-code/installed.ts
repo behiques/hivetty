@@ -1,11 +1,12 @@
 import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { SESSION_PLUGIN_NAME } from '@shared/config-contract';
 
 import { skillsUnder } from '../../skills/available';
 import type { HarnessInstalled } from '../port';
+
+import { claudeDir } from './claude-dir';
 
 /**
  * Claude Code's own configuration directory — **not** HiveTTY's.
@@ -26,8 +27,7 @@ import type { HarnessInstalled } from '../port';
  * and relocating that binary's own configuration directory is not something to
  * do to them in passing.
  */
-const claudeRoot = (): string =>
-  process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude');
+const claudeRoot = (): string => claudeDir();
 
 /** The user's own skills, which HiveTTY lists but does not manage. */
 const userSkillsRoot = (): string => join(claudeRoot(), 'skills');
