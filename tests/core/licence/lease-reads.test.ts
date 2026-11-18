@@ -16,6 +16,7 @@ const ALLOWED = new Set(
   ),
 );
 const NEEDLES = ['lease.jws', 'createLeaseFile', 'verifyLease'];
+const SCAN_ROOTS = ['core', 'shared', 'electron', 'src'];
 
 function* files(dir: string): Generator<string> {
   for (const name of readdirSync(dir)) {
@@ -27,7 +28,7 @@ function* files(dir: string): Generator<string> {
 
 describe('the lease has one reader', () => {
   it('no module outside the licence core names the lease file or its verifier', () => {
-    const offenders = [...files(join(ROOT, 'electron')), ...files(join(ROOT, 'src'))]
+    const offenders = SCAN_ROOTS.flatMap((root) => [...files(join(ROOT, root))])
       .map((path) => relative(ROOT, path))
       .filter((path) => !ALLOWED.has(path))
       .filter((path) => NEEDLES.some((needle) => readFileSync(join(ROOT, path), 'utf8').includes(needle)));
