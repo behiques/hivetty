@@ -80,6 +80,8 @@ LaunchDaemon, a process started at the login window, or one started over SSH
 before anyone logged in all hit exactly that. The design chose auto-login plus
 a LaunchAgent over writing a second secret store; if the server ever has to run
 as a true daemon (a Linux box, say), this is the decision to revisit first.
+`hivetty-server` did: it has its own store, see
+[The secret key](#the-secret-key).
 
 The paired-device tokens are not affected: the server stores only a SHA-256
 digest of each, in the config file, and needs no keychain to check one.
@@ -640,15 +642,55 @@ One process per folder and config: a second server on the same `HIVETTY_HOME`
 exits 1 and names the pid that holds it. With `HIVE_CONFIG_PATH` pointing two
 folders at one config, the second exits 1 without a pid.
 
+### The secret key
+
+There is no keychain on a server, so `hivetty-server` seals every credential it
+keeps with a key you give it (HIVE-424). Each credential file (`account.bin`,
+`cli-tokens.bin`, `jira-credential.bin`, `slack-tokens.bin`, `sync-key.bin`)
+stays its own file, sealed with AES-256-GCM. Paired-device tokens (digests in
+`config.json`) and `lease.jws` are not secrets and are not sealed.
+
+`node out/server/index.js --gen-key` prints a fresh key: 32 random bytes as 44
+base64 characters. 64 hex characters work too. Give it to the server one of two
+ways, read in this order:
+
+1. `HIVETTY_SECRET_KEY_FILE`: the path of a file that holds the key, such as a
+   mounted secret. Preferred.
+2. `HIVETTY_SECRET_KEY`: the key itself.
+
+- **A source that is set and unusable refuses.** An unreadable file, a file or
+  value that is not a key, or a key file inside the home folder exits 4 and
+  says why. It never falls through to the next source, which could hold a
+  different key.
+- **No key, no server.** Serving, `--login` and `--logout` exit 4 without one.
+  Nothing is ever stored unencrypted. `--pair`, `--devices`, `--revoke`,
+  `--health` and `--gen-key` need no key.
+- **The key file may not sit inside `HIVETTY_HOME`**, beside the data it
+  protects. The check compares resolved paths and does not follow symlinks.
+- **The variable leaves the process at boot.** `HIVETTY_SECRET_KEY` is deleted
+  from the server's environment before anything is spawned, so no child (`gh`,
+  `git`, a session, an agent) inherits it, and both variables are stripped from
+  every session's environment besides. On Linux, `/proc/<pid>/environ` still
+  shows the environment the process started with to any process running under
+  the same user. When agents run under the server's own user, as in local
+  development, use the key file.
+- **A wrong key reads as signed out.** A credential sealed with another key
+  cannot be opened. The server prints one line naming both key ids (never the
+  key) and goes on as if signed out. Start it with the key that sealed the
+  files, or sign in again.
+- **Rotating** means starting with a new key, then `--login` again and
+  re-entering the Jira and Slack tokens. There is no `--rotate-key` yet.
+
 ### Flags
 
 | Flag | What it does |
 | --- | --- |
-| *(none)* or `--server` | Serve. |
+| *(none)* or `--server` | Serve. Needs the secret key. |
 | `--pair "<name>"`, `--devices`, `--revoke "<name>"` | The same one-shots as the desktop, against the same `config.json`. |
 | `--health` | Exits 0 when the server in this folder is alive, else 1. Starts nothing. |
 | `--update` | Refused: *Update through your package manager or image tag.* |
-| `--login`, `--logout` | Refused until the server has a secret store (HIVE-424). |
+| `--login`, `--logout` | Sign in with a device code printed to stdout, and sign out. Need the secret key. |
+| `--gen-key` | Prints a fresh secret key. Starts nothing. |
 
 ### Exit codes
 
@@ -657,7 +699,8 @@ folders at one config, the second exits 1 without a pid.
 | 0 | A clean stop, or a one-shot that succeeded. |
 | 1 | The folder or the config is already served, a second SIGTERM or SIGINT forced the stop, or a one-shot failed or was used wrongly. |
 | 2 | `--update`, or a `--login` or `--logout` that failed with an error (the network, say). |
-| 3 | This edition is not part of the plan. `--login` and `--logout` also exit 3 today, refusing for want of a keychain. |
+| 3 | This edition is not part of the plan. |
+| 4 | No usable secret key: none set, or the one set is unreadable, malformed, or inside the home folder. |
 
 ### Stopping
 
@@ -688,7 +731,6 @@ serving, so attached clients see the lapse.
 | Missing | Ticket |
 | --- | --- |
 | Sessions: a spawn is refused (*The PTY host on the server arrives with HIVE-423.*) | HIVE-423 |
-| Sign-in, and every credential: there is no secret store, and nothing is ever stored unencrypted | HIVE-424 |
 | Linux tarballs and images | HIVE-425 |
 
 ## Troubleshooting
