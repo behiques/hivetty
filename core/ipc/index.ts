@@ -1982,7 +1982,7 @@ export function registerIpcHandlers(
    * status event should go. Handing it over unstarted keeps that knowledge in
    * one place instead of duplicating a registry lookup here.
    *
-   * `app.getPath('userData')` is the app's own directory. Nothing about this
+   * `platform().paths.stateDir` is the app's own directory. Nothing about this
    * touches `~/.claude`.
    */
   /**

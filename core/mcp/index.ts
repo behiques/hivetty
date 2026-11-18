@@ -48,7 +48,7 @@ export interface McpRuntime {
 }
 
 interface McpRuntimeOptions {
-  /** `app.getPath('userData')`, passed in so these tests need no Electron. */
+  /** The platform's `paths.stateDir`, passed in so these tests need no Electron. */
   userDataPath: string;
   /** How this shell starts `mcp-host.js`: the platform's `mcpLaunch` (HIVE-422). */
   launch: McpLaunch;

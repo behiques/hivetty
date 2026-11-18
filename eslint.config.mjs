@@ -9,8 +9,6 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
-/** Absolute path to this package, so zone globs do not depend on the cwd. */
-
 /** The folders that run with no Electron (HIVE-422): only `electron/` may import it. */
 const ELECTRON_FREE_DIRS = [
   './core/**/*',
@@ -24,6 +22,8 @@ const ELECTRON_FREE_DIRS = [
 
 const ELECTRON_FENCE_MESSAGE =
   'Only electron/ may import Electron. Shared code reaches the desktop through core/platform.';
+
+/** Absolute path to this package, so zone globs do not depend on the cwd. */
 const appRoot = fileURLToPath(new URL('.', import.meta.url)).replace(/\/$/, '');
 
 /**
