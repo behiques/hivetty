@@ -183,7 +183,7 @@ test('at the stage floor the session header and an arrival card stay inside the 
   }
 });
 
-test('at the stage floor a PR page’s ship track and run bar stay inside the stage (HIVE-226)', async ({}, testInfo) => {
+test('at the stage floor a PR page’s header does not overlap, and its ship track and run bar stay inside the stage (HIVE-226)', async ({}, testInfo) => {
   test.setTimeout(90_000);
   const configPath = testInfo.outputPath('hive-config.json');
   const stub = writeGhStub(testInfo.outputPath(''));
@@ -214,6 +214,20 @@ test('at the stage floor a PR page’s ship track and run bar stay inside the st
     await resizeTo(app, page, Math.ceil(STAGE_MIN + chrome));
     await expect.poll(() => width(page, 'main')).toBeLessThanOrEqual(STAGE_MIN + 2);
     await expect.poll(() => width(page, 'main')).toBeGreaterThanOrEqual(STAGE_MIN - 1);
+
+    // The header's row: the flap, the tabs and the two buttons sit side by side, none over the next.
+    const header = page.getByRole('main').locator('header').first();
+    const row = [
+      header.locator('h1 + span'),
+      header.getByRole('radiogroup', { name: 'Tab' }),
+      header.getByRole('button', { name: 'Details' }),
+      header.getByRole('link', { name: 'GitHub' }),
+    ];
+    const boxes = await Promise.all(row.map(rect));
+    for (let i = 1; i < boxes.length; i += 1) expect(boxes[i].left).toBeGreaterThanOrEqual(boxes[i - 1].right);
+    await expectInsideStage(page, row[3]);
+    // The title gives way first. 50px of it left is the room a four-digit number and `HATCHED 17:55` take.
+    expect(await width(page, 'main header h1')).toBeGreaterThanOrEqual(50);
 
     // The run bar is the Checks tab's; the track sits above every tab.
     await page.getByRole('main').getByRole('radio', { name: /^Checks/ }).click();

@@ -326,6 +326,19 @@ describe('drawComb', () => {
     expect(texts).not.toContain('the-hive-0'); // morphing session
   });
 
+  it('draws a tag small, and cuts a long name to 12, at scale', () => {
+    const { entities, projects } = heavy(HEAVY_COUNTS);
+    const long = 'release-notes-writer';
+    const { calls, texts } = draw(layoutComb([...entities, agent(long, 'summons')], projects));
+    expect(texts).toContain('release-not…');
+    expect(texts).not.toContain(long);
+    const at = calls.findIndex((c) => c.op === 'fillText' && c.args[0] === 'release-not…');
+    const font = calls.slice(0, at).findLast((c) => c.op === 'set:font')?.args[0];
+    expect(font).toMatch(/^600 8px /);
+    const box = calls.slice(0, at).findLast((c) => c.op === 'roundRect')?.args as number[];
+    expect(box[3]).toBe(12);
+  });
+
   it('draws Morphing tags under Summons and Failed tags at scale', () => {
     const l = layoutComb(heavy(HEAVY_COUNTS).entities, heavy(HEAVY_COUNTS).projects);
     const { texts } = draw(l);

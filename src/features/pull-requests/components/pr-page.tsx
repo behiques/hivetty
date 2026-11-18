@@ -36,12 +36,15 @@ import {
 } from '@stores/hive-store';
 import { usePrPageActions, usePrTab, type PrTab } from '@stores/ui-store';
 
-/** The tab strip; Files is HIVE-207's, Checks is HIVE-206's, Timeline is HIVE-208's. */
+/**
+ * The tab strip; Files is HIVE-207's, Checks is HIVE-206's, Timeline is HIVE-208's.
+ * Glyphs, not words: four words left the title no room on a narrow stage. The word is the tab's name and hint.
+ */
 export const PR_TABS = [
-  { value: 'conversation', label: 'Conversation' },
-  { value: 'files', label: 'Files' },
-  { value: 'checks', label: 'Checks' },
-  { value: 'timeline', label: 'Timeline' },
+  { value: 'conversation', label: 'Conversation', icon: 'ph-chat-circle-dots' },
+  { value: 'files', label: 'Files', icon: 'ph-file-code' },
+  { value: 'checks', label: 'Checks', icon: 'ph-check-circle' },
+  { value: 'timeline', label: 'Timeline', icon: 'ph-clock' },
 ] as const satisfies readonly SegmentedOption<PrTab>[];
 
 /** The open PR's detail re-reads once a minute while it is on stage; the first sweep is the open's read. */
@@ -153,10 +156,12 @@ export function PrPage({ row }: { row: HatcheryRow }) {
           href={pr.url}
           target="_blank"
           rel="noreferrer"
+          aria-label="GitHub"
           className="flex items-center gap-1.5 rounded-full border border-edge px-3 py-1 text-control font-semibold text-ink hover:bg-hover"
         >
           <GithubLogo size={13} aria-hidden />
-          GitHub
+          {/* Below 760px the logo alone: the word is the room a long flap needs before it spills onto the tabs. */}
+          <span className="hidden @min-[760px]:inline">GitHub</span>
         </a>
       </header>
       <ShipTrack pr={pr} />

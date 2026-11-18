@@ -610,7 +610,9 @@ pull request" while the sweep is not live.
   is keyed on the PR, so opening another is a new mount and a fresh read. A
   failed refresh keeps the last detail with the problem above it.
 - **`PR_TABS` is the tab list** (Conversation, Files, Checks, Timeline); a stored tab this
-  page does not have falls back to Conversation in the page, not in the store.
+  page does not have falls back to Conversation in the page, not in the store. Each is a
+  glyph, its word the name and the hint, so the title keeps its room on a narrow stage;
+  below 760px the GitHub button is its logo alone for the same reason.
 - **The ship track** is `bandStops()` over PR 1's `shipTrack`: the shipper's
   eight stops while it holds the PR, all eight ticked once merged after it ran,
   else the short Draft · Open · Review · Merge from GitHub's state.
