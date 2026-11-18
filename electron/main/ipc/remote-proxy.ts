@@ -11,6 +11,7 @@ import {
   payloadScopeFor,
   windowBoundReason,
 } from '@shared/remote-contract';
+import type { SetSyncGroupRequest, SyncedAppearance } from '@shared/sync-contract';
 
 import { RemoteCallError, type RemoteClient } from '../../remote-client/socket';
 import { ACCOUNT_CALLS, cloudSession, LICENCE_CALLS } from '../licence';
@@ -20,6 +21,7 @@ import { badgeDock, clearDockBadgeWithLastWindow } from '../notifications/dock-b
 import { createRemoteToasts, type RemoteToasts } from '../notifications/remote-toast';
 import { relayStatus } from '../relay';
 import { relayHostsFor } from '../relay/hosts';
+import { syncCalls } from '../sync';
 import { checkForUpdatesInteractively, updateStatus } from '../updates';
 
 
@@ -184,6 +186,18 @@ function localAnswerFor(
     /* HIVE-429. The servers of the account signed in here, not on the server. */
     case CH.relayHosts:
       return () => relayHostsFor(cloudSession());
+    /* HIVE-284. Settings sync is this machine's own: an attached window still reaches its own sync. */
+    case CH.syncStatus:
+    case CH.syncNow:
+    case CH.syncReset:
+    case CH.syncOpenConflicts:
+      return () => syncCalls()[channel]();
+    case CH.syncSetup:
+      return (passphrase: unknown) => syncCalls()[CH.syncSetup](passphrase as string);
+    case CH.syncSetGroup:
+      return (request: unknown) => syncCalls()[CH.syncSetGroup](request as SetSyncGroupRequest);
+    case CH.syncReportAppearance:
+      return (fields: unknown) => syncCalls()[CH.syncReportAppearance](fields as SyncedAppearance);
     default:
       return null;
   }

@@ -186,6 +186,7 @@ import {
   type SlackStatus,
   type SlackTokensState,
 } from '@shared/slack-contract';
+import type { SetSyncGroupRequest, SyncedAppearance } from '@shared/sync-contract';
 import type { UpdateStatus } from '@shared/update-contract';
 
 import {
@@ -360,6 +361,7 @@ import { createSkillsRuntime, type SkillsRuntime } from '../skills';
 import { readCliSkills } from '../skills/cli-skills';
 import { PLUGIN_DIR } from '../skills/paths';
 import { splashEnabled } from '../splash';
+import { onSyncAppearance, onSyncStatus, setSyncHooks, syncCalls } from '../sync';
 import {
   checkForUpdatesInteractively,
   setUpdateNotificationSink,
@@ -851,6 +853,8 @@ let stopSuspender: (() => void) | null = null;
 let stopHostLicence: (() => void) | null = null;
 /** HIVE-429: the `relay:status-changed` push's subscription, stopped beside the host licence's. */
 let stopRelayStatus: (() => void) | null = null;
+/** HIVE-284: the `sync:status-changed` and `sync:apply-appearance` pushes' subscriptions. */
+let stopSyncPushes: (() => void) | null = null;
 /**
  * The session history (HIVE-87), or `null` before registration.
  *
@@ -2072,6 +2076,21 @@ export function registerIpcHandlers(
   handle(CH.relayStatus, () => relayStatus());
   // HIVE-429: the servers of the account signed in here; bound local only, answered locally when attached.
   handle(CH.relayHosts, () => relayHostsFor(cloudSession()));
+  /*
+    HIVE-284: settings sync, every verb this machine's own; bound local only, answered locally when attached.
+    Each input is validated inside `syncCalls`, after the gate.
+  */
+  handle(CH.syncStatus, () => syncCalls()[CH.syncStatus]());
+  handle(CH.syncSetup, (_event, passphrase: unknown) => syncCalls()[CH.syncSetup](passphrase as string));
+  handle(CH.syncSetGroup, (_event, request: unknown) =>
+    syncCalls()[CH.syncSetGroup](request as SetSyncGroupRequest),
+  );
+  handle(CH.syncNow, () => syncCalls()[CH.syncNow]());
+  handle(CH.syncReset, () => syncCalls()[CH.syncReset]());
+  handle(CH.syncOpenConflicts, () => syncCalls()[CH.syncOpenConflicts]());
+  handle(CH.syncReportAppearance, (_event, fields: unknown) =>
+    syncCalls()[CH.syncReportAppearance](fields as SyncedAppearance),
+  );
   // HIVE-265: the gate's Quit. window.close() would leave the app running in the dock.
   handle(CH.appQuit, () => app.quit());
 
@@ -3626,6 +3645,22 @@ export function registerIpcHandlers(
   // HIVE-429: through `send`; the socket broadcaster holds it back, as a local-only event.
   stopRelayStatus?.();
   stopRelayStatus = onRelayStatus((status) => send(CH.relayStatusChanged, status));
+  // HIVE-284: through `send`; the socket broadcaster holds both back, as local-only events.
+  stopSyncPushes?.();
+  const stopSyncStatus = onSyncStatus((status) => send(CH.syncStatusChanged, status));
+  const stopSyncAppearance = onSyncAppearance((fields) => send(CH.syncApplyAppearance, fields));
+  stopSyncPushes = () => {
+    stopSyncStatus();
+    stopSyncAppearance();
+  };
+  // HIVE-284: what sync runs after it writes synced skills, agents or config keys, as Reload does.
+  setSyncHooks({
+    afterSkills: () => void skills?.sync(),
+    afterAgents: () => {
+      void refreshKnownAgents().then(() => fanOut.emit(CH.agentsChanged, undefined));
+    },
+    afterConfig: () => send(CH.configChanged, getConfig()),
+  });
 
   /*
     A wake, or a display coming back, is when Claude Code loses its size and
@@ -6053,6 +6088,8 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
   stopHostLicence = null;
   stopRelayStatus?.();
   stopRelayStatus = null;
+  stopSyncPushes?.();
+  stopSyncPushes = null;
   installSuspender(null);
   sessions?.dispose();
   sessions = null;

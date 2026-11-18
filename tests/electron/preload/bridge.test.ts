@@ -19,6 +19,7 @@ import {
   BRIDGE_PTY_KEYS,
   BRIDGE_REMOTE_KEYS,
   BRIDGE_RELAY_KEYS,
+  BRIDGE_SYNC_KEYS,
   BRIDGE_SERVER_KEYS,
   BRIDGE_SESSION_KEYS,
   BRIDGE_SHIPPED_KEYS,
@@ -120,6 +121,8 @@ const remote = () =>
   exposed.remote as Record<string, (...args: unknown[]) => unknown>;
 const relay = () =>
   exposed.relay as Record<string, (...args: unknown[]) => unknown>;
+const sync = () =>
+  exposed.sync as Record<string, (...args: unknown[]) => unknown>;
 const session = () =>
   exposed.session as Record<string, (...args: unknown[]) => unknown>;
 const ledger = () =>
@@ -156,6 +159,8 @@ describe('exposed surface', () => {
     expect(Object.keys(remote()).sort()).toEqual([...BRIDGE_REMOTE_KEYS].sort());
     // HIVE-429: this machine's relay status, a read and its push.
     expect(Object.keys(relay()).sort()).toEqual([...BRIDGE_RELAY_KEYS].sort());
+    // HIVE-284: settings sync, this machine's own.
+    expect(Object.keys(sync()).sort()).toEqual([...BRIDGE_SYNC_KEYS].sort());
     expect(Object.keys(shipped()).sort()).toEqual([...BRIDGE_SHIPPED_KEYS].sort());
     expect(Object.keys(integrations()).sort()).toEqual([
       ...BRIDGE_INTEGRATIONS_KEYS,
@@ -1065,6 +1070,31 @@ describe('the account verbs route to their channels (HIVE-264)', () => {
     (account().onChanged as (cb: unknown) => () => void)(callback);
     listeners.get(CH.accountChanged)?.[0]?.({}, { kind: 'signing-in' });
     expect(callback).toHaveBeenCalledWith({ kind: 'signing-in' });
+  });
+});
+
+describe('the settings sync verbs (HIVE-284)', () => {
+  it.each([
+    ['status', CH.syncStatus, []],
+    ['setup', CH.syncSetup, ['correct horse battery']],
+    ['setGroup', CH.syncSetGroup, [{ group: 'automation', on: false }]],
+    ['now', CH.syncNow, []],
+    ['reset', CH.syncReset, []],
+    ['openConflicts', CH.syncOpenConflicts, []],
+    ['reportAppearance', CH.syncReportAppearance, [{ density: 'compact' }]],
+  ] as const)('sync.%s invokes its channel with its argument', async (verb, channel, args) => {
+    await (sync()[verb] as (...a: unknown[]) => Promise<unknown>)(...args);
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(channel, ...args);
+  });
+
+  it.each([
+    ['onStatus', CH.syncStatusChanged, { kind: 'off', cloud: 'none', resetElsewhere: false }],
+    ['onApplyAppearance', CH.syncApplyAppearance, { density: 'compact' }],
+  ] as const)('sync.%s hands the pushed payload over, payload only', (verb, channel, payload) => {
+    const callback = vi.fn();
+    (sync()[verb] as (cb: unknown) => () => void)(callback);
+    listeners.get(channel)?.[0]?.({}, payload);
+    expect(callback).toHaveBeenCalledWith(payload);
   });
 });
 

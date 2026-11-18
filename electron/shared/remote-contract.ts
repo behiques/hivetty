@@ -105,8 +105,9 @@ import { isThisMachineAction } from './notification-contract';
  *   carried on the socket.
  * 46 → 47 (HIVE-429): `relay:hosts` (call, process-local); `RemoteConfig` and `SetRemoteRequest` gained `via` and
  *   `relayServerId`.
+ * 47 → 48 (HIVE-284): the nine `sync:*` channels, all this machine's own and never carried on the socket.
  */
-export const REMOTE_PROTOCOL_VERSION = 47;
+export const REMOTE_PROTOCOL_VERSION = 48;
 
 /**
  * What a frame is for.
@@ -309,6 +310,16 @@ export const FRAME_KIND = {
   [CH.relayStatus]: 'call',
   [CH.relayStatusChanged]: 'event',
   [CH.relayHosts]: 'call',
+  // HIVE-284: process-local and local-only, graded for the renderer as the relay's are.
+  [CH.syncStatus]: 'call',
+  [CH.syncStatusChanged]: 'event',
+  [CH.syncSetup]: 'call',
+  [CH.syncSetGroup]: 'call',
+  [CH.syncNow]: 'call',
+  [CH.syncReset]: 'call',
+  [CH.syncOpenConflicts]: 'call',
+  [CH.syncReportAppearance]: 'call',
+  [CH.syncApplyAppearance]: 'event',
   [CH.accountOrgs]: 'call',
   [CH.accountSwitchOrg]: 'call',
   [CH.accountBilling]: 'call',
@@ -660,6 +671,16 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.relayStatusChanged]: 'read',
   // HIVE-429: the servers of the account signed in here; a read, never answered by a server.
   [CH.relayHosts]: 'read',
+  // HIVE-284: reads of this machine's sync state and its pushes; every change is an execute, as account:* are.
+  [CH.syncStatus]: 'read',
+  [CH.syncStatusChanged]: 'read',
+  [CH.syncApplyAppearance]: 'read',
+  [CH.syncSetup]: 'execute',
+  [CH.syncSetGroup]: 'execute',
+  [CH.syncNow]: 'execute',
+  [CH.syncReset]: 'execute',
+  [CH.syncOpenConflicts]: 'execute',
+  [CH.syncReportAppearance]: 'execute',
   [CH.accountOrgs]: 'read',
   [CH.accountSwitchOrg]: 'execute',
   [CH.accountBilling]: 'read',
@@ -1058,6 +1079,20 @@ const PROCESS_LOCAL_REFUSALS = {
     'relay:status describes the machine you are sitting at, so it is answered there and never by a server.',
   [CH.relayHosts]:
     'relay:hosts lists the servers of the account signed in on the machine you are sitting at, so it is answered there and never by a server.',
+  [CH.syncStatus]:
+    'sync:status describes settings sync on the machine you are sitting at, so it is answered there and never by a server.',
+  [CH.syncSetup]:
+    'sync:setup takes the passphrase of the person at this machine, so it is answered there and never by a server.',
+  [CH.syncSetGroup]:
+    "sync:set-group switches what the machine you are sitting at syncs. A server refuses to change its own sync on a peer's say-so.",
+  [CH.syncNow]:
+    "sync:now runs the sync of the machine you are sitting at. A server refuses to run its own sync on a peer's say-so.",
+  [CH.syncReset]:
+    "sync:reset deletes the synced copy of the account signed in on the machine you are sitting at. A server refuses to reset its account's sync on a peer's say-so.",
+  [CH.syncOpenConflicts]:
+    'sync:open-conflicts opens a folder on the machine you are sitting at, so it is answered there and never by a server.',
+  [CH.syncReportAppearance]:
+    "sync:report-appearance carries this window's own appearance to its own machine's sync, so it is answered there and never by a server.",
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**
@@ -1099,6 +1134,9 @@ export const LOCAL_ONLY_EVENTS: readonly Channel[] = [
   CH.licenceChanged,
   // HIVE-429: a serving Mac that is also attached somewhere must not paint its relay state on a client.
   CH.relayStatusChanged,
+  // HIVE-284: a server's sync status, or its synced appearance, is never this machine's.
+  CH.syncStatusChanged,
+  CH.syncApplyAppearance,
 ];
 
 /** Whether `channel` is a push this process raises about itself. */

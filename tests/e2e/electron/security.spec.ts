@@ -93,6 +93,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     server: Object.keys(window.hive!.server).sort(),
     remote: Object.keys(window.hive!.remote).sort(),
     relay: Object.keys(window.hive!.relay).sort(),
+    sync: Object.keys(window.hive!.sync).sort(),
     updates: Object.keys(window.hive!.updates).sort(),
     ui: Object.keys(window.hive!.ui).sort(),
     cli: Object.keys(window.hive!.cli).sort(),
@@ -400,6 +401,8 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
       (`electron/shared/ipc-contract.ts`, the comment above `BRIDGE_KEYS`).
     */
     'slack',
+    // HIVE-284 adds `sync`: settings sync, this machine's own; every verb is process-local, asserted below.
+    'sync',
     'ui',
     'updates',
   ]);
@@ -479,6 +482,14 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
   expect(surface.remote).toEqual(['dialNow', 'forget', 'onLinkStatus', 'pair']);
   // HIVE-429: this machine's relay serving state, read and pushed; no payload, nothing to point anywhere.
   expect(surface.relay).toEqual(['hosts', 'onStatus', 'status']);
+  /*
+    HIVE-284: settings sync. `setup` takes the passphrase of the person at this machine and never returns it;
+    `openConflicts` takes no argument, so the page cannot name a path; `setGroup` and `reportAppearance` are
+    validated in main against fixed lists.
+  */
+  expect(surface.sync).toEqual([
+    'now', 'onApplyAppearance', 'onStatus', 'openConflicts', 'reportAppearance', 'reset', 'setGroup', 'setup', 'status',
+  ]);
   // HIVE-367: cliSkills lists the user's own CLI skills by name, read-only.
   expect(surface.skills).toEqual([
     'cliSkills',
