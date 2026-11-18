@@ -20,7 +20,8 @@ asks which CLI it has. Each CLI starts its own MCP host over stdio to reach the 
 HTTP from a container). The **licence** (`core/licence/`) signs in against the
 HiveTTY cloud and holds a signed, time-limited lease whose entitlements turn paid features on,
 Codex and Copilot among them; the renderer's gate covers the window until a lease is valid.
-`shared` is the only code both sides import. `core/` is the feature code both shells run; `electron/` is the desktop shell.
+`shared` is the only code both sides import. `core/` is the feature code both shells run: `electron/` is the desktop
+shell, and `server/` is `hivetty-server`, the same core booted by plain Node with no window ([Server mode](server-mode.md#the-server-edition)).
 Only `electron/` imports Electron: core reaches its shell through the platform port
 (`core/platform/`), and everything that needs a screen sits on the port's optional `desktop`
 member, so core registers every handler with or without an `ipcMain`.
@@ -82,12 +83,14 @@ electron/                the desktop shell
                          and platform.ts, the desktop's answer to core's platform port
   preload/               the bridge
   remote-client/         attach to a server (the laptop half)
+server/                  hivetty-server, the Node shell: the entry, boot, the server's platform,
+                         the edition gate, the heartbeat and signals; built to out/server/
 pty-host/                terminals
 mcp-host/                the hive MCP server
 remote-host/             server mode's listener (the server half)
 remote-channel/          the encrypted channel both halves attach through
 shared/                  contracts both sides import
-tests/                   mirrors src/, core/, shared/, electron/ and the child-process folders
+tests/                   mirrors src/, core/, shared/, electron/, server/ and the child-process folders
 ```
 
 ## The rules

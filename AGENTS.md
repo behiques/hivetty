@@ -18,7 +18,7 @@ terminal at the right moment.
 
 Current phase: terminals are **real PTYs**, projects come from a config file,
 tickets from **Jira**, PRs from `gh`, and notifications from each CLI's hooks
-(Claude Code, Codex and Copilot, behind the harness port).
+(Claude Code, Codex and Copilot, behind the harness port). `server/` is `hivetty-server`, the same core with no Electron (docs/server-mode.md).
 The session panel's Files tab is a **project explorer** over the active session's
 repository, opening files into a CodeMirror editor on the centre stage. Full
 context and scope: the **HIVE project in Jira**, the backlog.
@@ -44,7 +44,7 @@ This is **HiveTTY Pro**, a commercial, proprietary app by Behiques Consulting LL
 | `pnpm dev` | Vite dev server — the **browser** target (chrome only: no PTYs, no Jira, no config) |
 | `pnpm build` | Type-check, then production build of the browser target |
 | `pnpm desktop:dev` | electron-vite: the Electron app, renderer HMR included |
-| `pnpm desktop:build` | Type-check, then build `out/{main,preload,renderer}/` |
+| `pnpm desktop:build` · `server:build` · `test:server-edition` | Type-check, then build `out/{main,preload,renderer}/`; `server:build` builds `hivetty-server` into `out/server/` (Node, no Electron) and `test:server-edition` builds and boots it (`HIVE_SERVER_NODE` picks the Node) |
 | `pnpm desktop:preview` | Run the built Electron app |
 | `pnpm docs:shots` | Retake the guide screenshots from the built app (after `desktop:build`) |
 | `pnpm desktop:dist` · `release:smoke` | Package `.dmg` + `.zip` into `dist/` (macOS arm64); `:publish` uploads them. `release:smoke` packages into a temp folder, launches it once with a scratch profile, then kills it and removes the temp folder: run it before a tag |
