@@ -134,6 +134,44 @@ describe('applyMerge: files', () => {
     expect(deps.afterSkills).toHaveBeenCalledTimes(1);
   });
 
+  it('still deletes an unlisted file in a folder that was reset', async () => {
+    writeFileSync(manifest, JSON.stringify({ files: { 'skills/work-on/SKILL.md': sha256('shipped') }, parts: {} }));
+    write('skills/work-on/SKILL.md', 'edited');
+    write('skills/work-on/mine.md', 'mine');
+    await applyMerge(
+      makeDeps(),
+      result({ remove: ['automation:f:skills/work-on/SKILL.md', 'automation:f:skills/work-on/mine.md'] }),
+      {},
+    );
+    expect(existsSync(join(dir, 'skills/work-on/mine.md'))).toBe(false);
+  });
+
+  it('puts back an edited sibling the reset overwrote, as merged', async () => {
+    writeFileSync(
+      manifest,
+      JSON.stringify({ files: { 'skills/work-on/SKILL.md': sha256('shipped'), 'skills/work-on/refs/x.md': sha256('x') }, parts: {} }),
+    );
+    write('skills/work-on/SKILL.md', 'edited');
+    write('skills/work-on/refs/x.md', 'my edit');
+    const deps = makeDeps({
+      resetShipped: vi.fn(() => {
+        write('skills/work-on/SKILL.md', 'shipped');
+        write('skills/work-on/refs/x.md', 'x');
+        return Promise.resolve();
+      }),
+    });
+    await applyMerge(
+      deps,
+      result({
+        merged: { 'automation:f:skills/work-on/refs/x.md': file('my edit') },
+        remove: ['automation:f:skills/work-on/SKILL.md'],
+      }),
+      {},
+    );
+    expect(read('skills/work-on/SKILL.md')).toBe('shipped');
+    expect(read('skills/work-on/refs/x.md')).toBe('my edit');
+  });
+
   it('writes a set file for a reset folder after the reset', async () => {
     writeFileSync(manifest, JSON.stringify({ files: { 'skills/work-on/SKILL.md': sha256('shipped') }, parts: {} }));
     write('skills/work-on/SKILL.md', 'edited');
@@ -264,6 +302,24 @@ describe('applyMerge: conflicts', () => {
     expect(read('skills/review/SKILL.md')).toBe('mine');
   });
 
+  it('refuses to keep copies through a linked conflicts folder', async () => {
+    mkdirSync(join(dir, 'elsewhere'));
+    symlinkSync(join(dir, 'elsewhere'), join(dir, CONFLICTS_DIR));
+    write('skills/review/SKILL.md', 'mine');
+    await expect(
+      applyMerge(
+        makeDeps(),
+        result({
+          set: { 'automation:f:skills/review/SKILL.md': file('theirs') },
+          conflicts: { 'automation:f:skills/review/SKILL.md': file('mine') },
+        }),
+        {},
+      ),
+    ).rejects.toThrow();
+    expect(readdirSync(join(dir, 'elsewhere'))).toEqual([]);
+    expect(read('skills/review/SKILL.md')).toBe('mine');
+  });
+
   it('never keeps a losing file under a path outside the conflicts folder', async () => {
     await applyMerge(makeDeps(), result({ conflicts: { 'automation:f:../../escape': file('x') } }), {});
     expect(existsSync(join(dirname(dir), 'escape'))).toBe(false);
@@ -330,6 +386,7 @@ describe('conflictsSummary', () => {
     write(`${CONFLICTS_DIR}/2026-11-16T09-00-00.000Z/skills/a/SKILL.md`, 'a');
     write(`${CONFLICTS_DIR}/2026-11-16T09-00-00.000Z/settings.json`, JSON.stringify({ claudeCommand: 'c', 'jira.jql': 'q' }));
     write(`${CONFLICTS_DIR}/2026-11-17T10-20-30.456Z/skills/review/SKILL.md`, 'r');
+    write(`${CONFLICTS_DIR}/2026-11-17T10-20-30.456Z/.DS_Store`, 'x');
     write(`${CONFLICTS_DIR}/.DS_Store`, 'x');
     expect(await conflictsSummary(dir)).toEqual({
       count: 4,

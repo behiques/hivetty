@@ -74,6 +74,9 @@ const stampOf = (at: number): string => new Date(at).toISOString().replaceAll(':
  */
 async function keepConflicts(deps: ApplyDeps, conflicts: View, kept: Record<string, string>): Promise<Record<string, string>> {
   const next = { ...kept };
+  if (Object.entries(conflicts).every(([id, item]) => kept[id] === item.hash)) return next;
+  const top = await lstat(join(deps.hiveDir, CONFLICTS_DIR)).catch(() => null);
+  if (top !== null && !top.isDirectory()) throw new Error(`${CONFLICTS_DIR} is not a folder; nothing was overwritten`);
   const folder = join(deps.hiveDir, CONFLICTS_DIR, stampOf(deps.now()));
   const settings: Record<string, unknown> = {};
   for (const [id, item] of Object.entries(conflicts)) {
@@ -119,7 +122,7 @@ export async function applyMerge(
     const [root, name] = rel.split('/') as ['skills' | 'agents', string];
     touched.add(root);
     const folder = `${root}/${name}`;
-    if (reset.has(folder)) continue;
+    if (shipped[rel] !== undefined && reset.has(folder)) continue; // the reset already put it back
     if (shipped[rel] !== undefined) {
       // Another Mac went back to the shipped copy: this one restores its own build's, not nothing.
       const restored = await deps.resetShipped(root, name).then(
@@ -134,7 +137,15 @@ export async function applyMerge(
     await rm(full, { force: true });
     await pruneEmpty(dirname(full), resolve(deps.hiveDir, root));
   }
-  for (const [id, item] of Object.entries(result.set)) {
+  // A reset overwrites every shipped file in its folder, so the merged copy of each file there is written back
+  // too, not only what changed: "merged files as merged, everything else as shipped".
+  const writes: View = { ...result.set };
+  for (const [id, item] of Object.entries(result.merged)) {
+    const rel = FILE.exec(id)?.[1];
+    const folder = rel?.split('/').slice(0, 2).join('/');
+    if (folder !== undefined && reset.has(folder) && !Object.hasOwn(writes, id)) writes[id] = item;
+  }
+  for (const [id, item] of Object.entries(writes)) {
     const rel = FILE.exec(id)?.[1];
     if (rel === undefined || typeof item.data !== 'string') continue;
     const full = await landing(deps.hiveDir, rel);
@@ -169,7 +180,8 @@ const STAMP = /^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2}(?:\.\d+)?Z)$/;
 
 /** Entries in one conflicts folder: each file, except `settings.json`, which counts one per key it holds. */
 async function entriesOf(folder: string): Promise<string[]> {
-  const files = await walk(folder);
+  // Finder's `.DS_Store` and the like are not kept copies.
+  const files = (await walk(folder)).filter((file) => file.split('/').every((part) => !part.startsWith('.')));
   const entries = files.filter((file) => file !== SETTINGS_FILE);
   if (files.includes(SETTINGS_FILE)) {
     const parsed: unknown = await readFile(join(folder, SETTINGS_FILE), 'utf8')
