@@ -496,12 +496,14 @@ function drawCell(ctx: CanvasRenderingContext2D, c: CombCell, layout: CombLayout
 /** At scale a name shows only where it needs you, failed, or an agent is working, as a tag drawn over the comb. */
 function drawTag(ctx: CanvasRenderingContext2D, c: CombCell, R: number, p: SwarmPalette): void {
   const col = colourOf(p, c.state);
-  ctx.font = `600 10px ${SANS}`;
-  const tw = ctx.measureText(c.name).width + 10;
+  // Small and cut to 12: a long agent name must not cover the next cell. The hover card has the whole name.
+  const name = truncate(c.name, 12);
+  ctx.font = `600 8px ${SANS}`;
+  const tw = ctx.measureText(name).width + 6;
   const x0 = c.x + R * 0.55;
-  const y0 = c.y - R - 4;
+  const y0 = c.y - R - 2;
   ctx.beginPath();
-  ctx.roundRect(x0, y0, tw, 16, 4);
+  ctx.roundRect(x0, y0, tw, 12, 3);
   ctx.fillStyle = p.bg;
   withAlpha(ctx, 0.92, () => ctx.fill());
   ctx.strokeStyle = col;
@@ -509,7 +511,7 @@ function drawTag(ctx: CanvasRenderingContext2D, c: CombCell, R: number, p: Swarm
   withAlpha(ctx, 0.7, () => ctx.stroke());
   ctx.fillStyle = col;
   ctx.textAlign = 'left';
-  ctx.fillText(c.name, x0 + 5, y0 + 11.5);
+  ctx.fillText(name, x0 + 3, y0 + 9);
   ctx.textAlign = 'center';
 }
 

@@ -87,6 +87,16 @@ describe('PrPage', () => {
     expect(screen.getByText('GitHub said no.')).toBeInTheDocument();
   });
 
+  it('draws its tabs as glyphs, each still named by its word', () => {
+    render(<PrPage row={row} />);
+    const tabs = within(screen.getByRole('radiogroup', { name: 'Tab' })).getAllByRole('radio');
+    expect(tabs.map((tab) => tab.getAttribute('aria-label'))).toEqual(['Conversation', 'Files 9', 'Checks', 'Timeline']);
+    for (const tab of tabs) {
+      expect(tab).toHaveTextContent('');
+      expect(tab.querySelector('svg')).not.toBeNull();
+    }
+  });
+
   it('has a Files tab labelled with the changed-file count, and shows the tree on it (HIVE-207)', async () => {
     useHiveStore.setState({ loadPrDiff: vi.fn(() => Promise.resolve()) });
     render(<PrPage row={row} />);
@@ -152,7 +162,7 @@ describe('the Timeline tab (HIVE-208)', () => {
     useHiveStore.setState({ loadPrTimeline: vi.fn(() => Promise.resolve()) });
     render(<PrPage row={row} />);
     const tabs = within(screen.getByRole('radiogroup', { name: 'Tab' })).getAllByRole('radio');
-    expect(tabs.at(-1)?.textContent).toBe('Timeline');
+    expect(tabs.at(-1)).toHaveAccessibleName('Timeline');
     await userEvent.click(screen.getByRole('radio', { name: 'Timeline' }));
     expect(screen.getByRole('region', { name: 'Timeline' })).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Conversation' })).toBeNull();
