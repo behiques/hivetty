@@ -129,10 +129,14 @@ function headlessPlatform(): Platform {
 /** A recording `ipcMain`, keeping the handler each channel was bound to. */
 function recordingIpcMain() {
   const handlers = new Map<string, (event: unknown, payload: unknown) => unknown>();
+  const listeners = new Map<string, (event: unknown, payload: unknown) => void>();
   return {
     handlers,
+    listeners,
     ipcMain: {
-      on: vi.fn(),
+      on: vi.fn((channel: string, listener: (event: unknown, payload: unknown) => void) => {
+        listeners.set(channel, listener);
+      }),
       handle: vi.fn((channel: string, handler: (event: unknown, payload: unknown) => unknown) => {
         handlers.set(channel, handler);
       }),
@@ -204,5 +208,16 @@ describe('registration with a desktop (HIVE-422)', () => {
     const remote = captured.registry?.call(CH.appInfo);
     expect(remote).not.toBeNull();
     await expect(Promise.resolve(remote!(undefined, reporter))).resolves.toMatchObject({ version: '0.0.0' });
+  });
+
+  it('rejects a send from a subframe on the ipcMain path too', () => {
+    const fake = recordingIpcMain();
+    setPlatform(withDesktop(fake.ipcMain));
+    registerIpcHandlers();
+
+    const local = fake.listeners.get(CH.ptyWrite);
+    expect(local).toBeDefined();
+    const subframe = { senderFrame: { url: 'about:blank' }, sender: { mainFrame: { url: 'file:///x' }, on: () => undefined } };
+    expect(() => local!(subframe, { sessionId: 'x', data: 'y' })).toThrow(IpcSenderError);
   });
 });
