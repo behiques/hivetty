@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+import { LICENCE_LAPSED } from '../../core/agents/runs';
 import { CH, type Channel } from '../../shared/ipc-contract';
 import { REMOTE_PROTOCOL_VERSION, type ServerFrame } from '../../shared/remote-contract';
 import { claimsFor, makeSigner } from '../support/lease';
@@ -254,7 +255,7 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
     for (const root of homes.splice(0)) rmSync(root, { recursive: true, force: true });
   });
 
-  it('1: serves a lease with runners.byo, attaches encrypted, answers calls, stops on SIGTERM', async () => {
+  it('1 and 6: serves a lease with runners.byo, attaches encrypted, refuses a spawn in words and keeps answering, stops on SIGTERM', async () => {
     const home = await makeHome();
     const device = await pair(home);
     plantLease(home, ['runners.byo']);
@@ -269,8 +270,20 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
       expect(history.kind, JSON.stringify(history)).toBe('result');
       expect((history as { payload: unknown }).payload).toEqual([]);
 
+
+      // Case 6: the planted lease is lapsed, signed out, so the spawn is refused in the code's own words before the
+      // PTY host is tried, and the failed call leaves the server answering.
+      const spawned = await client.call(CH.ptySpawn, {
+        sessionId: 'sess-edition',
+        projectId: 'scratch',
+        cols: 80,
+        rows: 24,
+      });
+      expect(spawned.kind, JSON.stringify(spawned)).toBe('error');
+      expect((spawned as { message: string }).message).toBe(LICENCE_LAPSED);
       const again = await client.call(CH.sessionHistory, undefined);
-      expect(again.kind).toBe('result');
+      expect(again.kind, JSON.stringify(again)).toBe('result');
+      expect((again as { payload: unknown }).payload).toEqual([]);
     } finally {
       client.close();
     }
@@ -328,11 +341,11 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
   }, 60_000);
 
   /*
-    Case 6 cannot pass on this server yet: the only lease it can hold is lapsed (no sign-in until HIVE-424), and a
-    lapsed licence refuses `pty:spawn` ("HiveTTY Pro's licence has lapsed…") before the PTY host is ever forked, so
-    NO_PTY_HOST is never reached over the wire. `tests/server/platform.test.ts` proves the throw itself.
+    NO_PTY_HOST over the wire needs a licensed server, which needs sign-in (HIVE-424); a lapsed one refuses the spawn
+    before the PTY host is tried (case 6 above). It stops being true when the fork adapter lands (HIVE-423).
+    `tests/server/platform.test.ts` proves the throw itself.
   */
-  it.todo('6: a spawn is refused with NO_PTY_HOST and the server keeps answering (unreachable while lapsed; HIVE-423/424)');
+  it.todo('a spawn on a licensed server is refused with NO_PTY_HOST (needs HIVE-424; void once HIVE-423 lands)');
 
   it('5: nothing under out/server imports electron', () => {
     const offenders = filesUnder(join(ROOT, 'out/server')).filter((file) => {
