@@ -5,12 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as realWs from 'ws';
 import type { WebSocket } from 'ws';
 
-import { BACKOFF_MS } from '../../../electron/main/ipc/reattach';
 import { createRelayServe, SILENT_AFTER_MS, type RelayServeDeps } from '../../../core/relay/serve-loop';
 import { CHANNEL_TAG_BYTES } from '../../../remote-channel/secure-socket';
-import { CLIENT_ATTACH_TIMEOUT_MS } from '../../../electron/remote-client/socket';
 import { RELAY_PATH, incomingFrame, type RelayServeStatus } from '../../../shared/relay-contract';
-import { POST_ATTACH_FRAME_MAX_BYTES } from '../../../shared/remote-contract';
+import { BACKOFF_MS, CLIENT_ATTACH_TIMEOUT_MS, POST_ATTACH_FRAME_MAX_BYTES } from '../../../shared/remote-contract';
 
 vi.mock('ws', () => ({ WebSocket: vi.fn(function (this: object) { Object.assign(this, { on: vi.fn(), close: vi.fn() }); }) }));
 

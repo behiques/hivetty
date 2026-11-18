@@ -967,7 +967,7 @@ export function windowBoundReason(channel: string): string | null {
  * user's credential in place. HIVE-144 hid the button rather than fixing the
  * routing, which is a UI mitigation for an IPC defect and held only while
  * `src/` had exactly one caller. The bodies now live in
- * `core/ipc/remote-pairing.ts`, for the reason `config:set-remote`'s
+ * `electron/main/ipc/remote-pairing.ts` (moved from `core/` by HIVE-422), for the reason `config:set-remote`'s
  * live in `set-remote.ts`.
  *
  * **`CH.configGetRemote` joined as `CH.configSetRemote`'s read half
@@ -1452,7 +1452,7 @@ export const ATTACH_FRAME_MAX_BYTES = 8 * 1024;
 export const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000] as const;
 
 /**
- * How long {@link connectRemote} may spend getting from "no socket" to an
+ * How long `connectRemote` (`electron/remote-client/socket.ts`) may spend getting from "no socket" to an
  * `attach-accepted` frame before it gives up (HIVE-144 review, I5).
  *
  * **Nothing bounded this.** `ClientOptions` carried `family`, `lookup` and
@@ -1481,7 +1481,7 @@ export const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000] as const;
  *
  * Enforced twice, because the two halves fail differently. `handshakeTimeout`
  * is `ws`'s own and covers TCP connect plus the HTTP upgrade response — the
- * two cases above. The timer below covers what `ws` stops watching after the
+ * two cases above. The timer in `connectRemote` covers what `ws` stops watching after the
  * upgrade: a peer that speaks WebSocket, accepts the attach frame, and never
  * answers it.
  */

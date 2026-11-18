@@ -447,7 +447,6 @@ export function ipcBindingsSize(): number {
   return bindings.size();
 }
 
-
 /**
  * How `config:set-remote` asks this process to change mode (HIVE-144).
  *
@@ -4258,7 +4257,6 @@ export function registerIpcHandlers(
     }),
     (issue) => send(CH.jiraIssueChanged, issue),
   );
-
 
   /**
    * The PR poller's read — the app's second handler that executes a binary,

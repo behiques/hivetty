@@ -318,3 +318,25 @@ describe('the attach credential with no desktop (HIVE-422)', () => {
     });
   });
 });
+
+describe('the attach credential with a desktop (HIVE-422)', () => {
+  it("answers remote:pair, remote:forget and config:get-remote through the desktop's remotePairing", async () => {
+    const pair = vi.fn((_payload: unknown) => ({ paired: true as const }));
+    const forget = vi.fn();
+    setPlatform(withDesktop(recordingIpcMain().ipcMain, { remotePairing: { paired: () => true, pair, forget } }));
+    registerIpcHandlers();
+
+    const payload = { deviceId: 'laptop', token: 'sekret' };
+    await expect(Promise.resolve(captured.registry?.call(CH.remotePair)!(payload, reporter))).resolves.toEqual({
+      paired: true,
+    });
+    expect(pair).toHaveBeenCalledWith(payload);
+
+    captured.registry?.call(CH.remoteForget)!(undefined, reporter);
+    expect(forget).toHaveBeenCalledTimes(1);
+
+    await expect(Promise.resolve(captured.registry?.call(CH.configGetRemote)!(undefined, reporter))).resolves.toMatchObject({
+      paired: true,
+    });
+  });
+});
