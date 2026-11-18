@@ -21,6 +21,8 @@ export interface LicenceStateDeps {
 
 export interface LicenceStateMachine {
   state(): LicenceState;
+  /** The verified lease's `sub` while licensed or in grace, else null (HIVE-284: sync binds its key to it). */
+  subject(): string | null;
   onChange(listener: (state: LicenceState) => void): () => void;
   /** Read the stored lease, then renew. Idempotent. */
   start(): void;
@@ -214,6 +216,7 @@ export function createLicenceState(deps: LicenceStateDeps): LicenceStateMachine 
 
   return {
     state: () => current,
+    subject: () => ((current.kind === 'licensed' || current.kind === 'grace') && claims !== null ? claims.sub : null),
     onChange(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

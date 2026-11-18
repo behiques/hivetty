@@ -9,7 +9,7 @@ import type { HiveBridge } from '../../electron/shared/ipc-contract';
 
 export const BRIDGE_KEYS = [
   'account', 'agents', 'appInfo', 'appQuit', 'changedFiles', 'cli', 'config', 'fs', 'github', 'integrations', 'jira', 'ledger',
-  'licence', 'notifications', 'plans', 'pty', 'relay', 'remote', 'server', 'session', 'shipped', 'skills', 'slack', 'ui',
+  'licence', 'notifications', 'plans', 'pty', 'relay', 'remote', 'server', 'session', 'shipped', 'skills', 'slack', 'sync', 'ui',
   'updates',
 ] as const satisfies readonly (keyof HiveBridge)[];
 
@@ -105,6 +105,10 @@ export const BRIDGE_SERVER_KEYS = [
 ] as const satisfies readonly (keyof HiveBridge['server'])[];
 
 export const BRIDGE_RELAY_KEYS = ['status', 'onStatus', 'hosts'] as const satisfies readonly (keyof HiveBridge['relay'])[];
+
+export const BRIDGE_SYNC_KEYS = [
+  'status', 'onStatus', 'setup', 'setGroup', 'now', 'reset', 'openConflicts', 'reportAppearance', 'onApplyAppearance',
+] as const satisfies readonly (keyof HiveBridge['sync'])[];
 
 export const BRIDGE_REMOTE_KEYS = [
   'pair', 'forget', 'dialNow', 'onLinkStatus',

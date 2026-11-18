@@ -372,6 +372,32 @@ export function onConfigChange(listener: ConfigListener): () => void {
   };
 }
 
+/**
+ * The config file as JSON parsed it, unknown keys included, for settings sync to read its listed keys from
+ * (HIVE-284). Null when the file cannot be read or is not a JSON object. Nothing is cached or validated here:
+ * the allow-lists pick what they need, and a write goes back through {@link writeSyncedKeys}.
+ */
+export function readConfigDocument(): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(configPath(), 'utf8'));
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Settings sync's one write (HIVE-284): the mutation runs through `writeConfig`, so parsing and every
+ * validation still apply, and through {@link commit}, so config listeners hear it. Null when the write is
+ * refused, so the caller holds its merge base back and retries.
+ */
+export function writeSyncedKeys(mutate: Mutation): ConfigSnapshot | null {
+  const result = writeConfig(mutate);
+  return result.ok ? commit(result) : null;
+}
+
 /** Install a snapshot as the cache and tell every listener. A listener that throws never costs the write. */
 function install(next: ConfigSnapshot): ConfigSnapshot {
   const before = cached;

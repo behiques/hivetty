@@ -32,9 +32,17 @@ interface SecretFieldProps {
   onChange: (value: string) => void;
   /** Fired on Enter and on blur — the commit points, as in `TextField`. */
   onCommit?: () => void;
+  /** Fired on Enter only, never on blur: for an act, like turning sync on, that leaving the field must not do. */
+  onSubmit?: () => void;
   placeholder?: string;
   hint?: string;
   className?: string;
+  /** Marks the input `aria-invalid`, for an error shown beside it (HIVE-284). */
+  invalid?: boolean;
+  /** `off` by default; `new-password` where a password manager should offer to save what is typed (HIVE-284). */
+  autoComplete?: 'off' | 'new-password';
+  /** What the reveal toggle names: "Show the token" by default. */
+  secretName?: string;
 }
 
 export function SecretField({
@@ -42,9 +50,13 @@ export function SecretField({
   value,
   onChange,
   onCommit,
+  onSubmit,
   placeholder,
   hint,
   className,
+  invalid = false,
+  autoComplete = 'off',
+  secretName = 'token',
 }: SecretFieldProps) {
   const id = useId();
   const hintId = `${id}-hint`;
@@ -63,12 +75,13 @@ export function SecretField({
           value={value}
           placeholder={placeholder}
           aria-describedby={hint ? hintId : undefined}
+          aria-invalid={invalid || undefined}
           /**
            * A password manager offering to fill an Atlassian API token would
            * fill the wrong thing, and a spell-checker sends what it checks to
            * whoever wrote it.
            */
-          autoComplete="off"
+          autoComplete={autoComplete}
           spellCheck={false}
           onChange={(event) => onChange(event.target.value)}
           onBlur={onCommit}
@@ -76,6 +89,7 @@ export function SecretField({
             if (event.key === 'Enter') {
               event.preventDefault();
               onCommit?.();
+              onSubmit?.();
             }
             /**
              * Escape belongs to the settings overlay, not to this field — the
@@ -92,7 +106,7 @@ export function SecretField({
 
         <button
           type="button"
-          aria-label={revealed ? 'Hide the token' : 'Show the token'}
+          aria-label={revealed ? `Hide the ${secretName}` : `Show the ${secretName}`}
           onClick={() => setRevealed((current) => !current)}
           className={cn(
             'rounded-full border border-transparent p-1.5 text-subtle',

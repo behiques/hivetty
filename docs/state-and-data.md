@@ -350,6 +350,19 @@ keys (`CLASSIC_KEYS`) on the way up from v3 (HIVE-213), because `merge` spreads
 the stored object over the defaults and a stale key would otherwise ride into live
 state. Every other key is carried across untouched.
 
+**What settings sync shares (HIVE-284).** Eleven of these fields travel to the person's other Macs:
+`theme`, `themes`, `activeThemeId`, `density`, `terminalFont`, `terminalFontSize`, `editorFont`,
+`editorFontSize`, `editorWordWrap`, `editorLineNumbers` and `editorTabWidth` (`SYNCED_APPEARANCE_FIELDS` in
+`electron/shared/sync-contract.ts`). Panel widths, split ratios and every other field stay on the Mac.
+`useAppearanceSync`, mounted once in `app.tsx`, reports those fields to main whenever one changes and hands what
+main sends to `applySynced`, which checks each field against the values its control offers (and the theme
+library through `sanitizeThemeState`) before setting it. No new store slice: the Sync tab reads its status
+through `useSyncStatus`, local state in the `use-licence` shape.
+
+Main keeps sync's own files beside `config.json`, not in `localStorage`: `sync-state.json` (this Mac's merge base,
+the last revision, the three switches) and `sync-conflicts/` (the losing copies). The key, sealed with
+`safeStorage`, is `<userData>/sync-key.bin`.
+
 `systemDark` is the one exception inside `appearance-store` — it is an
 observation of the OS, not a preference, so it is excluded from `partialize`.
 Restoring it would mean trusting a stale answer on a machine whose theme has

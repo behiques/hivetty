@@ -225,7 +225,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(163);
+    expect(callChannels.length).toBe(170);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -242,7 +242,7 @@ describe('registerRemoteProxy', () => {
   });
 
   it('binds no handler for an event channel', () => {
-    expect(eventChannels.length).toBe(35);
+    expect(eventChannels.length).toBe(37);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -357,7 +357,7 @@ describe('registerRemoteProxy', () => {
    * the very first one that isn't `pty:data`.
    */
   it('pumps a client event into the broadcaster on the same channel', () => {
-    expect(eventChannels.length).toBe(35);
+    expect(eventChannels.length).toBe(37);
 
     const client = fakeClient();
     const broadcaster = fakeBroadcaster();
@@ -544,7 +544,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(169);
+    expect(remoteProxyBindingsSize()).toBe(176);
   });
 
   /**
@@ -558,8 +558,8 @@ describe('registerRemoteProxy', () => {
    * `remote:forget` (HIVE-153).
    */
   describe('PROCESS_LOCAL channels (HIVE-144 Rulings 24 and 28, HIVE-153, HIVE-149, HIVE-151)', () => {
-    it('names exactly thirty-two channels', () => {
-      expect(PROCESS_LOCAL.length).toBe(32);
+    it('names exactly thirty-nine channels', () => {
+      expect(PROCESS_LOCAL.length).toBe(39);
       expect([...PROCESS_LOCAL].sort()).toEqual(
         [
           'account:billing',
@@ -592,6 +592,13 @@ describe('registerRemoteProxy', () => {
           'remote:dial-now',
           'remote:forget',
           'remote:pair',
+          'sync:now',
+          'sync:open-conflicts',
+          'sync:report-appearance',
+          'sync:reset',
+          'sync:set-group',
+          'sync:setup',
+          'sync:status',
           'updates:check',
           'updates:status',
         ].sort(),
@@ -626,6 +633,21 @@ describe('registerRemoteProxy', () => {
         await invoke(channel, trustedEvent, { deviceId: 'laptop', token: 'sekret' });
       }
 
+      expect(client.call).not.toHaveBeenCalled();
+    });
+
+    it('answers every sync call on this machine, never client.call (HIVE-284)', async () => {
+      const client = fakeClient();
+      registerRemoteProxy({ client, broadcaster: fakeBroadcaster() });
+
+      await expect(invoke('sync:status', trustedEvent, undefined)).resolves.toEqual({ kind: 'unavailable', reason: 'signed-out' });
+      await expect(invoke('sync:setup', trustedEvent, 'correct horse battery')).resolves.toEqual({
+        ok: false,
+        error: 'Sign in to use Sync',
+      });
+      for (const channel of ['sync:now', 'sync:reset', 'sync:open-conflicts']) await invoke(channel, trustedEvent, undefined);
+      await invoke('sync:set-group', trustedEvent, { group: 'automation', on: false });
+      await invoke('sync:report-appearance', trustedEvent, { density: 'compact' });
       expect(client.call).not.toHaveBeenCalled();
     });
 
@@ -1257,8 +1279,8 @@ describe('registerRemoteProxy', () => {
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(169);
-    expect(removeAllListeners).toHaveBeenCalledTimes(169);
+    expect(removeHandler).toHaveBeenCalledTimes(176);
+    expect(removeAllListeners).toHaveBeenCalledTimes(176);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });

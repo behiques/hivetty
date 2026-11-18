@@ -81,7 +81,7 @@ const MAIN_ONLY: ReadonlyMap<string, FrameKind> = new Map([
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(204);
+    expect(entries).toHaveLength(213);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -175,11 +175,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 163 call, 6 notify and 35 event', () => {
+  it('splits 170 call, 6 notify and 37 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 163, notify: 6, event: 35 });
+    expect(tally).toEqual({ call: 170, notify: 6, event: 37 });
   });
 
   /**
@@ -193,7 +193,7 @@ describe('remote contract: frame kinds match the preload bridge', () => {
    * that forwarded only `EVENT_CHANNELS` would show an empty inbox on a busy
    * server, so the asymmetry is asserted rather than left to be rediscovered.
    */
-  it('covers EVENT_CHANNELS and the ten pushes it omits', () => {
+  it('covers EVENT_CHANNELS and the twelve pushes it omits', () => {
     for (const channel of EVENT_CHANNELS) expect(frameKindOf(channel)).toBe('event');
 
     const listed: ReadonlySet<string> = new Set(EVENT_CHANNELS);
@@ -224,6 +224,9 @@ describe('remote contract: frame kinds match the preload bridge', () => {
       // HIVE-265: relayed, not local-only; subscribed by the bridge's server.onLicence like account:changed.
       'server:licence-changed',
       'slack:socket-status',
+      // HIVE-284: local-only; this machine's own settings sync.
+      'sync:apply-appearance',
+      'sync:status-changed',
     ]);
   });
 
@@ -249,6 +252,8 @@ describe('remote contract: frame kinds match the preload bridge', () => {
       CH.accountDeviceCode,
       CH.licenceChanged,
       CH.relayStatusChanged,
+      CH.syncStatusChanged,
+      CH.syncApplyAppearance,
     ]);
     // The channels a server may genuinely push are not caught by it.
     expect(isLocalOnlyEvent(CH.ptyData)).toBe(false);
@@ -268,11 +273,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 204 as 87 read, 52 mutate and 65 execute', () => {
+  it('grades the 213 as 90 read, 52 mutate and 71 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 87, mutate: 52, execute: 65 });
+    expect(tally).toEqual({ read: 90, mutate: 52, execute: 71 });
   });
 
   /**
@@ -633,7 +638,7 @@ describe('remote contract: the version handshake', () => {
   });
 
   it('is protocol 3: 2 carried a generation (HIVE-144), 3 caught up on unbumped channels (HIVE-140 audit)', () => {
-    expect(REMOTE_PROTOCOL_VERSION).toBe(47);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(48);
   });
 });
 
@@ -684,7 +689,7 @@ describe('remote contract: the attach snapshot (HIVE-144)', () => {
     expect(EVENT_CHANNELS).toContain(CH.changedFilesChanged);
     expect(frameKindOf(CH.changedFilesChanged)).toBe('event');
     expect(frameKindOf(CH.changedFilesList)).toBe('call');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(47);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(48);
   });
 
   it('snapshots the plans so a reattaching client sees the current plan (HIVE-179)', () => {
@@ -795,7 +800,7 @@ describe('WINDOW_BOUND', () => {
  * admitted and nobody had applied it to.
  */
 describe('PROCESS_LOCAL', () => {
-  it('names exactly thirty-two channels', () => {
+  it('names exactly thirty-nine channels', () => {
     expect([...PROCESS_LOCAL].sort()).toEqual(
       [
         CH.appInfo,
@@ -830,6 +835,13 @@ describe('PROCESS_LOCAL', () => {
         CH.accountOpenInvoice,
         CH.relayStatus,
         CH.relayHosts,
+        CH.syncStatus,
+        CH.syncSetup,
+        CH.syncSetGroup,
+        CH.syncNow,
+        CH.syncReset,
+        CH.syncOpenConflicts,
+        CH.syncReportAppearance,
       ].sort(),
     );
   });
@@ -884,6 +896,26 @@ describe('PROCESS_LOCAL', () => {
     server, which minted them — that is why the far end can never answer these
     two, not merely why it should not.
   */
+  it('answers every sync call locally and never relays a sync push (HIVE-284)', () => {
+    const calls = [CH.syncStatus, CH.syncSetup, CH.syncSetGroup, CH.syncNow, CH.syncReset, CH.syncOpenConflicts, CH.syncReportAppearance];
+    for (const channel of calls) {
+      expect(isProcessLocal(channel)).toBe(true);
+      expect(frameKindOf(channel)).toBe('call');
+      expect(remoteRefusedReason(channel, undefined)).toMatch(new RegExp(`^${channel} `));
+    }
+    for (const channel of [CH.syncStatusChanged, CH.syncApplyAppearance]) {
+      expect(isLocalOnlyEvent(channel)).toBe(true);
+      expect(frameKindOf(channel)).toBe('event');
+    }
+    expect(CHANNEL_AUTHORIZATION[CH.syncStatus]).toBe('read');
+    expect(CHANNEL_AUTHORIZATION[CH.syncStatusChanged]).toBe('read');
+    expect(CHANNEL_AUTHORIZATION[CH.syncApplyAppearance]).toBe('read');
+    for (const channel of [CH.syncSetup, CH.syncSetGroup, CH.syncNow, CH.syncReset, CH.syncOpenConflicts, CH.syncReportAppearance]) {
+      expect(CHANNEL_AUTHORIZATION[channel]).toBe('execute');
+    }
+    expect(REMOTE_PROTOCOL_VERSION).toBe(48);
+  });
+
   it('answers relay:status locally and grades both relay channels as reads (HIVE-429)', () => {
     expect(isProcessLocal(CH.relayStatus)).toBe(true);
     expect(frameKindOf(CH.relayStatus)).toBe('call');

@@ -177,6 +177,7 @@ const CopilotPage = () => <HarnessPage cli="copilot" />;
 const ProfileDevicesPage = () => <AccountCentre tab="account-devices" />;
 const PlanBillingPage = () => <AccountCentre tab="plan-licence" />;
 const OrganizationPage = () => <AccountCentre tab="account-org" />;
+const SyncPage = () => <AccountCentre tab="account-sync" />;
 
 /**
  * Section id → pane, the same shape `list-panel.tsx` uses for its panels.
@@ -202,6 +203,7 @@ const PANES: Record<SectionId, ComponentType> = {
   'account-devices': ProfileDevicesPage,
   'plan-licence': PlanBillingPage,
   'account-org': OrganizationPage,
+  'account-sync': SyncPage,
   'updates-about': UpdatesAboutSection,
   advanced: AdvancedSection,
 };

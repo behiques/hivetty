@@ -191,7 +191,7 @@ the server's, and the pane says so.
 ## Account center
 
 The card at the top of the Settings nav, with your avatar, name and plan, opens the **Account center**. So does
-**Account center** in your avatar's menu at the foot of the bar. It has up to three tabs:
+**Account center** in your avatar's menu at the foot of the bar. It has up to four tabs:
 
 - **Profile & devices**: your name, email and plan, with **Sign out**, and this account's devices, this Mac first.
   **Remove** on any other device signs it out of HiveTTY Pro after you confirm; this Mac has **Sign out** instead.
@@ -207,6 +207,9 @@ The card at the top of the Settings nav, with your avatar, name and plan, opens 
   in, which is where you switch plans or change seats. When HiveTTY can't show the subscription or the payments
   (offline, or you aren't the organization's owner or billing member), the tab leaves them out and shows the
   licence alone. Signed out, it says **Sign in to see your plan.**
+- **Sync**: turn on settings sync with a passphrase, join it from another Mac, choose what this Mac syncs, see the
+  copies kept when two Macs changed the same thing, and reset it. Without a plan that includes sync, the tab shows a
+  lock. See [Settings sync](sync.md).
 - **Organization**: for a team, its name, your role, your seat and its plan. Owners, admins and billing members get
   **Manage members and seats**, which opens the web. A Solo account has no organization and no tab.
 

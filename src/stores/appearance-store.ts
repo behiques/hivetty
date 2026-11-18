@@ -7,6 +7,8 @@ import {
   DEFAULT_TERMINAL_FONT,
   DEFAULT_TERMINAL_FONT_SIZE,
   DEFAULT_TERMINAL_SCROLLBACK,
+  TERMINAL_FONT_SIZES,
+  TERMINAL_FONTS,
   terminalFontStack,
   type TerminalFontId,
 } from '@lib/terminal/fonts';
@@ -23,6 +25,7 @@ import {
   type ThemePreference,
 } from '@lib/theme/persisted';
 import { isHiveTheme } from '@lib/theme/validate';
+import { SYNCED_APPEARANCE_FIELDS, type SyncedAppearance } from '@shared/sync-contract';
 
 /**
  * Appearance — the first *persisted* state in the app (story 105).
@@ -271,6 +274,12 @@ interface AppearanceState {
    * observable pointing at a theme that is no longer there.
    */
   removeTheme: (id: string) => void;
+
+  /**
+   * Apply the appearance fields another Mac synced (HIVE-284). Only `SYNCED_APPEARANCE_FIELDS`, each checked as
+   * rehydration and the controls would; a field that fails is dropped and the rest apply. `undefined` is ignored.
+   */
+  applySynced: (fields: SyncedAppearance) => void;
 
   reset: () => void;
 }
@@ -623,6 +632,58 @@ export function migrateAppearance(
   return rest;
 }
 
+const THEME_PREFERENCES: readonly unknown[] = ['system', 'dark', 'light'];
+const DENSITIES: readonly unknown[] = ['comfortable', 'compact'];
+const isFontId = (value: unknown): value is TerminalFontId => TERMINAL_FONTS.some((font) => font.id === value);
+const oneOf = (values: readonly unknown[]) => (value: unknown) => values.includes(value);
+const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean';
+
+/** The check each synced scalar must pass: the values its control offers. */
+const SYNCED_SCALARS: Record<Exclude<keyof SyncedAppearance, 'themes' | 'activeThemeId'>, (value: unknown) => boolean> = {
+  theme: oneOf(THEME_PREFERENCES),
+  density: oneOf(DENSITIES),
+  terminalFont: isFontId,
+  terminalFontSize: oneOf(TERMINAL_FONT_SIZES),
+  editorFont: isFontId,
+  editorFontSize: oneOf(EDITOR_FONT_SIZES),
+  editorWordWrap: isBoolean,
+  editorLineNumbers: isBoolean,
+  editorTabWidth: oneOf(EDITOR_TAB_WIDTHS),
+};
+
+/** The fields of this store that settings sync carries (HIVE-284). Not a hook: `useAppearanceSync` reads it. */
+export function syncedAppearance(state: AppearanceState): SyncedAppearance {
+  const out: SyncedAppearance = {};
+  for (const field of SYNCED_APPEARANCE_FIELDS) out[field] = state[field];
+  return out;
+}
+
+/** What `applySynced` may set, after every check. */
+function validSynced(fields: SyncedAppearance, current: AppearanceState): Partial<AppearanceState> {
+  const next: Record<string, unknown> = {};
+  for (const [field, check] of Object.entries(SYNCED_SCALARS)) {
+    const value = (fields as Record<string, unknown>)[field];
+    if (value !== undefined && check(value)) next[field] = value;
+  }
+  let themes = current.themes;
+  if (fields.themes !== undefined) {
+    const raw = fields.themes;
+    const sanitized = sanitizeThemeState({ themes: raw, activeThemeId: BUILT_IN_THEME_ID }).themes;
+    // A library with anything that is not a theme is not applied at all: half a library is no one's.
+    const whole =
+      typeof raw === 'object' && raw !== null && !Array.isArray(raw) && Object.keys(sanitized).length === Object.keys(raw).length;
+    if (whole) {
+      themes = sanitized;
+      next.themes = sanitized;
+    }
+  }
+  if (fields.activeThemeId !== undefined) {
+    const id = sanitizeThemeState({ themes, activeThemeId: fields.activeThemeId }).activeThemeId;
+    if (id === fields.activeThemeId) next.activeThemeId = id;
+  }
+  return next as Partial<AppearanceState>;
+}
+
 export const useAppearanceStore = create<AppearanceState>()(
   persist(
     (set, get) => ({
@@ -742,6 +803,13 @@ export const useAppearanceStore = create<AppearanceState>()(
           themes: rest,
           activeThemeId: wasActive ? BUILT_IN_THEME_ID : activeThemeId,
         });
+      },
+
+      applySynced: (fields) => {
+        const next = validSynced(fields, get());
+        if (Object.keys(next).length === 0) return;
+        set(next);
+        applyAll(get());
       },
 
       reset: () => {

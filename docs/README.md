@@ -47,6 +47,7 @@ New here? Start with [Getting started](guide/getting-started.md), then
 | [Settings](guide/settings.md) | Every Settings section, what it changes, and the Account center |
 | [The config file](guide/configuration.md) | `~/.hivetty/config.json`, key by key |
 | [Themes](guide/themes.md) | Pick, import and write a theme |
+| [Settings sync](guide/sync.md) | Keep your setup the same on every Mac, encrypted with your passphrase |
 | [Updates](guide/updates.md) | How updates arrive, and `hivetty --update` |
 
 ## Internals

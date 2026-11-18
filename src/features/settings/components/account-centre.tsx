@@ -2,19 +2,24 @@ import type { ComponentType } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import { LockMark } from '@components/ui/lock';
 import { AccountDevicesSection } from '@features/settings/components/account-devices-section';
 import { AccountOrgSection } from '@features/settings/components/account-org-section';
+import { AccountSyncSection } from '@features/settings/components/account-sync-section';
 import { PlanLicenceSection } from '@features/settings/components/plan-licence-section';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
+import { useEntitlement } from '@hooks/use-entitlement';
 import { useActiveOrg } from '@hooks/use-orgs';
 import { onTablistKeyDown } from '@lib/tablist';
 import { isTeam } from '@shared/orgs';
 import { useSettingsActions } from '@stores/ui-store';
 
-/** The three account pane ids, each now a tab here. The ids stay, so every `openSettings` deep link still lands. */
+/** The four account pane ids, each a tab here. The ids stay, so every `openSettings` deep link still lands. */
 export const ACCOUNT_TABS = [
   { id: 'account-devices', label: 'Profile & devices', Body: AccountDevicesSection },
   { id: 'plan-licence', label: 'Plan & billing', Body: PlanLicenceSection },
+  // HIVE-284: after Plan & billing, as the spec places it.
+  { id: 'account-sync', label: 'Sync', Body: AccountSyncSection },
   { id: 'account-org', label: 'Organization', Body: AccountOrgSection },
 ] as const satisfies readonly { id: string; label: string; Body: ComponentType }[];
 
@@ -27,6 +32,7 @@ export type AccountTab = (typeof ACCOUNT_TABS)[number]['id'];
  */
 export function AccountCentre({ tab }: { tab: AccountTab }) {
   const active = useActiveOrg();
+  const sync = useEntitlement('sync');
   const { openSettings } = useSettingsActions();
   const team = active !== undefined && isTeam(active);
   const tabs = ACCOUNT_TABS.filter((entry) => entry.id !== 'account-org' || team || tab === 'account-org');
@@ -34,7 +40,10 @@ export function AccountCentre({ tab }: { tab: AccountTab }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-5 py-4">
-      <SettingsSectionHeader title="Account" description="Who is signed in, your plan and billing, and your team." />
+      <SettingsSectionHeader
+        title="Account"
+        description="Who is signed in, your plan and billing, your team, and sync."
+      />
       <div role="tablist" aria-label="Account" className="flex gap-1 text-ui-sm text-muted">
         {tabs.map((entry) => (
           <button
@@ -50,6 +59,7 @@ export function AccountCentre({ tab }: { tab: AccountTab }) {
             className={cn('rounded-full px-2.5 py-1', entry.id === current.id ? 'bg-active text-ink' : 'hover:bg-hover')}
           >
             {entry.label}
+            {entry.id === 'account-sync' && !sync.allowed ? <LockMark plan={sync.plan} className="ml-1" /> : null}
           </button>
         ))}
       </div>

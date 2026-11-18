@@ -11,7 +11,7 @@ import { applyDevDockIcon } from './app-icon';
 import { primaryWindow } from './aux-windows';
 import { bringForward } from './background';
 import { parseInvocation } from './cli';
-import { getConfig, onConfigChange } from './config';
+import { getConfig, onConfigChange, readConfigDocument, writeSyncedKeys } from './config';
 import { startLoginEnvImport } from './config/login-env';
 import { configPath, switchToDevHiveDir } from './config/paths';
 import { installContentSecurityPolicy } from './csp';
@@ -28,6 +28,7 @@ import {
   ACCOUNT_CALLS,
   cloudSession,
   LICENCE_CALLS,
+  leaseSubject,
   licence,
   onLicenceChange,
   runAccountCommand,
@@ -38,6 +39,7 @@ import { entitled } from './licence/entitled';
 import { startWhenLicensed } from './licence/serve-gate';
 import { registerLifecycle } from './lifecycle';
 import { startRelay } from './relay';
+import { resetShipped, shippedOptions } from './seed';
 import { bindUntilBound } from './server/bind-retry';
 import {
   pairDevice,
@@ -50,6 +52,7 @@ import { runOneShot } from './server/one-shot';
 import { claimServerLock, hiveLockPath } from './server/server-lock';
 import { isServerMode, setServerMode } from './server-mode';
 import { onShutdown } from './shutdown';
+import { startSync } from './sync';
 import { createServerTray } from './tray';
 import { runHeadlessUpdate, runUnattended, startUpdateChecks } from './updates';
 import { createWindow } from './window';
@@ -218,6 +221,32 @@ if (!app.requestSingleInstanceLock()) {
       accept: acceptRelaySocket,
     });
     onShutdown(() => relay.stop());
+    /*
+      HIVE-284: settings sync's gate, built in every process so every `sync:*` call has an answer. The engine
+      runs only signed in, entitled to `sync` and with the keychain able to seal the key.
+    */
+    const sync = startSync({
+      session: cloudSession,
+      entitled: () => entitled('sync'),
+      onLicenceChange: (listener) => onLicenceChange(() => listener()),
+      onConfigChange: (listener) => onConfigChange(() => listener()),
+      onFocus: (listener) => {
+        app.on('browser-window-focus', listener);
+        return () => app.off('browser-window-focus', listener);
+      },
+      userId: leaseSubject,
+      safeStorage,
+      userData: app.getPath('userData'),
+      hiveDir: dirname(configPath()),
+      manifestFile: shippedOptions().manifestFile,
+      readDocument: readConfigDocument,
+      writeConfig: (mutate) => writeSyncedKeys(mutate) !== null,
+      resetShipped: async (kind, name) => {
+        await resetShipped(shippedOptions(), { kind, name });
+      },
+      openPath: (path) => shell.openPath(path),
+    });
+    onShutdown(() => sync.stop());
     deepLinks.attach((url) => void licence.handleCallback(url));
   });
   /**

@@ -1,6 +1,7 @@
 import { AppShell } from '@components/layout/app-shell';
 import { TooltipProvider } from '@components/ui/tooltip';
 import { LicenceGate } from '@features/account/components/licence-gate';
+import { useAppearanceSync } from '@hooks/use-appearance-sync';
 
 /**
  * Composition root.
@@ -15,6 +16,8 @@ import { LicenceGate } from '@features/account/components/licence-gate';
  * component, so `Tooltip` itself stays a faithful, undivergent vendor copy.
  */
 export function App() {
+  // HIVE-284: once per window, outside the gate, so a locked window still reports what it shows.
+  useAppearanceSync();
   return (
     <TooltipProvider delayDuration={300}>
       <LicenceGate>

@@ -211,6 +211,7 @@ import type {
   SlackStatus,
   SlackTokensState,
 } from '@shared/slack-contract';
+import type { SetSyncGroupRequest, SyncedAppearance, SyncSetupResult, SyncStatus } from '@shared/sync-contract';
 import type { UpdateStatus } from '@shared/update-contract';
 
 /**
@@ -444,6 +445,22 @@ const bridge: HiveBridge = {
     onStatus: (callback: (status: RelayServeStatus) => void) =>
       subscribe<RelayServeStatus>(CH.relayStatusChanged, callback),
     hosts: (): Promise<RelayHostsResult> => ipcRenderer.invoke(CH.relayHosts) as Promise<RelayHostsResult>,
+  },
+  // HIVE-284. Settings sync, this machine's own.
+  sync: {
+    status: (): Promise<SyncStatus> => ipcRenderer.invoke(CH.syncStatus) as Promise<SyncStatus>,
+    onStatus: (callback: (status: SyncStatus) => void) => subscribe<SyncStatus>(CH.syncStatusChanged, callback),
+    setup: (passphrase: string): Promise<SyncSetupResult> =>
+      ipcRenderer.invoke(CH.syncSetup, passphrase) as Promise<SyncSetupResult>,
+    setGroup: (request: SetSyncGroupRequest): Promise<void> =>
+      ipcRenderer.invoke(CH.syncSetGroup, request) as Promise<void>,
+    now: (): Promise<void> => ipcRenderer.invoke(CH.syncNow) as Promise<void>,
+    reset: (): Promise<SyncSetupResult> => ipcRenderer.invoke(CH.syncReset) as Promise<SyncSetupResult>,
+    openConflicts: (): Promise<void> => ipcRenderer.invoke(CH.syncOpenConflicts) as Promise<void>,
+    reportAppearance: (fields: SyncedAppearance): Promise<void> =>
+      ipcRenderer.invoke(CH.syncReportAppearance, fields) as Promise<void>,
+    onApplyAppearance: (callback: (fields: SyncedAppearance) => void) =>
+      subscribe<SyncedAppearance>(CH.syncApplyAppearance, callback),
   },
   // HIVE-144. Storing and forgetting the credential this machine was handed
   // to attach outward, as a client, to someone else's server. Its own

@@ -143,6 +143,8 @@ export async function startStubCloud(): Promise<StubCloud> {
     billing: null as Record<string, unknown> | null,
     payments: null as Record<string, unknown> | null,
     otherDevices: [] as { id: string; name: string }[],
+    /** HIVE-284: `/api/sync`'s one row per user, and the counter a DELETE keeps. */
+    sync: { blob: null as { revision: number; salt: string; ciphertext: string } | null, counter: 0 },
   };
   const calls: StubCall[] = [];
   let url = '';
@@ -217,6 +219,43 @@ export async function startStubCloud(): Promise<StubCloud> {
       if (state.refusal !== null) return send(res, 403, { error: 'lease_refused', reason: state.refusal });
       if (plan === null) return send(res, 403, { error: 'lease_refused', reason: 'no_plan' });
       return send(res, 200, { lease: lease(plan, granted?.id ?? DEFAULT_ORG.id) });
+    }
+    /*
+      HIVE-284: `/api/sync` as built (hivetty-cloud #53). One encrypted blob per user, a revision compare-and-swap,
+      and a DELETE that keeps the counter so a reset is never mistaken for the old revision.
+    */
+    if (path === '/api/sync') {
+      if (unauthorised(req, res)) return;
+      const plan = state.plan;
+      if (plan === null || !featuresOf(plan).includes('sync')) return send(res, 403, { error: 'not_entitled' });
+      const { sync } = state;
+      if (req.method === 'GET') {
+        if (sync.blob === null) return send(res, 404, { error: 'not_found' });
+        const tag = `"${String(sync.blob.revision)}"`;
+        if (req.headers['if-none-match'] === tag) {
+          res.writeHead(304, { etag: tag, 'cache-control': 'no-store' });
+          return void res.end();
+        }
+        res.writeHead(200, { 'content-type': 'application/json', etag: tag, 'cache-control': 'no-store' });
+        return void res.end(JSON.stringify(sync.blob));
+      }
+      if (req.method === 'PUT') {
+        const match = req.headers['if-match'];
+        if (match === undefined) return send(res, 428, { error: 'precondition_required' });
+        const expected = sync.blob?.revision ?? 0;
+        if (match !== `"${String(expected)}"`) {
+          return send(res, 412, { error: 'revision_mismatch', revision: sync.blob?.revision ?? sync.counter });
+        }
+        if (sync.blob !== null && body.salt !== sync.blob.salt) return send(res, 409, { error: 'salt_mismatch' });
+        sync.counter += 1;
+        sync.blob = { revision: sync.counter, salt: body.salt ?? '', ciphertext: body.ciphertext ?? '' };
+        return send(res, 200, { revision: sync.counter });
+      }
+      if (req.method === 'DELETE') {
+        sync.blob = null;
+        res.writeHead(204, { 'cache-control': 'no-store' });
+        return void res.end();
+      }
     }
     if (req.method === 'POST' && path === '/api/oauth/token') {
       if (body.grant_type === 'authorization_code') return send(res, 200, tokens(body.device_id));

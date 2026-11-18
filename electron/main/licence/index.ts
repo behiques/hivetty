@@ -186,6 +186,14 @@ export function licence(): LicenceState {
   return licenceState?.state() ?? { kind: 'unlicensed' };
 }
 
+/**
+ * The verified lease's subject while licensed or in grace, else null (HIVE-284). Settings sync binds its key to
+ * it; it never reaches the renderer.
+ */
+export function leaseSubject(): string | null {
+  return licenceState?.subject() ?? null;
+}
+
 /** The signed-in cloud session, for callers outside this directory that speak to the cloud (the relay). */
 export interface CloudSession {
   baseUrl: string;

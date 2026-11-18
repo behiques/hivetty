@@ -204,6 +204,7 @@ import type {
   SlackStatus,
   SlackTokensState,
 } from './slack-contract';
+import type { SetSyncGroupRequest, SyncedAppearance, SyncSetupResult, SyncStatus } from './sync-contract';
 import type { UpdateStatus } from './update-contract';
 
 export const CH = {
@@ -933,6 +934,24 @@ export const CH = {
   relayStatusChanged: 'relay:status-changed',
   /** HIVE-429: this account's Macs serving the relay now, for Connect through relay. Process-local. */
   relayHosts: 'relay:hosts',
+  /** HIVE-284: settings sync's status on this machine. Process-local, like every `sync:*` channel. */
+  syncStatus: 'sync:status',
+  /** HIVE-284: push, the sync status changed. Local-only, never from a socket. */
+  syncStatusChanged: 'sync:status-changed',
+  /** HIVE-284: set up or join sync with the passphrase of the person at this machine. Process-local. */
+  syncSetup: 'sync:setup',
+  /** HIVE-284: turn one of the three groups on or off, on this machine only. Process-local. */
+  syncSetGroup: 'sync:set-group',
+  /** HIVE-284: run a sync now. Process-local. */
+  syncNow: 'sync:now',
+  /** HIVE-284: delete the synced copy in the cloud and this machine's key. Process-local. */
+  syncReset: 'sync:reset',
+  /** HIVE-284: open this machine's conflicts folder. Takes no argument. Process-local. */
+  syncOpenConflicts: 'sync:open-conflicts',
+  /** HIVE-284: the listed appearance fields, from a window to main. Process-local. */
+  syncReportAppearance: 'sync:report-appearance',
+  /** HIVE-284: push, synced appearance fields for the windows to apply. Local-only. */
+  syncApplyAppearance: 'sync:apply-appearance',
   /** HIVE-291: this account's orgs, from the cloud; `[]` when it cannot say. Process-local. */
   accountOrgs: 'account:orgs',
   /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. Process-local. */
@@ -2458,6 +2477,19 @@ export interface HiveBridge {
     onStatus(callback: (status: RelayServeStatus) => void): () => void;
     /** This account's Macs serving the relay now (HIVE-429), for the Connect through relay picker. */
     hosts(): Promise<RelayHostsResult>;
+  };
+  /** Settings sync (HIVE-284). Every verb is this machine's own and never answered by a server. */
+  sync: {
+    status(): Promise<SyncStatus>;
+    onStatus(callback: (status: SyncStatus) => void): () => void;
+    /** The passphrase is used here and never returned or stored. */
+    setup(passphrase: string): Promise<SyncSetupResult>;
+    setGroup(request: SetSyncGroupRequest): Promise<void>;
+    now(): Promise<void>;
+    reset(): Promise<SyncSetupResult>;
+    openConflicts(): Promise<void>;
+    reportAppearance(fields: SyncedAppearance): Promise<void>;
+    onApplyAppearance(callback: (fields: SyncedAppearance) => void): () => void;
   };
   remote: {
     /**
