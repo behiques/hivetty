@@ -42,7 +42,10 @@ export interface EngineDeps {
   readDocument(): Record<string, unknown> | null;
   /** `collectFiles(hiveDir, manifestFile)` */
   collectFiles(): Promise<View>;
-  apply(result: MergeResult, kept: Record<string, string>): Promise<{ configOk: boolean; kept: Record<string, string> }>;
+  apply(
+    result: MergeResult,
+    kept: Record<string, string>,
+  ): Promise<{ configOk: boolean; kept: Record<string, string>; skipped: string[] }>;
   conflicts(): Promise<{ count: number; latest: { path: string; at: number } | null }>;
   deriveKey(passphrase: string, salt: Buffer): Promise<Buffer>;
   now(): number;
@@ -171,6 +174,16 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     pollTimer = debounceTimer = waitTimer = null;
   }
 
+  /**
+   * Writes the cycle's state with the groups as they are on disk now: a switch flipped while the run was in
+   * flight is the person's newer word, and this run's copy must not write the old one back.
+   */
+  function save(state: SyncState): void {
+    const live = deps.state.read();
+    if (live !== null) state.groups = live.groups;
+    deps.state.write(state);
+  }
+
   async function pull(key: StoredKey, state: SyncState, alive: () => boolean): Promise<View | Outcome> {
     if (state.revision === 0 && cached?.revision === 0) return cached.view;
     const conditional = cached !== null && cached.revision === state.revision;
@@ -214,10 +227,14 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     const applied = await deps.apply(result, state.kept);
     if (!alive()) return 'stale';
     state.kept = applied.kept;
-    state.joined = true;
+    // A first join whose keys were refused stays a first join, so the retry still lets the synced copy win.
+    if (applied.configOk) state.joined = true;
 
-    // The base advances only where this Mac now agrees with the cloud. A key the config refused keeps its old base.
-    const held = (id: string): boolean => !applied.configOk && id.includes(':k:') && !isAppearance(id);
+    // The base advances only where this Mac now agrees with the cloud. A key the config refused, and a file that
+    // could not land here, keep their old base.
+    const skipped = new Set(applied.skipped);
+    const held = (id: string): boolean =>
+      skipped.has(id) || (!applied.configOk && id.includes(':k:') && !isAppearance(id));
     for (const id of new Set([...Object.keys(result.merged), ...Object.keys(pick(state.base, takesPart))])) {
       const agreed = result.merged[id]?.hash === remote[id]?.hash;
       if (!agreed || held(id)) continue;
@@ -225,11 +242,11 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       if (hash === undefined) delete state.base[id];
       else state.base[id] = hash;
     }
-    deps.state.write(state);
+    save(state);
     if (!applied.configOk) return 'apply-failed';
     if (!result.push) {
       state.lastSyncedAt = deps.now();
-      deps.state.write(state);
+      save(state);
       return 'done';
     }
 
@@ -261,7 +278,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     for (const id of Object.keys(pick(state.base, takesPart))) delete state.base[id];
     for (const [id, item] of Object.entries(result.merged)) state.base[id] = item.hash;
     state.lastSyncedAt = deps.now();
-    deps.state.write(state);
+    save(state);
     return 'done';
   }
 

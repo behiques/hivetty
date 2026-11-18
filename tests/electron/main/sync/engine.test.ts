@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -757,7 +757,7 @@ describe('review round (task 8)', () => {
       state: a.state,
       readDocument: () => ({}),
       collectFiles: () => Promise.resolve({}),
-      apply: () => Promise.resolve({ configOk: true, kept: {} }),
+      apply: () => Promise.resolve({ configOk: true, kept: {}, skipped: [] }),
       conflicts: () => Promise.resolve({ count: 0, latest: null }),
       deriveKey: async (passphrase, salt) => {
         await gate;
@@ -863,5 +863,64 @@ describe('failure pass', () => {
     a.doc = null as unknown as Record<string, unknown>;
     await a.engine.now();
     expect(problemOf(a.status())).toBe('apply-failed');
+  });
+});
+
+describe('self review round (PR 322)', () => {
+  it('a synced skill that cannot land through a linked skills/ is never read as a delete and pushed', async () => {
+    const a = makeMac('A', cloud);
+    a.write('skills/mine/SKILL.md', 'mine');
+    expect(await a.engine.setup(PASS)).toEqual({ ok: true });
+    await a.engine.idle();
+    const b = makeMac('B', cloud, { start: false });
+    mkdirSync(join(b.dir, 'elsewhere'));
+    symlinkSync(join(b.dir, 'elsewhere'), join(b.dir, 'skills'));
+    b.engine.start();
+    expect(await b.engine.setup(PASS)).toEqual({ ok: true });
+    await b.engine.idle();
+    await b.engine.now();
+    await b.engine.now();
+    expect((await cloudView(cloud, a))?.['automation:f:skills/mine/SKILL.md']).toBeDefined();
+    await a.engine.now();
+    expect(a.read('skills/mine/SKILL.md')).toBe('mine');
+  });
+
+  it('a group switched during a run stays switched once the run writes its state', async () => {
+    let during: (() => Promise<void>) | null = null;
+    const a = makeMac('A', cloud, {
+      doc: { claudeCommand: 'claude' },
+      apply: (real) => async (result, kept) => {
+        const hook = during;
+        during = null;
+        if (hook !== null) await hook();
+        return real(result, kept);
+      },
+    });
+    expect(await a.engine.setup(PASS)).toEqual({ ok: true });
+    await a.engine.idle();
+    during = () => a.engine.setGroup('harnesses', false);
+    a.doc = { claudeCommand: 'claude-2' };
+    await a.engine.now();
+    await a.engine.idle();
+    expect(a.state.read()?.groups.harnesses).toBe(false);
+    expect(a.status()).toMatchObject({ kind: 'on', groups: { harnesses: false } });
+  });
+
+  it('a first join whose config write was refused is still a first join on the retry: the synced copy wins', async () => {
+    const a = makeMac('A', cloud, { doc: { claudeCommand: 'claude' } });
+    expect(await a.engine.setup(PASS)).toEqual({ ok: true });
+    await a.engine.idle();
+    vi.setSystemTime(Date.now() + 60_000);
+    const b = makeMac('B', cloud, { doc: { claudeCommand: 'claude-b' } });
+    b.refuseConfig(true);
+    expect(await b.engine.setup(PASS)).toEqual({ ok: true });
+    await b.engine.idle();
+    expect(problemOf(b.status())).toBe('apply-failed');
+    b.refuseConfig(false);
+    await b.engine.now();
+    expect(problemOf(b.status())).toBeNull();
+    expect(b.doc).toEqual({ claudeCommand: 'claude' });
+    await a.engine.now();
+    expect(a.doc).toEqual({ claudeCommand: 'claude' });
   });
 });

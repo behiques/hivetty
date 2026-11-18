@@ -1251,7 +1251,7 @@ is not showing.
   `startRelay` and gated the same way: `startSync` runs the engine only while the account is signed in,
   `entitled('sync')` is `null` and `safeStorage` can seal the key, re-evaluated on every account and licence
   change. A sign-out, another account signing in, or a key found at launch with nobody signed in deletes
-  `<userData>/sync-key.bin` and `sync-state.json`; losing the entitlement only stops the engine.
+  `<userData>/sync-key.bin` and `sync-state.json` (beside `config.json`); losing the entitlement only stops the engine.
 - Seven small modules: `allow-lists.ts` (the only paths read from or written to `config.json`), `crypto.ts`
   (scrypt N=2^17 key, AES-256-GCM with the lease subject in the AAD), `merge.ts` (three-way per key and per file),
   `state.ts`, `bundle.ts` (this Mac's view; untouched shipped skills and agents left out), `apply.ts` (losing

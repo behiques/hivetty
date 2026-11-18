@@ -31,6 +31,9 @@ const GROUP_DESCRIPTIONS: Record<SyncGroup, string> = {
 const NEVER_SYNCED =
   "Never synced: projects, environment variables, tokens, server and remote settings, and each CLI's permission prompt setting.";
 
+/** `setupSync` answers null when the bridge threw or is absent. */
+const UNREACHABLE = "Couldn't reach sync. Try again.";
+
 const card = 'flex flex-col gap-3 rounded-lg border border-border bg-panel p-4';
 
 function GroupList() {
@@ -56,7 +59,7 @@ function ResetSync({ label = 'Reset sync' }: { label?: string }) {
     setPending(true);
     const result = await resetSync();
     setPending(false);
-    setError(result && !result.ok ? result.error : null);
+    setError(result === null ? UNREACHABLE : result.ok ? null : result.error);
   };
 
   return (
@@ -100,14 +103,14 @@ function SetUp({ resetElsewhere }: { resetElsewhere: boolean }) {
   const ready = passphrase.length >= MIN_PASSPHRASE && passphrase === again;
 
   const turnOn = async (): Promise<void> => {
-    if (!ready) return;
+    if (!ready || pending) return;
     setPending(true);
     const result = await setupSync(passphrase);
     setPending(false);
     // The passphrase lives here only for the call; it is cleared whatever the answer.
     setPassphrase('');
     setAgain('');
-    setError(result && !result.ok ? result.error : null);
+    setError(result === null ? UNREACHABLE : result.ok ? null : result.error);
   };
 
   return (
@@ -135,7 +138,7 @@ function SetUp({ resetElsewhere }: { resetElsewhere: boolean }) {
           label="Type it again"
           value={again}
           onChange={setAgain}
-          onCommit={() => void turnOn()}
+          onSubmit={() => void turnOn()}
           autoComplete="new-password"
           secretName="passphrase"
         />
@@ -167,12 +170,12 @@ function Join({ resetElsewhere }: { resetElsewhere: boolean }) {
   const [error, setError] = useState<string | null>(null);
 
   const join = async (): Promise<void> => {
-    if (passphrase === '') return;
+    if (passphrase === '' || pending) return;
     setPending(true);
     const result = await setupSync(passphrase);
     setPending(false);
     setPassphrase('');
-    setError(result && !result.ok ? result.error : null);
+    setError(result === null ? UNREACHABLE : result.ok ? null : result.error);
   };
 
   return (
@@ -192,7 +195,7 @@ function Join({ resetElsewhere }: { resetElsewhere: boolean }) {
             setPassphrase(next);
             setError(null);
           }}
-          onCommit={() => void join()}
+          onSubmit={() => void join()}
           invalid={error !== null}
           secretName="passphrase"
         />

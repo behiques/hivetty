@@ -102,6 +102,48 @@ describe('AccountSyncSection', () => {
     expect(screen.getByRole('alert')).toHaveTextContent("Can't reach HiveTTY");
   });
 
+  it('does not turn sync on when focus leaves the matching fields, and Enter then blur sets up once', async () => {
+    status.current = { kind: 'off', cloud: 'none', resetElsewhere: false };
+    let finish: (value: { ok: boolean }) => void = () => undefined;
+    lib.setupSync.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    render(<AccountSyncSection />);
+    await type('Sync passphrase', 'correct horse battery');
+    await type('Type it again', 'correct horse battery');
+    await userEvent.tab();
+    expect(lib.setupSync).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByLabelText('Type it again'));
+    await userEvent.keyboard('{Enter}');
+    await userEvent.keyboard('{Enter}');
+    await userEvent.tab();
+    expect(lib.setupSync).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ ok: true }));
+  });
+
+  it('says so when the set-up call answers nothing', async () => {
+    status.current = { kind: 'off', cloud: 'none', resetElsewhere: false };
+    lib.setupSync.mockResolvedValue(null);
+    render(<AccountSyncSection />);
+    await type('Sync passphrase', 'correct horse battery');
+    await type('Type it again', 'correct horse battery');
+    await userEvent.click(screen.getByRole('button', { name: 'Turn on sync' }));
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't reach sync. Try again.");
+  });
+
+  it('a join does not run on blur, and runs once while pending', async () => {
+    status.current = { kind: 'off', cloud: 'present', resetElsewhere: false };
+    let finish: (value: { ok: boolean }) => void = () => undefined;
+    lib.setupSync.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    render(<AccountSyncSection />);
+    await type('Sync passphrase', 'correct horse battery');
+    await userEvent.tab();
+    expect(lib.setupSync).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByLabelText('Sync passphrase'));
+    await userEvent.keyboard('{Enter}');
+    await userEvent.keyboard('{Enter}');
+    expect(lib.setupSync).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ ok: true }));
+  });
+
   it('joins an account that already syncs, and shows a wrong passphrase under the field', async () => {
     status.current = { kind: 'off', cloud: 'present', resetElsewhere: false };
     lib.setupSync.mockResolvedValueOnce({ ok: false, error: WRONG_PASSPHRASE });
@@ -184,6 +226,17 @@ describe('AccountSyncSection', () => {
       await userEvent.click(screen.getAllByRole('button', { name: 'Reset sync' }).at(-1)!);
     });
     expect(screen.getByRole('alert')).toHaveTextContent("Couldn't reset sync. Try again.");
+  });
+
+  it('shows a reset the bridge could not answer', async () => {
+    status.current = ON();
+    lib.resetSync.mockResolvedValueOnce(null as unknown as { ok: boolean });
+    render(<AccountSyncSection />);
+    await userEvent.click(screen.getByRole('button', { name: 'Reset sync' }));
+    await act(async () => {
+      await userEvent.click(screen.getAllByRole('button', { name: 'Reset sync' }).at(-1)!);
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't reach sync. Try again.");
   });
 
   it('keeps every control reachable in a container narrower than the two-column breakpoint', () => {

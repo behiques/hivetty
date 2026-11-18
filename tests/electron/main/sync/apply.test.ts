@@ -98,6 +98,22 @@ describe('applyMerge: files', () => {
     expect(deps.afterSkills).not.toHaveBeenCalled();
   });
 
+  it('names each file it could not write or remove, and only those', async () => {
+    write('outside/keep', 'keep');
+    symlinkSync(join(dir, 'outside'), join(dir, 'skills'));
+    write('agents/gone/AGENT.md', 'gone');
+    const { skipped } = await applyMerge(
+      makeDeps(),
+      result({
+        set: { 'automation:f:skills/x/SKILL.md': file('x'), 'automation:f:agents/a/AGENT.md': file('a') },
+        remove: ['automation:f:skills/old/SKILL.md', 'automation:f:agents/gone/AGENT.md'],
+      }),
+      {},
+    );
+    expect([...skipped].sort()).toEqual(['automation:f:skills/old/SKILL.md', 'automation:f:skills/x/SKILL.md']);
+    expect(read('agents/a/AGENT.md')).toBe('a');
+  });
+
   it('writes nothing when skills itself is a link', async () => {
     write('outside/keep', 'keep');
     symlinkSync(join(dir, 'outside'), join(dir, 'skills'));

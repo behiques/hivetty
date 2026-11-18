@@ -68,6 +68,28 @@ describe('SecretField', () => {
     expect(onCommit).toHaveBeenCalledTimes(2);
   });
 
+  it('submits on Enter only, never on blur', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(
+      <SecretField
+        label="API token"
+        value="x"
+        onChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const input = screen.getByLabelText('API token');
+    await user.click(input);
+    await user.tab();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.click(input);
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the hint out of the accessible name', () => {
     render(
       <SecretField

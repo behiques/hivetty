@@ -32,6 +32,8 @@ interface SecretFieldProps {
   onChange: (value: string) => void;
   /** Fired on Enter and on blur — the commit points, as in `TextField`. */
   onCommit?: () => void;
+  /** Fired on Enter only, never on blur: for an act, like turning sync on, that leaving the field must not do. */
+  onSubmit?: () => void;
   placeholder?: string;
   hint?: string;
   className?: string;
@@ -48,6 +50,7 @@ export function SecretField({
   value,
   onChange,
   onCommit,
+  onSubmit,
   placeholder,
   hint,
   className,
@@ -86,6 +89,7 @@ export function SecretField({
             if (event.key === 'Enter') {
               event.preventDefault();
               onCommit?.();
+              onSubmit?.();
             }
             /**
              * Escape belongs to the settings overlay, not to this field — the

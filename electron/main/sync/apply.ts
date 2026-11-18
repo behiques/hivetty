@@ -103,22 +103,28 @@ async function keepConflicts(deps: ApplyDeps, conflicts: View, kept: Record<stri
  * Writes what a merge says must change on this Mac (HIVE-284). Conflict copies first, so nothing is overwritten
  * before its copy exists; then files; then config keys in one validated write; then appearance. A file write
  * that fails throws: what was written stays, the caller does not advance the base, and the next cycle finishes.
+ * A file that may not land here (a linked skills/ or agents/) is named in `skipped`: this Mac does not agree with
+ * the cloud on it, so the caller keeps its old base rather than read its absence as a delete next cycle.
  */
 export async function applyMerge(
   deps: ApplyDeps,
   result: MergeResult,
   kept: Record<string, string>,
-): Promise<{ configOk: boolean; kept: Record<string, string> }> {
+): Promise<{ configOk: boolean; kept: Record<string, string>; skipped: string[] }> {
   const nextKept = await keepConflicts(deps, result.conflicts, kept);
 
   const shipped = (await readManifest(deps.manifestFile)).files;
   const touched = new Set<string>();
   const reset = new Set<string>();
+  const skipped: string[] = [];
   for (const id of result.remove) {
     const rel = FILE.exec(id)?.[1];
     if (rel === undefined) continue;
     const full = await landing(deps.hiveDir, rel);
-    if (full === null) continue;
+    if (full === null) {
+      skipped.push(id);
+      continue;
+    }
     const [root, name] = rel.split('/') as ['skills' | 'agents', string];
     touched.add(root);
     const folder = `${root}/${name}`;
@@ -149,7 +155,10 @@ export async function applyMerge(
     const rel = FILE.exec(id)?.[1];
     if (rel === undefined || typeof item.data !== 'string') continue;
     const full = await landing(deps.hiveDir, rel);
-    if (full === null) continue;
+    if (full === null) {
+      skipped.push(id);
+      continue;
+    }
     await writeAtomic(full, Buffer.from(item.data, 'base64'));
     touched.add(rel.split('/')[0] ?? '');
   }
@@ -173,7 +182,7 @@ export async function applyMerge(
   if (Object.keys(fields).length > 0) deps.sendAppearance(fields);
   if (touched.has('skills')) deps.afterSkills();
   if (touched.has('agents')) deps.afterAgents();
-  return { configOk, kept: nextKept };
+  return { configOk, kept: nextKept, skipped };
 }
 
 const STAMP = /^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2}(?:\.\d+)?Z)$/;
