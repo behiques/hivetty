@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -37,10 +37,11 @@ vi.mock('electron', () => ({
   BrowserWindow: { fromWebContents: () => null, getAllWindows: () => [] },
   dialog: { showOpenDialog: vi.fn() },
   ipcMain: electronIpcMain,
+  // Available, so a core that still reached Electron's keychain would store a credential.
   safeStorage: {
-    isEncryptionAvailable: () => false,
-    encryptString: () => Buffer.alloc(0),
-    decryptString: () => '',
+    isEncryptionAvailable: () => true,
+    encryptString: (text: string) => Buffer.from(text, 'utf8'),
+    decryptString: (data: Buffer) => Buffer.from(data).toString('utf8'),
   },
   session: { defaultSession: { webRequest: { onHeadersReceived: vi.fn() } } },
 }));
@@ -173,6 +174,7 @@ function withDesktop(ipcMain: Desktop['ipcMain'], overrides: Partial<Desktop> = 
     updateStatus: () => {
       throw new Error('not in this suite');
     },
+    remotePairing: { paired: () => false, pair: () => ({ error: 'not in this suite' }), forget: () => undefined },
     ...overrides,
   };
   return { ...headlessPlatform(), desktop };
@@ -290,5 +292,29 @@ describe('screen-only calls with a desktop (HIVE-422)', () => {
     expect(isForeground('sess-1')).toBe(true);
     focused = false;
     expect(isForeground('sess-1')).toBe(false);
+  });
+});
+
+describe('the attach credential with no desktop (HIVE-422)', () => {
+  it('answers remote:pair with an error and writes no file', async () => {
+    const headless = headlessPlatform();
+    setPlatform(headless);
+    registerIpcHandlers();
+
+    const pair = captured.registry?.call(CH.remotePair);
+    await expect(Promise.resolve(pair!({ deviceId: 'laptop', token: 'sekret' }, reporter))).resolves.toEqual({
+      error: 'This machine cannot attach to another Hive.',
+    });
+    expect(existsSync(join(headless.paths.stateDir, 'remote-credential.bin'))).toBe(false);
+  });
+
+  it('answers remote:forget with nothing, and config:get-remote as not paired', async () => {
+    setPlatform(headlessPlatform());
+    registerIpcHandlers();
+
+    expect(captured.registry?.call(CH.remoteForget)!(undefined, reporter)).toBeUndefined();
+    await expect(Promise.resolve(captured.registry?.call(CH.configGetRemote)!(undefined, reporter))).resolves.toMatchObject({
+      paired: false,
+    });
   });
 });

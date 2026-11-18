@@ -1,7 +1,7 @@
 import { ATTACH_FRAME_MAX_BYTES, type ResumePoint } from '@shared/remote-contract';
 
-import { attachRequest } from '../../electron/remote-client/index';
-import { frameBytes } from '../../electron/remote-client/socket';
+import { attachRequest } from '../../remote-client/index';
+import { frameBytes } from '../../remote-client/socket';
 
 /** A session's resume point, with the id it belongs to. */
 interface TrackedPoint {

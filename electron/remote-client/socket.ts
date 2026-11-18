@@ -9,6 +9,7 @@ import { RELAY_CLOSE, RELAY_PATH, relaySocketUrl } from '@shared/relay-contract'
 import {
   ATTACH_FRAME_MAX_BYTES,
   CALL_GIVE_UP_MS,
+  CLIENT_ATTACH_TIMEOUT_MS,
   CALL_TIMEOUT_CODE,
   POST_ATTACH_FRAME_MAX_BYTES,
   frameKindOf,
@@ -83,41 +84,8 @@ import { attachRequest } from './index';
  * one and refusing is the failing-closed direction.
  */
 
-/**
- * How long {@link connectRemote} may spend getting from "no socket" to an
- * `attach-accepted` frame before it gives up (HIVE-144 review, I5).
- *
- * **Nothing bounded this.** `ClientOptions` carried `family`, `lookup` and
- * `maxPayload` and no timeout, and nothing armed a timer: the promise settled
- * only on a frame, an error or a close. The PR called the wait "bounded by the
- * handshake timeout", but that is `ATTACH_HANDSHAKE_TIMEOUT_MS` on the
- * **server**, which only exists once the far end is a Hive that has answered.
- * Two real addresses are not:
- *
- * - a tailnet host that is simply off costs the OS TCP connect timeout, about
- *   75 s on macOS;
- * - a host running some *other* TCP service on 7434 accepts the connection and
- *   never speaks HTTP, and the dial **hangs indefinitely**.
- *
- * `switchIpcMode` awaits this after `unbindEverything()`, so for the whole of
- * that wait the window has no bound channels at all — an app that looks alive
- * and answers nothing, which is precisely the state the ordering in that
- * function exists to make brief.
- *
- * Ten seconds: long enough for a sleeping tailnet peer to wake and complete a
- * WireGuard handshake, short enough that a person watching the pane's
- * "Attaching…" reads it as a failure rather than a freeze. Comfortably above
- * the server's own 5 s attach deadline, so a Hive that is going to refuse gets
- * to say so in its own words rather than being cut off and reported as a
- * generic timeout.
- *
- * Enforced twice, because the two halves fail differently. `handshakeTimeout`
- * is `ws`'s own and covers TCP connect plus the HTTP upgrade response — the
- * two cases above. The timer below covers what `ws` stops watching after the
- * upgrade: a peer that speaks WebSocket, accepts the attach frame, and never
- * answers it.
- */
-export const CLIENT_ATTACH_TIMEOUT_MS = 10_000;
+// Moved to the shared contract (HIVE-422): the relay's serve loop dials with the same deadline.
+export { CLIENT_ATTACH_TIMEOUT_MS };
 
 /**
  * An address a direct attach will not dial, from either fence (HIVE-428).

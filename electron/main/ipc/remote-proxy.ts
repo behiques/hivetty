@@ -16,7 +16,6 @@ import type { SetSyncGroupRequest, SyncedAppearance } from '@shared/sync-contrac
 import { createBindings, type Bindings } from '../../../core/ipc/bindings';
 import type { Broadcaster } from '../../../core/ipc/broadcaster';
 import { readLocalRemote } from '../../../core/ipc/get-remote';
-import type { ResumeTracker } from '../../../core/ipc/resume-tracker';
 import { assertSender } from '../../../core/ipc/sender';
 import { ACCOUNT_CALLS, cloudSession, LICENCE_CALLS } from '../../../core/licence';
 import { relayStatus } from '../../../core/relay';
@@ -30,6 +29,7 @@ import { createRemoteToasts, type RemoteToasts } from '../notifications/remote-t
 import { checkForUpdatesInteractively, updateStatus } from '../updates';
 
 import { createForegroundStamp, type ForegroundStamp } from './remote-foreground';
+import type { ResumeTracker } from './resume-tracker';
 
 
 /**

@@ -4,7 +4,6 @@ import { rmSync } from 'node:fs';
 import { homedir, hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { app, safeStorage } from 'electron';
 import type { WebSocket } from 'ws';
 
 import { SNAPSHOT_READ_BUDGET_MS, createRemoteListener } from '@remote-host/listener';
@@ -178,11 +177,6 @@ import {
 import type { SetSyncGroupRequest, SyncedAppearance } from '@shared/sync-contract';
 import { idleUpdateStatus, type UpdateStatus } from '@shared/update-contract';
 
-import {
-  createTokenStore,
-  type StoredDeviceCredential,
-  type TokenStore,
-} from '../../electron/remote-client/token-store';
 import { createAgentsRuntime, type AgentRegistry } from '../agents';
 import {
   AUTO_MERGE_AGENT,
@@ -346,7 +340,6 @@ import type { Broadcaster } from './broadcaster';
 import { readLocalRemote } from './get-remote';
 import { createIpcRegistry, type CallHandler, type RemoteReporter } from './registry';
 import { createRemoteDispatch } from './remote-dispatch';
-import { applyRemoteForget, applyRemotePair } from './remote-pairing';
 import { assertSender } from './sender';
 import { applySetRemote, type AttachedSnapshot, type ModeSwitcher } from './set-remote';
 import {
@@ -454,50 +447,6 @@ export function ipcBindingsSize(): number {
   return bindings.size();
 }
 
-/**
- * The device credential this machine was handed when it attached to someone
- * else's Hive (HIVE-144) — composed exactly as Jira's is: `safeStorage` and a
- * file under `userData`, both injected, so `token-store.ts` can be answered by
- * a unit test without a keyring.
- *
- * A function rather than a module-scope constant because `app.getPath` is only
- * answerable after the app exists, and this module is imported long before
- * that. One function rather than two construction sites because
- * `remote:pair`'s handler writes through it and {@link readRemoteCredential}
- * reads through it, and a second spelling of that filename is a credential
- * written to one path and looked for at another.
- *
- * **Exported since HIVE-153, and the rule above is why.** Both channels are on
- * `PROCESS_LOCAL` now, so `router.ts` answers them from the proxy — from a
- * process where the `remoteTokenStore` below no longer exists. It builds its
- * own store *through this factory* rather than composing one, because the
- * failure that rule guards against is exactly the one two surfaces invite: a
- * credential paired from the local handler and looked for by the proxy at
- * another path. There is still one spelling of the filename, in one function.
- */
-export function remoteCredentialStore(): TokenStore {
-  return createTokenStore({
-    safeStorage,
-    filePath: join(app.getPath('userData'), 'remote-credential.bin'),
-  });
-}
-
-/**
- * The stored device credential, or `null` when there is none this machine can
- * use (HIVE-144).
- *
- * Exported for exactly one caller: `ipc/router.ts`'s `switchIpcMode`, which
- * needs it to dial and has no business composing the store itself — Ruling 2
- * put the read on the switch rather than inside `connectRemote`, precisely so
- * the socket module stays free of Electron's `safeStorage`.
- *
- * Still not reachable from the renderer: no IPC verb returns this, and none
- * may. `remote:pair` writes the credential and `remote:forget` clears it;
- * neither hands it back.
- */
-export function readRemoteCredential(): StoredDeviceCredential | null {
-  return remoteCredentialStore().read();
-}
 
 /**
  * How `config:set-remote` asks this process to change mode (HIVE-144).
@@ -4310,22 +4259,6 @@ export function registerIpcHandlers(
     (issue) => send(CH.jiraIssueChanged, issue),
   );
 
-  /**
-   * The device credential this machine was handed when it attached to
-   * someone else's Hive (HIVE-144).
-   *
-   * {@link remoteCredentialStore} rather than a `createTokenStore` call here,
-   * so the filename exists in one place: the mode switch reads this same
-   * credential through `readRemoteCredential`, and a second spelling of that
-   * path would be a credential written by `remote:pair` and looked for
-   * somewhere else at attach time.
-   *
-   * `read()` is main-internal — see `electron/remote-client/token-store.ts`'s
-   * own doc comment for why this is a distinct module from `jira/auth.ts`
-   * rather than a shared helper. No IPC verb returns the token; `remote:pair`
-   * below only ever writes it, and `remote:forget` only ever clears it.
-   */
-  const remoteTokenStore = remoteCredentialStore();
 
   /**
    * The PR poller's read — the app's second handler that executes a binary,
@@ -4715,7 +4648,7 @@ export function registerIpcHandlers(
     modes cannot drift into answering the same question differently.
   */
   handle(CH.configGetRemote, (): LocalRemoteState =>
-    readLocalRemote(remoteCredentialStore().read() !== null),
+    readLocalRemote(platform().desktop?.remotePairing.paired() ?? false),
   );
   /**
    * Store the device credential a `server:pair` mint on some *other* Hive
@@ -4732,14 +4665,17 @@ export function registerIpcHandlers(
    */
   /*
     The bodies of this channel and `remote:forget` below live in
-    `./remote-pairing` since HIVE-153, for the reason `config:set-remote`'s
-    lives in `./set-remote`: both are on `PROCESS_LOCAL`, so the proxy answers
-    them from a process where `remoteTokenStore` is gone. What that fixed is
+    the desktop shell's `remote-pairing` since HIVE-153 (moved to `electron/`
+    by HIVE-422, reached through `platform().desktop.remotePairing`), for the
+    reason `config:set-remote`'s lives in `./set-remote`: both are on
+    `PROCESS_LOCAL`, so the proxy answers them from a process where the
+    local handlers are gone. With no desktop the three answer not paired, an
+    error and nothing. What that fixed is
     not a hypothetical — while they were proxied, a Forget click on an attached
     client cleared the *server's* credential.
   */
   handle(CH.remotePair, (_event, payload): { paired: true } | { error: string } =>
-    applyRemotePair(payload, remoteTokenStore),
+    platform().desktop?.remotePairing.pair(payload) ?? { error: 'This machine cannot attach to another Hive.' },
   );
   /**
    * Discard the credential `remote:pair` stored (HIVE-144). Idempotent, and
@@ -4748,7 +4684,7 @@ export function registerIpcHandlers(
    * from `server:revoke` above.
    */
   handle(CH.remoteForget, (): void => {
-    applyRemoteForget(remoteTokenStore);
+    platform().desktop?.remotePairing.forget();
   });
   /**
    * Try now (HIVE-211). A no-op in local mode, and not a placeholder: the

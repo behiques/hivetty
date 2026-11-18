@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as realWs from 'ws';
 import type { WebSocket } from 'ws';
 
-import { BACKOFF_MS } from '../../../core/ipc/reattach';
+import { BACKOFF_MS } from '../../../electron/main/ipc/reattach';
 import { createRelayServe, SILENT_AFTER_MS, type RelayServeDeps } from '../../../core/relay/serve-loop';
 import { CHANNEL_TAG_BYTES } from '../../../remote-channel/secure-socket';
 import { CLIENT_ATTACH_TIMEOUT_MS } from '../../../electron/remote-client/socket';

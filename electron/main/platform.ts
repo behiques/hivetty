@@ -18,6 +18,8 @@ import type { HostChild } from '../../core/pty-host/supervisor';
 import { shippedRoot } from '../../core/seed/paths';
 
 import { onDisplayWake } from './display-wake';
+import { remoteCredentialStore } from './ipc/remote-credential';
+import { applyRemoteForget, applyRemotePair } from './ipc/remote-pairing';
 import { createWindowBroadcaster } from './ipc/window-broadcaster';
 import { keepAwake } from './keep-awake';
 import { activateOnThisMachine, focusThisMachine } from './notifications/activate-here';
@@ -213,6 +215,17 @@ export function createDesktopPlatform(): Platform {
       checkForUpdatesInteractively,
       setUpdateNotificationSink,
       updateStatus,
+      /*
+        A store per call, as `router.ts` already builds them: `createTokenStore`
+        holds nothing between calls, so a pair followed by a read sees the write.
+      */
+      remotePairing: {
+        paired: () => remoteCredentialStore().read() !== null,
+        pair: (payload) => applyRemotePair(payload, remoteCredentialStore()),
+        forget: () => {
+          applyRemoteForget(remoteCredentialStore());
+        },
+      },
     },
   };
 }

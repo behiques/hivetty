@@ -1438,6 +1438,56 @@ export const CALL_TIMEOUT_CODE = 'call-timeout';
 export const ATTACH_FRAME_MAX_BYTES = 8 * 1024;
 
 /**
+ * How long to wait before each retry, and the ceiling it holds at.
+ *
+ * Front-loaded because most drops are brief — a tailnet blip, a peer that slept
+ * for a moment — and those should be invisible. The tail is thirty seconds
+ * because the drops that are not brief are usually a machine rebooting or a
+ * network that is gone, and polling either one faster achieves nothing at some
+ * cost to a laptop battery.
+ *
+ * The last entry repeats for as long as the loop runs. There is no give-up
+ * step, deliberately: see `createReattachLoop` (`electron/main/ipc/reattach.ts`).
+ */
+export const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000] as const;
+
+/**
+ * How long {@link connectRemote} may spend getting from "no socket" to an
+ * `attach-accepted` frame before it gives up (HIVE-144 review, I5).
+ *
+ * **Nothing bounded this.** `ClientOptions` carried `family`, `lookup` and
+ * `maxPayload` and no timeout, and nothing armed a timer: the promise settled
+ * only on a frame, an error or a close. The PR called the wait "bounded by the
+ * handshake timeout", but that is `ATTACH_HANDSHAKE_TIMEOUT_MS` on the
+ * **server**, which only exists once the far end is a Hive that has answered.
+ * Two real addresses are not:
+ *
+ * - a tailnet host that is simply off costs the OS TCP connect timeout, about
+ *   75 s on macOS;
+ * - a host running some *other* TCP service on 7434 accepts the connection and
+ *   never speaks HTTP, and the dial **hangs indefinitely**.
+ *
+ * `switchIpcMode` awaits this after `unbindEverything()`, so for the whole of
+ * that wait the window has no bound channels at all — an app that looks alive
+ * and answers nothing, which is precisely the state the ordering in that
+ * function exists to make brief.
+ *
+ * Ten seconds: long enough for a sleeping tailnet peer to wake and complete a
+ * WireGuard handshake, short enough that a person watching the pane's
+ * "Attaching…" reads it as a failure rather than a freeze. Comfortably above
+ * the server's own 5 s attach deadline, so a Hive that is going to refuse gets
+ * to say so in its own words rather than being cut off and reported as a
+ * generic timeout.
+ *
+ * Enforced twice, because the two halves fail differently. `handshakeTimeout`
+ * is `ws`'s own and covers TCP connect plus the HTTP upgrade response — the
+ * two cases above. The timer below covers what `ws` stops watching after the
+ * upgrade: a peer that speaks WebSocket, accepts the attach frame, and never
+ * answers it.
+ */
+export const CLIENT_ATTACH_TIMEOUT_MS = 10_000;
+
+/**
  * The most **any** frame on an attached socket may weigh — `ws`'s `maxPayload`
  * on both ends, and therefore the ceiling an attached device's `call` and
  * `notify` frames live under (HIVE-143 review).

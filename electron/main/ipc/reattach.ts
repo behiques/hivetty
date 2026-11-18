@@ -1,20 +1,10 @@
 import type { RemoteLinkStatus } from '@shared/ipc-contract';
+import { BACKOFF_MS } from '@shared/remote-contract';
 
-import { classifyCause, type CloseCause, type RemoteClient } from '../../electron/remote-client/socket';
+import { classifyCause, type CloseCause, type RemoteClient } from '../../remote-client/socket';
 
-/**
- * How long to wait before each retry, and the ceiling it holds at.
- *
- * Front-loaded because most drops are brief — a tailnet blip, a peer that slept
- * for a moment — and those should be invisible. The tail is thirty seconds
- * because the drops that are not brief are usually a machine rebooting or a
- * network that is gone, and polling either one faster achieves nothing at some
- * cost to a laptop battery.
- *
- * The last entry repeats for as long as the loop runs. There is no give-up
- * step, deliberately: see {@link createReattachLoop}.
- */
-export const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000] as const;
+// Moved to the shared contract (HIVE-422): the relay's serve loop backs off on the same schedule.
+export { BACKOFF_MS };
 
 interface ReattachDeps {
   /** The far machine's name, for every status this loop emits. */

@@ -20,8 +20,9 @@ import { getConfig } from '../config';
  * arriving through the other door.
  *
  * `paired` is handed in rather than read here: the credential store is spelled
- * in `ipc/index.ts` (`remoteCredentialStore`), which imports this module, so
- * reading it here would close an import cycle. Both callers pass the same
+ * in the desktop shell (`electron/main/ipc/remote-credential.ts`, HIVE-422),
+ * which core may not import. Both callers pass the same answer: core's handler
+ * `platform().desktop?.remotePairing.paired()`, the proxy
  * `remoteCredentialStore().read() !== null`.
  */
 export function readLocalRemote(paired: boolean): LocalRemoteState {

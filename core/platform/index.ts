@@ -91,6 +91,16 @@ export interface Desktop {
   checkForUpdatesInteractively(): Promise<void>;
   setUpdateNotificationSink(sink: (input: UpdateNotification) => void): void;
   updateStatus(): UpdateStatus;
+  /**
+   * The credential this machine stores when it attaches to another Hive.
+   * Remote mode is desktop-only; `remote:pair`, `remote:forget` and the paired
+   * flag in `config:get-remote` answer through it.
+   */
+  remotePairing: {
+    paired(): boolean;
+    pair(payload: unknown): { paired: true } | { error: string };
+    forget(): void;
+  };
 }
 
 export interface Platform {

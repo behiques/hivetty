@@ -466,7 +466,7 @@ const { remoteProxyBindingsSize, resetRemoteProxy } = await import(
 const { AddressRefusedError, RELAY_SERVER_OFFLINE, RelayClosedError, ServerTooOldError } = await import(
   '../../../electron/remote-client/socket'
 );
-const { BACKOFF_MS } = await import('../../../core/ipc/reattach');
+const { BACKOFF_MS } = await import('../../../electron/main/ipc/reattach');
 const { attachedResumeTracker, attachedServerName, dialNowAttached, registerIpc, switchIpcMode } = await import(
   '../../../electron/main/ipc/router'
 );
