@@ -125,8 +125,7 @@ describe('the files a Claude Code session is launched with', () => {
 
   it('session mcp config', async () => {
     await writeMcpConfig(join(root, 'hive', 'hive.mcp.json'), {
-      execPath: '/Applications/HiveTTY.app/Contents/MacOS/HiveTTY',
-      scriptPath: '/Applications/HiveTTY.app/Contents/Resources/app.asar/out/mcp-host/index.js',
+      launch: { command: '/Applications/HiveTTY.app/Contents/MacOS/HiveTTY', args: ['/Applications/HiveTTY.app/Contents/Resources/app.asar/out/mcp-host/index.js'], env: { ELECTRON_RUN_AS_NODE: '1' } },
     });
     expect(await tree()).toMatchSnapshot();
   });

@@ -1,14 +1,14 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { RemoteLinkStatus } from '../../../shared/ipc-contract';
+import type { RemoteLinkStatus } from '../../../../shared/ipc-contract';
 import {
   RELAY_SERVER_OFFLINE,
   RelayClosedError,
   type CloseCause,
   type RemoteClient,
-} from '../../../electron/remote-client/socket';
-import { BACKOFF_MS, createReattachLoop } from '../../../core/ipc/reattach';
+} from '../../../../electron/remote-client/socket';
+import { BACKOFF_MS, createReattachLoop } from '../../../../electron/main/ipc/reattach';
 
 /**
  * The reconnect loop (HIVE-150).
@@ -251,7 +251,7 @@ describe('createReattachLoop', () => {
       calls += 1;
       if (calls === 1) throw new Error('ECONNREFUSED');
       const { AttachRefusedError } = await import(
-        '../../../electron/remote-client/socket'
+        '../../../../electron/remote-client/socket'
       );
       throw new AttachRefusedError('revoked', 'That device was revoked.');
     });

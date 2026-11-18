@@ -21,6 +21,9 @@ HTTP from a container). The **licence** (`core/licence/`) signs in against the
 HiveTTY cloud and holds a signed, time-limited lease whose entitlements turn paid features on,
 Codex and Copilot among them; the renderer's gate covers the window until a lease is valid.
 `shared` is the only code both sides import. `core/` is the feature code both shells run; `electron/` is the desktop shell.
+Only `electron/` imports Electron: core reaches its shell through the platform port
+(`core/platform/`), and everything that needs a screen sits on the port's optional `desktop`
+member, so core registers every handler with or without an `ipcMain`.
 
 ## Processes
 
@@ -70,11 +73,13 @@ src/
                          lib/theme/colour, and nothing else from lib/
   stores/                hive, ui, appearance, editor
 core/                    config, sessions, hooks, ledger, agents, integrations, server
+  platform/              the port to the shell: setPlatform() / platform(), the desktop member
   harness/               the port, and an adapter each: claude-code/, codex/, copilot/
   licence/               sign-in, the lease and its entitlements, devices, billing
   relay/                 the managed relay: the serve loop and its gate
 electron/                the desktop shell
-  main/                  the entry point, windows, tray, menu, updates, desktop notifications
+  main/                  the entry point, windows, tray, menu, updates, desktop notifications,
+                         and platform.ts, the desktop's answer to core's platform port
   preload/               the bridge
   remote-client/         attach to a server (the laptop half)
 pty-host/                terminals

@@ -2,6 +2,8 @@ import { chmodSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node
 
 import { SYNC_GROUPS, type SyncGroup } from '@shared/sync-contract';
 
+import type { Secrets } from '../platform';
+
 /** This Mac's side of settings sync (HIVE-284), kept beside config.json as `sync-state.json`. */
 export interface SyncState {
   v: 1;
@@ -109,7 +111,7 @@ export interface StoredKey {
 
 export interface KeyStoreDeps {
   file: string;
-  safeStorage: Pick<Electron.SafeStorage, 'isEncryptionAvailable' | 'encryptString' | 'decryptString'>;
+  safeStorage: Secrets;
 }
 
 export interface KeyStore {

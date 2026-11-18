@@ -4,19 +4,6 @@ import { rmSync } from 'node:fs';
 import { homedir, hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import {
-  BrowserWindow,
-  Notification,
-  app,
-  dialog,
-  ipcMain,
-  powerMonitor,
-  powerSaveBlocker,
-  safeStorage,
-  shell,
-  type IpcMainEvent,
-  type IpcMainInvokeEvent,
-} from 'electron';
 import type { WebSocket } from 'ws';
 
 import { SNAPSHOT_READ_BUDGET_MS, createRemoteListener } from '@remote-host/listener';
@@ -152,6 +139,7 @@ import {
   type NotificationReadEvent,
   type RemoteLinkStatus,
   type LocalRemoteState,
+  type NotificationDeliveryStatus,
 } from '@shared/ipc-contract';
 import type {
   JiraComment,
@@ -187,30 +175,8 @@ import {
   type SlackTokensState,
 } from '@shared/slack-contract';
 import type { SetSyncGroupRequest, SyncedAppearance } from '@shared/sync-contract';
-import type { UpdateStatus } from '@shared/update-contract';
+import { idleUpdateStatus, type UpdateStatus } from '@shared/update-contract';
 
-import { onDisplayWake } from '../../electron/main/display-wake';
-import { keepAwake } from '../../electron/main/keep-awake';
-import {
-  activateOnThisMachine,
-  focusThisMachine,
-} from '../../electron/main/notifications/activate-here';
-import {
-  notificationDelivery,
-  recordNotificationRefusal,
-} from '../../electron/main/notifications/delivery';
-import { badgeDock, clearDockBadge } from '../../electron/main/notifications/dock-badge';
-import { splashEnabled } from '../../electron/main/splash';
-import {
-  checkForUpdatesInteractively,
-  setUpdateNotificationSink,
-  updateStatus,
-} from '../../electron/main/updates';
-import {
-  createTokenStore,
-  type StoredDeviceCredential,
-  type TokenStore,
-} from '../../electron/remote-client/token-store';
 import { createAgentsRuntime, type AgentRegistry } from '../agents';
 import {
   AUTO_MERGE_AGENT,
@@ -338,6 +304,7 @@ import {
   createToastRoute,
 } from '../notifications';
 import { createBuilderProgress, type BuilderProgress } from '../plans';
+import { platform, type IpcEvent } from '../platform';
 import { registerPtyHost } from '../pty-host';
 import { onRelayStatus, relayStatus } from '../relay';
 import { relayHostsFor } from '../relay/hosts';
@@ -369,17 +336,17 @@ import { PLUGIN_DIR } from '../skills/paths';
 import { onSyncAppearance, onSyncStatus, setSyncHooks, syncCalls } from '../sync';
 
 import { createBindings } from './bindings';
-import { createWindowBroadcaster, type Broadcaster } from './broadcaster';
+import type { Broadcaster } from './broadcaster';
 import { readLocalRemote } from './get-remote';
 import { createIpcRegistry, type CallHandler, type RemoteReporter } from './registry';
 import { createRemoteDispatch } from './remote-dispatch';
-import { applyRemoteForget, applyRemotePair } from './remote-pairing';
 import { assertSender } from './sender';
 import { applySetRemote, type AttachedSnapshot, type ModeSwitcher } from './set-remote';
 import {
   createFanOutBroadcaster,
   createSocketBroadcaster,
 } from './socket-broadcaster';
+import { splashEnabled } from './splash-enabled';
 import { createSurfaceRegistry, deviceNameOf, type SurfaceId } from './surfaces';
 
 /**
@@ -397,7 +364,8 @@ import { createSurfaceRegistry, deviceNameOf, type SurfaceId } from './surfaces'
  * HIVE-265 ruling 4: the Playwright suite runs unpackaged with HIVE_E2E and no cloud, so the licence gate stays off;
  * HIVE-270's licence specs set HIVE_E2E_GATE to keep it on. HIVE-332's plan lock follows the same switch.
  */
-const licenceGateOff = (): boolean => !app.isPackaged && Boolean(process.env.HIVE_E2E) && !process.env.HIVE_E2E_GATE;
+const licenceGateOff = (): boolean =>
+  !platform().lifecycle.isPackaged && Boolean(process.env.HIVE_E2E) && !process.env.HIVE_E2E_GATE;
 const entitledCli = (id: HarnessId): string | null => (licenceGateOff() ? null : cliEntitled(id));
 
 /**
@@ -463,7 +431,7 @@ const surfaceFor = (sender: unknown): SurfaceId =>
  * reason `remoteRegistry` is: `registerIpcHandlers` fills it, and a live mode
  * switch must be able to empty it from outside that function.
  */
-const bindings = createBindings(ipcMain);
+const bindings = createBindings(() => platform().desktop?.ipcMain);
 
 /**
  * How many channels this process has bound locally (HIVE-144).
@@ -477,51 +445,6 @@ const bindings = createBindings(ipcMain);
  */
 export function ipcBindingsSize(): number {
   return bindings.size();
-}
-
-/**
- * The device credential this machine was handed when it attached to someone
- * else's Hive (HIVE-144) — composed exactly as Jira's is: `safeStorage` and a
- * file under `userData`, both injected, so `token-store.ts` can be answered by
- * a unit test without a keyring.
- *
- * A function rather than a module-scope constant because `app.getPath` is only
- * answerable after the app exists, and this module is imported long before
- * that. One function rather than two construction sites because
- * `remote:pair`'s handler writes through it and {@link readRemoteCredential}
- * reads through it, and a second spelling of that filename is a credential
- * written to one path and looked for at another.
- *
- * **Exported since HIVE-153, and the rule above is why.** Both channels are on
- * `PROCESS_LOCAL` now, so `router.ts` answers them from the proxy — from a
- * process where the `remoteTokenStore` below no longer exists. It builds its
- * own store *through this factory* rather than composing one, because the
- * failure that rule guards against is exactly the one two surfaces invite: a
- * credential paired from the local handler and looked for by the proxy at
- * another path. There is still one spelling of the filename, in one function.
- */
-export function remoteCredentialStore(): TokenStore {
-  return createTokenStore({
-    safeStorage,
-    filePath: join(app.getPath('userData'), 'remote-credential.bin'),
-  });
-}
-
-/**
- * The stored device credential, or `null` when there is none this machine can
- * use (HIVE-144).
- *
- * Exported for exactly one caller: `ipc/router.ts`'s `switchIpcMode`, which
- * needs it to dial and has no business composing the store itself — Ruling 2
- * put the read on the switch rather than inside `connectRemote`, precisely so
- * the socket module stays free of Electron's `safeStorage`.
- *
- * Still not reachable from the renderer: no IPC verb returns this, and none
- * may. `remote:pair` writes the credential and `remote:forget` clears it;
- * neither hands it back.
- */
-export function readRemoteCredential(): StoredDeviceCredential | null {
-  return remoteCredentialStore().read();
 }
 
 /**
@@ -593,8 +516,7 @@ const noModeSwitcher: ModeSwitcher = () => {
  * paragraph above enforceable; the `_event` naming convention every other
  * handler follows is what makes it readable.
  */
-const remoteInvokeEvent = (reporter: RemoteReporter): IpcMainInvokeEvent =>
-  ({ sender: reporter }) as unknown as IpcMainInvokeEvent;
+const remoteInvokeEvent = (reporter: RemoteReporter): IpcEvent => ({ sender: reporter });
 
 /**
  * Fire-and-forget channels (story 093).
@@ -606,9 +528,23 @@ const remoteInvokeEvent = (reporter: RemoteReporter): IpcMainInvokeEvent =>
  */
 function on(
   channel: string,
-  handler: (event: IpcMainEvent, payload: unknown) => void,
+  handler: (event: IpcEvent, payload: unknown) => void,
 ): void {
-  ipcMain.on(channel, (event, payload: unknown) => {
+  /*
+    Recorded once at registration, never inside the `ipcMain` callback below —
+    a record per invocation would rewrite the same entry on every keystroke.
+    `remote-dispatch.ts` owns the refusals; this stores and nothing else.
+  */
+  remoteRegistry.recordNotify(channel as Channel, (payload, reporter) => {
+    // The reporter stands in for `event.sender`. Only `pty:prompt` reads it,
+    // through `watchReporter`, which already accepts anything with an `.on`.
+    handler({ sender: reporter }, payload);
+  });
+  // HIVE-144: so a later mode switch can unbind this channel from `ipcMain`
+  // and register it again against a different set of layers.
+  bindings.record(channel);
+  // Only a shell with windows has an ipcMain. A server answers through the registry alone (HIVE-422).
+  platform().desktop?.ipcMain.on(channel, (event, payload: unknown) => {
     assertSender(event);
     try {
       handler(event, payload);
@@ -619,30 +555,13 @@ function on(
       console.error(`[hive] rejected ${channel}:`, cause);
     }
   });
-  /*
-    Recorded once at registration, never inside the `ipcMain` callback above —
-    a record per invocation would rewrite the same entry on every keystroke.
-    `remote-dispatch.ts` owns the refusals; this stores and nothing else.
-  */
-  remoteRegistry.recordNotify(channel as Channel, (payload, reporter) => {
-    // The reporter stands in for `event.sender`. Only `pty:prompt` reads it,
-    // through `watchReporter`, which already accepts anything with an `.on`.
-    handler({ sender: reporter } as unknown as IpcMainEvent, payload);
-  });
-  // HIVE-144: so a later mode switch can unbind this channel from `ipcMain`
-  // and register it again against a different set of layers.
-  bindings.record(channel);
 }
 
 /** Wrap a handler so sender validation cannot be forgotten on a new channel. */
 function handle<T>(
   channel: string,
-  handler: (event: IpcMainInvokeEvent, payload: unknown) => T,
+  handler: (event: IpcEvent, payload: unknown) => T,
 ): void {
-  ipcMain.handle(channel, (event, payload: unknown) => {
-    assertSender(event);
-    return handler(event, payload);
-  });
   // Registration-time, as in `on` above. `assertSender` is deliberately absent:
   // there is no sender to assert, and the socket's own gate is the handshake
   // plus `remote-dispatch.ts` — the one remote gate, kept out of the local path.
@@ -652,6 +571,11 @@ function handle<T>(
   // HIVE-144: so a later mode switch can unbind this channel from `ipcMain`
   // and register it again against a different set of layers.
   bindings.record(channel);
+  // Only a shell with windows has an ipcMain. A server answers through the registry alone (HIVE-422).
+  platform().desktop?.ipcMain.handle(channel, (event, payload: unknown) => {
+    assertSender(event);
+    return handler(event, payload);
+  });
 }
 
 /**
@@ -1237,10 +1161,27 @@ const foreground = new Map<SurfaceId, { terminalId: string | null; focused: bool
  * (or the splash, during startup) turn every foreground session into an
  * interruption about something on screen.
  */
-const windowFocused = (): boolean =>
-  BrowserWindow.getAllWindows().some(
-    (window) => !window.isDestroyed() && window.isFocused(),
-  );
+const windowFocused = (): boolean => platform().desktop?.windowFocused() ?? false;
+
+/*
+  What a machine with no screen answers (HIVE-422). A server's platform has no
+  `desktop`; every screen-only read falls back to one of these, never to a
+  guess about somebody else's screen.
+*/
+
+/** Delivers to nobody: with no desktop there are no windows to push to. */
+const silentBroadcaster: Broadcaster = { emit: () => undefined };
+
+/** No notification daemon a server could reach, and nothing refused yet. */
+const NO_DESKTOP_DELIVERY: NotificationDeliveryStatus = { supported: false, refused: null };
+
+/** The contract's status for a build that cannot check (`unsupported`). */
+const noDesktopUpdateStatus = (): UpdateStatus =>
+  idleUpdateStatus(platform().lifecycle.version, {
+    canCheck: false,
+    mode: 'manual',
+    reason: 'This copy has no desktop to update. Install a newer release from the releases page.',
+  });
 
 /**
  * Is this terminal the one **that surface** is already looking at?
@@ -1410,11 +1351,12 @@ let stopPermissionReminder: (() => void) | null = null;
  */
 function watchWindowFocus(): void {
   unwatchWindowFocus?.();
-  app.on('browser-window-blur', scheduleForegroundChange);
-  app.on('browser-window-focus', scheduleForegroundChange);
+  // No desktop, no windows to watch (HIVE-422): the subscriptions are no-ops.
+  const offBlur = platform().desktop?.onWindowBlur(scheduleForegroundChange);
+  const offFocus = platform().desktop?.onWindowFocus(scheduleForegroundChange);
   unwatchWindowFocus = () => {
-    app.removeListener('browser-window-blur', scheduleForegroundChange);
-    app.removeListener('browser-window-focus', scheduleForegroundChange);
+    offBlur?.();
+    offFocus?.();
     unwatchWindowFocus = null;
   };
 }
@@ -1540,7 +1482,7 @@ export function remoteListenerBindError(): string | null {
  * side effects alone, which is every test on this branch until this one.
  */
 export function registerIpcHandlers(
-  broadcaster: Broadcaster = createWindowBroadcaster(),
+  broadcaster: Broadcaster = platform().desktop?.broadcaster ?? silentBroadcaster,
   switchMode: ModeSwitcher = noModeSwitcher,
   attachedServerName: () => string | null = () => null,
   attachedSnapshot: AttachedSnapshot = () => null,
@@ -1637,73 +1579,8 @@ export function registerIpcHandlers(
    * calls this only for a local window — an attached client raises its own,
    * because a served Mac's desktop is not where the user is.
    */
-  const presentLocally = ({
-    title,
-    body,
-    onClick,
-  }: {
-    title: string;
-    body: string;
-    onClick: () => void;
-  }): void => {
-      // False on a Linux box with no notification daemon. Checked per send
-      // rather than once at boot: the daemon can arrive or go away while the
-      // app is running, and constructing one when unsupported throws.
-      if (!Notification.isSupported()) return;
-
-      const notification = new Notification({ title, body });
-      notification.on('click', onClick);
-      /**
-       * The failure that was being thrown away.
-       *
-       * `show()` is fire-and-forget and its refusal arrives here, on an event
-       * nothing was listening to. Measured on macOS 15 / Electron 43.2.0:
-       * `isSupported()` returns `true`, this event fires with `UNErrorDomain
-       * error 1` — not authorized — and the app carried on reporting desktop
-       * delivery as available. Every "System" notification since has been
-       * dropped in silence.
-       *
-       * Recorded rather than merely logged, because the honest place for it is
-       * the settings pane that offers the switch. Logged once per distinct
-       * reason so a fleet of blocked sessions cannot fill a terminal with the
-       * same line.
-       */
-      notification.on('failed', (_event, error) => {
-        const reason = String(error);
-        if (!recordNotificationRefusal(reason)) return;
-        console.error(
-          `[hive] the OS refused a desktop notification — the inbox still has it (${reason})`,
-        );
-      });
-      notification.show();
-
-      /**
-       * The dock is what still works when the OS says no.
-       *
-       * Measured on the same machine that refuses notifications outright:
-       * `app.dock.bounce('critical')` and `setBadge` both succeed, because
-       * neither needs notification authorization. So the app is not out of ways
-       * to reach someone in another window — it was only using the one that was
-       * being rejected.
-       *
-       * Unconditional rather than only on a recorded refusal. A bounce is what
-       * `both` already means — *interrupt me* — and gating it on a failure
-       * would make the first interruption of every launch the one that gets
-       * lost, since the refusal is not known until a send has already failed.
-       * `dock` is undefined off macOS, where the badge and bounce have no
-       * equivalent and the toast is expected to work.
-       *
-       * **`informational`, not `critical`.** `critical` maps to
-       * `NSCriticalRequest`, which bounces *until the app is activated* — and
-       * nothing here ever calls `cancelBounce`. A fleet left overnight would
-       * start bouncing at the first session to go quiet and not stop until
-       * somebody came back to it, which is not an interruption, it is a fault
-       * light. `informational` bounces once, which is the whole of what a
-       * notification is entitled to; the **badge** is the part that persists,
-       * and it persists honestly because it is a count rather than an alarm.
-       */
-    app.dock?.bounce('informational');
-  };
+  const presentLocally = (toast: { title: string; body: string; onClick: () => void }): void =>
+    platform().notify(toast);
 
   /**
    * Open whatever a notification is about.
@@ -1731,7 +1608,7 @@ export function registerIpcHandlers(
        * A `none` action has nowhere to go and is satisfied by the focus below.
        */
       if (isThisMachineAction(action)) {
-        activateOnThisMachine(action);
+        platform().desktop?.activateOnThisMachine(action);
         return;
       }
 
@@ -1742,7 +1619,7 @@ export function registerIpcHandlers(
        * renderer knows what opening a session means — and a minimised window
        * has to be restored first, or focusing it does nothing visible.
        */
-      focusThisMachine();
+      platform().desktop?.focusThisMachine();
 
       /**
        * An `ask` answers nothing from here (HIVE-118) — it *reveals* the card.
@@ -1815,11 +1692,11 @@ export function registerIpcHandlers(
     present: presentLocally,
     queue: (payload) => { toastQueue.push(payload); },
     /*
-      Read from `BrowserWindow`, not from the registry: a surface registers
+      Read from the desktop's windows, not from the registry: a surface registers
       lazily on its first report, so "no surface" and "no window" are different
       states and only the second is an empty room.
     */
-    hasWindow: () => BrowserWindow.getAllWindows().some((window) => !window.isDestroyed()),
+    hasWindow: () => platform().desktop?.hasWindow() ?? false,
   });
 
   const hub = createNotificationHub({
@@ -1880,7 +1757,7 @@ export function registerIpcHandlers(
      */
     announceBadge: (count) => {
       if (isServerMode()) return;
-      badgeDock(count);
+      platform().desktop?.badgeDock(count);
     },
     activate: activateNotification,
     now: () => Date.now(),
@@ -1961,13 +1838,13 @@ export function registerIpcHandlers(
     openCards: () =>
       ledger.read({}).openAsks.filter((ask) => ask.to === OVERMIND && isPermissionAsk(ask)),
     remind: (id) => hub.remind(id),
-    idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    idleSeconds: () => platform().desktop?.idleSeconds() ?? 0,
   });
   const remindOnFocus = (): void => permissionReminder.onFocus();
   permissionReminder.start();
-  app.on('browser-window-focus', remindOnFocus);
+  const offRemindOnFocus = platform().desktop?.onWindowFocus(remindOnFocus);
   stopPermissionReminder = () => {
-    app.removeListener('browser-window-focus', remindOnFocus);
+    offRemindOnFocus?.();
     permissionReminder.stop();
     stopPermissionReminder = null;
   };
@@ -1986,7 +1863,7 @@ export function registerIpcHandlers(
    * process answers, and since HIVE-145 the toast is raised on the *client's*
    * desktop. Proxied, this told an attached user about the server's OS.
    */
-  handle(CH.notificationsDelivery, () => notificationDelivery());
+  handle(CH.notificationsDelivery, () => platform().desktop?.notificationDelivery() ?? NO_DESKTOP_DELIVERY);
 
   /**
    * Heard and ignored (HIVE-159).
@@ -2030,7 +1907,7 @@ export function registerIpcHandlers(
    * raised into an empty sink, which can only happen in the moments before the
    * first check is even scheduled.
    */
-  setUpdateNotificationSink((input) => {
+  platform().desktop?.setUpdateNotificationSink((input) => {
     hub.raise(input);
   });
 
@@ -2045,8 +1922,10 @@ export function registerIpcHandlers(
     if (action !== null) hub.activate(action);
   });
 
-  handle(CH.updatesStatus, (): UpdateStatus => updateStatus());
-  handle(CH.updatesCheck, () => checkForUpdatesInteractively());
+  handle(CH.updatesStatus, (): UpdateStatus => platform().desktop?.updateStatus() ?? noDesktopUpdateStatus());
+  handle(CH.updatesCheck, async (): Promise<void> => {
+    await platform().desktop?.checkForUpdatesInteractively();
+  });
   // HIVE-264. Process-local: the remote proxy answers the same calls from `ACCOUNT_CALLS`.
   handle(CH.accountState, () => ACCOUNT_CALLS[CH.accountState]());
   handle(CH.accountSignIn, () => ACCOUNT_CALLS[CH.accountSignIn]());
@@ -2092,7 +1971,7 @@ export function registerIpcHandlers(
     syncCalls()[CH.syncReportAppearance](fields as SyncedAppearance),
   );
   // HIVE-265: the gate's Quit. window.close() would leave the app running in the dock.
-  handle(CH.appQuit, () => app.quit());
+  handle(CH.appQuit, () => platform().lifecycle.quit());
 
   /**
    * The hook pipeline is constructed here and started by `createSessions`
@@ -2103,7 +1982,7 @@ export function registerIpcHandlers(
    * status event should go. Handing it over unstarted keeps that knowledge in
    * one place instead of duplicating a registry lookup here.
    *
-   * `app.getPath('userData')` is the app's own directory. Nothing about this
+   * `platform().paths.stateDir` is the app's own directory. Nothing about this
    * touches `~/.claude`.
    */
   /**
@@ -2115,7 +1994,7 @@ export function registerIpcHandlers(
    * knows about its own rows, not anything Claude wrote.
    */
   history = createSessionHistory(
-    join(app.getPath('userData'), SESSION_HISTORY_FILE),
+    join(platform().paths.stateDir, SESSION_HISTORY_FILE),
   );
 
   /**
@@ -2498,7 +2377,7 @@ export function registerIpcHandlers(
 
   /*
     Constructed before the session layer, which takes it as an option and syncs
-    it on every spawn (HIVE-96). `app.getVersion()` is read here rather than
+    it on every spawn (HIVE-96). `platform().lifecycle.version` is read here rather than
     inside the runtime so that module's tests can run under plain Node — the
     same reason `userDataPath` is passed in rather than resolved there.
   */
@@ -2509,7 +2388,7 @@ export function registerIpcHandlers(
     and this is the only line where they meet.
   */
   const hooks = createHookRuntime({
-    userDataPath: app.getPath('userData'),
+    userDataPath: platform().paths.stateDir,
     // Read per call, so a config reload is picked up (HIVE-79).
     sessionMetrics: () => getConfig().sessionMetrics,
     // HIVE-176. Resolved against the plugin registry at every write, and the
@@ -2782,8 +2661,8 @@ export function registerIpcHandlers(
   });
 
   skills = createSkillsRuntime({
-    userDataPath: app.getPath('userData'),
-    version: app.getVersion(),
+    userDataPath: platform().paths.stateDir,
+    version: platform().lifecycle.version,
     /*
       Read at every regeneration rather than captured here: this runs before the
       receiver has bound, so a value read now would be `null` for the life of the
@@ -2839,8 +2718,8 @@ export function registerIpcHandlers(
     on where the app is installed and where its own bundle sits, and neither
     moves while the app runs.
 
-    `import.meta.dirname` is `out/main/` in both dev and a packaged build, which
-    is where `mcp-host.js` is emitted — the same resolution `pty-host` uses.
+    How `mcp-host.js` is launched is the shell's answer, `platform().mcpLaunch`
+    (HIVE-422): the desktop runs its own binary as Node from `out/main/`.
 
     Fired here, unawaited, so a slow write cannot delay the first window — the
     same reasoning `startLoginEnvImport` gives in `main/index.ts`. That leaves
@@ -2850,9 +2729,8 @@ export function registerIpcHandlers(
     session can be spawned, exactly as they already `await loginEnvStatus()`.
   */
   const mcp = createMcpRuntime({
-    userDataPath: app.getPath('userData'),
-    execPath: process.execPath,
-    scriptPath: join(import.meta.dirname, 'mcp-host.js'),
+    userDataPath: platform().paths.stateDir,
+    launch: platform().mcpLaunch,
   });
   void mcp.start();
 
@@ -2904,8 +2782,8 @@ export function registerIpcHandlers(
 
   // HIVE-343. Copilot's agent token, stored as Slack's are. `read()` reaches the wake, never a channel.
   const cliTokens = createCliTokens({
-    store: safeStorage,
-    file: credentialFile(join(app.getPath('userData'), CLI_TOKENS_FILE)),
+    store: platform().secrets,
+    file: credentialFile(join(platform().paths.stateDir, CLI_TOKENS_FILE)),
   });
 
   // HIVE-396. One deps object, so the form's harness check resolves exactly what a wake would.
@@ -2916,17 +2794,17 @@ export function registerIpcHandlers(
     cliHome,
     // HIVE-343. The only reader of a stored CLI token: it reaches the child's env, never a channel.
     cliToken: (id) => (id === 'copilot' ? cliTokens.read('copilot') : null),
-    promptFile: (name) => agentPromptFile(app.getPath('userData'), name),
+    promptFile: (name) => agentPromptFile(platform().paths.stateDir, name),
     // HIVE-360: the run's own CLI's folder. The fallback is Claude's, which has no catalog.md, so a
     // CLI whose folder is missing gets no catalog block, and Claude's argv is today's.
-    pluginDir: (cli) => skills?.pluginDirPath(cli) ?? join(app.getPath('userData'), PLUGIN_DIR),
+    pluginDir: (cli) => skills?.pluginDirPath(cli) ?? join(platform().paths.stateDir, PLUGIN_DIR),
     // The agent-space file, never `hooks.settingsPathFor()`: that one carries
     // no `permissions.ask` rule, and a wake started against it would run with
     // no fence at all (HIVE-119).
     agentSettingsPath: () => hooks.agentSettingsPathFor(),
     mcpConfig: () => mcp.configPathFor(),
     hiveServer: () => mcp.hiveServerSpec(),
-    agentMcpFile: (name) => agentMcpConfigFile(app.getPath('userData'), name),
+    agentMcpFile: (name) => agentMcpConfigFile(platform().paths.stateDir, name),
     hookEnv: (name) => hooks.envFor(name),
     claudeCommand,
     subscriptionAuth: () => getConfig().subscriptionAuth,
@@ -2946,7 +2824,7 @@ export function registerIpcHandlers(
     // HIVE-137. The container agent's settings file lives in the container
     // set `hooks` writes at start, and the alias is the receiver's global one,
     // read live so a config reload is honoured on the next wake.
-    userDataPath: () => app.getPath('userData'),
+    userDataPath: () => platform().paths.stateDir,
     hostAlias: () => getConfig().receiver.hostAlias,
     agentContainerSettingsPath: (config) => hooks.agentContainerSettingsPathFor(config),
     laneHolds: (name, lane) => laneClaims(name, ledger.read({}).entries).has(lane),
@@ -3038,12 +2916,9 @@ export function registerIpcHandlers(
     } satisfies AgentStatusPush);
   };
 
-  /** Keeps the Mac awake while any agent run is live (HIVE-408). Server mode's own blocker is separate. */
-  let runAwake: ((live: boolean) => void) | undefined;
-
   runs = createRunTracker({
-    // Built on first use: the ipc suites' `electron` mocks have no `powerSaveBlocker`, and reading a missing export throws.
-    onLive: (live) => (runAwake ??= keepAwake(powerSaveBlocker))(live),
+    // Keeps the Mac awake while any agent run is live (HIVE-408); the desktop holds the one blocker. Server mode's own blocker is separate.
+    onLive: (live) => platform().desktop?.keepAwake(live),
     /*
       `spawn` is injected rather than imported by `runs.ts`, which is what lets
       that module's tests drive a recording fake without a real process. The
@@ -3320,8 +3195,8 @@ export function registerIpcHandlers(
    * IPC verb returns a token.
    */
   const slackTokens = createSlackTokens({
-    store: safeStorage,
-    file: credentialFile(join(app.getPath('userData'), SLACK_TOKENS_FILE)),
+    store: platform().secrets,
+    file: credentialFile(join(platform().paths.stateDir, SLACK_TOKENS_FILE)),
   });
 
   /**
@@ -3437,7 +3312,7 @@ export function registerIpcHandlers(
     // `skills` and `mcp` are each built with, so a container project's
     // per-session directory and its host counterpart resolve against the
     // same root.
-    userDataPath: app.getPath('userData'),
+    userDataPath: platform().paths.stateDir,
     skills,
     hooks,
     history,
@@ -3667,9 +3542,10 @@ export function registerIpcHandlers(
     sits at 80×24 until the window is dragged. Every live session gets the drag.
   */
   stopDisplayWake?.();
-  stopDisplayWake = onDisplayWake(() => {
-    for (const entityId of sessions?.entities() ?? []) sessions?.refresh(entityId);
-  });
+  stopDisplayWake =
+    platform().desktop?.onDisplayWake(() => {
+      for (const entityId of sessions?.entities() ?? []) sessions?.refresh(entityId);
+    }) ?? null;
 
   /**
    * The explorer may follow a session into a worktree kept outside the mapped
@@ -3907,13 +3783,13 @@ export function registerIpcHandlers(
     const { electron, chrome, node } = process.versions;
     const diagnostics = sessions?.diagnostics() ?? [];
     return {
-      version: app.getVersion(),
+      version: platform().lifecycle.version,
       electron: electron ?? 'unknown',
       chrome: chrome ?? 'unknown',
       node: node ?? 'unknown',
       platform: process.platform,
       // Reported, never written to — this app logs to stdout. See `AppInfo`.
-      logPath: app.getPath('logs'),
+      logPath: platform().paths.logsDir,
       // `hooks?.` rather than `hooks.`, matching every other read through this
       // runtime on this file: `null` is the correct answer for a receiver that
       // never bound, exactly as `boundHost()` itself already returns for that
@@ -4033,16 +3909,13 @@ export function registerIpcHandlers(
      * per call for the same reason. `assertSender` has already proven this
      * sender is the main frame, so its window is the one that asked.
      */
-    const window = BrowserWindow.fromWebContents(event.sender);
-    // Destroyed between the invoke and here. Nothing to attach a sheet to, and
-    // treating it as a cancelled dialog is what the caller already handles.
-    if (!window) return null;
-
-    const result = await dialog.showOpenDialog(window, {
+    // No window (destroyed between the invoke and here, or no desktop at all)
+    // answers `null`, which is a cancelled dialog to the caller.
+    const paths = await platform().desktop?.pickPaths(event.sender, {
       properties: ['openDirectory'],
     });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0] ?? null;
+    if (!paths || paths.length === 0) return null;
+    return paths[0] ?? null;
   });
 
   /**
@@ -4288,7 +4161,7 @@ export function registerIpcHandlers(
    * it is the one of the two that cannot launch a program.
    */
   handle(CH.configReveal, (): void => {
-    shell.showItemInFolder(configPath());
+    platform().desktop?.reveal(configPath());
   });
 
   /**
@@ -4376,31 +4249,14 @@ export function registerIpcHandlers(
    */
   const jira = announceIssueWrites(
     createJira({
-      store: safeStorage,
-      file: credentialFile(join(app.getPath('userData'), 'jira-credential.bin')),
+      store: platform().secrets,
+      file: credentialFile(join(platform().paths.stateDir, 'jira-credential.bin')),
       env: process.env,
       config: getConfig,
       fetch: (url, init) => globalThis.fetch(url, init),
     }),
     (issue) => send(CH.jiraIssueChanged, issue),
   );
-
-  /**
-   * The device credential this machine was handed when it attached to
-   * someone else's Hive (HIVE-144).
-   *
-   * {@link remoteCredentialStore} rather than a `createTokenStore` call here,
-   * so the filename exists in one place: the mode switch reads this same
-   * credential through `readRemoteCredential`, and a second spelling of that
-   * path would be a credential written by `remote:pair` and looked for
-   * somewhere else at attach time.
-   *
-   * `read()` is main-internal — see `electron/remote-client/token-store.ts`'s
-   * own doc comment for why this is a distinct module from `jira/auth.ts`
-   * rather than a shared helper. No IPC verb returns the token; `remote:pair`
-   * below only ever writes it, and `remote:forget` only ever clears it.
-   */
-  const remoteTokenStore = remoteCredentialStore();
 
   /**
    * The PR poller's read — the app's second handler that executes a binary,
@@ -4790,7 +4646,7 @@ export function registerIpcHandlers(
     modes cannot drift into answering the same question differently.
   */
   handle(CH.configGetRemote, (): LocalRemoteState =>
-    readLocalRemote(remoteCredentialStore().read() !== null),
+    readLocalRemote(platform().desktop?.remotePairing.paired() ?? false),
   );
   /**
    * Store the device credential a `server:pair` mint on some *other* Hive
@@ -4807,14 +4663,17 @@ export function registerIpcHandlers(
    */
   /*
     The bodies of this channel and `remote:forget` below live in
-    `./remote-pairing` since HIVE-153, for the reason `config:set-remote`'s
-    lives in `./set-remote`: both are on `PROCESS_LOCAL`, so the proxy answers
-    them from a process where `remoteTokenStore` is gone. What that fixed is
+    the desktop shell's `remote-pairing` since HIVE-153 (moved to `electron/`
+    by HIVE-422, reached through `platform().desktop.remotePairing`), for the
+    reason `config:set-remote`'s lives in `./set-remote`: both are on
+    `PROCESS_LOCAL`, so the proxy answers them from a process where the
+    local handlers are gone. With no desktop the three answer not paired, an
+    error and nothing. What that fixed is
     not a hypothetical — while they were proxied, a Forget click on an attached
     client cleared the *server's* credential.
   */
   handle(CH.remotePair, (_event, payload): { paired: true } | { error: string } =>
-    applyRemotePair(payload, remoteTokenStore),
+    platform().desktop?.remotePairing.pair(payload) ?? { error: 'This machine cannot attach to another Hive.' },
   );
   /**
    * Discard the credential `remote:pair` stored (HIVE-144). Idempotent, and
@@ -4823,7 +4682,7 @@ export function registerIpcHandlers(
    * from `server:revoke` above.
    */
   handle(CH.remoteForget, (): void => {
-    applyRemoteForget(remoteTokenStore);
+    platform().desktop?.remotePairing.forget();
   });
   /**
    * Try now (HIVE-211). A no-op in local mode, and not a placeholder: the
@@ -5258,12 +5117,10 @@ export function registerIpcHandlers(
         a renderer-side picker would offer the wrong machine's disk. `drop`
         already carries the user's own files, and the refusal names it.
       */
-      const window = BrowserWindow.fromWebContents(event.sender);
-      if (window === null) return [];
-      const result = await dialog.showOpenDialog(window, {
+      const paths = await platform().desktop?.pickPaths(event.sender, {
         properties: ['openFile', 'openDirectory', 'multiSelections'],
       });
-      return result.canceled ? [] : result.filePaths;
+      return paths ?? [];
     });
   });
 
@@ -5279,13 +5136,11 @@ export function registerIpcHandlers(
   */
   handle(CH.skillsImport, (event) =>
     skills?.importSkill(async () => {
-      const window = BrowserWindow.fromWebContents(event.sender);
-      if (window === null) return [];
-      const result = await dialog.showOpenDialog(window, {
+      const paths = await platform().desktop?.pickPaths(event.sender, {
         properties: ['openFile', 'openDirectory'],
         filters: [{ name: 'Skill', extensions: ['zip'] }],
       });
-      return result.canceled ? [] : result.filePaths;
+      return paths ?? [];
     }),
   );
 
@@ -6051,7 +5906,7 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
     its own count: a fresh hub starts from an empty buffer, and the renderer
     re-reports when its link changes (`useDockBadge`).
   */
-  clearDockBadge();
+  platform().desktop?.clearDockBadge();
   /*
     HIVE-142. Most tests never call `startRemoteListener`, so this is usually
     stopping a socket that was never bound — cheap, per `listener.ts`'s own
@@ -6235,6 +6090,16 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
  */
 export function remoteRegistrySize(): number {
   return remoteRegistry.size();
+}
+
+/**
+ * Test-only: whether the remote registry holds a handler for `channel`
+ * (HIVE-422). In the same register as {@link remoteRegistrySize}: the headless
+ * suite reads it to prove every channel a client may send is answered with no
+ * desktop, which a size alone cannot show.
+ */
+export function remoteRegistryHas(channel: string): boolean {
+  return remoteRegistry.call(channel) !== null || remoteRegistry.notify(channel) !== null;
 }
 
 /*

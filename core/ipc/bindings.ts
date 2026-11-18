@@ -14,7 +14,7 @@
  */
 interface BindingTarget {
   removeHandler(channel: string): void;
-  removeAllListeners(channel: string): void;
+  removeAllListeners(channel: string): unknown;
 }
 
 export interface Bindings {
@@ -26,7 +26,12 @@ export interface Bindings {
   size(): number;
 }
 
-export function createBindings(ipc: BindingTarget): Bindings {
+/**
+ * `target` is read when unbinding, not when built, and may answer `undefined`:
+ * a server has no `ipcMain` (HIVE-422), and then `unbindAll` clears its record
+ * and touches nothing else.
+ */
+export function createBindings(target: () => BindingTarget | undefined): Bindings {
   const bound = new Set<string>();
 
   return {
@@ -41,9 +46,10 @@ export function createBindings(ipc: BindingTarget): Bindings {
       second thing to keep in step with the wrappers.
     */
     unbindAll() {
+      const ipc = target();
       for (const channel of bound) {
-        ipc.removeHandler(channel);
-        ipc.removeAllListeners(channel);
+        ipc?.removeHandler(channel);
+        ipc?.removeAllListeners(channel);
       }
       bound.clear();
     },

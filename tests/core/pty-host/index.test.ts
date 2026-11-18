@@ -11,6 +11,7 @@ import {
   runShutdown,
   shutdownHookCount,
 } from '../../../core/shutdown';
+import { installDesktopPlatform } from '../../support/desktop-platform';
 
 /**
  * Wiring the supervisor into the app (story 091).
@@ -49,6 +50,7 @@ const { fork } = vi.hoisted(() => ({
 vi.mock('electron', () => ({ utilityProcess: { fork } }));
 
 beforeEach(() => {
+  installDesktopPlatform();
   resetShutdownHooks();
   resetPtyHost();
   fork.mockClear();

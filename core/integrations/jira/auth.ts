@@ -4,6 +4,7 @@ import {
   JIRA_TOKEN_ENV,
   type JiraCredentialState,
 } from '../../../shared/jira-contract';
+import type { Secrets } from '../../platform';
 
 import { parseCredential, readEnvToken, type ParsedCredential } from './env';
 
@@ -42,11 +43,7 @@ import { parseCredential, readEnvToken, type ParsedCredential } from './env';
  */
 
 /** The slice of Electron's `safeStorage` this module uses. */
-export interface SecretStore {
-  isEncryptionAvailable(): boolean;
-  encryptString(plain: string): Buffer;
-  decryptString(cipher: Buffer): string;
-}
+export type SecretStore = Secrets;
 
 /** The ciphertext file, as a seam. */
 export interface SecretFile {

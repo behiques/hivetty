@@ -18,10 +18,11 @@ vi.mock('electron', () => ({ app: appMock }));
 // `tests/setup.ts` mocks the seed for every other spec (HIVE-230).
 vi.unmock('../../../core/seed');
 
-const { seedShippedIntoHive } = await import('../../../core/seed');
+const { seedShippedIntoHive, shippedOptions } = await import('../../../core/seed');
+const { resetPlatform, setPlatform } = await import('../../../core/platform');
 
-/** Where `out/main/` sits in the real tree, so `../../resources` is the repo's. */
-const outMain = new URL('../../../out/main', import.meta.url).pathname;
+/** The repository's shipped tree, which is what the desktop's `platform().resources` is unpackaged. */
+const resources = new URL('../../../resources', import.meta.url).pathname;
 
 let base: string;
 
@@ -38,7 +39,7 @@ afterEach(async () => {
 
 describe('seedShippedIntoHive', () => {
   it('seeds the repository resources beside the config file and writes the manifest there', async () => {
-    const report = await seedShippedIntoHive(outMain);
+    const report = await seedShippedIntoHive(resources);
 
     expect(report).not.toBeNull();
     expect(report?.created).toContain('skills/worktree/SKILL.md');
@@ -51,7 +52,7 @@ describe('seedShippedIntoHive', () => {
     await mkdir(join(base, 'hive', 'agents', 'builder'), { recursive: true });
     await writeFile(join(base, 'hive', 'agents', 'builder', 'AGENT.md'), shipped.replace(/parallel: \d+/, 'parallel: 9'), 'utf8');
 
-    await seedShippedIntoHive(outMain);
+    await seedShippedIntoHive(resources);
 
     const manifest = JSON.parse(await readFile(join(base, 'hive', '.seed.json'), 'utf8')) as {
       parts: Record<string, { keys: Record<string, string> }>;
@@ -90,7 +91,7 @@ describe('seedShippedIntoHive', () => {
         'utf8',
       );
 
-      const report = await seedShippedIntoHive(outMain);
+      const report = await seedShippedIntoHive(resources);
 
       for (const name of names) {
         const rel = `agents/${name}/AGENT.md`;
@@ -116,10 +117,28 @@ describe('seedShippedIntoHive', () => {
     await writeFile(join(base, 'hive'), 'not a folder', 'utf8');
     const info = vi.spyOn(console, 'info').mockImplementation(() => {});
 
-    const report = await seedShippedIntoHive(outMain);
+    const report = await seedShippedIntoHive(resources);
 
     expect(report).toBeNull();
     expect(info).toHaveBeenCalledWith(expect.stringContaining('could not be seeded'));
     info.mockRestore();
+  });
+});
+
+describe('shippedOptions (HIVE-422)', () => {
+  afterEach(() => {
+    resetPlatform();
+  });
+
+  it('reads the shipped tree from the folder it is given, history included', () => {
+    const options = shippedOptions('/shipped');
+    expect(options.source).toBe('/shipped');
+    expect(options.history).toBe(join('/shipped', 'shipped-history.json'));
+    expect(options.target).toBe(join(base, 'hive'));
+  });
+
+  it("defaults to the platform's resources folder", () => {
+    setPlatform({ resources: '/from-the-platform' } as never);
+    expect(shippedOptions().source).toBe('/from-the-platform');
   });
 });

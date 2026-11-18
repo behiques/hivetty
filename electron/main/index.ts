@@ -18,7 +18,6 @@ import {
   remoteListenerBoundAddress,
   startRemoteListener,
 } from '../../core/ipc';
-import { createWindowBroadcaster } from '../../core/ipc/broadcaster';
 import {
   ACCOUNT_CALLS,
   cloudSession,
@@ -32,6 +31,7 @@ import {
 import { installDeepLinks } from '../../core/licence/deep-link';
 import { entitled } from '../../core/licence/entitled';
 import { startWhenLicensed } from '../../core/licence/serve-gate';
+import { setPlatform } from '../../core/platform';
 import { startRelay } from '../../core/relay';
 import { resetShipped, shippedOptions } from '../../core/seed';
 import { bindUntilBound } from '../../core/server/bind-retry';
@@ -53,7 +53,9 @@ import { primaryWindow } from './aux-windows';
 import { bringForward } from './background';
 import { installContentSecurityPolicy } from './csp';
 import { registerIpc, switchIpcMode } from './ipc/router';
+import { createWindowBroadcaster } from './ipc/window-broadcaster';
 import { registerLifecycle } from './lifecycle';
+import { createDesktopPlatform } from './platform';
 import { createServerTray } from './tray';
 import { runHeadlessUpdate, runUnattended, startUpdateChecks } from './updates';
 import { createWindow } from './window';
@@ -109,6 +111,12 @@ app.setName(APP_NAME);
 if (!app.isPackaged && !app.commandLine.hasSwitch('user-data-dir')) {
   app.setPath('userData', join(app.getPath('appData'), DEV_USER_DATA_NAME));
 }
+
+/*
+  Core's port to this shell (HIVE-422). Installed once, straight after
+  userData is settled and before anything in core reads it.
+*/
+setPlatform(createDesktopPlatform());
 
 /*
   The hive folder follows the same split as userData (HIVE-227): a dev run

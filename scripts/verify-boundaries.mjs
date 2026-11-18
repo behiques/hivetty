@@ -39,6 +39,9 @@ import { testMirrorProblemsOnDisk } from './test-mirror.mjs';
 
 const appRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+/** Mirrors `eslint.config.mjs`'s `ELECTRON_FREE_DIRS` (HIVE-422). */
+const ELECTRON_FREE_DIRS = ['core', 'shared', 'pty-host', 'mcp-host', 'remote-host', 'remote-channel', 'server'];
+
 /**
  * Story 080 cut the alias map from four hand-synced copies to two:
  * `vite.aliases.mjs` (imported by every bundler config) and `tsconfig.json`'s
@@ -650,6 +653,28 @@ const CASES = [
         "import { adapter } from './claude-code/probe-target';\nexport const probe = adapter;\n",
     },
   },
+  /**
+   * The Electron fence (HIVE-422): two probes per folder that runs without
+   * Electron, one for each half of the fence. `server/` does not exist until
+   * PR 3, so its probe plants the folder and the runner removes it again.
+   */
+  ...ELECTRON_FREE_DIRS.flatMap((dir) => [
+    {
+      name: `fence: ${dir}/ may not import electron (HIVE-422)`,
+      rule: 'no-restricted-imports',
+      files: {
+        [`${dir}/probe.ts`]: "import { app } from 'electron';\nexport const probe = app;\n",
+      },
+    },
+    {
+      name: `fence: ${dir}/ may not import a file under electron/main/ (HIVE-422)`,
+      rule: 'import/no-restricted-paths',
+      files: {
+        [`${dir}/probe.ts`]:
+          "import { keepAwake } from '../electron/main/keep-awake';\nexport const probe = keepAwake;\n",
+      },
+    },
+  ]),
   /** #244's miss: a double-quoted import review let through (HIVE-417). */
   {
     name: 'format: a double-quoted import is refused',
@@ -683,9 +708,12 @@ const results = [];
 
 for (const testCase of CASES) {
   const written = [];
+  /** Folders this case created (a probe under a folder that does not exist yet, like `server/`). */
+  const createdDirs = [];
   for (const [relativePath, contents] of Object.entries(testCase.files)) {
     const absolutePath = join(appRoot, relativePath);
-    mkdirSync(dirname(absolutePath), { recursive: true });
+    const created = mkdirSync(dirname(absolutePath), { recursive: true });
+    if (created !== undefined) createdDirs.push(created);
     writeFileSync(absolutePath, contents);
     written.push({ relativePath, absolutePath });
   }
@@ -698,6 +726,7 @@ for (const testCase of CASES) {
       .filter(Boolean);
   } finally {
     for (const { absolutePath } of written) rmSync(absolutePath, { force: true });
+    for (const dir of createdDirs) rmSync(dir, { recursive: true, force: true });
     for (const dir of ['src/utils/ProbeFolder', 'core/ProbeFolder']) {
       rmSync(join(appRoot, dir), { recursive: true, force: true });
     }

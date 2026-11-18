@@ -1,18 +1,16 @@
 import { dirname, join } from 'node:path';
 
-import { app } from 'electron';
-
 import { configPath } from '../config/paths';
+import { platform } from '../platform';
 
-import { SEED_MANIFEST_FILE, SHIPPED_HISTORY_FILE, shippedRoot } from './paths';
+import { SEED_MANIFEST_FILE, SHIPPED_HISTORY_FILE } from './paths';
 import { seedShipped, type SeedOptions, type SeedReport } from './seed';
 
 export { keepMine, resetShipped, shippedStatus, takeShippedPrompt } from './actions';
 
 /** Where the shipped tree, `~/.hivetty`, the manifest and the history are. */
-export function shippedOptions(fromDir: string = import.meta.dirname): SeedOptions {
+export function shippedOptions(source: string = platform().resources): SeedOptions {
   const target = dirname(configPath());
-  const source = shippedRoot(app.isPackaged, process.resourcesPath, fromDir);
 
   return {
     source,
@@ -32,18 +30,17 @@ export function shippedOptions(fromDir: string = import.meta.dirname): SeedOptio
  * it watches its folder, and a definition the seed writes reaches it the way
  * a hand-written one does.
  *
- * `fromDir` is a parameter for the reason `trayIconPath`'s is: under vitest
- * `import.meta.dirname` is this source folder, not `out/main/`, and the test
- * has to name the tree it means.
+ * `source` is a parameter so a test can name the tree it means; the shell
+ * answers it otherwise, as `platform().resources` (HIVE-422).
  *
  * Never fatal. A `~/.hivetty` the app cannot write is a `~/.hivetty` the rest of the
  * app is about to complain about in its own words; a seed that failed costs
  * the shipped skills until the next launch, and says so on the console.
  */
 export async function seedShippedIntoHive(
-  fromDir: string = import.meta.dirname,
+  source?: string,
 ): Promise<SeedReport | null> {
-  const options = shippedOptions(fromDir);
+  const options = shippedOptions(source);
   const { target } = options;
   try {
     const report = await seedShipped(options);

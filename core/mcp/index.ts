@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 
 import { sessionAdapter } from '../harness/registry';
+import type { McpLaunch } from '../platform';
 
 import type { StdioServerSpec } from './agent-config';
 import { hiveServerSpec } from './config';
@@ -47,18 +48,15 @@ export interface McpRuntime {
 }
 
 interface McpRuntimeOptions {
-  /** `app.getPath('userData')`, passed in so these tests need no Electron. */
+  /** The platform's `paths.stateDir`, passed in so these tests need no Electron. */
   userDataPath: string;
-  /** `process.execPath`. */
-  execPath: string;
-  /** Absolute path to `mcp-host.js`, resolved by the caller. */
-  scriptPath: string;
+  /** How this shell starts `mcp-host.js`: the platform's `mcpLaunch` (HIVE-422). */
+  launch: McpLaunch;
 }
 
 export function createMcpRuntime({
   userDataPath,
-  execPath,
-  scriptPath,
+  launch,
 }: McpRuntimeOptions): McpRuntime {
   const path = join(userDataPath, MCP_CONFIG_FILE);
   let written = false;
@@ -75,7 +73,7 @@ export function createMcpRuntime({
 
   const run = async (): Promise<void> => {
     try {
-      await sessionAdapter().prepare.mcpConfig(path, { execPath, scriptPath });
+      await sessionAdapter().prepare.mcpConfig(path, { launch });
       written = true;
     } catch (cause) {
       /*
@@ -102,7 +100,7 @@ export function createMcpRuntime({
     },
 
     hiveServerSpec(): StdioServerSpec | null {
-      return written ? hiveServerSpec({ execPath, scriptPath }) : null;
+      return written ? hiveServerSpec(launch) : null;
     },
   };
 }

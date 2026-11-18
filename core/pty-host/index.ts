@@ -1,44 +1,18 @@
-import { join } from 'node:path';
-
-import { utilityProcess } from 'electron';
-
+import { platform } from '../platform';
 import { onShutdown } from '../shutdown';
 
 import {
   createPtyHostSupervisor,
-  type HostChild,
   type PtyHostSupervisor,
 } from './supervisor';
 
 /**
- * Wiring the supervisor to Electron (story 091).
+ * Wiring the supervisor to the shell (story 091, HIVE-422).
  *
- * The only file here that imports `electron`, which is what keeps
+ * The fork itself is the platform's `processHost()`: `utilityProcess` on the
+ * desktop. Nothing here imports `electron`, which is what keeps
  * `supervisor.ts` — the part with all the behaviour — drivable under Vitest.
  */
-
-/** Emitted beside `index.js` by the `main` target's second rollup input. */
-const PTY_HOST_ENTRY = 'pty-host.js';
-
-/**
- * `utilityProcess`, not `child_process.fork`.
- *
- * Three things Electron's own API brings that `fork` does not:
- *
- * - The child is an **Electron** Node process, so it has the same ABI the
- *   `node-pty` binary was built for (story 084).
- * - MessagePort-based messaging, structured-clone typed, rather than a
- *   hand-rolled stdio protocol.
- * - Electron tracks the child's lifetime with the app, so a hard quit cannot
- *   orphan it.
- */
-function forkPtyHost(): HostChild {
-  return utilityProcess.fork(join(import.meta.dirname, PTY_HOST_ENTRY), [], {
-    // Names the process in Activity Monitor. A nameless helper next to an app
-    // that spawns terminals is the one a user force-quits first.
-    serviceName: 'hive-pty-host',
-  });
-}
 
 let supervisor: PtyHostSupervisor | null = null;
 
@@ -51,7 +25,7 @@ let supervisor: PtyHostSupervisor | null = null;
 export function registerPtyHost(): PtyHostSupervisor {
   if (supervisor) return supervisor;
 
-  const created = createPtyHostSupervisor({ fork: forkPtyHost });
+  const created = createPtyHostSupervisor({ fork: () => platform().processHost() });
 
   /**
    * Registration, not a refactor of the quit path — which is exactly why

@@ -3,8 +3,8 @@ import { describe, expect, it, vi, type Mock } from 'vitest';
 import {
   applyRemoteForget,
   applyRemotePair,
-} from '../../../core/ipc/remote-pairing';
-import { NO_ENCRYPTION_REASON, type TokenStore } from '../../../electron/remote-client/token-store';
+} from '../../../../electron/main/ipc/remote-pairing';
+import { NO_ENCRYPTION_REASON, type TokenStore } from '../../../../electron/remote-client/token-store';
 
 /**
  * `remote:pair` and `remote:forget`'s bodies, extracted from

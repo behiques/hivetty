@@ -15,7 +15,7 @@ import { containerHiveServerSpec, type ResolvedIdentity } from '../../mcp/contai
 
 export const mcpConfig = (options: McpConfigOptions): string =>
   `${JSON.stringify(
-    { mcpServers: { [MCP_SERVER_NAME]: hiveServerSpec(options) } },
+    { mcpServers: { [MCP_SERVER_NAME]: hiveServerSpec(options.launch) } },
     null,
     2,
   )}\n`;

@@ -141,7 +141,7 @@ vi.mock('electron', () => ({
 const { countsAsAction, lostToTheLink, registerRemoteProxy, remoteProxyBindingsSize, resetRemoteProxy } = await import(
   '../../../../electron/main/ipc/remote-proxy'
 );
-const { createResumeTracker } = await import('../../../../core/ipc/resume-tracker');
+const { createResumeTracker } = await import('../../../../electron/main/ipc/resume-tracker');
 
 /** Matches `foreground.test.ts`'s trusted-sender fixture: identity, not shape. */
 const mainFrame = { url: 'file:///out/renderer/index.html' };

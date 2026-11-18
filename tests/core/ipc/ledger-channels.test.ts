@@ -195,6 +195,7 @@ vi.mock('../../../core/ledger', () => ({
 }));
 
 const { CH } = await import('../../../shared/ipc-contract');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const { OVERMIND } = await import('../../../shared/ledger-contract');
 const { registerIpcHandlers, resetIpcHandlers } = await import(
   '../../../core/ipc'
@@ -214,6 +215,7 @@ const answer = (payload: unknown) =>
 const act = (payload: unknown) => handlers.get(CH.notificationsAct)!(trustedEvent, payload);
 
 beforeEach(() => {
+  installDesktopPlatform();
   handlers.clear();
   liveIds = [];
   resumableIds = [];

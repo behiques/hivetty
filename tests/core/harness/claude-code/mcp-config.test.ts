@@ -13,7 +13,7 @@ import {
 } from '../../../../core/harness/claude-code/mcp-config';
 
 describe('mcpConfig', () => {
-  const options = { execPath: '/Apps/Hive.app/Contents/MacOS/Hive', scriptPath: '/out/mcp-host.js' };
+  const options = { launch: { command: '/Apps/Hive.app/Contents/MacOS/Hive', args: ['/out/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } }, };
 
   it('names the server "hive" so tools resolve as mcp__hive__*', () => {
     expect(Object.keys(JSON.parse(mcpConfig(options)).mcpServers)).toEqual(['hive']);
@@ -51,15 +51,15 @@ describe('writeMcpConfig', () => {
 
   it('creates the parent directory when it is not there', async () => {
     const path = join(dir, 'hive', 'hive.mcp.json');
-    await writeMcpConfig(path, { execPath: '/bin/app', scriptPath: '/out/mcp-host.js' });
+    await writeMcpConfig(path, { launch: { command: '/bin/app', args: ['/out/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } }, });
 
     expect(JSON.parse(await readFile(path, 'utf8')).mcpServers.hive.command).toBe('/bin/app');
   });
 
   it('rewrites rather than appends, so a stale path from an older build cannot survive', async () => {
     const path = join(dir, 'hive.mcp.json');
-    await writeMcpConfig(path, { execPath: '/old/app', scriptPath: '/old/mcp-host.js' });
-    await writeMcpConfig(path, { execPath: '/new/app', scriptPath: '/new/mcp-host.js' });
+    await writeMcpConfig(path, { launch: { command: '/old/app', args: ['/old/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } }, });
+    await writeMcpConfig(path, { launch: { command: '/new/app', args: ['/new/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } }, });
 
     const parsed = JSON.parse(await readFile(path, 'utf8'));
     expect(parsed.mcpServers.hive.command).toBe('/new/app');
@@ -70,7 +70,7 @@ describe('writeMcpConfig', () => {
 describe('the stdio and container emitters agree on the hive server', () => {
   it('both name the server `hive` and nothing else', () => {
     const stdio = JSON.parse(
-      mcpConfig({ execPath: '/app/Electron', scriptPath: '/app/mcp-host.js' }),
+      mcpConfig({ launch: { command: '/app/Electron', args: ['/app/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } }, }),
     ) as { mcpServers: Record<string, unknown> };
     const container = JSON.parse(containerMcpConfig('exec-env')) as {
       mcpServers: Record<string, unknown>;

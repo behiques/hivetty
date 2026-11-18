@@ -12,7 +12,7 @@ function target() {
 describe('createBindings', () => {
   it('unbinds every recorded channel exactly once', () => {
     const ipc = target();
-    const bindings = createBindings(ipc);
+    const bindings = createBindings(() => ipc);
 
     bindings.record('config:get');
     bindings.record('pty:write');
@@ -28,7 +28,7 @@ describe('createBindings', () => {
 
   it('records a channel once however many times it is registered', () => {
     const ipc = target();
-    const bindings = createBindings(ipc);
+    const bindings = createBindings(() => ipc);
 
     bindings.record('pty:write');
     bindings.record('pty:write');
@@ -40,7 +40,7 @@ describe('createBindings', () => {
 
   it('is idempotent, so a second unbind is a no-op', () => {
     const ipc = target();
-    const bindings = createBindings(ipc);
+    const bindings = createBindings(() => ipc);
 
     bindings.record('config:get');
     bindings.unbindAll();
@@ -48,5 +48,26 @@ describe('createBindings', () => {
 
     expect(ipc.removeHandler).toHaveBeenCalledTimes(1);
     expect(bindings.size()).toBe(0);
+  });
+
+  // HIVE-422: a server has no ipcMain, so the target may be absent.
+  it('clears its record and touches nothing when there is no target', () => {
+    const bindings = createBindings(() => undefined);
+
+    bindings.record('config:get');
+    expect(() => bindings.unbindAll()).not.toThrow();
+    expect(bindings.size()).toBe(0);
+  });
+
+  it('reads the target when it unbinds, not when it is built', () => {
+    let current: ReturnType<typeof target> | undefined;
+    const bindings = createBindings(() => current);
+    const late = target();
+
+    bindings.record('pty:write');
+    current = late;
+    bindings.unbindAll();
+
+    expect(late.removeHandler).toHaveBeenCalledWith('pty:write');
   });
 });

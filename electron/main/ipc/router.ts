@@ -5,18 +5,13 @@ import { CH, type AppInfo, type RemoteLinkStatus } from '@shared/ipc-contract';
 import { RELAY_CLOSE } from '@shared/relay-contract';
 
 import { getConfig } from '../../../core/config';
-import { createWindowBroadcaster, type Broadcaster } from '../../../core/ipc/broadcaster';
+import type { Broadcaster } from '../../../core/ipc/broadcaster';
 import {
   ipcBindingsSize,
-  readRemoteCredential,
   registerIpcHandlers,
-  remoteCredentialStore,
   resetIpcHandlers,
   sessionsLayer,
 } from '../../../core/ipc/index';
-import { createReattachLoop, type ReattachLoop } from '../../../core/ipc/reattach';
-import { applyRemoteForget, applyRemotePair } from '../../../core/ipc/remote-pairing';
-import { composeResumeFrom, createResumeTracker, type ResumeTracker } from '../../../core/ipc/resume-tracker';
 import { applySetRemote, targetOf, type ConfiguredTarget } from '../../../core/ipc/set-remote';
 import { cloudSession, type CloudSession } from '../../../core/licence';
 import { isServerMode } from '../../../core/server-mode';
@@ -31,7 +26,12 @@ import {
 } from '../../remote-client/socket';
 import type { StoredDeviceCredential } from '../../remote-client/token-store';
 
+import { createReattachLoop, type ReattachLoop } from './reattach';
+import { readRemoteCredential, remoteCredentialStore } from './remote-credential';
+import { applyRemoteForget, applyRemotePair } from './remote-pairing';
 import { registerRemoteProxy, remoteProxyBindingsSize, resetRemoteProxy } from './remote-proxy';
+import { composeResumeFrom, createResumeTracker, type ResumeTracker } from './resume-tracker';
+import { createWindowBroadcaster } from './window-broadcaster';
 
 
 /**

@@ -21,8 +21,7 @@ describe('createMcpRuntime', () => {
   it('offers no path before it has started', () => {
     const runtime = createMcpRuntime({
       userDataPath: dir,
-      execPath: '/bin/app',
-      scriptPath: '/out/mcp-host.js',
+      launch: { command: '/bin/app', args: ['/out/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } },
     });
 
     expect(runtime.configPathFor()).toBeNull();
@@ -31,8 +30,7 @@ describe('createMcpRuntime', () => {
   it('writes the file and offers its path after a successful start', async () => {
     const runtime = createMcpRuntime({
       userDataPath: dir,
-      execPath: '/bin/app',
-      scriptPath: '/out/mcp-host.js',
+      launch: { command: '/bin/app', args: ['/out/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } },
     });
 
     await runtime.start();
@@ -53,8 +51,7 @@ describe('createMcpRuntime', () => {
     */
     const runtime = createMcpRuntime({
       userDataPath: dir,
-      execPath: '/bin/app',
-      scriptPath: '/out/mcp-host.js',
+      launch: { command: '/bin/app', args: ['/out/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } },
     });
 
     const first = runtime.start();
@@ -80,8 +77,7 @@ describe('createMcpRuntime', () => {
     // A path under a file, which cannot be made into a directory.
     const runtime = createMcpRuntime({
       userDataPath: '/dev/null/nope',
-      execPath: '/bin/app',
-      scriptPath: '/out/mcp-host.js',
+      launch: { command: '/bin/app', args: ['/out/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } },
     });
 
     await expect(runtime.start()).resolves.toBeUndefined();
@@ -97,8 +93,7 @@ describe('createMcpRuntime', () => {
   it('offers no hive server spec before it has started', () => {
     const runtime = createMcpRuntime({
       userDataPath: dir,
-      execPath: '/bin/app',
-      scriptPath: '/out/mcp-host.js',
+      launch: { command: '/bin/app', args: ['/out/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } },
     });
 
     expect(runtime.hiveServerSpec()).toBeNull();
@@ -107,8 +102,7 @@ describe('createMcpRuntime', () => {
   it('offers the hive server descriptor after a successful start', async () => {
     const runtime = createMcpRuntime({
       userDataPath: dir,
-      execPath: '/bin/app',
-      scriptPath: '/out/mcp-host.js',
+      launch: { command: '/bin/app', args: ['/out/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } },
     });
 
     await runtime.start();
@@ -126,8 +120,7 @@ describe('createMcpRuntime', () => {
     // A path under a file, which cannot be made into a directory.
     const runtime = createMcpRuntime({
       userDataPath: '/dev/null/nope',
-      execPath: '/bin/app',
-      scriptPath: '/out/mcp-host.js',
+      launch: { command: '/bin/app', args: ['/out/mcp-host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } },
     });
 
     await expect(runtime.start()).resolves.toBeUndefined();

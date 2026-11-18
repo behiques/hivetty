@@ -81,9 +81,25 @@ an mp4 and needed one; nothing in the app plays media now.
 
 | | Runs | May import | Never |
 |---|---|---|---|
-| `core/**`, `electron/main/**` | Node, full privilege | `shared/**` | `src/**` |
+| `core/**`, `electron/main/**` | Node, full privilege | `shared/**` | `src/**`; and for `core/**`, the `electron` module and `electron/**` |
 | `electron/preload/**` | renderer, sandboxed | `shared/**` | `src/**`, `core/**`, `electron/main/**` |
 | `src/**` | renderer | `@shared` (**type-only**) | `core/**`, `electron/main/**`, `electron/preload/**` |
+
+Core never imports Electron (HIVE-422). It reads the shell through
+`core/platform/index.ts`, and `electron/main/platform.ts` builds the desktop's
+answer from Electron and the shell files: `safeStorage`, `app.getPath`, the
+`utilityProcess` fork, the MCP host launch, and on its `desktop` member the
+windows, dialogs, dock, updates and the attach credential. `electron/main/index.ts`
+installs it with `setPlatform` before anything registers. `handle()`/`on()` fill
+the remote registry first and bind `ipcMain` only when the platform has a
+desktop.
+
+A new screen-only dependency is a new `Desktop` member, never an import in
+core; a function core needs that touches no Electron moves into core instead
+(`splashEnabled` did). Suites that mock `electron` and reach a platform read call
+`installDesktopPlatform()` (`tests/support/desktop-platform.ts`) in their
+`beforeEach`, and `tests/core/ipc/headless.test.ts` proves core registers every
+handler with `electron` throwing on import and no desktop installed.
 
 `shared/**` has **no runtime imports, no Node APIs, no DOM APIs**. It is
 the one module both sides may import, which makes the IPC contract a compile-time
@@ -531,7 +547,8 @@ child's lifetime to the app so a hard quit cannot orphan it.
 
 Split across three places: `shared/pty-host-protocol.ts` (the wire
 types, deliberately distinct from the renderer-facing `ipc-contract.ts` so the
-two can diverge), `core/pty-host/` (the supervisor), and
+two can diverge), `core/pty-host/` (the supervisor, which forks through
+`platform().processHost()`; the `utilityProcess` call is in `electron/main/platform.ts`), and
 `pty-host/` (the child). The child is a **second rollup input on the
 `main` target**, so it lands at `out/main/pty-host.js` and inherits main's
 module format, externals and output directory.

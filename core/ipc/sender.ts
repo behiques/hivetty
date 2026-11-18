@@ -1,4 +1,4 @@
-import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron';
+import type { IpcEvent } from '../platform';
 
 /**
  * Sender validation (story 082).
@@ -18,8 +18,6 @@ export class IpcSenderError extends Error {
   }
 }
 
-type AnyIpcEvent = IpcMainEvent | IpcMainInvokeEvent;
-
 /**
  * True when the event came from the top-level frame of the sending
  * `webContents`.
@@ -30,14 +28,14 @@ type AnyIpcEvent = IpcMainEvent | IpcMainInvokeEvent;
  * between send and handle — treated as untrusted, since there is nothing left
  * to verify against.
  */
-export function isTrustedSender(event: AnyIpcEvent): boolean {
+export function isTrustedSender(event: IpcEvent): boolean {
   const frame = event.senderFrame;
   if (!frame) return false;
   return frame === event.sender.mainFrame;
 }
 
 /** Throws unless the event came from the app's own main frame. */
-export function assertSender(event: AnyIpcEvent): void {
+export function assertSender(event: IpcEvent): void {
   if (!isTrustedSender(event)) {
     throw new IpcSenderError('rejected IPC from a non-main frame');
   }

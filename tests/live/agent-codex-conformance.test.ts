@@ -230,7 +230,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
     const settingsPath = await writeAgentSettings(userDataPath, url ?? '');
     const mcpConfigPath = join(userDataPath, 'hive', 'hive.mcp.json');
     await mkdir(dirname(mcpConfigPath), { recursive: true });
-    await writeFile(mcpConfigPath, mcpConfig({ execPath: process.execPath, scriptPath: host }), 'utf8');
+    await writeFile(mcpConfigPath, mcpConfig({ launch: { command: process.execPath, args: [host], env: { ELECTRON_RUN_AS_NODE: '1' } }, }), 'utf8');
 
     agentState = createAgentState({ path: agentStateFile() });
     const newUuid = (): string => randomUUID();
@@ -265,7 +265,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
       pluginDir: (cli) => skills.pluginDirPath(cli) ?? join(userDataPath, 'plugin'),
       agentSettingsPath: () => settingsPath,
       mcpConfig: () => mcpConfigPath,
-      hiveServer: () => hiveServerSpec({ execPath: process.execPath, scriptPath: host }),
+      hiveServer: () => hiveServerSpec({ command: process.execPath, args: [host], env: { ELECTRON_RUN_AS_NODE: '1' } }),
       agentMcpFile: (name) => agentMcpConfigFile(userDataPath, name),
       hookEnv: (name) => ({
         [HOOK_ENV_SESSION]: name,

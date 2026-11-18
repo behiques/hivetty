@@ -2368,7 +2368,7 @@ export interface HiveBridge {
      * held the device token, so this returns the three fields `setRemote`
      * writes, plus whether a credential is stored ({@link LocalRemoteState}).
      * The credential itself is not here and never will be — see
-     * `readRemoteCredential`'s doc comment in `core/ipc/index.ts`.
+     * `readRemoteCredential`'s doc comment in `electron/main/ipc/remote-credential.ts`.
      *
      * Prefer this over {@link get}'s `remote` block anywhere the answer must
      * describe *this* window: while attached, `config:get` is answered by the

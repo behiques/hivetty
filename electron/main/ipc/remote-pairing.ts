@@ -1,6 +1,6 @@
 import { parseRemotePairRequest } from '@shared/guards';
 
-import { NO_ENCRYPTION_REASON, type TokenStore } from '../../electron/remote-client/token-store';
+import { NO_ENCRYPTION_REASON, type TokenStore } from '../../remote-client/token-store';
 
 /**
  * Everything `remote:pair` and `remote:forget` do, in the one place both

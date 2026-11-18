@@ -567,7 +567,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       */
       const log = await run(
         'done',
-        { hiveServer: hiveServerSpec({ execPath: process.execPath, scriptPath: host }) },
+        { hiveServer: hiveServerSpec({ command: process.execPath, args: [host], env: { ELECTRON_RUN_AS_NODE: '1' } }) },
         '$hive-done ',
         undefined,
         { exitOn: join(scratch, 'done.signal'), exit: EXIT_COMMAND, exitLog },

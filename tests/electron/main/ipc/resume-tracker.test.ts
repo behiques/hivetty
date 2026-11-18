@@ -1,13 +1,13 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 
-import { attachRequest } from '../../../electron/remote-client/index';
-import { frameBytes } from '../../../electron/remote-client/socket';
-import { ATTACH_FRAME_MAX_BYTES } from '../../../shared/remote-contract';
+import { attachRequest } from '../../../../electron/remote-client/index';
+import { frameBytes } from '../../../../electron/remote-client/socket';
+import { ATTACH_FRAME_MAX_BYTES } from '../../../../shared/remote-contract';
 import {
   composeResumeFrom,
   createResumeTracker,
-} from '../../../core/ipc/resume-tracker';
+} from '../../../../electron/main/ipc/resume-tracker';
 
 /**
  * What an attached client remembers so it can resume (HIVE-150).

@@ -144,6 +144,7 @@ vi.mock('../../../core/config/index', () => ({
 }));
 
 const { CH } = await import('../../../shared/ipc-contract');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const { registerIpcHandlers, resetIpcHandlers } = await import(
   '../../../core/ipc'
 );
@@ -153,6 +154,7 @@ const { resetServerModeForTest, setServerMode } = await import(
 );
 
 beforeEach(() => {
+  installDesktopPlatform();
   sent.length = 0;
   presenter = undefined;
   windows = [fakeWindow()];

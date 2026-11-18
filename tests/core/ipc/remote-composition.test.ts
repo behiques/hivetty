@@ -450,6 +450,7 @@ vi.mock('../../../core/sessions', () => ({
 }));
 
 const { CH } = await import('../../../shared/ipc-contract');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const {
   acceptRelaySocket,
   ipcBindingsSize,
@@ -465,7 +466,7 @@ const { remoteProxyBindingsSize, resetRemoteProxy } = await import(
 const { AddressRefusedError, RELAY_SERVER_OFFLINE, RelayClosedError, ServerTooOldError } = await import(
   '../../../electron/remote-client/socket'
 );
-const { BACKOFF_MS } = await import('../../../core/ipc/reattach');
+const { BACKOFF_MS } = await import('../../../shared/remote-contract');
 const { attachedResumeTracker, attachedServerName, dialNowAttached, registerIpc, switchIpcMode } = await import(
   '../../../electron/main/ipc/router'
 );
@@ -489,6 +490,7 @@ const emitLedgerChanged = (entry: unknown): void => {
 };
 
 beforeEach(() => {
+  installDesktopPlatform();
   windowSends.length = 0;
   windows.length = 0;
   onChangeListener = undefined;

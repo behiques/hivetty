@@ -64,7 +64,17 @@ export function createDeepLinkRouter(scheme: Scheme): DeepLinkRouter {
   };
 }
 
-export type DeepLinkApp = Pick<Electron.App, 'on' | 'isPackaged' | 'setAsDefaultProtocolClient'>;
+/**
+ * The slice of Electron's `app` this module uses, written out rather than
+ * picked from `Electron.App` (HIVE-422): core runs under plain Node too, and
+ * may not lean on Electron's types any more than on its module.
+ */
+export interface DeepLinkApp {
+  readonly isPackaged: boolean;
+  on(event: 'will-finish-launching', listener: () => void): unknown;
+  on(event: 'open-url', listener: (event: { preventDefault(): void }, url: string) => void): unknown;
+  setAsDefaultProtocolClient(protocol: string, path?: string, args?: string[]): boolean;
+}
 
 /**
  * Call at module load, before `whenReady`: macOS sends a link that launched the app as `open-url` right
