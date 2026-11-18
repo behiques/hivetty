@@ -25,11 +25,12 @@ import { createCloud, type Fetch, resolveCloudUrl } from './cloud';
 import { schemeFor } from './deep-link';
 import { abortableSleep, runDeviceFlow } from './device-flow';
 import { listDevices, revokeDevice } from './devices';
-import { leaseKeys } from './keys';
+import { type LeaseJwk, leaseKeys } from './keys';
 import { createLeaseFile, renewLease } from './lease';
 import { createLicenceState, type LicenceStateMachine } from './licence-state';
 import { createSeenOrgs, isOrgId, listOrgs } from './orgs';
 import { startTrial } from './trial';
+import { verifyLease } from './verify';
 
 /**
  * HiveTTY Pro's licence slice (HIVE-264 onwards): one module-level client, like `updates/`, so both the
@@ -40,6 +41,8 @@ let client: AuthClient | null = null;
 /** The cloud base `startLicence` resolved, kept for the relay's URL (HIVE-429). */
 let cloudBase: string | null = null;
 let licenceState: LicenceStateMachine | null = null;
+/** HIVE-422: what `leaseFeatures` reads, set by `startLicence`. */
+let leaseSource: { read(): string | null; keys: readonly LeaseJwk[]; iss: string } | null = null;
 /** The browser, as `startLicence` was given it: Manage billing and invoice links open through it. */
 let openExternal: (url: string) => Promise<void> = () => Promise.reject(new Error('the licence has not started'));
 /** Module-level, so a subscriber made before or after `startLicence` hears every change (PR 2's suspender). */
@@ -118,6 +121,7 @@ export function startLicence(
   },
 ): AuthClient {
   const built = buildAccount(deps);
+  leaseSource = { read: () => built.leaseFile.read(), keys: built.keys, iss: built.baseUrl };
   openExternal = deps.openExternal;
   const next = built.client;
   next.onChange(deps.broadcast);
@@ -171,6 +175,7 @@ export function startLicence(
 export function resetLicence(): void {
   client = null;
   cloudBase = null;
+  leaseSource = null;
   licenceState?.dispose();
   licenceState = null;
   licenceListeners.clear();
@@ -192,6 +197,21 @@ export function licence(): LicenceState {
  */
 export function leaseSubject(): string | null {
   return licenceState?.subject() ?? null;
+}
+
+/**
+ * HIVE-422: the features of the lease on disk, whatever the licence state. A lapsed state carries no terms, and the
+ * server edition's gate still has to know which plan the lease was issued for. The signature and the issuer are
+ * checked. Expiry and the device are not (`now: 0`, `deviceId: null`): `fromFile` in `licence-state.ts` counts an
+ * expired lease as one this machine held, and so does this.
+ */
+export function leaseFeatures(): string[] | null {
+  const source = leaseSource;
+  if (source === null) return null;
+  const jws = source.read();
+  if (jws === null) return null;
+  const verdict = verifyLease(jws, { keys: source.keys, iss: source.iss, deviceId: null, now: 0 });
+  return verdict.ok ? verdict.claims.features : null;
 }
 
 /** The signed-in cloud session, for callers outside this directory that speak to the cloud (the relay). */

@@ -43,7 +43,8 @@ that the machine looks after itself.
 [Updates](#updates) ·
 [What an attached device can do](#what-an-attached-device-can-do) ·
 [Reaching it from anywhere](#reaching-it-from-anywhere) ·
-[Exposure](#exposure) · [Troubleshooting](#troubleshooting)
+[Exposure](#exposure) · [The server edition](#the-server-edition) ·
+[Troubleshooting](#troubleshooting)
 
 ## Before you start
 
@@ -607,6 +608,88 @@ the agents, any containers) runs on the server.
 
 Over a slow link: terminal output is framed as JSON, about 5 % over the raw
 bytes at normal flush sizes.
+
+## The server edition
+
+`hivetty-server` is the same feature code (`core/`) booted by plain Node, with no
+Electron and no window (HIVE-422). It is not public yet: there is no package and
+no image, and sessions cannot start on it. It exists so the pieces below can be
+built and proven before they ship. The desktop app's `--server` mode described
+above is unchanged and works on any plan.
+
+Build it and start it from a checkout:
+
+```sh
+pnpm server:build
+node out/server/index.js
+```
+
+### Its folder
+
+`HIVETTY_HOME` decides where everything lives, `~/.hivetty` when it is unset or
+blank:
+
+| Path | What it holds |
+| --- | --- |
+| `config.json` | The same workspace config the desktop reads, `server` block included. `HIVE_CONFIG_PATH` overrides it. |
+| `ledger/`, `skills/`, `agents/` | As on the desktop. |
+| `goals/` | Goal briefs. `HIVE_GOALS_DIR` overrides it. |
+| `data/` | What the desktop keeps in its `userData`: the lease, session history, the heartbeat. Created private to its owner. |
+
+One process per folder and config: a second server on the same `HIVETTY_HOME`
+exits 1 and names the pid that holds it. With `HIVE_CONFIG_PATH` pointing two
+folders at one config, the second exits 1 without a pid.
+
+### Flags
+
+| Flag | What it does |
+| --- | --- |
+| *(none)* or `--server` | Serve. |
+| `--pair "<name>"`, `--devices`, `--revoke "<name>"` | The same one-shots as the desktop, against the same `config.json`. |
+| `--health` | Exits 0 when the server in this folder is alive, else 1. Starts nothing. |
+| `--update` | Refused: *Update through your package manager or image tag.* |
+| `--login`, `--logout` | Refused until the server has a secret store (HIVE-424). |
+
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | A clean stop, or a one-shot that succeeded. |
+| 1 | The folder or the config is already served, a second SIGTERM or SIGINT forced the stop, or a one-shot failed or was used wrongly. |
+| 2 | `--update`, or a `--login` or `--logout` that failed with an error (the network, say). |
+| 3 | This edition is not part of the plan. `--login` and `--logout` also exit 3 today, refusing for want of a keychain. |
+
+### Stopping
+
+The first SIGTERM or SIGINT continues anything a lapse paused, runs the
+shutdown hooks, and exits 0. It waits at most `HIVETTY_SHUTDOWN_BUDGET_MS`
+(20000 by default) before exiting anyway. A second signal exits 1 at once.
+
+### Logs and health
+
+Every line the server writes starts with an ISO time and a tag:
+`2026-11-18T09:30:00.000Z [relay] connected`. A line that has no tag of its own
+gets `[hive]`.
+
+The server writes `data/heartbeat` (the time and its pid) at boot and every
+15 seconds. `node out/server/index.js --health` reads it and exits 0 when it is
+under 45 seconds old and that pid is alive, which is what a container's health
+check should call. A server waiting for a licence is healthy.
+
+### The licence
+
+The server serves only for a lease whose plan includes `runners.byo`. Without
+one it prints *This edition isn't part of your plan* and exits 3. A machine
+that has never held a lease waits. A lease that lapses while it serves keeps it
+serving, so attached clients see the lapse.
+
+### What does not work yet
+
+| Missing | Ticket |
+| --- | --- |
+| Sessions: a spawn is refused (*The PTY host on the server arrives with HIVE-423.*) | HIVE-423 |
+| Sign-in, and every credential: there is no secret store, and nothing is ever stored unencrypted | HIVE-424 |
+| Linux tarballs and images | HIVE-425 |
 
 ## Troubleshooting
 

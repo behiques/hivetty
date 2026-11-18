@@ -1,8 +1,9 @@
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { TitleVerdict } from '../port';
+
+import { claudeDir } from './claude-dir';
 
 /**
  * Telling a `/rename` apart from Claude's own auto-title (first-prompt naming).
@@ -109,8 +110,8 @@ export function claudeProjectDir(cwd: string): string {
  * a scan for the uuid second, which survives any future change to the escaping —
  * a uuid is unique across every project, so finding one is unambiguous.
  */
-export function transcriptPath(home: string, cwd: string, sessionUuid: string): string | null {
-  const projects = join(home, '.claude', 'projects');
+export function transcriptPath(claudeRoot: string, cwd: string, sessionUuid: string): string | null {
+  const projects = join(claudeRoot, 'projects');
   const file = `${sessionUuid}.jsonl`;
 
   const computed = join(projects, claudeProjectDir(cwd), file);
@@ -140,7 +141,7 @@ interface TitleOriginReader {
 }
 
 interface TitleOriginOptions {
-  /** Overridable for tests; defaults to the real home directory. */
+  /** Overridable for tests: `<home>/.claude`. Without it, `CLAUDE_CONFIG_DIR` or `~/.claude` (HIVE-422). */
   home?: string;
   /** Overridable for tests; defaults to {@link TAIL_BYTES}. */
   tailBytes?: number;
@@ -210,11 +211,11 @@ function titleRecord(line: string): { origin: TitleVerdict; title: string } | nu
 }
 
 export function createTitleOriginReader(options: TitleOriginOptions = {}): TitleOriginReader {
-  const { home = homedir(), tailBytes = TAIL_BYTES } = options;
+  const { home, tailBytes = TAIL_BYTES } = options;
 
   return {
     classify(cwd, sessionUuid, name) {
-      const path = transcriptPath(home, cwd, sessionUuid);
+      const path = transcriptPath(claudeDir(home), cwd, sessionUuid);
       if (path === null) return 'unknown';
 
       const lines = readTail(path, tailBytes);
