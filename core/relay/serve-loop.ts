@@ -3,8 +3,8 @@ import { WebSocket } from 'ws';
 import { RELAY_CLOSE, RELAY_PATH, RELAY_PING_MS, parseIncoming, type RelayServeStatus } from '@shared/relay-contract';
 import { POST_ATTACH_FRAME_MAX_BYTES } from '@shared/remote-contract';
 
-import { CHANNEL_TAG_BYTES } from '../../remote-channel/secure-socket';
 import { CLIENT_ATTACH_TIMEOUT_MS } from '../../electron/remote-client/socket';
+import { CHANNEL_TAG_BYTES } from '../../remote-channel/secure-socket';
 import { BACKOFF_MS } from '../ipc/reattach';
 
 /** Two missed relay pings and a margin: past this a serve socket is half-open, whatever TCP says. */

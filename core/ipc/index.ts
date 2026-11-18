@@ -189,6 +189,23 @@ import {
 import type { SetSyncGroupRequest, SyncedAppearance } from '@shared/sync-contract';
 import type { UpdateStatus } from '@shared/update-contract';
 
+import { onDisplayWake } from '../../electron/main/display-wake';
+import { keepAwake } from '../../electron/main/keep-awake';
+import {
+  activateOnThisMachine,
+  focusThisMachine,
+} from '../../electron/main/notifications/activate-here';
+import {
+  notificationDelivery,
+  recordNotificationRefusal,
+} from '../../electron/main/notifications/delivery';
+import { badgeDock, clearDockBadge } from '../../electron/main/notifications/dock-badge';
+import { splashEnabled } from '../../electron/main/splash';
+import {
+  checkForUpdatesInteractively,
+  setUpdateNotificationSink,
+  updateStatus,
+} from '../../electron/main/updates';
 import {
   createTokenStore,
   type StoredDeviceCredential,
@@ -265,7 +282,6 @@ import { loginEnvStatus } from '../config/login-env';
 import { serverBindRefusal } from '../config/parse';
 import { restartRequired } from '../config/restart-required';
 import { diagnoseCommand, effectiveRuntime, receiverHostAliases } from '../config/runtime';
-import { onDisplayWake } from '../../electron/main/display-wake';
 import {
   browseHomeDirectory,
   createFsWatchLayer,
@@ -303,7 +319,6 @@ import {
   type SubscribableAgent,
 } from '../integrations/slack/subscriptions';
 import { createSlackTokens } from '../integrations/slack/tokens';
-import { keepAwake } from '../../electron/main/keep-awake';
 import { createLedger } from '../ledger';
 import { createDeliver } from '../ledger/deliver';
 import { createLedgerNotifier, replayOpenAsks } from '../ledger/notify';
@@ -322,15 +337,6 @@ import {
   createToastQueue,
   createToastRoute,
 } from '../notifications';
-import {
-  activateOnThisMachine,
-  focusThisMachine,
-} from '../../electron/main/notifications/activate-here';
-import {
-  notificationDelivery,
-  recordNotificationRefusal,
-} from '../../electron/main/notifications/delivery';
-import { badgeDock, clearDockBadge } from '../../electron/main/notifications/dock-badge';
 import { createBuilderProgress, type BuilderProgress } from '../plans';
 import { registerPtyHost } from '../pty-host';
 import { onRelayStatus, relayStatus } from '../relay';
@@ -360,13 +366,7 @@ import { onShutdown } from '../shutdown';
 import { createSkillsRuntime, type SkillsRuntime } from '../skills';
 import { readCliSkills } from '../skills/cli-skills';
 import { PLUGIN_DIR } from '../skills/paths';
-import { splashEnabled } from '../../electron/main/splash';
 import { onSyncAppearance, onSyncStatus, setSyncHooks, syncCalls } from '../sync';
-import {
-  checkForUpdatesInteractively,
-  setUpdateNotificationSink,
-  updateStatus,
-} from '../../electron/main/updates';
 
 import { createBindings } from './bindings';
 import { createWindowBroadcaster, type Broadcaster } from './broadcaster';

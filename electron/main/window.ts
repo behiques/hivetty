@@ -9,9 +9,10 @@ import {
   WINDOW_BACKGROUND,
 } from '@shared/window';
 
+import { isSafeExternalUrl } from '../../core/external-links';
+
 import { devIconPath } from './app-icon';
 import { reveal } from './background';
-import { isSafeExternalUrl } from '../../core/external-links';
 import { createSplashWindow, splashEnabled, type SplashController } from './splash';
 import {
   debounce,

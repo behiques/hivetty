@@ -13,24 +13,24 @@ import {
 } from '@shared/remote-contract';
 import type { SetSyncGroupRequest, SyncedAppearance } from '@shared/sync-contract';
 
-import { RemoteCallError, type RemoteClient } from '../../remote-client/socket';
+import { createBindings, type Bindings } from '../../../core/ipc/bindings';
+import type { Broadcaster } from '../../../core/ipc/broadcaster';
+import { readLocalRemote } from '../../../core/ipc/get-remote';
+import type { ResumeTracker } from '../../../core/ipc/resume-tracker';
+import { assertSender } from '../../../core/ipc/sender';
 import { ACCOUNT_CALLS, cloudSession, LICENCE_CALLS } from '../../../core/licence';
+import { relayStatus } from '../../../core/relay';
+import { relayHostsFor } from '../../../core/relay/hosts';
+import { syncCalls } from '../../../core/sync';
+import { RemoteCallError, type RemoteClient } from '../../remote-client/socket';
 import { activateOnThisMachine } from '../notifications/activate-here';
 import { notificationDelivery } from '../notifications/delivery';
 import { badgeDock, clearDockBadgeWithLastWindow } from '../notifications/dock-badge';
 import { createRemoteToasts, type RemoteToasts } from '../notifications/remote-toast';
-import { relayStatus } from '../../../core/relay';
-import { relayHostsFor } from '../../../core/relay/hosts';
-import { syncCalls } from '../../../core/sync';
 import { checkForUpdatesInteractively, updateStatus } from '../updates';
 
-
-import { createBindings, type Bindings } from '../../../core/ipc/bindings';
-import type { Broadcaster } from '../../../core/ipc/broadcaster';
-import { readLocalRemote } from '../../../core/ipc/get-remote';
 import { createForegroundStamp, type ForegroundStamp } from './remote-foreground';
-import type { ResumeTracker } from '../../../core/ipc/resume-tracker';
-import { assertSender } from '../../../core/ipc/sender';
+
 
 /**
  * What each `PROCESS_LOCAL` channel is actually answered with (HIVE-144,
