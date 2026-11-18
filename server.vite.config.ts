@@ -27,7 +27,8 @@ const noElectron = (): Plugin => ({
 /**
  * The SERVER target (HIVE-422): `node out/server/index.js`. A plain Vite SSR build, so dependencies stay external
  * (Vite's SSR default) and `node_modules` resolves them at run time, beside `out/server/mcp-host.js`, the MCP server
- * every session is given, launched with plain Node.
+ * every session is given, launched with plain Node, and `out/server/pty-host.js`, the PTY host the server forks
+ * with its own Node on the first spawn (HIVE-423).
  */
 export default defineConfig({
   resolve: { alias: aliases },
@@ -44,7 +45,7 @@ export default defineConfig({
     emptyOutDir: true,
     minify: false,
     rollupOptions: {
-      input: { index: 'server/index.ts', 'mcp-host': 'mcp-host/index.ts' },
+      input: { index: 'server/index.ts', 'mcp-host': 'mcp-host/index.ts', 'pty-host': 'pty-host/index.ts' },
       output: { format: 'es', entryFileNames: '[name].js' },
     },
   },

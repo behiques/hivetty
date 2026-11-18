@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { connect as netConnect, createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,8 +20,8 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  * to over the encrypted channel from outside the process. `server/index.ts` and `server/boot.ts` are composition,
  * excluded from coverage; this suite is their proof.
  *
- * Sessions cannot spawn yet (HIVE-423) and nobody can sign in (HIVE-424), so case 1 plants a signed lease the server
- * reads as lapsed, signed out: the edition gate then decides from the lease on disk.
+ * Nobody can sign in yet (HIVE-424), so case 1 plants a signed lease the server reads as lapsed, signed out: the
+ * edition gate then decides from the lease on disk.
  *
  * Gated behind `HIVE_LIVE_SERVER_EDITION_PROOF=1`. CI runs none of the live suites.
  */
@@ -341,13 +341,13 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
   }, 60_000);
 
   /*
-    NO_PTY_HOST over the wire needs a licensed server, which needs sign-in (HIVE-424); a lapsed one refuses the spawn
-    before the PTY host is tried (case 6 above). It stops being true when the fork adapter lands (HIVE-423).
-    `tests/server/platform.test.ts` proves the throw itself.
+    A spawn through the server needs a licensed server, which needs sign-in (HIVE-424); a lapsed one refuses the
+    spawn before the PTY host is tried (case 6 above). `pnpm test:pty-host` drives the fork host itself.
   */
-  it.todo('a spawn on a licensed server is refused with NO_PTY_HOST (needs HIVE-424; void once HIVE-423 lands)');
+  it.todo('a licensed server spawns a session through the fork host (needs HIVE-424)');
 
   it('5: nothing under out/server imports electron', () => {
+    expect(existsSync(join(ROOT, 'out/server/pty-host.js'))).toBe(true);
     const offenders = filesUnder(join(ROOT, 'out/server')).filter((file) => {
       const text = readFileSync(file, 'utf8');
       return text.includes('from "electron"') || text.includes("from 'electron'") || text.includes('require("electron")');

@@ -1,10 +1,18 @@
 // @vitest-environment node
+import { fork } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { PROD_CLOUD_URL, resolveCloudUrl } from '../../core/licence/cloud';
 import { leaseKeys } from '../../core/licence/keys';
-import { createServerPlatform, NO_PTY_HOST, NO_SECRET_STORE } from '../../server/platform';
+import { createServerPlatform, NO_SECRET_STORE } from '../../server/platform';
 import { makeSigner } from '../support/lease';
+
+vi.mock('node:child_process', async (original) => ({
+  ...(await original<typeof import('node:child_process')>()),
+  fork: vi.fn(() => Object.assign(new EventEmitter(), { pid: 77, connected: true, send: vi.fn(), kill: vi.fn() })),
+}));
 
 const make = (release = false, quit = vi.fn()) =>
   createServerPlatform({ dataDir: '/srv/h/data', release, version: '1.2.3', quit, fromDir: '/app/server' });
@@ -38,8 +46,27 @@ describe('the server platform (HIVE-422)', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('refuses to fork a PTY host, in words', () => {
-    expect(() => make().processHost()).toThrow(NO_PTY_HOST);
+  it('forks the PTY host that sits beside the bundle', () => {
+    vi.mocked(fork).mockClear();
+    const host = make().processHost();
+    expect(host.pid).toBe(77);
+    expect(fork).toHaveBeenCalledWith('/app/server/pty-host.js', [], {
+      serialization: 'advanced',
+      stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
+    });
+  });
+
+  it('runs the host as the host user when one is given', () => {
+    vi.mocked(fork).mockClear();
+    createServerPlatform({
+      dataDir: '/d',
+      release: false,
+      version: '1',
+      quit: vi.fn(),
+      fromDir: '/app/server',
+      hostUser: { uid: 1001, gid: 1002 },
+    }).processHost();
+    expect(vi.mocked(fork).mock.calls[0]?.[2]).toMatchObject({ uid: 1001, gid: 1002 });
   });
 
   it('launches the MCP host with plain Node, no ELECTRON_RUN_AS_NODE', () => {
