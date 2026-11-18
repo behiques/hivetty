@@ -16,6 +16,11 @@ vi.mock('@features/settings/components/plan-licence-section', () => ({
 vi.mock('@features/settings/components/account-org-section', () => ({
   AccountOrgSection: () => <p>org body</p>,
 }));
+vi.mock('@features/settings/components/account-sync-section', () => ({
+  AccountSyncSection: () => <p>sync body</p>,
+}));
+const syncEntitlement = vi.hoisted(() => ({ current: { allowed: true } as unknown }));
+vi.mock('@hooks/use-entitlement', () => ({ useEntitlement: () => syncEntitlement.current }));
 
 const TEAM = { id: 'org-acme', name: 'Acme', role: 'Member', seat: true, plan: 'team', personal: false };
 const PERSONAL = { id: 'org-me', name: 'Personal', role: 'Owner', seat: true, plan: 'solo', personal: true };
@@ -26,15 +31,29 @@ describe('AccountCentre (the native Account center, inside Settings)', () => {
     activeOrg.current = TEAM;
   });
 
-  it('is one Account pane whose tabs are the three account pane ids', () => {
+  it('is one Account pane whose tabs are the four account pane ids', () => {
     render(<AccountCentre tab="plan-licence" />);
 
     expect(screen.getByRole('heading', { name: 'Account', level: 2 })).toBeInTheDocument();
     const tabs = within(screen.getByRole('tablist', { name: 'Account' })).getAllByRole('tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['Profile & devices', 'Plan & billing', 'Organization']);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Profile & devices', 'Plan & billing', 'Sync', 'Organization']);
     expect(screen.getByRole('tab', { name: 'Plan & billing' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel', { name: 'Plan & billing' })).toHaveTextContent('plan body');
     expect(screen.queryByText('devices body')).toBeNull();
+  });
+
+  it('says sync is here too, and opens the Sync tab (HIVE-284)', async () => {
+    render(<AccountCentre tab="account-devices" />);
+    expect(screen.getByText('Who is signed in, your plan and billing, your team, and sync.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Sync' }));
+    expect(useUiStore.getState()).toMatchObject({ settings: true, settingsSection: 'account-sync' });
+  });
+
+  it('marks the Sync tab locked without the feature (HIVE-284)', () => {
+    syncEntitlement.current = { allowed: false, reason: 'Sync is part of Pro.', plan: 'Pro', upgradeUrl: '/upgrade' };
+    render(<AccountCentre tab="account-sync" />);
+    expect(within(screen.getByRole('tab', { name: /Sync/ })).getByLabelText('Locked: Pro')).toBeInTheDocument();
+    syncEntitlement.current = { allowed: true };
   });
 
   it('a tab opens its pane id, so a deep link and a click land in the same place', async () => {

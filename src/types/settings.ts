@@ -29,6 +29,7 @@ export type SettingsSection =
   | 'account-devices'
   | 'plan-licence'
   | 'account-org'
+  | 'account-sync'
   | 'updates-about'
   | 'advanced';
 

@@ -152,6 +152,7 @@ describe('SettingsOverlay', () => {
     ['account-devices', 'Account'],
     ['plan-licence', 'Account'],
     ['account-org', 'Account'],
+    ['account-sync', 'Account'],
     ['updates-about', 'Updates & About'],
     ['advanced', 'Advanced'],
   ] as const)('pane id %s renders its section', (id, title) => {
@@ -178,7 +179,7 @@ describe('SettingsOverlay', () => {
     );
   });
 
-  it.each(['account-devices', 'plan-licence', 'account-org'] as const)(
+  it.each(['account-devices', 'plan-licence', 'account-org', 'account-sync'] as const)(
     'the profile card is the current row for %s, and opens the Account center',
     async (id) => {
       const user = userEvent.setup();

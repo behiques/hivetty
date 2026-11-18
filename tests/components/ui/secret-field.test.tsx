@@ -127,4 +127,13 @@ describe('SecretField', () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
   });
+  it('can say what it holds, mark itself invalid and ask for a new password (HIVE-284)', () => {
+    render(
+      <SecretField label="Sync passphrase" value="" onChange={vi.fn()} invalid autoComplete="new-password" secretName="passphrase" />,
+    );
+    const input = screen.getByLabelText('Sync passphrase');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAttribute('autocomplete', 'new-password');
+    expect(screen.getByRole('button', { name: 'Show the passphrase' })).toBeInTheDocument();
+  });
 });
