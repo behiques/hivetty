@@ -6092,6 +6092,16 @@ export function remoteRegistrySize(): number {
   return remoteRegistry.size();
 }
 
+/**
+ * Test-only: whether the remote registry holds a handler for `channel`
+ * (HIVE-422). In the same register as {@link remoteRegistrySize}: the headless
+ * suite reads it to prove every channel a client may send is answered with no
+ * desktop, which a size alone cannot show.
+ */
+export function remoteRegistryHas(channel: string): boolean {
+  return remoteRegistry.call(channel) !== null || remoteRegistry.notify(channel) !== null;
+}
+
 /*
   There is deliberately no `attachForTest` here (HIVE-143 review).
 

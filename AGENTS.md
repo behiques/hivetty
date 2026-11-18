@@ -149,6 +149,7 @@ one still fires.
 | `src/stores/**` | `src/features/**`, `src/components/**` |
 | `src/**`, `core/**`, `shared/**`, `electron/**`, the child-process folders | `tests/**` (test scaffolding never ships) |
 | `core/**`, `electron/main/**` | `src/**` |
+| **`core/**`, `shared/**`, `pty-host/**`, `mcp-host/**`, `remote-host/**`, `remote-channel/**`, `server/**`** (everything that runs without Electron) | the `electron` module and any `electron/…` subpath of it, `electron/**`, `src/**` |
 | `electron/preload/**` | `src/**`, `core/**`, `electron/main/**` |
 | **`pty-host/**`, `mcp-host/**`, `remote-channel/**`** (child processes, at the repo root) | `src/**`, `core/**`, `electron/main/**`, `electron/preload/**`; `remote-channel` also `remote-host/**`, `electron/remote-client/**` |
 | `core/harness/**` | `core/{sessions,ipc,notifications,plans}/**`, `electron/main/{ipc,notifications}/**` |
@@ -159,6 +160,18 @@ registry ([`docs/harness-architecture.md`](docs/harness-architecture.md)). `core
 processes may import, and its rule is what a module **drags in** — no runtime imports, no Node APIs, no DOM APIs — not "types
 only" (`guards.ts`, `ledger-derive.ts`, `mcp-tools.ts` all ship logic both sides run). The renderer reaches it via `@shared`,
 **type-only** for anything with behaviour behind it, or main-process code lands in the renderer bundle — that compile-time contract.
+
+**Only `electron/` imports Electron (HIVE-422).** Core reaches its shell through one port,
+`core/platform/index.ts`: `platform()` answers the secrets backend, the state and logs folders, the
+shipped resources, the local notification, the PTY host fork, the MCP host launch and the app's
+version, and `electron/main/platform.ts` builds the desktop's answer, installed by
+`electron/main/index.ts` before anything registers. Everything that needs a screen (windows, focus,
+dialogs, the dock, updates, keep-awake, the attach credential) is on the port's optional `desktop`
+member, which a server leaves out; every handler stays in core and registers whether or not there is
+an `ipcMain`. A new screen-only dependency is a new `Desktop` member, never an import in core. A
+function core needs that touches no Electron moves into core instead. Suites that mock `electron` and
+reach a platform read call `installDesktopPlatform()` (`tests/support/desktop-platform.ts`) in their
+`beforeEach`; `tests/core/ipc/headless.test.ts` proves core registers with `electron` throwing on import.
 
 `src/components/layout/` is the **composition root** and is exempt from the
 `features/` ban: the list panel, the stage and the session panel exist to mount

@@ -10,6 +10,20 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 /** Absolute path to this package, so zone globs do not depend on the cwd. */
+
+/** The folders that run with no Electron (HIVE-422): only `electron/` may import it. */
+const ELECTRON_FREE_DIRS = [
+  './core/**/*',
+  './shared/**/*',
+  './pty-host/**/*',
+  './mcp-host/**/*',
+  './remote-host/**/*',
+  './remote-channel/**/*',
+  './server/**/*',
+];
+
+const ELECTRON_FENCE_MESSAGE =
+  'Only electron/ may import Electron. Shared code reaches the desktop through core/platform.';
 const appRoot = fileURLToPath(new URL('.', import.meta.url)).replace(/\/$/, '');
 
 /**
@@ -347,6 +361,23 @@ export default tseslint.config(
               message:
                 'The main process has no renderer, no DOM and no store. It may import shared/ only.',
             },
+            /**
+             * THE ELECTRON FENCE (HIVE-422).
+             *
+             * Everything outside `electron/` runs under plain Node too: a
+             * server boots core with no Electron at all. So none of these
+             * folders may reach into the desktop shell or the renderer; what
+             * core needs from a screen it reads through `core/platform`'s
+             * `desktop`, and the shell supplies it. Every file in these folders
+             * is fenced, so a fenced file cannot reach Electron through
+             * another one. The `electron` module itself is refused by
+             * `no-restricted-imports` below.
+             */
+            {
+              target: ELECTRON_FREE_DIRS,
+              from: ['./electron/**/*', './src/**/*'],
+              message: ELECTRON_FENCE_MESSAGE,
+            },
             {
               target: './electron/preload/**/*',
               from: [
@@ -602,6 +633,23 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
+  },
+  {
+    /**
+     * The other half of the Electron fence (HIVE-422): the module itself, and
+     * any `electron/…` subpath of it, from the folders that run without it.
+     * Relative reaches into `./electron/**` are the zone's above.
+     */
+    files: ELECTRON_FREE_DIRS.map((dir) => `${dir.replace(/^\.\//, '').replace(/\/\*\*\/\*$/, '')}/**/*.ts`),
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [{ name: 'electron', message: ELECTRON_FENCE_MESSAGE }],
+          patterns: [{ regex: '^electron/', message: ELECTRON_FENCE_MESSAGE }],
+        },
       ],
     },
   },
