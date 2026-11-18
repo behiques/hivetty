@@ -1,4 +1,4 @@
-// Rewrites electron/shared/feature-plans.ts from @hivetty/plans (HIVE-268). Reads the sibling checkout's built
+// Rewrites shared/feature-plans.ts from @hivetty/plans (HIVE-268). Reads the sibling checkout's built
 // package, so the app's build never touches hivetty-cloud or the network. HIVETTY_CLOUD_DIR overrides the folder.
 import { existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -37,5 +37,5 @@ ${Object.entries(cheapest).map(([feature, key]) => `  ${prop(feature)}: ${q(key)
 
 export const TRIAL_PLAN: PlanKey = ${q(TRIAL_PLAN)};
 `;
-writeFileSync(resolve(root, 'electron/shared/feature-plans.ts'), body);
+writeFileSync(resolve(root, 'shared/feature-plans.ts'), body);
 console.log(`feature-plans.ts: ${order.length} plans, ${Object.keys(cheapest).length} features`);
