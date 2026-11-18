@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { readdir, readFile } from 'node:fs/promises';
 
 /**
  * Reading and signalling the process tree (HIVE-72).
@@ -132,8 +133,39 @@ export function walkDescendants(
   return found;
 }
 
+/**
+ * Linux (HIVE-423): the three columns `ps` prints, read from `/proc/<pid>/stat`, so a slim image with no
+ * `procps` still finds a session's descendants. Any failure to list answers `''`, as the `ps` reader does.
+ */
+export async function readProcTable(procDir = '/proc'): Promise<string> {
+  let names: string[];
+  try {
+    names = await readdir(procDir); // throws: the caller sees '' and warns once
+  } catch {
+    return '';
+  }
+  const lines = await Promise.all(
+    names
+      .filter((name) => /^\d+$/.test(name))
+      .map(async (pid) => {
+        try {
+          const stat = await readFile(`${procDir}/${pid}/stat`, 'utf8'); // throws: the process ended; skipped
+          // `comm` may hold spaces, parentheses and newlines: the fields start after the LAST ")".
+          const close = stat.lastIndexOf(')');
+          if (close === -1) return '';
+          const [, ppid, pgrp] = stat.slice(close + 1).trim().split(/\s+/);
+          return `${pid} ${ppid} ${pgrp}`; // a short line prints "undefined", which the parser drops
+        } catch {
+          return '';
+        }
+      }),
+  );
+  return lines.filter((line) => line !== '').join('\n');
+}
+
 /** Read the table, answering `''` for any failure at all. */
-function readProcessTable(): Promise<string> {
+function readProcessTable(platform: NodeJS.Platform, procDir?: string): Promise<string> {
+  if (platform === 'linux') return readProcTable(procDir);
   return new Promise((resolve) => {
     execFile(
       // Pinned rather than resolved through PATH: this runs with the app's
@@ -152,12 +184,17 @@ interface ProcessControlDeps {
   /** Injected so tests never exec a real `ps`. */
   readTable?: () => Promise<string>;
   platform?: NodeJS.Platform;
+  /** Linux only: where the process table is mounted. A parameter so a test names a fixture tree. */
+  procDir?: string;
 }
 
 export function createProcessControl({
-  readTable = readProcessTable,
+  readTable,
   platform = process.platform,
+  procDir,
 }: ProcessControlDeps = {}): ProcessControl {
+  const read = readTable ?? (() => readProcessTable(platform, procDir));
+  let warned = false;
   return {
     signalGroup(pgid, signal) {
       // Belt and braces: the parser already drops these, and this is the call
@@ -191,8 +228,16 @@ export function createProcessControl({
       // about not shelling out to a `ps` that does not exist.
       if (platform === 'win32') return [];
 
-      const table = await readTable();
-      if (table === '') return [];
+      const table = await read();
+      if (table === '') {
+        if (!warned) {
+          warned = true;
+          console.warn(
+            `[pty-host] the process table could not be read; descendants of ${roots.length} session(s) will not be cleaned up`,
+          );
+        }
+        return [];
+      }
 
       return walkDescendants(parseProcessTable(table), roots);
     },
