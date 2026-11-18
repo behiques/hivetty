@@ -19,6 +19,11 @@ import { aliases } from './vite.aliases.mjs';
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: aliases },
+  // The server build's constants (HIVE-422, `server/release.ts`): never a release under test.
+  define: {
+    __HIVETTY_RELEASE__: 'false',
+    __HIVETTY_VERSION__: JSON.stringify('0.0.0-test'),
+  },
   test: {
     globals: true,
     environment: 'happy-dom',
@@ -36,11 +41,14 @@ export default defineConfig({
         `electron/main` are what the unit suite exercises; the preload, the
         pty host and the MCP host run only under the e2e suite.
       */
-      include: ['src/**/*.{ts,tsx}', 'core/**/*.ts', 'shared/**/*.ts', 'electron/main/**/*.ts'],
+      include: ['src/**/*.{ts,tsx}', 'core/**/*.ts', 'shared/**/*.ts', 'electron/main/**/*.ts', 'server/**/*.ts'],
       exclude: [
         // Entry points — no logic to cover.
         'src/main.tsx',
         'electron/main/index.ts',
+        // HIVE-422: composition; `pnpm test:server-edition` boots them for real.
+        'server/index.ts',
+        'server/boot.ts',
         // Data, not logic (story 012).
         'src/data/**',
         // shadcn primitives are vendored verbatim.
