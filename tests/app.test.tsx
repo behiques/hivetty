@@ -7,6 +7,8 @@ import { useUiStore } from '@stores/ui-store';
 
 vi.mock('@xterm/xterm');
 vi.mock('@xterm/addon-fit');
+const appearanceSync = vi.hoisted(() => vi.fn());
+vi.mock('@/hooks/use-appearance-sync', () => ({ useAppearanceSync: appearanceSync }));
 
 /**
  * The composition root is a one-liner since story 020 — it mounts the shell and
@@ -18,6 +20,12 @@ describe('App', () => {
     document.body.removeAttribute('data-theme');
     useUiStore.getState().reset();
     useAppearanceStore.getState().reset();
+  });
+
+  it('mounts the appearance bridge for settings sync once (HIVE-284)', () => {
+    appearanceSync.mockClear();
+    render(<App />);
+    expect(appearanceSync).toHaveBeenCalled();
   });
 
   it('mounts the app shell', () => {

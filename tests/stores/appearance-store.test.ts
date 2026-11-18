@@ -1209,3 +1209,77 @@ describe('appearance-store — What’s new', () => {
     expect(stored.state).toMatchObject({ whatsNewSeen: '1.0', whatsNewOff: true });
   });
 });
+
+describe('appearance-store — settings sync (HIVE-284)', () => {
+  it('picks exactly the synced fields', async () => {
+    const { syncedAppearance } = await import('@stores/appearance-store');
+    const picked = syncedAppearance(useAppearanceStore.getState());
+    expect(Object.keys(picked).sort()).toEqual(
+      [
+        'activeThemeId',
+        'density',
+        'editorFont',
+        'editorFontSize',
+        'editorLineNumbers',
+        'editorTabWidth',
+        'editorWordWrap',
+        'terminalFont',
+        'terminalFontSize',
+        'theme',
+        'themes',
+      ].sort(),
+    );
+  });
+
+  it('applies valid listed fields and drops the rest', () => {
+    const before = useAppearanceStore.getState();
+    useAppearanceStore.getState().applySynced({ density: 'compact', listPanelWidth: 999, terminalFontSize: 'huge' } as never);
+    const after = useAppearanceStore.getState();
+    expect(after.density).toBe('compact');
+    expect(document.body.getAttribute('data-density')).toBe('compact');
+    expect(after.listPanelWidth).toBe(before.listPanelWidth);
+    expect(after.terminalFontSize).toBe(before.terminalFontSize);
+  });
+
+  it('leaves the theme library alone when a synced theme is not a theme', () => {
+    const before = useAppearanceStore.getState().themes;
+    useAppearanceStore.getState().applySynced({ themes: { bad: {} } });
+    expect(useAppearanceStore.getState().themes).toBe(before);
+  });
+
+  it('applies a valid theme library and an active id it holds, and repaints', () => {
+    const theme = { ...BUILT_IN_THEME, name: 'Mine' } as HiveTheme;
+    useAppearanceStore.getState().applySynced({ themes: { mine: theme }, activeThemeId: 'mine', theme: 'light' });
+    const after = useAppearanceStore.getState();
+    expect(after.themes).toEqual({ mine: theme });
+    expect(after.activeThemeId).toBe('mine');
+    expect(after.theme).toBe('light');
+    expect(document.body.getAttribute('data-theme')).toBe('light');
+  });
+
+  it('drops an active id that names no theme, and ignores a field set to undefined', () => {
+    useAppearanceStore.getState().applySynced({ activeThemeId: 'nope', density: undefined, theme: 'sepia' });
+    const after = useAppearanceStore.getState();
+    expect(after.activeThemeId).toBe('hivetty');
+    expect(after.density).toBe('comfortable');
+    expect(after.theme).toBe('dark');
+  });
+
+  it('checks every scalar against its offered values', () => {
+    useAppearanceStore.getState().applySynced({
+      terminalFont: 'not-a-font',
+      editorFont: 'system',
+      editorFontSize: 7,
+      editorTabWidth: 3,
+      editorWordWrap: 'yes',
+      editorLineNumbers: false,
+    });
+    const after = useAppearanceStore.getState();
+    expect(after.terminalFont).toBe('system');
+    expect(after.editorFont).toBe('system');
+    expect(after.editorLineNumbers).toBe(false);
+    expect(after.editorTabWidth).not.toBe(3);
+    expect(after.editorFontSize).not.toBe(7);
+    expect(after.editorWordWrap).not.toBe('yes');
+  });
+});
