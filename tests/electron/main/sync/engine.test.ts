@@ -673,6 +673,90 @@ describe('timers and triggers', () => {
   });
 });
 
+describe('review round (task 8)', () => {
+  it('a probe from before a reset elsewhere is not reused: the new passphrase joins', async () => {
+    const [a] = await pair();
+    const c = makeMac('C', cloud);
+    expect(await c.engine.refresh()).toMatchObject({ kind: 'off', cloud: 'present' });
+    await a.engine.reset();
+    expect(await a.engine.setup('a brand new passphrase')).toEqual({ ok: true });
+    await a.engine.idle();
+    expect(await c.engine.setup('a brand new passphrase')).toEqual({ ok: true });
+    await c.engine.idle();
+    expect(c.read('skills/mine/SKILL.md')).toBe('mine');
+  });
+
+  it('a reset pressed during a run waits for it, and the run writes nothing afterwards', async () => {
+    const [a] = await pair();
+    let resetting: Promise<unknown> = Promise.resolve();
+    cloud.beforeNextPut(() => {
+      resetting = a.engine.reset();
+      return Promise.resolve();
+    });
+    a.write('skills/a/SKILL.md', 'more');
+    await a.engine.now();
+    expect(await resetting).toEqual({ ok: true });
+    expect(a.state.read()).toBeNull();
+    expect(a.keys.read()).toBeNull();
+    expect(a.status()).toEqual({ kind: 'off', cloud: 'none', resetElsewhere: false });
+    expect(cloud.blob()).toBeNull();
+  });
+
+  it('a stop with wipe during a run sends nothing more with the old key and recreates no state', async () => {
+    let wipeDuringApply = false;
+    let engine: SyncEngine | null = null;
+    const a = makeMac('A', cloud, { doc: { claudeCommand: 'claude' } });
+    a.write('skills/mine/SKILL.md', 'mine');
+    await a.engine.setup(PASS);
+    await a.engine.idle();
+    const b = makeMac('B', cloud, {
+      apply: (real) => async (result, kept) => {
+        if (wipeDuringApply) engine?.stop({ wipe: true });
+        return real(result, kept);
+      },
+    });
+    engine = b.engine;
+    await b.engine.setup(PASS);
+    await b.engine.idle();
+    b.write('skills/b/SKILL.md', 'from B');
+    wipeDuringApply = true;
+    const before = puts(b).length;
+    await b.engine.now();
+    expect(puts(b).length).toBe(before);
+    expect(b.keys.read()).toBeNull();
+    expect(b.state.read()).toBeNull();
+    expect(b.statuses.at(-1)).toEqual({ kind: 'off', cloud: 'unknown', resetElsewhere: false });
+  });
+
+  it('a trigger during the run that got a 429 waits too', async () => {
+    const [a] = await pair();
+    let before = 0;
+    cloud.force('PUT', () => {
+      void a.engine.now();
+      before = a.calls().length;
+      return cloud.json({ error: 'rate_limited' }, 429, { 'retry-after': '7' });
+    });
+    a.write('skills/a/SKILL.md', 'more');
+    await a.engine.now();
+    expect(a.calls().length).toBe(before);
+    await vi.advanceTimersByTimeAsync(6_999);
+    await a.engine.idle();
+    expect(a.calls().length).toBe(before);
+  });
+
+  it('a set-up that cannot save answers instead of throwing', async () => {
+    const a = makeMac('A', cloud, {
+      state: (real) => ({
+        ...real,
+        write: () => {
+          throw new Error('EACCES');
+        },
+      }),
+    });
+    expect(await a.engine.setup(PASS)).toEqual({ ok: false, error: "Couldn't store the sync key on this Mac." });
+  });
+});
+
 describe('failure pass', () => {
   it('an apply that throws mid-way is apply-failed; the base holds and the next run finishes', async () => {
     let fail = false;

@@ -74,7 +74,8 @@ interface CloudBlob {
   ciphertext: string;
 }
 
-type Outcome = 'done' | 'retry' | SyncProblem | 'reset-none' | 'reset-present' | 'locked' | { wait: number };
+/** `stale`: a stop or a reset happened during the run, which then writes and sends nothing more. */
+type Outcome = 'done' | 'retry' | 'stale' | SyncProblem | 'reset-none' | 'reset-present' | 'locked' | { wait: number };
 
 const etag = (revision: number): string => `"${String(revision)}"`;
 const isAppearance = (id: string): boolean => id.startsWith('workspace:k:appearance.');
@@ -120,6 +121,10 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let waitTimer: ReturnType<typeof setTimeout> | null = null;
   let published: string | null = null;
+  /** Bumped by every stop and reset: a run from an older generation writes and sends nothing more. */
+  let generation = 0;
+  /** True while a reset waits for the run in flight: no new run starts. */
+  let blocked = false;
 
   function status(): SyncStatus {
     if (locked) return { kind: 'unavailable', reason: 'locked' };
@@ -166,7 +171,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     pollTimer = debounceTimer = waitTimer = null;
   }
 
-  async function pull(key: StoredKey, state: SyncState): Promise<View | Outcome> {
+  async function pull(key: StoredKey, state: SyncState, alive: () => boolean): Promise<View | Outcome> {
     if (state.revision === 0 && cached?.revision === 0) return cached.view;
     const conditional = cached !== null && cached.revision === state.revision;
     const response = await deps.fetch(SYNC_PATH, conditional ? { headers: { 'if-none-match': etag(state.revision) } } : {});
@@ -185,14 +190,15 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     const plain = open(Buffer.from(key.key, 'base64'), key.userId, Buffer.from(body.ciphertext, 'base64'));
     const view = plain === null ? null : await decodeBundle(plain);
     if (view === null) return 'reset-present';
+    if (!alive()) return 'stale';
     cached = { revision: body.revision, view };
     state.revision = body.revision;
     return view;
   }
 
   /** One pull, merge, apply and push. `retry` means the push lost a race and the caller should go again. */
-  async function once(key: StoredKey, state: SyncState): Promise<Outcome> {
-    const remote = await pull(key, state);
+  async function once(key: StoredKey, state: SyncState, alive: () => boolean): Promise<Outcome> {
+    const remote = await pull(key, state, alive);
     if (typeof remote === 'string' || 'wait' in remote) return remote as Outcome;
 
     const document = deps.readDocument();
@@ -204,7 +210,9 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       state.groups[groupOfId(id)] && (!isAppearance(id) || appearance !== null);
 
     const result = merge(pick(state.base, takesPart), pick(local, takesPart), pick(remote, takesPart), !state.joined);
+    if (!alive()) return 'stale';
     const applied = await deps.apply(result, state.kept);
+    if (!alive()) return 'stale';
     state.kept = applied.kept;
     state.joined = true;
 
@@ -229,6 +237,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     const outgoing: View = { ...pick(remote, (id) => !takesPart(id)), ...result.merged };
     const blob = seal(Buffer.from(key.key, 'base64'), key.userId, await encodeBundle(outgoing));
     if (blob.length > MAX_BLOB_BYTES) return 'too-large';
+    if (!alive()) return 'stale';
     const response = await deps.fetch(SYNC_PATH, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', 'if-match': etag(state.revision) },
@@ -246,6 +255,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     const body = (await readJson(response)) as { revision?: unknown } | null;
     if (!Number.isInteger(body?.revision)) return 'offline';
     const revision = body?.revision as number; // from the body, never the ETag
+    if (!alive()) return 'stale';
     state.revision = revision;
     cached = { revision, view: outgoing };
     for (const id of Object.keys(pick(state.base, takesPart))) delete state.base[id];
@@ -255,12 +265,13 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     return 'done';
   }
 
-  async function cycle(key: StoredKey, state: SyncState): Promise<Outcome> {
+  async function cycle(key: StoredKey, state: SyncState, alive: () => boolean): Promise<Outcome> {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
       let outcome: Outcome;
       try {
-        outcome = await once(key, state);
+        outcome = await once(key, state, alive);
       } catch (error) {
+        if (!alive()) return 'stale';
         // A CloudError is the network; anything else failed while applying or saving.
         return error instanceof CloudError ? 'offline' : 'apply-failed';
       }
@@ -280,6 +291,8 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       return;
     }
     switch (outcome) {
+      case 'stale':
+        return;
       case 'done':
       case 'retry':
         problem = null;
@@ -301,17 +314,19 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
 
   async function runOnce(): Promise<void> {
     if (stopped || locked) return;
+    const mine = generation;
+    const alive = (): boolean => mine === generation && !stopped;
     const key = ownKey();
     const state = key === null ? null : deps.state.read();
     if (key !== null && state !== null) {
-      settle(await cycle(key, state));
+      settle(await cycle(key, state, alive));
       conflicts = await deps.conflicts().catch(() => conflicts);
     }
     publish();
   }
 
   function now(): Promise<void> {
-    if (stopped || locked || waitTimer !== null) return running ?? Promise.resolve();
+    if (stopped || locked || blocked || waitTimer !== null) return running ?? Promise.resolve();
     if (running !== null) {
       again = true;
       return running;
@@ -320,7 +335,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       do {
         again = false;
         await runOnce();
-      } while (again && !stopped && !locked);
+      } while (again && !stopped && !locked && !blocked && waitTimer === null);
     })().finally(() => {
       running = null;
     });
@@ -389,39 +404,67 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     if (!deps.keys.available()) return { ok: false, error: NO_ENCRYPTION };
     const user = deps.userId();
     if (user === null) return { ok: false, error: SIGN_IN };
-    let blob = probe;
-    if (blob === null) {
-      let response: Response;
-      try {
-        response = await deps.fetch(SYNC_PATH);
-      } catch {
-        return { ok: false, error: SYNC_PROBLEM_COPY.offline };
-      }
-      if (response.status === 404) {
-        cloud = 'none';
-        return create(passphrase, user);
-      }
-      if (!response.ok) return { ok: false, error: SYNC_PROBLEM_COPY.offline };
-      blob = asBlob(await readJson(response));
-      if (blob === null) return { ok: false, error: SYNC_PROBLEM_COPY.offline };
-      probe = blob;
+    await (running ?? Promise.resolve());
+    // The probe is reused only while the cloud still holds that revision: a 304 costs no download, and the kept
+    // counter means any reset since answers 200 or 404.
+    let response: Response;
+    try {
+      response = await deps.fetch(SYNC_PATH, probe === null ? {} : { headers: { 'if-none-match': etag(probe.revision) } });
+    } catch {
+      return { ok: false, error: SYNC_PROBLEM_COPY.offline };
     }
-    return join(passphrase, user, blob);
+    try {
+      if (response.status === 404) {
+        probe = null;
+        cloud = 'none';
+        return await create(passphrase, user);
+      }
+      let blob = response.status === 304 ? probe : null;
+      if (blob === null) {
+        if (!response.ok) return { ok: false, error: SYNC_PROBLEM_COPY.offline };
+        blob = asBlob(await readJson(response));
+        if (blob === null) return { ok: false, error: SYNC_PROBLEM_COPY.offline };
+        probe = blob;
+        cloud = 'present';
+      }
+      return await join(passphrase, user, blob);
+    } catch {
+      deps.state.clear();
+      return { ok: false, error: CANT_STORE };
+    }
   }
 
   async function reset(): Promise<SyncSetupResult> {
-    let response: Response;
+    // The run in flight finishes first and writes nothing more: it must not recreate the state, nor read the
+    // 404 that follows as a reset made elsewhere.
+    blocked = true;
+    generation += 1;
     try {
-      response = await deps.fetch(SYNC_PATH, { method: 'DELETE' });
-    } catch {
-      return { ok: false, error: CANT_RESET };
+      await (running ?? Promise.resolve());
+      let response: Response;
+      try {
+        response = await deps.fetch(SYNC_PATH, { method: 'DELETE' });
+      } catch {
+        return { ok: false, error: CANT_RESET };
+      }
+      if (response.status !== 204) return { ok: false, error: CANT_RESET };
+      forget();
+      cloud = 'none';
+      resetElsewhere = false;
+      publish();
+      return { ok: true };
+    } finally {
+      blocked = false;
     }
-    if (response.status !== 204) return { ok: false, error: CANT_RESET };
-    forget();
-    cloud = 'none';
-    resetElsewhere = false;
-    publish();
-    return { ok: true };
+  }
+
+  function changed(): void {
+    if (stopped || locked) return;
+    if (debounceTimer !== null) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      void now();
+    }, DEBOUNCE_MS);
   }
 
   return {
@@ -439,16 +482,9 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     reportAppearance(fields) {
       if (appearance !== null && JSON.stringify(appearance) === JSON.stringify(fields)) return;
       appearance = { ...fields };
-      this.changed();
+      changed();
     },
-    changed() {
-      if (stopped || locked) return;
-      if (debounceTimer !== null) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        debounceTimer = null;
-        void now();
-      }, DEBOUNCE_MS);
-    },
+    changed,
     now,
     idle: () => running ?? Promise.resolve(),
     reset,
@@ -463,11 +499,13 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     },
     stop(options) {
       stopped = true;
+      generation += 1;
       clearTimers();
       if (options?.wipe) {
         forget();
         cloud = 'unknown';
         resetElsewhere = false;
+        publish();
       }
     },
   };
