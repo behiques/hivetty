@@ -10,6 +10,7 @@ import {
   ACCOUNT_CALLS,
   cloudSession,
   LICENCE_CALLS,
+  leaseSubject,
   licence,
   onLicenceChange,
   RELOAD_EVERY_MS,
@@ -173,6 +174,29 @@ describe('licence composition', () => {
     });
     await ACCOUNT_CALLS[CH.accountSignIn]();
     expect(new URL(openExternal.mock.calls[0]![0] as string).origin).toBe('https://hive.acme.test');
+  });
+
+  it('has no lease subject before it starts (HIVE-284)', () => {
+    expect(leaseSubject()).toBeNull();
+  });
+
+  it('answers no lease subject while the lease is lapsed (HIVE-284)', () => {
+    const signer = makeSigner('kid-subject');
+    writeFileSync(join(dir, 'lease.jws'), signer.sign(claimsFor({ sub: 'usr_7' })));
+    startLicence({
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
+      safeStorage,
+      openExternal: vi.fn(),
+      env: { HIVETTY_LEASE_KEYS: JSON.stringify([signer.jwk]), HIVETTY_CLOUD_URL: ISS },
+      fetch: vi.fn(),
+      broadcast: vi.fn(),
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
+    });
+    expect(licence()).toEqual({ kind: 'lapsed', reason: 'signed_out' });
+    expect(leaseSubject()).toBeNull();
   });
 
   it('answers unlicensed before it starts, and refresh is safe', async () => {

@@ -72,6 +72,37 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('the lease subject (HIVE-284: sync binds its key to it)', () => {
+  it('answers the sub of the lease it verified, while licensed and in grace', async () => {
+    const { machine } = harness({ stored: signer.sign(claimsFor({ sub: 'usr_42' })) });
+    expect(machine.subject()).toBeNull();
+    machine.start();
+    expect(machine.subject()).toBe('usr_42');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(machine.state().kind).toBe('grace');
+    expect(machine.subject()).toBe('usr_42');
+  });
+
+  it('answers null after a lapse and after sign-out', async () => {
+    const refused = harness({ stored: signer.sign(claimsFor()), renew: [{ kind: 'refused', reason: 'payment_failed' }] });
+    refused.machine.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refused.machine.state().kind).toBe('lapsed');
+    expect(refused.machine.subject()).toBeNull();
+
+    const out = harness({ stored: signer.sign(claimsFor()) });
+    out.machine.start();
+    out.setAccount({ kind: 'signed-out' });
+    expect(out.machine.subject()).toBeNull();
+  });
+
+  it('answers null when unlicensed', () => {
+    const { machine } = harness();
+    machine.start();
+    expect(machine.subject()).toBeNull();
+  });
+});
+
 describe('licence state at launch', () => {
   it('is unlicensed with no lease, and with a lease that fails verification', () => {
     for (const stored of [null, 'a.b.c', makeSigner('kid-x').sign(claimsFor())]) {
