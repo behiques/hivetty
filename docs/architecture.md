@@ -10,17 +10,17 @@ The map for the team working on HiveTTY Pro. Each box below has a deep dive; thi
 
 HiveTTY Pro is one Electron app with a strict process model. The renderer (`src/`) is React,
 four Zustand stores and xterm; it reaches the main process only through verbs the preload
-exposes on `window.hive`. Main (`electron/main`) is the single policy point: it validates
+exposes on `window.hive`. Main (`electron/main` and `core/`) is the single policy point: it validates
 every call, owns the config, the ledger, session history and the hook receiver. Terminals run
 in a separate PTY host process, so a crash there cannot take down main. Every session runs one
 of three agent CLIs (Claude Code, Codex or Copilot), and main speaks to each through one
-**harness port** (`electron/main/harness/`): an adapter per CLI builds its command line, wires
+**harness port** (`core/harness/`): an adapter per CLI builds its command line, wires
 its hooks, reads its meters and runs it headless for agents, so nothing outside the harness
 asks which CLI it has. Each CLI starts its own MCP host over stdio to reach the ledger (over
-HTTP from a container). The **licence** (`electron/main/licence/`) signs in against the
+HTTP from a container). The **licence** (`core/licence/`) signs in against the
 HiveTTY cloud and holds a signed, time-limited lease whose entitlements turn paid features on,
 Codex and Copilot among them; the renderer's gate covers the window until a lease is valid.
-`electron/shared` is the only code both sides import.
+`shared` is the only code both sides import. `core/` is the feature code both shells run; `electron/` is the desktop shell.
 
 ## Processes
 
@@ -38,7 +38,7 @@ Codex and Copilot among them; the renderer's gate covers the window until a leas
 | Explorer and editor, the fs surface | [Explorer and editor](explorer-and-editor.md) |
 | Ledger, MCP host, agents | [Agents and the ledger](agents-and-ledger.md) |
 | The harness port, the Claude Code, Codex and Copilot adapters | [Harness architecture](harness-architecture.md) |
-| Sign-in, the lease, entitlements, billing | `electron/main/licence/`, `src/features/account/`; the user's view is [Settings › Account center](guide/settings.md#account-center) |
+| Sign-in, the lease, entitlements, billing | `core/licence/`, `src/features/account/`; the user's view is [Settings › Account center](guide/settings.md#account-center) |
 | Remote listener and pairing | [Server mode](server-mode.md) |
 | Build, sign, publish, update | [Packaging and updates](packaging-and-updates.md) |
 
@@ -69,19 +69,20 @@ src/
                          muta, tone, kit, palette, the comb (MUTA_SCALE) and
                          lib/theme/colour, and nothing else from lib/
   stores/                hive, ui, appearance, editor
-electron/
-  main/                  config, sessions, hooks, ledger, agents, integrations, server
-  main/harness/          the port, and an adapter each: claude-code/, codex/, copilot/
-  main/licence/          sign-in, the lease and its entitlements, devices, billing
-  main/relay/            the managed relay: the serve loop and its gate
+core/                    config, sessions, hooks, ledger, agents, integrations, server
+  harness/               the port, and an adapter each: claude-code/, codex/, copilot/
+  licence/               sign-in, the lease and its entitlements, devices, billing
+  relay/                 the managed relay: the serve loop and its gate
+electron/                the desktop shell
+  main/                  the entry point, windows, tray, menu, updates, desktop notifications
   preload/               the bridge
-  pty-host/              terminals
-  mcp-host/              the hive MCP server
-  remote-host/           server mode's listener (the server half)
   remote-client/         attach to a server (the laptop half)
-  remote-channel/        the encrypted channel both halves attach through
-  shared/                contracts both sides import
-tests/                   mirrors src/ and electron/
+pty-host/                terminals
+mcp-host/                the hive MCP server
+remote-host/             server mode's listener (the server half)
+remote-channel/          the encrypted channel both halves attach through
+shared/                  contracts both sides import
+tests/                   mirrors src/, core/, shared/, electron/ and the child-process folders
 ```
 
 ## The rules
@@ -96,8 +97,8 @@ Enforced by ESLint, proven by `pnpm verify:boundaries`. The full table is in
 - Only `appearance-store` persists, to `localStorage`.
 - No raw hex in components: colour comes from `--cc-*` tokens (the terminal from the theme's
   JS palette).
-- `electron/remote-channel/` is a leaf: `remote-host/` and `remote-client/` import it, and it imports `node:*` and its own files only.
-- Only `electron/main/harness/` may import an adapter, and an adapter never imports sessions, IPC, notifications or plans.
+- `remote-channel/` is a leaf: `remote-host/` and `remote-client/` import it, and it imports `node:*` and its own files only.
+- Only `core/harness/` may import an adapter, and an adapter never imports sessions, IPC, notifications or plans.
 
 ## Where to read next
 

@@ -28,7 +28,7 @@ context and scope: the **HIVE project in Jira**, the backlog.
 This is **HiveTTY Pro**, a commercial, proprietary app by Behiques Consulting LLC, in the private
 `behiques/hivetty` repo. Every PR targets **`behiques/hivetty`**.
 
-- Paid features need no extension seam. Each lives in its own directory (`electron/main/licence/`,
+- Paid features need no extension seam. Each lives in its own directory (`core/licence/`,
   a `src/features/<slice>/`) and turns on from a lease entitlement, never from an `isPro` check in a
   core file. Core features need no entitlement.
 - Pro's data lives in `~/.hivetty`. `~/.hive` belongs to the free HiveTTY: only the importer
@@ -48,8 +48,8 @@ This is **HiveTTY Pro**, a commercial, proprietary app by Behiques Consulting LL
 | `pnpm desktop:preview` | Run the built Electron app |
 | `pnpm docs:shots` | Retake the guide screenshots from the built app (after `desktop:build`) |
 | `pnpm desktop:dist` · `release:smoke` | Package `.dmg` + `.zip` into `dist/` (macOS arm64); `:publish` uploads them. `release:smoke` packages into a temp folder, launches it once with a scratch profile, then kills it and removes the temp folder: run it before a tag |
-| `pnpm lint` | ESLint across `src/`, `electron/` and config |
-| `pnpm type-check` | `tsc --noEmit` for the app, the Node-side configs, and `electron/` |
+| `pnpm lint` | ESLint across `src/`, `core/`, `shared/`, `electron/`, the child-process folders and config |
+| `pnpm type-check` | `tsc --noEmit` for the app, the Node-side configs, and `electron/`, `core/`, `shared/` and the child-process folders |
 | `pnpm test` | Vitest, single run |
 | `pnpm test:coverage` | Vitest with the 80% coverage gate |
 | `pnpm test:e2e` | Playwright — both the web and electron projects |
@@ -147,15 +147,15 @@ one still fires.
 | `src/lib/**` | `src/features/**`, `src/components/**` |
 | `src/hooks/**` | `src/features/**` |
 | `src/stores/**` | `src/features/**`, `src/components/**` |
-| `src/**`, `electron/**` | `tests/**` (test scaffolding never ships) |
-| `electron/main/**` | `src/**` |
-| `electron/preload/**` | `src/**`, `electron/main/**` |
-| **`electron/pty-host/**`, `electron/mcp-host/**`, `electron/remote-channel/**`** | `src/**`, `electron/main/**`, `electron/preload/**`; `remote-channel` also `electron/remote-host/**`, `electron/remote-client/**` |
-| `electron/main/harness/**` | `electron/main/{sessions,ipc,notifications,plans}/**` |
-| `src/**` | `electron/main/**`, `electron/preload/**`, `electron/pty-host/**`, `electron/mcp-host/**`, `electron/remote-channel/**` |
+| `src/**`, `core/**`, `shared/**`, `electron/**`, the child-process folders | `tests/**` (test scaffolding never ships) |
+| `core/**`, `electron/main/**` | `src/**` |
+| `electron/preload/**` | `src/**`, `core/**`, `electron/main/**` |
+| **`pty-host/**`, `mcp-host/**`, `remote-channel/**`** (child processes, at the repo root) | `src/**`, `core/**`, `electron/main/**`, `electron/preload/**`; `remote-channel` also `remote-host/**`, `electron/remote-client/**` |
+| `core/harness/**` | `core/{sessions,ipc,notifications,plans}/**`, `electron/main/{ipc,notifications}/**` |
+| `src/**` | `core/**`, `electron/main/**`, `electron/preload/**`, `pty-host/**`, `mcp-host/**`, `remote-host/**`, `remote-channel/**` |
 
-Nothing outside `electron/main/harness/**` imports `electron/main/harness/claude-code/**`; everyone else goes through the
-registry ([`docs/harness-architecture.md`](docs/harness-architecture.md)). `electron/shared/**` is the **only** module both
+Nothing outside `core/harness/**` imports `core/harness/claude-code/**`; everyone else goes through the
+registry ([`docs/harness-architecture.md`](docs/harness-architecture.md)). `core/` is the feature code both shells run; `electron/` is the desktop shell. `shared/**` is the **only** module both
 processes may import, and its rule is what a module **drags in** — no runtime imports, no Node APIs, no DOM APIs — not "types
 only" (`guards.ts`, `ledger-derive.ts`, `mcp-tools.ts` all ship logic both sides run). The renderer reaches it via `@shared`,
 **type-only** for anything with behaviour behind it, or main-process code lands in the renderer bundle — that compile-time contract.

@@ -8,7 +8,7 @@ Terminals and transports: [`terminal-architecture.md`](terminal-architecture.md)
 
 > **TL;DR**
 > - Electron is the product; the browser build is a fixtures-only demo sharing `src/`.
-> - Main, preload and renderer are fenced by ESLint; `electron/shared` is the only common code.
+> - Main, preload and renderer are fenced by ESLint; `shared` is the only common code.
 > - The bridge exposes verbs, never `ipcRenderer`. Every handler checks its sender and payload.
 > - PTYs live in a `utilityProcess` with a heartbeat and a crash-loop guard.
 > - `pty:data` is batched every 8 ms; output pauses above 512 KB unacked, resumes below 128 KB.
@@ -81,11 +81,11 @@ an mp4 and needed one; nothing in the app plays media now.
 
 | | Runs | May import | Never |
 |---|---|---|---|
-| `electron/main/**` | Node, full privilege | `electron/shared/**` | `src/**` |
-| `electron/preload/**` | renderer, sandboxed | `electron/shared/**` | `src/**`, `electron/main/**` |
-| `src/**` | renderer | `@shared` (**type-only**) | `electron/main/**`, `electron/preload/**` |
+| `core/**`, `electron/main/**` | Node, full privilege | `shared/**` | `src/**` |
+| `electron/preload/**` | renderer, sandboxed | `shared/**` | `src/**`, `core/**`, `electron/main/**` |
+| `src/**` | renderer | `@shared` (**type-only**) | `core/**`, `electron/main/**`, `electron/preload/**` |
 
-`electron/shared/**` has **no runtime imports, no Node APIs, no DOM APIs**. It is
+`shared/**` has **no runtime imports, no Node APIs, no DOM APIs**. It is
 the one module both sides may import, which makes the IPC contract a compile-time
 artifact instead of a convention. All three zones are ESLint-enforced and proved
 by `pnpm verify:boundaries`.
@@ -139,7 +139,7 @@ broadcaster so a server that does have a window attached keeps painting
 locally too.
 
 Those frames travel inside an encrypted channel (HIVE-428, protocol 45). The
-leaf `electron/remote-channel/` holds a `Noise_NNpsk0_25519_AESGCM_SHA256`
+leaf `remote-channel/` holds a `Noise_NNpsk0_25519_AESGCM_SHA256`
 handshake on `node:crypto` (`noise.ts`) and the framing over a WebSocket
 (`secure-socket.ts`); `remote-host/listener.ts` runs the responder half in
 `acceptSocket` (the one entry for a direct socket and, with HIVE-429, a
@@ -183,7 +183,7 @@ from `dirname(configPath())` rather than `homedir()`, so `HIVE_CONFIG_PATH`
 relocates the skills too and an e2e run never writes into the developer's own
 `~/.hivetty`.
 
-Read in main (`electron/main/config/`), never in the renderer. The file is
+Read in main (`core/config/`), never in the renderer. The file is
 user-authored input arriving from disk, so it gets the same treatment as input
 arriving from the renderer: hand-written guards, an explicit key allowlist, and
 `__proto__` rejected outright. Paths are `~`-expanded, required absolute,
@@ -305,7 +305,7 @@ stopping Claude from inferring them.
 So a session now opens unnamed, Claude titles it from the conversation, and the
 title arrives on the OSC-0 stream `readTitle` already parses — no new
 transport and no second inference engine. `hiveNameFromTitle`
-(`electron/shared/session-contract.ts`) spells it the way the Sessions list spells names:
+(`shared/session-contract.ts`) spells it the way the Sessions list spells names:
 lower-cased, hyphenated, at most four words, with any ticket key upper-cased and
 hoisted to the front (`back key interception abc-123` →
 `ABC-123-back-key-interception`).
@@ -396,10 +396,10 @@ while the terminal sat on `main`. It was not a stale value; it was never true.
 
 | Piece | Where |
 | --- | --- |
-| `CH.sessionBranch: 'session:branch'` | `electron/shared/ipc-contract.ts` |
-| `SessionBranchEvent { entityId, branch, cwd }` | `electron/shared/session-contract.ts` |
-| `git rev-parse` reader, cached and rate-limited | `electron/main/sessions/git.ts` |
-| Observation and push | `electron/main/sessions/index.ts` (`publishBranch`) |
+| `CH.sessionBranch: 'session:branch'` | `shared/ipc-contract.ts` |
+| `SessionBranchEvent { entityId, branch, cwd }` | `shared/session-contract.ts` |
+| `git rev-parse` reader, cached and rate-limited | `core/sessions/git.ts` |
+| Observation and push | `core/sessions/index.ts` (`publishBranch`) |
 | `setSessionBranch(id, branch, cwd)` | `src/stores/hive-store.ts` |
 | `bridge.session.onBranch(...)` | `src/features/sessions/hooks/use-session-status.ts` |
 
@@ -461,7 +461,7 @@ is where anybody installs a developer tool. `gh` at `/opt/homebrew/bin/gh` is
 genuinely invisible to this process while being obviously present in the user's
 terminal.
 
-`electron/main/config/login-env.ts` runs the configured login shell once at
+`core/config/login-env.ts` runs the configured login shell once at
 startup and merges an allowlist — `PATH`, `GH_TOKEN`, `GITHUB_TOKEN` — back into
 `process.env`. `main/index.ts` starts it before the handlers are registered and
 never awaits it, so a slow rc file cannot delay the first window.
@@ -529,10 +529,10 @@ process, so it has the ABI `node-pty` was built for; messaging is MessagePort
 structured-clone rather than a hand-rolled stdio protocol; and Electron ties the
 child's lifetime to the app so a hard quit cannot orphan it.
 
-Split across three places: `electron/shared/pty-host-protocol.ts` (the wire
+Split across three places: `shared/pty-host-protocol.ts` (the wire
 types, deliberately distinct from the renderer-facing `ipc-contract.ts` so the
-two can diverge), `electron/main/pty-host/` (the supervisor), and
-`electron/pty-host/` (the child). The child is a **second rollup input on the
+two can diverge), `core/pty-host/` (the supervisor), and
+`pty-host/` (the child). The child is a **second rollup input on the
 `main` target**, so it lands at `out/main/pty-host.js` and inherits main's
 module format, externals and output directory.
 
@@ -616,7 +616,7 @@ the `descendants` group is the test that should have caught it.
 
 Not the renderer — xterm.js was rendering fixtures long before any pty. What
 was missing is a kernel pty pair with a process whose controlling terminal it
-is. `electron/pty-host/session-manager.ts` owns that. Four things there are load
+is. `pty-host/session-manager.ts` owns that. Four things there are load
 bearing and easy to break:
 
 - **`TERM=xterm-256color`.** How every program in the terminal decides what it
@@ -750,7 +750,7 @@ batch, which the terminal already renders.
 
 ### Sessions: what actually runs
 
-`electron/main/sessions/` sits between "a pty exists" and "a session is running".
+`core/sessions/` sits between "a pty exists" and "a session is running".
 The PTY layers below it know nothing about projects, bootstraps or attention.
 
 **A session is `$SHELL -l`, with `claude` written in as input.** Both halves are
@@ -932,7 +932,7 @@ cleared it while the one the user actually had to approve was still blocked. The
 notifier compensated (`status === 'waiting' || event === 'PostToolUse'`) rather
 than fixing the status itself, which is the workaround the tracker replaced.
 
-The fix is `electron/main/hooks/tracker.ts`: status is now **derived from a
+The fix is `core/hooks/tracker.ts`: status is now **derived from a
 per-session tracker**, not looked up per event. The tracker pairs blocks to the
 tool that caused them by `tool_use_id`, and clears exactly that pairing when its
 `PostToolUse` arrives — a sibling's completion no longer touches it. Pairing
@@ -1053,7 +1053,7 @@ pnpm test:pty --filter signals   # one property group
 ```
 
 It drives the **real** session manager, not a reimplementation:
-`electron.vite.config.ts` emits `electron/pty-host/session-manager.ts` as a third
+`electron.vite.config.ts` emits `pty-host/session-manager.ts` as a third
 input on the `main` target, so `out/main/session-manager.js` is an importable ESM
 module built for Electron's ABI with `node-pty` left external. A suite that talked
 to its own pty wrapper would prove that wrapper works and nothing about the
@@ -1151,7 +1151,7 @@ inside an archive.
 
 ## The licence slice and the deep link (HIVE-264)
 
-`electron/main/licence/` is HiveTTY Pro's paid code. `cloud.ts` talks to the cloud (`api.hivetty.dev`
+`core/licence/` is HiveTTY Pro's paid code. `cloud.ts` talks to the cloud (`api.hivetty.dev`
 packaged, `api.dev.hivetty.dev` unpackaged; `account.cloudUrl` overrides both, `HIVETTY_CLOUD_URL` only
 unpackaged), `account-store.ts` keeps `<userData>/account.bin` through safeStorage, `deep-link.ts` owns the
 scheme, and `auth-client.ts` is the sign-in state machine; `index.ts` composes them into one client that
@@ -1215,8 +1215,8 @@ is not showing.
   from before a sign-out never lands.
 - Main reads `licence()` (and `onLicenceChange`); the licence calls answer from `LICENCE_CALLS` and are
   `PROCESS_LOCAL`, `licence:changed` is `LOCAL_ONLY_EVENTS`; the renderer reads `useLicence()`.
-- Entitlement (HIVE-268) is one pure function, `entitlementOf(state, feature)` in `electron/shared/entitlement.ts`,
-  fed by the generated `electron/shared/feature-plans.ts` (`pnpm plans:sync` reads hivetty-cloud's built
+- Entitlement (HIVE-268) is one pure function, `entitlementOf(state, feature)` in `shared/entitlement.ts`,
+  fed by the generated `shared/feature-plans.ts` (`pnpm plans:sync` reads hivetty-cloud's built
   `@hivetty/plans`; the build never does). Main asks `entitled(feature)` (`null` means allowed), the renderer
   `useEntitlement(feature)`, so both give the same reason. Only `licence/{index,lease,licence-state,verify}.ts`
   touch the stored lease; `lease-reads.test.ts` holds that line.
@@ -1247,7 +1247,7 @@ is not showing.
 
 ## Settings sync (HIVE-284)
 
-- `electron/main/sync/` is a paid feature in its own directory, started from `electron/main/index.ts` beside
+- `core/sync/` is a paid feature in its own directory, started from `electron/main/index.ts` beside
   `startRelay` and gated the same way: `startSync` runs the engine only while the account is signed in,
   `entitled('sync')` is `null` and `safeStorage` can seal the key, re-evaluated on every account and licence
   change. A sign-out, another account signing in, or a key found at launch with nobody signed in deletes

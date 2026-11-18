@@ -181,7 +181,7 @@ pnpm auto-installs peers, so `pnpm dev`, `pnpm desktop:dev`, `pnpm test` and
 every live suite resolved it and nothing looked wrong anywhere. electron-builder
 collects production modules by walking `dependencies` and `optionalDependencies`
 — never `peerDependencies` — so it never saw `undici`, never packed it, and the
-first thing `electron/main/integrations/slack/clients.ts` imports at startup was
+first thing `core/integrations/slack/clients.ts` imports at startup was
 a module that was not there.
 
 A peer dependency is the one edge in the graph that a dev tree satisfies and a
@@ -221,7 +221,7 @@ The screenshot that started this: the menu bar read **Electron**, and the
 submenu read **About the-hive**. Those were two different bugs.
 
 HiveTTY Pro has **one name everywhere** (HIVE-242): `APP_NAME` in
-`electron/shared/app-name.ts` and `productName` in `electron-builder.yml` are
+`shared/app-name.ts` and `productName` in `electron-builder.yml` are
 both `HiveTTY Pro` (HIVE-350; the public app is `HiveTTY`, HIVE-326). The dmg
 and zip are named by `artifactName` instead, `HiveTTY-Pro-<v>-arm64`, because
 GitHub turns the space in an asset name into a dot and `latest-mac.yml` would
@@ -537,7 +537,7 @@ for the in-app path even back when the swap was refused.
 
 | File | Owns |
 | --- | --- |
-| `electron/shared/update-contract.ts` | Types, the release URLs, the two intervals. Imported type-only by the renderer. |
+| `shared/update-contract.ts` | Types, the release URLs, the two intervals. Imported type-only by the renderer. |
 | `electron/main/updates/capability.ts` | The `codesign` probe and the demotion. |
 | `electron/main/updates/updater.ts` | Every decision. Imports no Electron and no `electron-updater`, which is what makes it testable. |
 | `electron/main/updates/engine.ts` | The only file that touches `electron-updater`. |

@@ -48,7 +48,7 @@ that the machine looks after itself.
 ## Before you start
 
 - **The same version on both ends.** The attach frame carries
-  `REMOTE_PROTOCOL_VERSION` (`electron/shared/remote-contract.ts`). A mismatch
+  `REMOTE_PROTOCOL_VERSION` (`shared/remote-contract.ts`). A mismatch
   is refused with a message naming both versions and which side to update. A
   client or server from before the encrypted channel (protocol 44 and older)
   cannot speak to this one at all: an old client is told, in one plain-text
@@ -474,7 +474,7 @@ leaves.
 **Direct attach stays on a private network.** The client dials loopback, an
 address on the local network, or a Tailscale address, and nothing else. It
 checks the host before it dials and the address DNS returned before it
-connects (`isRemoteTarget` and `isLanHost`, `electron/shared/config-contract.ts`),
+connects (`isRemoteTarget` and `isLanHost`, `shared/config-contract.ts`),
 so an ngrok hostname, a public DNS name or a forwarded public IP is refused
 before a byte leaves the laptop, and so is a `.local` name a hostile resolver
 answers with a public address. The relay is the only route off a private
@@ -494,7 +494,7 @@ A relayed link works but adds latency. `tailscale ping <server>` on the client
 says whether the path is direct or `via DERP`.
 
 **The encryption is the app's own, on every route.** Each attach runs a Noise
-handshake (`Noise_NNpsk0_25519_AESGCM_SHA256`, `electron/remote-channel/`)
+handshake (`Noise_NNpsk0_25519_AESGCM_SHA256`, `remote-channel/`)
 keyed by a fresh X25519 exchange and the device's pairing secret, and every
 frame after it is AES-256-GCM. A WireGuard tunnel underneath is a second layer,
 not the one this link relies on.

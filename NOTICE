@@ -41,8 +41,8 @@ Third-party components
 marked (v13.0.3) — MIT License
   Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/)
   Copyright (c) 2011-2018, Christopher Jeffrey (https://github.com/chjj/)
-  Vendored at: electron/main/integrations/jira/adf/vendor/marked/
-  Full text at: electron/main/integrations/jira/adf/vendor/marked/LICENSE.md
+  Vendored at: core/integrations/jira/adf/vendor/marked/
+  Full text at: core/integrations/jira/adf/vendor/marked/LICENSE.md
 
 Dependencies installed from npm remain under their own licences, as declared
 in each package.
