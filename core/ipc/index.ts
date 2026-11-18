@@ -8,13 +8,10 @@ import {
   BrowserWindow,
   app,
   dialog,
-  ipcMain,
   powerMonitor,
   powerSaveBlocker,
   safeStorage,
   shell,
-  type IpcMainEvent,
-  type IpcMainInvokeEvent,
 } from 'electron';
 import type { WebSocket } from 'ws';
 
@@ -335,7 +332,7 @@ import {
   createToastRoute,
 } from '../notifications';
 import { createBuilderProgress, type BuilderProgress } from '../plans';
-import { platform } from '../platform';
+import { platform, type IpcEvent } from '../platform';
 import { registerPtyHost } from '../pty-host';
 import { onRelayStatus, relayStatus } from '../relay';
 import { relayHostsFor } from '../relay/hosts';
@@ -462,7 +459,7 @@ const surfaceFor = (sender: unknown): SurfaceId =>
  * reason `remoteRegistry` is: `registerIpcHandlers` fills it, and a live mode
  * switch must be able to empty it from outside that function.
  */
-const bindings = createBindings(ipcMain);
+const bindings = createBindings(() => platform().desktop?.ipcMain);
 
 /**
  * How many channels this process has bound locally (HIVE-144).
@@ -592,8 +589,7 @@ const noModeSwitcher: ModeSwitcher = () => {
  * paragraph above enforceable; the `_event` naming convention every other
  * handler follows is what makes it readable.
  */
-const remoteInvokeEvent = (reporter: RemoteReporter): IpcMainInvokeEvent =>
-  ({ sender: reporter }) as unknown as IpcMainInvokeEvent;
+const remoteInvokeEvent = (reporter: RemoteReporter): IpcEvent => ({ sender: reporter });
 
 /**
  * Fire-and-forget channels (story 093).
@@ -605,9 +601,23 @@ const remoteInvokeEvent = (reporter: RemoteReporter): IpcMainInvokeEvent =>
  */
 function on(
   channel: string,
-  handler: (event: IpcMainEvent, payload: unknown) => void,
+  handler: (event: IpcEvent, payload: unknown) => void,
 ): void {
-  ipcMain.on(channel, (event, payload: unknown) => {
+  /*
+    Recorded once at registration, never inside the `ipcMain` callback below —
+    a record per invocation would rewrite the same entry on every keystroke.
+    `remote-dispatch.ts` owns the refusals; this stores and nothing else.
+  */
+  remoteRegistry.recordNotify(channel as Channel, (payload, reporter) => {
+    // The reporter stands in for `event.sender`. Only `pty:prompt` reads it,
+    // through `watchReporter`, which already accepts anything with an `.on`.
+    handler({ sender: reporter }, payload);
+  });
+  // HIVE-144: so a later mode switch can unbind this channel from `ipcMain`
+  // and register it again against a different set of layers.
+  bindings.record(channel);
+  // Only a shell with windows has an ipcMain. A server answers through the registry alone (HIVE-422).
+  platform().desktop?.ipcMain.on(channel, (event, payload: unknown) => {
     assertSender(event);
     try {
       handler(event, payload);
@@ -618,30 +628,13 @@ function on(
       console.error(`[hive] rejected ${channel}:`, cause);
     }
   });
-  /*
-    Recorded once at registration, never inside the `ipcMain` callback above —
-    a record per invocation would rewrite the same entry on every keystroke.
-    `remote-dispatch.ts` owns the refusals; this stores and nothing else.
-  */
-  remoteRegistry.recordNotify(channel as Channel, (payload, reporter) => {
-    // The reporter stands in for `event.sender`. Only `pty:prompt` reads it,
-    // through `watchReporter`, which already accepts anything with an `.on`.
-    handler({ sender: reporter } as unknown as IpcMainEvent, payload);
-  });
-  // HIVE-144: so a later mode switch can unbind this channel from `ipcMain`
-  // and register it again against a different set of layers.
-  bindings.record(channel);
 }
 
 /** Wrap a handler so sender validation cannot be forgotten on a new channel. */
 function handle<T>(
   channel: string,
-  handler: (event: IpcMainInvokeEvent, payload: unknown) => T,
+  handler: (event: IpcEvent, payload: unknown) => T,
 ): void {
-  ipcMain.handle(channel, (event, payload: unknown) => {
-    assertSender(event);
-    return handler(event, payload);
-  });
   // Registration-time, as in `on` above. `assertSender` is deliberately absent:
   // there is no sender to assert, and the socket's own gate is the handshake
   // plus `remote-dispatch.ts` — the one remote gate, kept out of the local path.
@@ -651,6 +644,11 @@ function handle<T>(
   // HIVE-144: so a later mode switch can unbind this channel from `ipcMain`
   // and register it again against a different set of layers.
   bindings.record(channel);
+  // Only a shell with windows has an ipcMain. A server answers through the registry alone (HIVE-422).
+  platform().desktop?.ipcMain.handle(channel, (event, payload: unknown) => {
+    assertSender(event);
+    return handler(event, payload);
+  });
 }
 
 /**
@@ -3966,7 +3964,7 @@ export function registerIpcHandlers(
      * per call for the same reason. `assertSender` has already proven this
      * sender is the main frame, so its window is the one that asked.
      */
-    const window = BrowserWindow.fromWebContents(event.sender);
+    const window = BrowserWindow.fromWebContents(event.sender as Electron.WebContents);
     // Destroyed between the invoke and here. Nothing to attach a sheet to, and
     // treating it as a cancelled dialog is what the caller already handles.
     if (!window) return null;
@@ -5191,7 +5189,7 @@ export function registerIpcHandlers(
         a renderer-side picker would offer the wrong machine's disk. `drop`
         already carries the user's own files, and the refusal names it.
       */
-      const window = BrowserWindow.fromWebContents(event.sender);
+      const window = BrowserWindow.fromWebContents(event.sender as Electron.WebContents);
       if (window === null) return [];
       const result = await dialog.showOpenDialog(window, {
         properties: ['openFile', 'openDirectory', 'multiSelections'],
@@ -5212,7 +5210,7 @@ export function registerIpcHandlers(
   */
   handle(CH.skillsImport, (event) =>
     skills?.importSkill(async () => {
-      const window = BrowserWindow.fromWebContents(event.sender);
+      const window = BrowserWindow.fromWebContents(event.sender as Electron.WebContents);
       if (window === null) return [];
       const result = await dialog.showOpenDialog(window, {
         properties: ['openFile', 'openDirectory'],

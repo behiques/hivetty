@@ -517,7 +517,7 @@ export function registerRemoteProxy(deps: {
     }
   };
 
-  bindings = createBindings(ipcMain);
+  bindings = createBindings(() => ipcMain);
   /*
     The badge is the renderer's report while attached, and a closed window is
     a renderer that can no longer report. See `clearDockBadgeWithLastWindow`.
