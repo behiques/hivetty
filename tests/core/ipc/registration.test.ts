@@ -24,11 +24,14 @@ const electronIpcMain = vi.hoisted(() => ({
   removeAllListeners: vi.fn(),
 }));
 
+/** Electron's `app` listeners. A platform with no desktop must leave none behind. */
+const electronApp = vi.hoisted(() => ({ on: vi.fn(), removeListener: vi.fn() }));
+
 vi.mock('electron', () => ({
   app: {
     getVersion: () => '0.0.0',
-    on: vi.fn(),
-    removeListener: vi.fn(),
+    on: electronApp.on,
+    removeListener: electronApp.removeListener,
     getPath: () => '/tmp/hive-test-registration',
   },
   BrowserWindow: { fromWebContents: () => null, getAllWindows: () => [] },
@@ -98,7 +101,7 @@ vi.mock('../../../core/ipc/registry', async (importOriginal) => {
 
 const { CH } = await import('../../../shared/ipc-contract');
 const { resetPlatform, setPlatform } = await import('../../../core/platform');
-const { ipcBindingsSize, IpcSenderError, registerIpcHandlers, remoteRegistrySize, resetIpcHandlers } =
+const { ipcBindingsSize, IpcSenderError, isForeground, registerIpcHandlers, remoteRegistrySize, resetIpcHandlers } =
   await import('../../../core/ipc');
 
 type Platform = import('../../../core/platform').Platform;
@@ -146,8 +149,33 @@ function recordingIpcMain() {
   };
 }
 
-function withDesktop(ipcMain: Desktop['ipcMain']): Platform {
-  return { ...headlessPlatform(), desktop: { ipcMain, broadcaster: { emit: () => undefined } } as Desktop };
+/** A desktop whose every member is inert, so a test overrides only what it is about. */
+function withDesktop(ipcMain: Desktop['ipcMain'], overrides: Partial<Desktop> = {}): Platform {
+  const desktop: Desktop = {
+    ipcMain,
+    broadcaster: { emit: () => undefined },
+    windowFocused: () => false,
+    hasWindow: () => false,
+    onWindowFocus: () => () => undefined,
+    onWindowBlur: () => () => undefined,
+    idleSeconds: () => 0,
+    pickPaths: () => Promise.resolve(null),
+    reveal: () => undefined,
+    keepAwake: () => undefined,
+    onDisplayWake: () => () => undefined,
+    activateOnThisMachine: () => undefined,
+    focusThisMachine: () => undefined,
+    notificationDelivery: () => ({ supported: false, refused: null }),
+    badgeDock: () => undefined,
+    clearDockBadge: () => undefined,
+    checkForUpdatesInteractively: () => Promise.resolve(),
+    setUpdateNotificationSink: () => undefined,
+    updateStatus: () => {
+      throw new Error('not in this suite');
+    },
+    ...overrides,
+  };
+  return { ...headlessPlatform(), desktop };
 }
 
 const reporter = { on: () => undefined };
@@ -219,5 +247,48 @@ describe('registration with a desktop (HIVE-422)', () => {
     expect(local).toBeDefined();
     const subframe = { senderFrame: { url: 'about:blank' }, sender: { mainFrame: { url: 'file:///x' }, on: () => undefined } };
     expect(() => local!(subframe, { sessionId: 'x', data: 'y' })).toThrow(IpcSenderError);
+  });
+});
+
+describe('screen-only calls with no desktop (HIVE-422)', () => {
+  it('answers the directory picker with null, as a cancelled dialog', async () => {
+    setPlatform(headlessPlatform());
+    registerIpcHandlers();
+
+    const pick = captured.registry?.call(CH.configChooseDirectory);
+    await expect(Promise.resolve(pick!(undefined, reporter))).resolves.toBeNull();
+  });
+
+  it('says no terminal is in front of anyone', () => {
+    setPlatform(headlessPlatform());
+    registerIpcHandlers();
+
+    expect(isForeground('sess-1')).toBe(false);
+  });
+
+  it('leaves no listener behind on Electron when it registers and resets', () => {
+    setPlatform(headlessPlatform());
+    registerIpcHandlers();
+    resetIpcHandlers();
+
+    expect(electronApp.on).not.toHaveBeenCalled();
+    expect(electronApp.removeListener).not.toHaveBeenCalled();
+  });
+});
+
+describe('screen-only calls with a desktop (HIVE-422)', () => {
+  it("reads whether a window is focused from the desktop's windowFocused", () => {
+    const fake = recordingIpcMain();
+    let focused = true;
+    setPlatform(withDesktop(fake.ipcMain, { windowFocused: () => focused }));
+    registerIpcHandlers();
+
+    const mainFrame = { url: 'file:///out/renderer/index.html' };
+    const window = { senderFrame: mainFrame, sender: { mainFrame, id: 7, on: () => undefined, send: () => undefined } };
+    fake.listeners.get(CH.uiForeground)!(window, { terminalId: 'sess-1', focused: true });
+
+    expect(isForeground('sess-1')).toBe(true);
+    focused = false;
+    expect(isForeground('sess-1')).toBe(false);
   });
 });

@@ -1,3 +1,7 @@
+import type { NotificationDeliveryStatus } from '@shared/ipc-contract';
+import type { ThisMachineAction } from '@shared/notification-contract';
+import type { UpdateStatus } from '@shared/update-contract';
+
 import type { Broadcaster } from '../ipc/broadcaster';
 import type { RemoteReporter } from '../ipc/registry';
 import type { HostChild } from '../pty-host/supervisor';
@@ -38,10 +42,55 @@ export interface McpLaunch {
   env: Record<string, string>;
 }
 
-/** Everything that needs a screen. A server has none. */
+/** What the three native pickers pass to the open dialog. */
+export interface OpenOptions {
+  properties: ('openFile' | 'openDirectory' | 'multiSelections')[];
+  filters?: { name: string; extensions: string[] }[];
+}
+
+/** An update notification the updater raises into the hub. */
+export interface UpdateNotification {
+  kind: 'app.update_available' | 'app.update_ready';
+  id: string;
+  title: string;
+  body: string;
+  action: { type: 'update.download' } | { type: 'update.install' } | { type: 'url'; url: string };
+}
+
+/**
+ * Everything that needs a screen. A server has none, and every core call site
+ * reads it as `platform().desktop?.…` with the answer a machine with no window
+ * gives: nothing focused, no window, a cancelled dialog, nothing badged.
+ */
 export interface Desktop {
   ipcMain: IpcMainLike;
   broadcaster: Broadcaster;
+  /** Is any live window of ours focused? */
+  windowFocused(): boolean;
+  /** Is any live window of ours open? */
+  hasWindow(): boolean;
+  /** A window got focus. Returns its own removal. */
+  onWindowFocus(listener: () => void): () => void;
+  /** A window lost focus. Returns its own removal. */
+  onWindowBlur(listener: () => void): () => void;
+  /** Seconds since the person last touched this machine. */
+  idleSeconds(): number;
+  /** The open dialog, parented on the sender's window. `null` for no window or a cancelled dialog. */
+  pickPaths(sender: unknown, options: OpenOptions): Promise<string[] | null>;
+  /** Select the file in a Finder window. */
+  reveal(path: string): void;
+  /** Hold off app suspension while `live`. */
+  keepAwake(live: boolean): void;
+  /** A wake, an unlock or a display coming back, settled. Returns its own removal. */
+  onDisplayWake(listener: () => void, settleMs?: number): () => void;
+  activateOnThisMachine(action: ThisMachineAction): void;
+  focusThisMachine(): void;
+  notificationDelivery(): NotificationDeliveryStatus;
+  badgeDock(count: unknown): void;
+  clearDockBadge(): void;
+  checkForUpdatesInteractively(): Promise<void>;
+  setUpdateNotificationSink(sink: (input: UpdateNotification) => void): void;
+  updateStatus(): UpdateStatus;
 }
 
 export interface Platform {

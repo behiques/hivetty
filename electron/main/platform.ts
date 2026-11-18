@@ -1,13 +1,29 @@
 import { join } from 'node:path';
 
-import { Notification, app, ipcMain, safeStorage, utilityProcess } from 'electron';
+import {
+  BrowserWindow,
+  Notification,
+  app,
+  dialog,
+  ipcMain,
+  powerMonitor,
+  powerSaveBlocker,
+  safeStorage,
+  shell,
+  utilityProcess,
+} from 'electron';
 
 import type { Platform } from '../../core/platform';
 import type { HostChild } from '../../core/pty-host/supervisor';
 import { shippedRoot } from '../../core/seed/paths';
 
+import { onDisplayWake } from './display-wake';
 import { createWindowBroadcaster } from './ipc/window-broadcaster';
-import { recordNotificationRefusal } from './notifications/delivery';
+import { keepAwake } from './keep-awake';
+import { activateOnThisMachine, focusThisMachine } from './notifications/activate-here';
+import { notificationDelivery, recordNotificationRefusal } from './notifications/delivery';
+import { badgeDock, clearDockBadge } from './notifications/dock-badge';
+import { checkForUpdatesInteractively, setUpdateNotificationSink, updateStatus } from './updates';
 
 /**
  * The desktop's platform (HIVE-422): core's port, built from Electron.
@@ -18,6 +34,9 @@ import { recordNotificationRefusal } from './notifications/delivery';
  * object touches nothing.
  */
 export function createDesktopPlatform(): Platform {
+  /** One blocker for every agent run (HIVE-408), built on first use: the suites' mocks have no `powerSaveBlocker`. */
+  let runAwake: ((live: boolean) => void) | undefined;
+
   return {
     get secrets() {
       return safeStorage;
@@ -147,6 +166,53 @@ export function createDesktopPlatform(): Platform {
         return ipcMain;
       },
       broadcaster: createWindowBroadcaster(),
+      /**
+       * Any window of ours, not only the main one: the About panel or the
+       * splash being focused is still the user looking at the app.
+       */
+      windowFocused: () =>
+        BrowserWindow.getAllWindows().some((window) => !window.isDestroyed() && window.isFocused()),
+      hasWindow: () => BrowserWindow.getAllWindows().some((window) => !window.isDestroyed()),
+      onWindowFocus: (listener) => {
+        app.on('browser-window-focus', listener);
+        return () => {
+          app.removeListener('browser-window-focus', listener);
+        };
+      },
+      onWindowBlur: (listener) => {
+        app.on('browser-window-blur', listener);
+        return () => {
+          app.removeListener('browser-window-blur', listener);
+        };
+      },
+      idleSeconds: () => powerMonitor.getSystemIdleTime(),
+      pickPaths: async (sender, options) => {
+        /*
+          The parent window is resolved from the sender rather than captured: on
+          macOS the window can be closed and re-created while the app keeps
+          running. Destroyed between the invoke and here is a cancelled dialog,
+          which every caller already handles.
+        */
+        const window = BrowserWindow.fromWebContents(sender as Electron.WebContents);
+        if (!window) return null;
+        const result = await dialog.showOpenDialog(window, options);
+        return result.canceled ? null : result.filePaths;
+      },
+      reveal: (path) => {
+        shell.showItemInFolder(path);
+      },
+      keepAwake: (live) => {
+        (runAwake ??= keepAwake(powerSaveBlocker))(live);
+      },
+      onDisplayWake: (listener, settleMs) => onDisplayWake(listener, settleMs),
+      activateOnThisMachine,
+      focusThisMachine,
+      notificationDelivery,
+      badgeDock,
+      clearDockBadge,
+      checkForUpdatesInteractively,
+      setUpdateNotificationSink,
+      updateStatus,
     },
   };
 }

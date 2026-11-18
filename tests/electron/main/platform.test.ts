@@ -16,8 +16,23 @@ const safeStorage = {
   decryptString: vi.fn(),
 };
 
+const windows = vi.hoisted(() => ({
+  all: [] as { isDestroyed: () => boolean; isFocused: () => boolean }[],
+  fromWebContents: null as unknown,
+}));
+const appOn = vi.hoisted(() => vi.fn());
+const appRemoveListener = vi.hoisted(() => vi.fn());
+const showOpenDialog = vi.hoisted(() => vi.fn());
+
 vi.mock('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: () => windows.all,
+    fromWebContents: () => windows.fromWebContents,
+  },
+  dialog: { showOpenDialog },
   app: {
+    on: appOn,
+    removeListener: appRemoveListener,
     getPath: (name: string) => getPath(name),
     getVersion: () => '9.9.9',
     get isPackaged() {
@@ -32,6 +47,11 @@ const { createDesktopPlatform } = await import('../../../electron/main/platform'
 
 beforeEach(() => {
   electron.isPackaged = false;
+  windows.all = [];
+  windows.fromWebContents = null;
+  appOn.mockClear();
+  appRemoveListener.mockClear();
+  showOpenDialog.mockReset();
 });
 
 describe('createDesktopPlatform', () => {
@@ -85,5 +105,62 @@ describe('createDesktopPlatform', () => {
     const fresh = await import('../../../electron/main/platform');
     expect(() => fresh.createDesktopPlatform()).not.toThrow();
     vi.doUnmock('electron');
+  });
+});
+
+describe('the desktop member (HIVE-422)', () => {
+  const win = (focused: boolean, destroyed = false) => ({ isDestroyed: () => destroyed, isFocused: () => focused });
+
+  it('says a window is focused only when a live one is', () => {
+    const { desktop } = createDesktopPlatform();
+    expect(desktop?.windowFocused()).toBe(false);
+    windows.all = [win(true, true), win(false)];
+    expect(desktop?.windowFocused()).toBe(false);
+    windows.all = [win(false), win(true)];
+    expect(desktop?.windowFocused()).toBe(true);
+  });
+
+  it('says there is a window only when a live one exists', () => {
+    const { desktop } = createDesktopPlatform();
+    windows.all = [win(false, true)];
+    expect(desktop?.hasWindow()).toBe(false);
+    windows.all = [win(false)];
+    expect(desktop?.hasWindow()).toBe(true);
+  });
+
+  it('subscribes to browser-window-focus, and the return value unsubscribes', () => {
+    const { desktop } = createDesktopPlatform();
+    const listener = vi.fn();
+    const off = desktop!.onWindowFocus(listener);
+    expect(appOn).toHaveBeenCalledWith('browser-window-focus', listener);
+    off();
+    expect(appRemoveListener).toHaveBeenCalledWith('browser-window-focus', listener);
+  });
+
+  it('subscribes to browser-window-blur, and the return value unsubscribes', () => {
+    const { desktop } = createDesktopPlatform();
+    const listener = vi.fn();
+    const off = desktop!.onWindowBlur(listener);
+    expect(appOn).toHaveBeenCalledWith('browser-window-blur', listener);
+    off();
+    expect(appRemoveListener).toHaveBeenCalledWith('browser-window-blur', listener);
+  });
+
+  it('answers null from the picker when the sender has no window, and opens no dialog', async () => {
+    const { desktop } = createDesktopPlatform();
+    await expect(desktop!.pickPaths({}, { properties: ['openDirectory'] })).resolves.toBeNull();
+    expect(showOpenDialog).not.toHaveBeenCalled();
+  });
+
+  it('answers the chosen paths, and null for a cancelled dialog', async () => {
+    const { desktop } = createDesktopPlatform();
+    const parent = win(true);
+    windows.fromWebContents = parent;
+    showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: ['/a', '/b'] });
+    await expect(desktop!.pickPaths({}, { properties: ['openFile', 'multiSelections'] })).resolves.toEqual(['/a', '/b']);
+    expect(showOpenDialog).toHaveBeenCalledWith(parent, { properties: ['openFile', 'multiSelections'] });
+
+    showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    await expect(desktop!.pickPaths({}, { properties: ['openFile'] })).resolves.toBeNull();
   });
 });

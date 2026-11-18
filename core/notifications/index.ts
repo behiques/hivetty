@@ -832,5 +832,3 @@ export { createToastRoute } from './toast-route';
 export type { ToastRouteOptions } from './toast-route';
 export { createToastQueue, TOAST_QUEUE_KINDS } from './toast-queue';
 export type { ToastQueue } from './toast-queue';
-export { createRemoteToasts } from '../../electron/main/notifications/remote-toast';
-export type { RemoteToasts } from '../../electron/main/notifications/remote-toast';

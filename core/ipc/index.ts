@@ -4,15 +4,7 @@ import { rmSync } from 'node:fs';
 import { homedir, hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import {
-  BrowserWindow,
-  app,
-  dialog,
-  powerMonitor,
-  powerSaveBlocker,
-  safeStorage,
-  shell,
-} from 'electron';
+import { app, safeStorage } from 'electron';
 import type { WebSocket } from 'ws';
 
 import { SNAPSHOT_READ_BUDGET_MS, createRemoteListener } from '@remote-host/listener';
@@ -148,6 +140,7 @@ import {
   type NotificationReadEvent,
   type RemoteLinkStatus,
   type LocalRemoteState,
+  type NotificationDeliveryStatus,
 } from '@shared/ipc-contract';
 import type {
   JiraComment,
@@ -183,23 +176,8 @@ import {
   type SlackTokensState,
 } from '@shared/slack-contract';
 import type { SetSyncGroupRequest, SyncedAppearance } from '@shared/sync-contract';
-import type { UpdateStatus } from '@shared/update-contract';
+import { idleUpdateStatus, type UpdateStatus } from '@shared/update-contract';
 
-import { onDisplayWake } from '../../electron/main/display-wake';
-import { createWindowBroadcaster } from '../../electron/main/ipc/window-broadcaster';
-import { keepAwake } from '../../electron/main/keep-awake';
-import {
-  activateOnThisMachine,
-  focusThisMachine,
-} from '../../electron/main/notifications/activate-here';
-import { notificationDelivery } from '../../electron/main/notifications/delivery';
-import { badgeDock, clearDockBadge } from '../../electron/main/notifications/dock-badge';
-import { splashEnabled } from '../../electron/main/splash';
-import {
-  checkForUpdatesInteractively,
-  setUpdateNotificationSink,
-  updateStatus,
-} from '../../electron/main/updates';
 import {
   createTokenStore,
   type StoredDeviceCredential,
@@ -375,6 +353,7 @@ import {
   createFanOutBroadcaster,
   createSocketBroadcaster,
 } from './socket-broadcaster';
+import { splashEnabled } from './splash-enabled';
 import { createSurfaceRegistry, deviceNameOf, type SurfaceId } from './surfaces';
 
 /**
@@ -1234,10 +1213,27 @@ const foreground = new Map<SurfaceId, { terminalId: string | null; focused: bool
  * (or the splash, during startup) turn every foreground session into an
  * interruption about something on screen.
  */
-const windowFocused = (): boolean =>
-  BrowserWindow.getAllWindows().some(
-    (window) => !window.isDestroyed() && window.isFocused(),
-  );
+const windowFocused = (): boolean => platform().desktop?.windowFocused() ?? false;
+
+/*
+  What a machine with no screen answers (HIVE-422). A server's platform has no
+  `desktop`; every screen-only read falls back to one of these, never to a
+  guess about somebody else's screen.
+*/
+
+/** Delivers to nobody: with no desktop there are no windows to push to. */
+const silentBroadcaster: Broadcaster = { emit: () => undefined };
+
+/** No notification daemon a server could reach, and nothing refused yet. */
+const NO_DESKTOP_DELIVERY: NotificationDeliveryStatus = { supported: false, refused: null };
+
+/** The contract's status for a build that cannot check (`unsupported`). */
+const noDesktopUpdateStatus = (): UpdateStatus =>
+  idleUpdateStatus(platform().lifecycle.version, {
+    canCheck: false,
+    mode: 'manual',
+    reason: 'This copy has no desktop to update. Install a newer release from the releases page.',
+  });
 
 /**
  * Is this terminal the one **that surface** is already looking at?
@@ -1407,11 +1403,12 @@ let stopPermissionReminder: (() => void) | null = null;
  */
 function watchWindowFocus(): void {
   unwatchWindowFocus?.();
-  app.on('browser-window-blur', scheduleForegroundChange);
-  app.on('browser-window-focus', scheduleForegroundChange);
+  // No desktop, no windows to watch (HIVE-422): the subscriptions are no-ops.
+  const offBlur = platform().desktop?.onWindowBlur(scheduleForegroundChange);
+  const offFocus = platform().desktop?.onWindowFocus(scheduleForegroundChange);
   unwatchWindowFocus = () => {
-    app.removeListener('browser-window-blur', scheduleForegroundChange);
-    app.removeListener('browser-window-focus', scheduleForegroundChange);
+    offBlur?.();
+    offFocus?.();
     unwatchWindowFocus = null;
   };
 }
@@ -1537,7 +1534,7 @@ export function remoteListenerBindError(): string | null {
  * side effects alone, which is every test on this branch until this one.
  */
 export function registerIpcHandlers(
-  broadcaster: Broadcaster = createWindowBroadcaster(),
+  broadcaster: Broadcaster = platform().desktop?.broadcaster ?? silentBroadcaster,
   switchMode: ModeSwitcher = noModeSwitcher,
   attachedServerName: () => string | null = () => null,
   attachedSnapshot: AttachedSnapshot = () => null,
@@ -1663,7 +1660,7 @@ export function registerIpcHandlers(
        * A `none` action has nowhere to go and is satisfied by the focus below.
        */
       if (isThisMachineAction(action)) {
-        activateOnThisMachine(action);
+        platform().desktop?.activateOnThisMachine(action);
         return;
       }
 
@@ -1674,7 +1671,7 @@ export function registerIpcHandlers(
        * renderer knows what opening a session means — and a minimised window
        * has to be restored first, or focusing it does nothing visible.
        */
-      focusThisMachine();
+      platform().desktop?.focusThisMachine();
 
       /**
        * An `ask` answers nothing from here (HIVE-118) — it *reveals* the card.
@@ -1747,11 +1744,11 @@ export function registerIpcHandlers(
     present: presentLocally,
     queue: (payload) => { toastQueue.push(payload); },
     /*
-      Read from `BrowserWindow`, not from the registry: a surface registers
+      Read from the desktop's windows, not from the registry: a surface registers
       lazily on its first report, so "no surface" and "no window" are different
       states and only the second is an empty room.
     */
-    hasWindow: () => BrowserWindow.getAllWindows().some((window) => !window.isDestroyed()),
+    hasWindow: () => platform().desktop?.hasWindow() ?? false,
   });
 
   const hub = createNotificationHub({
@@ -1812,7 +1809,7 @@ export function registerIpcHandlers(
      */
     announceBadge: (count) => {
       if (isServerMode()) return;
-      badgeDock(count);
+      platform().desktop?.badgeDock(count);
     },
     activate: activateNotification,
     now: () => Date.now(),
@@ -1893,13 +1890,13 @@ export function registerIpcHandlers(
     openCards: () =>
       ledger.read({}).openAsks.filter((ask) => ask.to === OVERMIND && isPermissionAsk(ask)),
     remind: (id) => hub.remind(id),
-    idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    idleSeconds: () => platform().desktop?.idleSeconds() ?? 0,
   });
   const remindOnFocus = (): void => permissionReminder.onFocus();
   permissionReminder.start();
-  app.on('browser-window-focus', remindOnFocus);
+  const offRemindOnFocus = platform().desktop?.onWindowFocus(remindOnFocus);
   stopPermissionReminder = () => {
-    app.removeListener('browser-window-focus', remindOnFocus);
+    offRemindOnFocus?.();
     permissionReminder.stop();
     stopPermissionReminder = null;
   };
@@ -1918,7 +1915,7 @@ export function registerIpcHandlers(
    * process answers, and since HIVE-145 the toast is raised on the *client's*
    * desktop. Proxied, this told an attached user about the server's OS.
    */
-  handle(CH.notificationsDelivery, () => notificationDelivery());
+  handle(CH.notificationsDelivery, () => platform().desktop?.notificationDelivery() ?? NO_DESKTOP_DELIVERY);
 
   /**
    * Heard and ignored (HIVE-159).
@@ -1962,7 +1959,7 @@ export function registerIpcHandlers(
    * raised into an empty sink, which can only happen in the moments before the
    * first check is even scheduled.
    */
-  setUpdateNotificationSink((input) => {
+  platform().desktop?.setUpdateNotificationSink((input) => {
     hub.raise(input);
   });
 
@@ -1977,8 +1974,10 @@ export function registerIpcHandlers(
     if (action !== null) hub.activate(action);
   });
 
-  handle(CH.updatesStatus, (): UpdateStatus => updateStatus());
-  handle(CH.updatesCheck, () => checkForUpdatesInteractively());
+  handle(CH.updatesStatus, (): UpdateStatus => platform().desktop?.updateStatus() ?? noDesktopUpdateStatus());
+  handle(CH.updatesCheck, async (): Promise<void> => {
+    await platform().desktop?.checkForUpdatesInteractively();
+  });
   // HIVE-264. Process-local: the remote proxy answers the same calls from `ACCOUNT_CALLS`.
   handle(CH.accountState, () => ACCOUNT_CALLS[CH.accountState]());
   handle(CH.accountSignIn, () => ACCOUNT_CALLS[CH.accountSignIn]());
@@ -2969,12 +2968,9 @@ export function registerIpcHandlers(
     } satisfies AgentStatusPush);
   };
 
-  /** Keeps the Mac awake while any agent run is live (HIVE-408). Server mode's own blocker is separate. */
-  let runAwake: ((live: boolean) => void) | undefined;
-
   runs = createRunTracker({
-    // Built on first use: the ipc suites' `electron` mocks have no `powerSaveBlocker`, and reading a missing export throws.
-    onLive: (live) => (runAwake ??= keepAwake(powerSaveBlocker))(live),
+    // Keeps the Mac awake while any agent run is live (HIVE-408); the desktop holds the one blocker. Server mode's own blocker is separate.
+    onLive: (live) => platform().desktop?.keepAwake(live),
     /*
       `spawn` is injected rather than imported by `runs.ts`, which is what lets
       that module's tests drive a recording fake without a real process. The
@@ -3598,9 +3594,10 @@ export function registerIpcHandlers(
     sits at 80×24 until the window is dragged. Every live session gets the drag.
   */
   stopDisplayWake?.();
-  stopDisplayWake = onDisplayWake(() => {
-    for (const entityId of sessions?.entities() ?? []) sessions?.refresh(entityId);
-  });
+  stopDisplayWake =
+    platform().desktop?.onDisplayWake(() => {
+      for (const entityId of sessions?.entities() ?? []) sessions?.refresh(entityId);
+    }) ?? null;
 
   /**
    * The explorer may follow a session into a worktree kept outside the mapped
@@ -3964,16 +3961,13 @@ export function registerIpcHandlers(
      * per call for the same reason. `assertSender` has already proven this
      * sender is the main frame, so its window is the one that asked.
      */
-    const window = BrowserWindow.fromWebContents(event.sender as Electron.WebContents);
-    // Destroyed between the invoke and here. Nothing to attach a sheet to, and
-    // treating it as a cancelled dialog is what the caller already handles.
-    if (!window) return null;
-
-    const result = await dialog.showOpenDialog(window, {
+    // No window (destroyed between the invoke and here, or no desktop at all)
+    // answers `null`, which is a cancelled dialog to the caller.
+    const paths = await platform().desktop?.pickPaths(event.sender, {
       properties: ['openDirectory'],
     });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0] ?? null;
+    if (!paths || paths.length === 0) return null;
+    return paths[0] ?? null;
   });
 
   /**
@@ -4219,7 +4213,7 @@ export function registerIpcHandlers(
    * it is the one of the two that cannot launch a program.
    */
   handle(CH.configReveal, (): void => {
-    shell.showItemInFolder(configPath());
+    platform().desktop?.reveal(configPath());
   });
 
   /**
@@ -5189,12 +5183,10 @@ export function registerIpcHandlers(
         a renderer-side picker would offer the wrong machine's disk. `drop`
         already carries the user's own files, and the refusal names it.
       */
-      const window = BrowserWindow.fromWebContents(event.sender as Electron.WebContents);
-      if (window === null) return [];
-      const result = await dialog.showOpenDialog(window, {
+      const paths = await platform().desktop?.pickPaths(event.sender, {
         properties: ['openFile', 'openDirectory', 'multiSelections'],
       });
-      return result.canceled ? [] : result.filePaths;
+      return paths ?? [];
     });
   });
 
@@ -5210,13 +5202,11 @@ export function registerIpcHandlers(
   */
   handle(CH.skillsImport, (event) =>
     skills?.importSkill(async () => {
-      const window = BrowserWindow.fromWebContents(event.sender as Electron.WebContents);
-      if (window === null) return [];
-      const result = await dialog.showOpenDialog(window, {
+      const paths = await platform().desktop?.pickPaths(event.sender, {
         properties: ['openFile', 'openDirectory'],
         filters: [{ name: 'Skill', extensions: ['zip'] }],
       });
-      return result.canceled ? [] : result.filePaths;
+      return paths ?? [];
     }),
   );
 
@@ -5982,7 +5972,7 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
     its own count: a fresh hub starts from an empty buffer, and the renderer
     re-reports when its link changes (`useDockBadge`).
   */
-  clearDockBadge();
+  platform().desktop?.clearDockBadge();
   /*
     HIVE-142. Most tests never call `startRemoteListener`, so this is usually
     stopping a socket that was never bound — cheap, per `listener.ts`'s own
