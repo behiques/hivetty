@@ -641,7 +641,8 @@ bearing and easy to break:
   `COLORTERM=truecolor` beside it, or tools quantise the 24-bit palette to 256.
 - **Environment sanitisation.** The child must not inherit Electron's
   environment verbatim. `ELECTRON_*`, `NODE_OPTIONS`, `NODE_PATH`,
-  `GDK_PIXBUF_*` and `CHROME_*` are stripped. This is the bug class behind "it
+  `GDK_PIXBUF_*`, `CHROME_*` and the server's `HIVETTY_SECRET_KEY*` (HIVE-424)
+  are stripped. This is the bug class behind "it
   works in my terminal but not in the app", and it stays invisible until
   something downstream behaves strangely.
 - **`encoding: null` plus a per-session `StringDecoder`.** A multi-byte

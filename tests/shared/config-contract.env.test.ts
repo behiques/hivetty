@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 
-import { buildSessionEnv, COLORTERM, TERM } from '../../shared/config-contract';
+import { buildSessionEnv, COLORTERM, isSessionEnvDenied, TERM } from '../../shared/config-contract';
 
 /**
  * Environment sanitisation for spawned shells (story 092, HIVE-64).
@@ -41,6 +41,29 @@ describe('buildSessionEnv', () => {
       expect(buildSessionEnv({ [key]: 'x' }, '/repo')).not.toHaveProperty(key);
     },
   );
+
+  describe('the server secret key (HIVE-424)', () => {
+    it('denies both key variables and nothing else named HIVETTY_', () => {
+      expect(isSessionEnvDenied('HIVETTY_SECRET_KEY')).toBe(true);
+      expect(isSessionEnvDenied('HIVETTY_SECRET_KEY_FILE')).toBe(true);
+      expect(isSessionEnvDenied('HIVETTY_HOME')).toBe(false);
+      expect(isSessionEnvDenied('HIVETTY_CLOUD_URL')).toBe(false);
+    });
+
+    it('never hands either to a session', () => {
+      const env = buildSessionEnv(
+        {
+          HIVETTY_SECRET_KEY: 'ab'.repeat(32),
+          HIVETTY_SECRET_KEY_FILE: '/run/secrets/key',
+          HIVETTY_HOME: '/srv/hivetty',
+        },
+        '/repo',
+      );
+      expect(env).not.toHaveProperty('HIVETTY_SECRET_KEY');
+      expect(env).not.toHaveProperty('HIVETTY_SECRET_KEY_FILE');
+      expect(env.HIVETTY_HOME).toBe('/srv/hivetty');
+    });
+  });
 
   describe('Claude Code session leakage (HIVE-64)', () => {
     /**

@@ -1761,6 +1761,8 @@ export const SESSION_ENV_DENY_PREFIXES: readonly string[] = [
   'ELECTRON_',
   'GDK_PIXBUF_',
   'CHROME_',
+  // HIVE-424: the server deletes its key from process.env at boot; this is the second layer, for PTY sessions and agent wakes.
+  'HIVETTY_SECRET_KEY',
   ...SESSION_ENV_PREFIXES,
 ];
 
