@@ -4,7 +4,7 @@ import { join, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { gunzip, gzip } from 'node:zlib';
 
-import { SYNC_GROUPS, type SyncedAppearance, type SyncGroup } from '@shared/sync-contract';
+import { SYNC_GROUPS, SYNCED_APPEARANCE_FIELDS, type SyncedAppearance, type SyncGroup } from '@shared/sync-contract';
 
 import { readManifest, walk } from '../seed/seed';
 
@@ -57,7 +57,8 @@ export function collectKeys(
   now: number,
 ): { view: View; seen: Seen } {
   const values: Record<string, unknown> = readKeys(doc);
-  for (const [field, value] of Object.entries(appearance ?? {})) {
+  for (const field of SYNCED_APPEARANCE_FIELDS) {
+    const value = appearance !== null && Object.hasOwn(appearance, field) ? appearance[field] : undefined;
     if (value !== undefined) values[`${APPEARANCE_PREFIX}${field}`] = value;
   }
   const view: View = {};
@@ -126,8 +127,14 @@ export async function encodeBundle(view: View): Promise<Buffer> {
     const group = match?.[1] as SyncGroup | undefined;
     if (match === null || group === undefined || !(SYNC_GROUPS as readonly string[]).includes(group)) continue;
     const [, , kind, name] = match as unknown as [string, string, 'k' | 'f', string];
-    if (kind === 'k') groups[group].keys[name] = { value: item.data, at: item.at };
-    else groups[group].files[name] = { sha256: item.hash, mtime: item.at, b64: String(item.data) };
+    // defineProperty, not assignment: a key named `__proto__` from a peer's bundle stays an ordinary entry.
+    const entry = kind === 'k' ? { value: item.data, at: item.at } : { sha256: item.hash, mtime: item.at, b64: String(item.data) };
+    Object.defineProperty(kind === 'k' ? groups[group].keys : groups[group].files, name, {
+      value: entry,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   return gzipAsync(Buffer.from(JSON.stringify({ v: 1, groups }), 'utf8'));
 }
@@ -156,6 +163,7 @@ export async function decodeBundle(bytes: Buffer): Promise<View | null> {
     const keys = entries.keys ?? {};
     const files = entries.files ?? {};
     if (!isRecord(keys) || !isRecord(files)) return null;
+    if (group !== 'automation' && Object.keys(files).length > 0) return null; // only Automation carries files
     for (const [path, entry] of Object.entries(keys)) {
       if (!isRecord(entry) || !isTime(entry.at) || !Object.hasOwn(entry, 'value') || entry.value === undefined) return null;
       view[`${group}:k:${path}`] = { hash: hashOf(entry.value), at: entry.at, data: entry.value } satisfies Item;

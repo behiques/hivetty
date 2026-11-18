@@ -120,6 +120,11 @@ describe('collectKeys', () => {
     expect(view).toEqual({ 'workspace:k:appearance.density': { hash: hashOf('compact'), at: 1, data: 'compact' } });
   });
 
+  it('drops an appearance field that is not listed', () => {
+    const { view } = collectKeys({}, { listPanelWidth: 300, density: 'compact' } as never, {}, 1);
+    expect(Object.keys(view)).toEqual(['workspace:k:appearance.density']);
+  });
+
   it('never collects a key that is not listed', () => {
     const { view } = collectKeys({ projects: [{ path: '/x' }], env: { A: 'b' }, clis: { codex: { skipPermissions: true } } }, null, {}, 1);
     expect(view).toEqual({});
@@ -200,6 +205,20 @@ describe('the bundle', () => {
     for (const rel of ['../config.json', 'skills/../../x', 'ledger/agents.json', 'skills//x', 'skills\\x', '/etc/passwd', 'skills/.hidden/x']) {
       expect(await decodeBundle(await gzipJson(bundleWithFile(rel)))).toBeNull();
     }
+  });
+
+  it('carries a key named __proto__ through a round trip as an ordinary entry', async () => {
+    const hostile = await gzipJson({ v: 1, groups: { harnesses: { keys: JSON.parse('{"__proto__":{"value":"x","at":1}}') as object } } });
+    const decoded = await decodeBundle(hostile);
+    expect(decoded).toEqual({ 'harnesses:k:__proto__': { hash: hashOf('x'), at: 1, data: 'x' } });
+    expect(await decodeBundle(await encodeBundle(decoded ?? {}))).toEqual(decoded);
+    expect(({} as Record<string, unknown>).value).toBeUndefined();
+  });
+
+  it('refuses files outside the automation group', async () => {
+    const text = 'x';
+    const file = { sha256: sha256(text), mtime: 1, b64: Buffer.from(text).toString('base64') };
+    expect(await decodeBundle(await gzipJson({ v: 1, groups: { harnesses: { files: { 'skills/a/x': file } } } }))).toBeNull();
   });
 
   it('refuses a bundle whose sha256 does not match its bytes', async () => {
