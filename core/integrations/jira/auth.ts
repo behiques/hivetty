@@ -1,4 +1,4 @@
-import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 
 import {
   JIRA_TOKEN_ENV,
@@ -186,10 +186,20 @@ export function credentialFile(path: string): SecretFile {
       }
     },
     write(bytes) {
-      writeFileSync(path, bytes, { mode: 0o600 });
-      // `writeFileSync`'s mode applies only when it creates the file, so an
-      // existing one keeps whatever mode it had. Re-asserting is one syscall.
-      chmodSync(path, 0o600);
+      // A sibling, then a rename over the old file (HIVE-424): a crash
+      // mid-write leaves the old credential, never a truncated one that the
+      // store would read as "signed out".
+      const tmp = `${path}.${String(process.pid)}.tmp`;
+      try {
+        writeFileSync(tmp, bytes, { mode: 0o600 });
+        // `writeFileSync`'s mode applies only when it creates the file; a
+        // temp left by a killed run keeps its own. Re-asserting is one syscall.
+        chmodSync(tmp, 0o600);
+        renameSync(tmp, path);
+      } catch (cause) {
+        rmSync(tmp, { force: true });
+        throw cause;
+      }
     },
     clear() {
       rmSync(path, { force: true });
