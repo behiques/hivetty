@@ -1,7 +1,7 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 
-import type { LeaseJwk } from '../../electron/main/licence/keys';
-import type { LeaseClaims } from '../../electron/shared/licence-contract';
+import type { LeaseJwk } from '../../core/licence/keys';
+import type { LeaseClaims } from '../../shared/licence-contract';
 
 export const ISS = 'https://cloud.test';
 export const DEVICE = 'dev-1';

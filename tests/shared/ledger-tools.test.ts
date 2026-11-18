@@ -1,0 +1,458 @@
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
+import { LEDGER_KINDS } from '@shared/ledger-contract';
+import {
+  AGENTS_TOOL,
+  APPROVE_TOOL,
+  ASK_INTENT_GUIDANCE,
+  HIVE_CONSENT_TOOLS,
+  HIVE_STANDING_GRANTS,
+  HIVE_TOOL_NAMES,
+  HIVE_TOOLS,
+  LEDGER_TOOLS,
+  LEDGER_TOOL_NAMES,
+  JIRA_COMMENT_TOOL,
+  JIRA_GET_TOOL,
+  JIRA_TRANSITION_TOOL,
+  JIRA_USERS_TOOL,
+  PR_MERGE_TOOL,
+  PR_TOOL,
+  PROJECT_AUTO_MERGE_TOOL,
+  PROJECTS_TOOL,
+  SESSION_DONE_TOOL,
+} from '@shared/ledger-tools';
+import { matches, rungsFor } from '@shared/permission-rules';
+
+/** What the fence answers for a name under the grants every agent holds. */
+const standing = (name: string): boolean =>
+  HIVE_STANDING_GRANTS.some((rule) => matches(rule, name, {}));
+
+describe('ledger-tools', () => {
+  it('ships exactly the ten ledger tools', () => {
+    expect(LEDGER_TOOL_NAMES).toEqual([
+      'ledger_read',
+      'ledger_post',
+      'ledger_ask',
+      'ledger_answer',
+      'ledger_accept',
+      'ledger_claim',
+      'ledger_release',
+      'ledger_done',
+      'ledger_failed',
+      'ledger_handoff',
+    ]);
+  });
+
+  it('gives every tool a model-facing description', () => {
+    for (const tool of LEDGER_TOOLS) {
+      // Long enough to say when to use it, not just what it is called.
+      expect(tool.description.length).toBeGreaterThan(40);
+    }
+  });
+
+  it('tells the model that ledger_read comes first on a wake', () => {
+    const read = LEDGER_TOOLS.find((tool) => tool.name === 'ledger_read');
+    expect(read?.description).toMatch(/first/i);
+  });
+
+  it('warns that an ask ends the caller turn', () => {
+    const ask = LEDGER_TOOLS.find((tool) => tool.name === 'ledger_ask');
+    expect(ask?.description).toMatch(/ends your turn/i);
+  });
+
+  /**
+   * `quote` is what lets an agent's ask render as a draft-for-approval card
+   * (HIVE-118) rather than a plain question — declared optional because most
+   * asks are not that, and `required` staying untouched proves it.
+   */
+  it('declares an optional string quote on ledger_ask', () => {
+    const ask = LEDGER_TOOLS.find((tool) => tool.name === 'ledger_ask');
+    expect(ask?.inputSchema.properties?.quote).toMatchObject({ type: 'string' });
+    expect(ask?.inputSchema.required).not.toContain('quote');
+  });
+
+  it('gives every tool an object input schema', () => {
+    for (const tool of LEDGER_TOOLS) {
+      expect(tool.inputSchema.type).toBe('object');
+      expect(typeof tool.inputSchema.properties).toBe('object');
+    }
+  });
+
+  it('requires a body on every tool that writes one', () => {
+    for (const name of ['ledger_post', 'ledger_ask', 'ledger_answer', 'ledger_done', 'ledger_failed']) {
+      const tool = LEDGER_TOOLS.find((candidate) => candidate.name === name);
+      expect(tool?.inputSchema.required).toContain('body');
+    }
+  });
+
+  it('requires a task on the claim pair', () => {
+    for (const name of ['ledger_claim', 'ledger_release']) {
+      const tool = LEDGER_TOOLS.find((candidate) => candidate.name === name);
+      expect(tool?.inputSchema.required).toEqual(['task']);
+    }
+  });
+
+  /**
+   * `ledger_post`'s handler has always forwarded `thread` (HIVE-112
+   * self-review) — the schema just never told the model the capability
+   * existed. `ledger_done` and `ledger_failed` already declare it.
+   */
+  it('declares thread on every tool whose handler can carry one', () => {
+    for (const name of ['ledger_post', 'ledger_done', 'ledger_failed']) {
+      const tool = LEDGER_TOOLS.find((candidate) => candidate.name === name);
+      expect(tool?.inputSchema.properties).toHaveProperty('thread');
+    }
+  });
+
+  it('names only kinds the ledger accepts', () => {
+    // Every tool maps to one kind; a typo here is a 400 at runtime.
+    for (const kind of [
+      'post',
+      'ask',
+      'answer',
+      'claim',
+      'release',
+      'done',
+      'failed',
+      'handoff',
+    ]) {
+      expect(LEDGER_KINDS).toContain(kind);
+    }
+  });
+
+  /*
+    The other two-thirds of the `acr` → `pr-patrol` stall (see
+    `preamble.test.ts`). `ledger_done` read "Post exactly one of these per wake
+    that did something" — unconditional, in the schema the model reads — while
+    `ledger_answer` read "Answer an ask someone made of you", which parses as
+    being about *questions*. An agent handed a job rather than a question had
+    two sources telling it to use `done` and one, 230 lines into its own
+    definition, telling it not to.
+
+    Asserted on the descriptions because the descriptions are the artifact:
+    these strings are what reaches the model, and `ledger-tools.ts` is
+    deliberately the only copy of them.
+  */
+  it('tells the model an answer is addressed to the asker for it', () => {
+    const answer = LEDGER_TOOLS.find((tool) => tool.name === 'ledger_answer');
+
+    expect(answer?.description).toMatch(/addressed to the asker/i);
+    // Both recipients, because the routes differ: a peer is woken by the
+    // scheduler, a session is nudged in its terminal by `deliver.ts`.
+    expect(answer?.description).toMatch(/woken/i);
+    expect(answer?.description).toMatch(/nudged/i);
+  });
+
+  /*
+    These say what to reach for, not what the tool cannot do.
+
+    The first version asserted "It cannot be addressed to anybody… wakes no
+    agent" — a claim the same change falsified, since `Ledger.append` now
+    addresses a threaded close and `decide()` wakes on it. A description is the
+    artifact a model reasons from, so a false sentence in it is a defect even
+    when it steers the right way; the steer is kept as a prohibition instead.
+  */
+  it('sends a peer or session ask away from ledger_done and ledger_failed', () => {
+    for (const name of ['ledger_done', 'ledger_failed']) {
+      const tool = LEDGER_TOOLS.find((candidate) => candidate.name === name);
+
+      expect(tool?.description).toMatch(/inbox card/i);
+      expect(tool?.description).toContain('ledger_answer');
+      expect(tool?.description).not.toMatch(/wakes no agent/i);
+      expect(tool?.description).not.toMatch(/cannot be addressed/i);
+    }
+  });
+
+  /*
+    `ledger_ask` also reaches a peer — it carries a `to` and `ask` is in
+    `WAKING_KINDS` — so an absolute "only call that reaches another agent" on
+    `ledger_answer` was false, and an agent believing it might never ask a peer
+    at all.
+  */
+  it('does not claim an answer is the only way to reach a peer', () => {
+    const answer = LEDGER_TOOLS.find((tool) => tool.name === 'ledger_answer');
+
+    expect(answer?.description).not.toMatch(/only call that reaches/i);
+  });
+
+  it('no longer claims every wake that did something needs a done', () => {
+    const done = LEDGER_TOOLS.find((tool) => tool.name === 'ledger_done');
+
+    expect(done?.description).not.toMatch(/per wake that did something/i);
+    expect(done?.description).toMatch(/at most one per wake/i);
+  });
+
+  it('offers ledger_handoff, requiring only a body', () => {
+    const tool = LEDGER_TOOLS.find((t) => t.name === 'ledger_handoff');
+
+    expect(tool).toBeDefined();
+    expect(tool?.inputSchema.required).toEqual(['body']);
+    // A handoff is addressed to your own next session; `to` would be noise.
+    expect(tool?.inputSchema.properties).not.toHaveProperty('to');
+  });
+
+  /**
+   * An ask carries what its asker was about to do (HIVE-135). The schema is
+   * the whole producer: a key the model is not told about is a key it never
+   * writes. Named on `ledger_ask` alone — no other kind is waited on.
+   */
+  it('describes meta.intent on ledger_ask, in the model-facing words', () => {
+    const ask = LEDGER_TOOLS.find((tool) => tool.name === 'ledger_ask');
+    const meta = ask?.inputSchema.properties?.meta as {
+      description?: string;
+      properties?: Record<string, { type?: string; description?: string }>;
+    };
+
+    expect(meta.description).toContain(ASK_INTENT_GUIDANCE);
+    expect(meta.properties?.intent).toMatchObject({ type: 'string' });
+    expect(meta.properties?.intent?.description).toBe(ASK_INTENT_GUIDANCE);
+    expect(ASK_INTENT_GUIDANCE).toMatch(/no memory/i);
+  });
+
+  /**
+   * `ttlOf` (`ledger-derive.ts`) only ever reads `meta.ttlMs` off an ask, so
+   * it is named on `ledger_ask`'s `meta` alone — naming it on every tool's
+   * `meta` would tell a model it does something on a post or an answer that
+   * it does not do.
+   */
+  it('describes ttlMs on ledger_ask, and only there', () => {
+    const ask = LEDGER_TOOLS.find((tool) => tool.name === 'ledger_ask');
+    const askMeta = ask?.inputSchema.properties?.meta as {
+      description?: string;
+      properties?: Record<string, { type?: string; description?: string }>;
+    };
+
+    expect(askMeta.description).toContain('ttlMs');
+    expect(askMeta.properties?.ttlMs).toMatchObject({ type: 'number' });
+
+    const post = LEDGER_TOOLS.find((tool) => tool.name === 'ledger_post');
+    const postMeta = post?.inputSchema.properties?.meta as { description?: string };
+    expect(postMeta.description).not.toContain('ttlMs');
+  });
+});
+
+describe('AGENTS_TOOL', () => {
+  it('is named for the short mcp__hive__ form the model calls', () => {
+    expect(AGENTS_TOOL.name).toBe('agents');
+  });
+
+  it('stays outside LEDGER_TOOLS, which is the ledger vocabulary', () => {
+    expect(LEDGER_TOOL_NAMES).not.toContain('agents');
+    expect(LEDGER_TOOLS).not.toContain(AGENTS_TOOL);
+    expect(AGENTS_TOOL).not.toBe(APPROVE_TOOL);
+  });
+
+  it('takes no arguments, so a model cannot name who is asking', () => {
+    expect(AGENTS_TOOL.inputSchema.type).toBe('object');
+    expect(AGENTS_TOOL.inputSchema.properties).toEqual({});
+    expect(AGENTS_TOOL.inputSchema.required).toBeUndefined();
+  });
+
+  it('tells the model when to reach for it, not just what it does', () => {
+    expect(AGENTS_TOOL.description.length).toBeGreaterThan(40);
+    expect(AGENTS_TOOL.description).toMatch(/before/i);
+  });
+
+  /*
+    The acceptance criterion "granted unconditionally, the way `mcp__hive__*`
+    already is in waker.ts" — asserted rather than assumed, because it is the
+    difference between a tool every agent can reach and one only an agent that
+    happened to name it in `tools:` can. `waker.ts:214` (the `--allowedTools`
+    grant) and `waker.ts:297` (`HOOK_ENV_GRANTS`, which the fence consults)
+    both put this exact rule in front of it.
+  */
+  it('is covered by the standing grants every agent holds, with no `tools:` entry', () => {
+    expect(standing(`mcp__hive__${AGENTS_TOOL.name}`)).toBe(true);
+  });
+});
+
+describe('PROJECTS_TOOL and PR_TOOL (HIVE-173)', () => {
+  it('are named for the short mcp__hive__ form and stay outside the ledger vocabulary', () => {
+    expect(PROJECTS_TOOL.name).toBe('projects');
+    expect(PR_TOOL.name).toBe('pr');
+    expect(LEDGER_TOOL_NAMES).not.toContain('projects');
+    expect(LEDGER_TOOL_NAMES).not.toContain('pr');
+  });
+
+  it('projects takes no arguments; pr requires the repo slug and the number', () => {
+    expect(PROJECTS_TOOL.inputSchema.properties).toEqual({});
+    expect(PROJECTS_TOOL.inputSchema.required).toBeUndefined();
+    expect(PR_TOOL.inputSchema.required).toEqual(['repo', 'number']);
+    expect(PR_TOOL.inputSchema.properties?.['number']).toMatchObject({ type: 'integer' });
+  });
+
+  it('are covered by the standing grants every agent holds', () => {
+    expect(standing(`mcp__hive__${PROJECTS_TOOL.name}`)).toBe(true);
+    expect(standing(`mcp__hive__${PR_TOOL.name}`)).toBe(true);
+  });
+
+  it('tell the model why to reach for them: the config file and gh api are the alternatives', () => {
+    expect(PROJECTS_TOOL.description).toMatch(/config file/i);
+    expect(PR_TOOL.description).toMatch(/gh api/);
+  });
+});
+
+describe('the Jira tools (HIVE-174)', () => {
+  it('are named for the short mcp__hive__ form, outside the ledger vocabulary', () => {
+    for (const tool of [JIRA_GET_TOOL, JIRA_TRANSITION_TOOL, JIRA_COMMENT_TOOL, JIRA_USERS_TOOL]) {
+      expect(tool.name).toMatch(/^jira_/);
+      expect(LEDGER_TOOL_NAMES).not.toContain(tool.name);
+    }
+  });
+
+  it('the read stands; the two writes need a tools: entry or a card', () => {
+    expect(standing(`mcp__hive__${JIRA_GET_TOOL.name}`)).toBe(true);
+    for (const tool of [JIRA_TRANSITION_TOOL, JIRA_COMMENT_TOOL]) {
+      expect(standing(`mcp__hive__${tool.name}`)).toBe(false);
+      expect(HIVE_CONSENT_TOOLS).toContain(`mcp__hive__${tool.name}`);
+      expect(tool.description).toMatch(/consent on a card/);
+    }
+  });
+
+  it('the standing grants cover every ledger tool and approve, and nothing outside the server', () => {
+    for (const name of LEDGER_TOOL_NAMES) expect(standing(`mcp__hive__${name}`)).toBe(true);
+    expect(standing(`mcp__hive__${APPROVE_TOOL.name}`)).toBe(true);
+    expect(standing('mcp__other__ledger_read')).toBe(false);
+    expect(standing('Bash')).toBe(false);
+  });
+
+  it('require what each needs and nothing more', () => {
+    expect(JIRA_GET_TOOL.inputSchema.required).toEqual(['key']);
+    expect(JIRA_TRANSITION_TOOL.inputSchema.required).toEqual(['key', 'status']);
+    expect(JIRA_COMMENT_TOOL.inputSchema.required).toEqual(['key', 'markdown']);
+  });
+
+  it('tell the model the CLI is the fallback, and that a ticket never moves backwards', () => {
+    expect(JIRA_GET_TOOL.description).toMatch(/jira-writer/);
+    expect(JIRA_TRANSITION_TOOL.description).toMatch(/would move backwards/i);
+  });
+
+  it('jira_users is a read: it stands, like jira_get (HIVE-216)', () => {
+    expect(standing(`mcp__hive__${JIRA_USERS_TOOL.name}`)).toBe(true);
+    expect(HIVE_CONSENT_TOOLS).not.toContain(`mcp__hive__${JIRA_USERS_TOOL.name}`);
+    expect(JIRA_USERS_TOOL.inputSchema.required).toEqual(['query']);
+  });
+
+  it('jira_comment takes mentions and says where account ids come from (HIVE-216)', () => {
+    expect(JIRA_COMMENT_TOOL.inputSchema.properties).toHaveProperty('mentions');
+    expect(JIRA_COMMENT_TOOL.inputSchema.required).toEqual(['key', 'markdown']);
+    expect(JIRA_COMMENT_TOOL.description).toMatch(/jira_users/);
+  });
+});
+
+/*
+  Retro B, Task 3. Turning auto-merge on is a merge grant: the shipper then
+  merges that project's PRs with nobody approving. The person's rule is that
+  this tool never runs without their yes, so nothing may grant it ahead of the
+  call: not the standing grants, not a shipped agent's `tools:`, and not the
+  "always" rung of the card that asks.
+*/
+describe('PROJECT_AUTO_MERGE_TOOL', () => {
+  const qualified = `mcp__hive__${PROJECT_AUTO_MERGE_TOOL.name}`;
+
+  it('is named project_auto_merge and takes one project or a list, and the switch', () => {
+    expect(PROJECT_AUTO_MERGE_TOOL.name).toBe('project_auto_merge');
+    expect(LEDGER_TOOL_NAMES).not.toContain(PROJECT_AUTO_MERGE_TOOL.name);
+    expect(PROJECT_AUTO_MERGE_TOOL.inputSchema.required).toEqual(['on']);
+    expect(PROJECT_AUTO_MERGE_TOOL.inputSchema.properties?.['project']).toMatchObject({ type: 'string' });
+    // HIVE-409: several in one call, one consent card for all of them.
+    expect(PROJECT_AUTO_MERGE_TOOL.inputSchema.properties?.['projects']).toMatchObject({
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 1,
+      maxItems: 20,
+    });
+    expect(PROJECT_AUTO_MERGE_TOOL.inputSchema.properties?.['on']).toMatchObject({ type: 'boolean' });
+  });
+
+  it('says it grants unattended merging and needs the person\'s consent', () => {
+    expect(PROJECT_AUTO_MERGE_TOOL.description).toMatch(/without a person's approval/);
+    expect(PROJECT_AUTO_MERGE_TOOL.description).toMatch(/shipper merges/);
+    expect(PROJECT_AUTO_MERGE_TOOL.description).toMatch(/person's consent/);
+  });
+
+  it('is a consent tool and no standing grant covers it, the ledger glob included', () => {
+    expect(HIVE_CONSENT_TOOLS).toContain(qualified);
+    expect(HIVE_STANDING_GRANTS).not.toContain(qualified);
+    expect(standing(qualified)).toBe(false);
+    expect(matches('mcp__hive__ledger_*', qualified, {})).toBe(false);
+  });
+
+  it('is in no shipped agent\'s tools: list', () => {
+    const agents = join(__dirname, '../../resources/agents');
+    const names = readdirSync(agents, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && existsSync(join(agents, entry.name, 'AGENT.md')))
+      .map((entry) => entry.name);
+    expect(names).toContain('shipper');
+    for (const name of names) {
+      const text = readFileSync(join(agents, name, 'AGENT.md'), 'utf8');
+      const list = /^tools:\s*\[(.*)\]\s*$/m.exec(text)?.[1] ?? '';
+      const rules = list.split(',').map((rule) => rule.trim()).filter((rule) => rule !== '');
+      expect(rules.filter((rule) => matches(rule, qualified, {})), name).toEqual([]);
+    }
+  });
+
+  it('offers only a once rung on its card, so a yes can never become a standing grant', () => {
+    const rungs = rungsFor(qualified, { project: 'hive', on: true });
+    expect(rungs.map((rung) => rung.id)).toEqual(['allow-once']);
+    expect(rungs.every((rung) => rung.rule === undefined)).toBe(true);
+  });
+});
+
+describe('HIVE_TOOL_NAMES (HIVE-369)', () => {
+  it('names every tool the hive server serves', () => {
+    expect(HIVE_TOOL_NAMES).toContain('ledger_ask');
+    expect(HIVE_TOOL_NAMES).toContain('jira_get');
+    expect(HIVE_TOOL_NAMES).toContain('approve');
+    expect(new Set(HIVE_TOOL_NAMES).size).toBe(HIVE_TOOL_NAMES.length);
+  });
+});
+
+describe('SESSION_DONE_TOOL (HIVE-368)', () => {
+  it('takes no arguments and says what happens', () => {
+    expect(SESSION_DONE_TOOL.name).toBe('session_done');
+    expect(SESSION_DONE_TOOL.description).toBe(
+      'Finish this session. HiveTTY marks it done and closes its terminal when the turn ends.',
+    );
+    expect(SESSION_DONE_TOOL.inputSchema).toEqual({ type: 'object', properties: {} });
+  });
+  it('is served, just ahead of approve', () => {
+    const names = HIVE_TOOLS.map((tool) => tool.name);
+    expect(names.slice(-2)).toEqual(['session_done', 'approve']);
+  });
+});
+
+describe('pr_merge (HIVE-409)', () => {
+  const input = { repo: 'a/b', number: 1, sha: 'a'.repeat(40) };
+
+  it('is served, needs consent, and no standing grant covers it', () => {
+    expect(HIVE_TOOL_NAMES).toContain(PR_MERGE_TOOL.name);
+    expect(HIVE_CONSENT_TOOLS).toContain('mcp__hive__pr_merge');
+    expect(HIVE_STANDING_GRANTS.some((rule) => matches(rule, 'mcp__hive__pr_merge', input))).toBe(false);
+  });
+
+  it('requires the repository, the number and the head it merges', () => {
+    expect(PR_MERGE_TOOL.inputSchema.required).toEqual(['repo', 'number', 'sha']);
+  });
+});
+
+describe('descriptions agents act on (HIVE-413)', () => {
+  const d = (name: string) => LEDGER_TOOLS.find((tool) => tool.name === name)?.description ?? '';
+  it('claim always records and names the previous holder', () => {
+    expect(d('ledger_claim')).toMatch(/always records your claim/i);
+    expect(d('ledger_claim')).toMatch(/names them/i);
+  });
+  it('a threaded post wakes its addressee and closes nothing; an accept wakes nobody', () => {
+    expect(d('ledger_post')).toMatch(/closes nothing/);
+    expect(d('ledger_post')).toMatch(/accept wakes nobody/i);
+  });
+  it('an ask to the shipper needs meta.repo', () => {
+    expect(d('ledger_ask')).toMatch(/`shipper` needs `meta\.repo`/);
+  });
+  it('a denied call ends the turn', () => {
+    expect(d('ledger_failed')).toMatch(/denied call ends the turn/i);
+  });
+});

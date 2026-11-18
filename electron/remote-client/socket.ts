@@ -26,7 +26,7 @@ import {
   initiate,
   pskOfToken,
   type SecureSocket,
-} from '../remote-channel/secure-socket';
+} from '../../remote-channel/secure-socket';
 
 import { attachRequest } from './index';
 
@@ -35,14 +35,14 @@ import { attachRequest } from './index';
  * attach handshake, correlate `result` and `error` frames back to the `call`
  * that is waiting for them, and fan `event` frames out to whoever subscribed.
  *
- * The mirror of `electron/remote-host/listener.ts`, and deliberately only that.
+ * The mirror of `remote-host/listener.ts`, and deliberately only that.
  * It knows nothing about sessions, the store, or what any channel means — it
  * moves frames. `electron/main/**`'s router is what gives them meaning.
  *
  * ## The channel, and the two fences
  *
  * Every attach runs inside an end-to-end encrypted channel (HIVE-428,
- * `electron/remote-channel/`): a Noise NNpsk0 handshake keyed by a fresh
+ * `remote-channel/`): a Noise NNpsk0 handshake keyed by a fresh
  * X25519 exchange and the device's pairing secret, then AES-256-GCM on every
  * frame. The device credential (`electron/remote-client/token-store.ts`) only
  * ever crosses inside it, and a peer that does not hold the pairing secret
@@ -464,7 +464,7 @@ function fencedLookup(
  * defect waiting: a composer that fitted the map under the ceiling by its own
  * arithmetic, and a client that then weighed the real frame and threw.
  *
- * It cannot live in `electron/shared/` beside `ATTACH_FRAME_MAX_BYTES`, where
+ * It cannot live in `shared/` beside `ATTACH_FRAME_MAX_BYTES`, where
  * it otherwise belongs — that module may not reach a Node API, and `Buffer` is
  * one.
  */

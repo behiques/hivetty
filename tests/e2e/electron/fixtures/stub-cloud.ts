@@ -60,7 +60,7 @@ export interface StubCloud {
 
 /**
  * The HiveTTY cloud as the app calls it (HIVE-270), one per test, on 127.0.0.1 and a random port. Shapes are
- * the app's as merged: `electron/main/licence/{cloud,lease,verify,trial,devices,device-flow,orgs}.ts` and
+ * the app's as merged: `core/licence/{cloud,lease,verify,trial,devices,device-flow,orgs}.ts` and
  * `auth-client.ts`'s web-session. A control changes what the *next* request gets, never the past.
  */
 export const DAY_S = 86_400;

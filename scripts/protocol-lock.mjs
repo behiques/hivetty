@@ -35,8 +35,8 @@ import {
 } from './ts-source.mjs';
 
 export const LOCK_PATH = 'scripts/remote-protocol.lock.json';
-export const IPC_CONTRACT_PATH = 'electron/shared/ipc-contract.ts';
-export const REMOTE_CONTRACT_PATH = 'electron/shared/remote-contract.ts';
+export const IPC_CONTRACT_PATH = 'shared/ipc-contract.ts';
+export const REMOTE_CONTRACT_PATH = 'shared/remote-contract.ts';
 
 /** `CH`'s member name → channel string. */
 function readChannelNames(ipcContract) {

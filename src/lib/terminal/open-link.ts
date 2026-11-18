@@ -45,7 +45,7 @@
  * the bug: **the first argument is the URL**.
  *
  * No scheme check happens here. Main is the security boundary
- * (`electron/main/external-links.ts`), it is the only side that can be trusted
+ * (`core/external-links.ts`), it is the only side that can be trusted
  * to be one, and a second copy of the allowlist in the renderer would be a
  * second definition of "safe" — which is how the two come to disagree.
  *

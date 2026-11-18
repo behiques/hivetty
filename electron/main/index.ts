@@ -7,23 +7,18 @@ import { APP_NAME, DEV_USER_DATA_NAME } from '@shared/app-name';
 import { UPGRADE_PATH } from '@shared/entitlement';
 import { CH } from '@shared/ipc-contract';
 
-import { applyDevDockIcon } from './app-icon';
-import { primaryWindow } from './aux-windows';
-import { bringForward } from './background';
-import { parseInvocation } from './cli';
-import { getConfig, onConfigChange, readConfigDocument, writeSyncedKeys } from './config';
-import { startLoginEnvImport } from './config/login-env';
-import { configPath, switchToDevHiveDir } from './config/paths';
-import { installContentSecurityPolicy } from './csp';
+import { parseInvocation } from '../../core/cli';
+import { getConfig, onConfigChange, readConfigDocument, writeSyncedKeys } from '../../core/config';
+import { startLoginEnvImport } from '../../core/config/login-env';
+import { configPath, switchToDevHiveDir } from '../../core/config/paths';
 import {
   acceptRelaySocket,
   fleetIsIdle,
   remoteListenerBindError,
   remoteListenerBoundAddress,
   startRemoteListener,
-} from './ipc';
-import { createWindowBroadcaster } from './ipc/broadcaster';
-import { registerIpc, switchIpcMode } from './ipc/router';
+} from '../../core/ipc';
+import { createWindowBroadcaster } from '../../core/ipc/broadcaster';
 import {
   ACCOUNT_CALLS,
   cloudSession,
@@ -33,26 +28,32 @@ import {
   onLicenceChange,
   runAccountCommand,
   startLicence,
-} from './licence';
-import { installDeepLinks } from './licence/deep-link';
-import { entitled } from './licence/entitled';
-import { startWhenLicensed } from './licence/serve-gate';
-import { registerLifecycle } from './lifecycle';
-import { startRelay } from './relay';
-import { resetShipped, shippedOptions } from './seed';
-import { bindUntilBound } from './server/bind-retry';
+} from '../../core/licence';
+import { installDeepLinks } from '../../core/licence/deep-link';
+import { entitled } from '../../core/licence/entitled';
+import { startWhenLicensed } from '../../core/licence/serve-gate';
+import { startRelay } from '../../core/relay';
+import { resetShipped, shippedOptions } from '../../core/seed';
+import { bindUntilBound } from '../../core/server/bind-retry';
 import {
   pairDevice,
   pairOutcomeMessage,
   revokeDevice,
   revokeOutcomeMessage,
-} from './server/devices';
-import { fileBackedIo, serverDeviceStore } from './server/file-backed-io';
-import { runOneShot } from './server/one-shot';
-import { claimServerLock, hiveLockPath } from './server/server-lock';
-import { isServerMode, setServerMode } from './server-mode';
-import { onShutdown } from './shutdown';
-import { startSync } from './sync';
+} from '../../core/server/devices';
+import { fileBackedIo, serverDeviceStore } from '../../core/server/file-backed-io';
+import { runOneShot } from '../../core/server/one-shot';
+import { claimServerLock, hiveLockPath } from '../../core/server/server-lock';
+import { isServerMode, setServerMode } from '../../core/server-mode';
+import { onShutdown } from '../../core/shutdown';
+import { startSync } from '../../core/sync';
+
+import { applyDevDockIcon } from './app-icon';
+import { primaryWindow } from './aux-windows';
+import { bringForward } from './background';
+import { installContentSecurityPolicy } from './csp';
+import { registerIpc, switchIpcMode } from './ipc/router';
+import { registerLifecycle } from './lifecycle';
 import { createServerTray } from './tray';
 import { runHeadlessUpdate, runUnattended, startUpdateChecks } from './updates';
 import { createWindow } from './window';
@@ -377,7 +378,7 @@ if (!app.requestSingleInstanceLock()) {
 
     `switchIpcMode` refuses this same combination itself, which is what makes
     the guard here a nicety rather than the enforcement — see
-    `electron/main/server-mode.ts` for what the combination actually costs.
+    `core/server-mode.ts` for what the combination actually costs.
   */
   if (getConfig().remote.mode === 'remote' && serverMode) {
     console.error(

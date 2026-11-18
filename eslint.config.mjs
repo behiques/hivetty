@@ -307,7 +307,7 @@ export default tseslint.config(
              * ten fake sessions on screen again, which is the whole bug.
              */
             {
-              target: ['./src/**/*', './electron/**/*'],
+              target: ['./src/**/*', './electron/**/*', './core/**/*', './shared/**/*', './pty-host/**/*', './mcp-host/**/*', './remote-host/**/*', './remote-channel/**/*'],
               from: './tests/**/*',
               message:
                 'tests/ is test scaffolding and never ships. Production code may not import it — that is how the seeded demo fleet got into the app in the first place.',
@@ -333,24 +333,25 @@ export default tseslint.config(
             /**
              * THE PROCESS BOUNDARY (story 080).
              *
-             * Three zones, one idea: `electron/shared/` is the only module the
+             * Three zones, one idea: `shared/` is the only module the
              * two processes share, and it carries types and constants only.
              * Everything else stays on its own side of the bridge.
              *
-             * `electron/shared/**` is importable from all three and imports
+             * `shared/**` is importable from all three and imports
              * from none of them — it has no zone of its own because it has no
              * imports to restrict.
              */
             {
-              target: './electron/main/**/*',
+              target: ['./core/**/*', './electron/main/**/*'],
               from: './src/**/*',
               message:
-                'The main process has no renderer, no DOM and no store. It may import electron/shared/ only.',
+                'The main process has no renderer, no DOM and no store. It may import shared/ only.',
             },
             {
               target: './electron/preload/**/*',
               from: [
                 './src/**/*',
+                './core/**/*',
                 './electron/main/**/*',
                 /*
                   The other half of the remote fence below (HIVE-141 review).
@@ -366,26 +367,27 @@ export default tseslint.config(
                   alone here: closing them is right, and it is not this
                   ticket's diff.
                 */
-                './electron/remote-host/**/*',
+                './remote-host/**/*',
                 './electron/remote-client/**/*',
-                './electron/remote-channel/**/*',
+                './remote-channel/**/*',
               ],
               message:
-                'preload is a bridge, not a participant. It may import electron/shared/ only.',
+                'preload is a bridge, not a participant. It may import shared/ only.',
             },
             {
               target: './src/**/*',
               from: [
+                './core/**/*',
                 './electron/main/**/*',
                 './electron/preload/**/*',
-                './electron/pty-host/**/*',
-                './electron/mcp-host/**/*',
-                './electron/remote-host/**/*',
+                './pty-host/**/*',
+                './mcp-host/**/*',
+                './remote-host/**/*',
                 './electron/remote-client/**/*',
-                './electron/remote-channel/**/*',
+                './remote-channel/**/*',
               ],
               message:
-                'The renderer may only see @shared. Reaching into electron/main/ or electron/preload/ would bundle main-process code into the renderer.',
+                'The renderer may only see @shared. Reaching into core/, electron/main/ or electron/preload/ would bundle main-process code into the renderer.',
             },
             /**
              * THE HOST IS DUMB ON PURPOSE (story 091).
@@ -400,14 +402,15 @@ export default tseslint.config(
              * from also being the thing that decides what to run.
              */
             {
-              target: './electron/pty-host/**/*',
+              target: './pty-host/**/*',
               from: [
                 './src/**/*',
+                './core/**/*',
                 './electron/main/**/*',
                 './electron/preload/**/*',
               ],
               message:
-                'The pty host owns processes, not policy. It may import electron/shared/ only — config, fixtures and main-process code are all off limits.',
+                'The pty host owns processes, not policy. It may import shared/ only — config, fixtures and main-process code are all off limits.',
             },
             /**
              * THE HOST IS A CLIENT, NOT A PEER (HIVE-112).
@@ -416,18 +419,19 @@ export default tseslint.config(
              * did. It reaches the ledger the same way any other caller would —
              * over the receiver, with a token — so that "one writer in main"
              * survives a second process wanting to write. An import from
-             * `electron/main` here would be a second writer with a different
+             * `core` or `electron/main` here would be a second writer with a different
              * lock, which is the bug this fence exists to make impossible.
              */
             {
-              target: './electron/mcp-host/**/*',
+              target: './mcp-host/**/*',
               from: [
                 './src/**/*',
+                './core/**/*',
                 './electron/main/**/*',
                 './electron/preload/**/*',
               ],
               message:
-                'The MCP host is a client of the receiver, not a peer of main. It may import electron/shared/ only — reaching into main would mean a second writer on the ledger.',
+                'The MCP host is a client of the receiver, not a peer of main. It may import shared/ only — reaching into main would mean a second writer on the ledger.',
             },
             /**
              * TWO HALVES, ONE CUT (HIVE-141).
@@ -437,11 +441,11 @@ export default tseslint.config(
              * drifted across the cut would be a dependency that compiles on one
              * machine and is dead weight on the other, and the first symptom
              * would be a bundle, not an error. Anything genuinely common goes
-             * in `electron/shared/`, which is what that directory is for.
+             * in `shared/`, which is what that directory is for.
              *
              * **What this proves, stated honestly.** It proves the two modules
              * do not reference each other. It does NOT prove they end up in
-             * different processes: `electron/main/**` may import both — HIVE-144
+             * different processes: `core/**` and `electron/main/**` may import both — HIVE-144
              * will, from `router.ts` — and electron-vite emits one `out/main`
              * bundle regardless. Separability is a property of what main
              * chooses to load at boot, which no lint zone can see. An earlier
@@ -455,13 +459,13 @@ export default tseslint.config(
              * importing `src/**` or `electron/preload/**` — or the bridge
              * importing one of them — would be that knowledge leaking upward.
              *
-             * `electron/main/**` is deliberately NOT fenced off. `remote-host`
+             * `core/**` and `electron/main/**` are deliberately NOT fenced off. `remote-host`
              * reuses the receiver's timing-safe compare and its Origin/Host
              * allowlist (HIVE-134) rather than growing a second copy, and
              * `remote-client` is driven by the router that lives in main.
              */
             {
-              target: './electron/remote-host/**/*',
+              target: './remote-host/**/*',
               from: [
                 './src/**/*',
                 './electron/preload/**/*',
@@ -475,7 +479,7 @@ export default tseslint.config(
               from: [
                 './src/**/*',
                 './electron/preload/**/*',
-                './electron/remote-host/**/*',
+                './remote-host/**/*',
               ],
               message:
                 'The remote client runs on the laptop. It may not import the renderer, the bridge, or the host half — the two halves must stay separable onto two machines.',
@@ -483,19 +487,20 @@ export default tseslint.config(
             /**
              * THE CHANNEL IS A LEAF (HIVE-428).
              *
-             * `electron/remote-channel/` holds the Noise handshake and the
+             * `remote-channel/` holds the Noise handshake and the
              * framing every attach runs inside. Both remote halves import it,
              * so it may import neither, nor anything above them: it sees
              * `node:*` and its own files, which is what lets the same cipher
              * code run on both machines and be proven against a vector alone.
              */
             {
-              target: './electron/remote-channel/**/*',
+              target: './remote-channel/**/*',
               from: [
                 './src/**/*',
+                './core/**/*',
                 './electron/main/**/*',
                 './electron/preload/**/*',
-                './electron/remote-host/**/*',
+                './remote-host/**/*',
                 './electron/remote-client/**/*',
               ],
               message:
@@ -511,12 +516,14 @@ export default tseslint.config(
              * first one's grip on the core.
              */
             {
-              target: './electron/main/harness/**/*',
+              target: './core/harness/**/*',
               from: [
-                './electron/main/sessions/**/*',
+                './core/sessions/**/*',
+                './core/ipc/**/*',
                 './electron/main/ipc/**/*',
+                './core/notifications/**/*',
                 './electron/main/notifications/**/*',
-                './electron/main/plans/**/*',
+                './core/plans/**/*',
               ],
               message:
                 'An adapter does not reach the core. The core passes what an adapter needs in as arguments.',
@@ -524,7 +531,7 @@ export default tseslint.config(
             /**
              * THE DRIVEN SIDE STAYS SEALED (HIVE-233).
              *
-             * Only `electron/main/harness/**` may import an adapter; everyone
+             * Only `core/harness/**` may import an adapter; everyone
              * else asks the registry (`adapterFor`, `harnessOf`). That is what
              * lets a second harness land as a new folder rather than a hunt for
              * every place that knew it was Claude. The target is everything that
@@ -534,18 +541,23 @@ export default tseslint.config(
              */
             {
               target: [
-                './electron/main/!(harness)/**/*',
-                './electron/main/*',
-                './electron/!(main)/**/*',
+                './core/!(harness)/**/*',
+                './core/*',
+                './electron/**/*',
+                './shared/**/*',
+                './pty-host/**/*',
+                './mcp-host/**/*',
+                './remote-host/**/*',
+                './remote-channel/**/*',
                 './src/**/*',
               ],
               from: [
-                './electron/main/harness/claude-code/**/*',
-                './electron/main/harness/codex/**/*',
-                './electron/main/harness/copilot/**/*',
+                './core/harness/claude-code/**/*',
+                './core/harness/codex/**/*',
+                './core/harness/copilot/**/*',
               ],
               message:
-                'Only electron/main/harness/ may import an adapter. Reach Claude Code, Codex or Copilot through the registry: adapterFor(), headlessAdapter() and harnessOf().',
+                'Only core/harness/ may import an adapter. Reach Claude Code, Codex or Copilot through the registry: adapterFor(), headlessAdapter() and harnessOf().',
             },
           ],
         },
@@ -568,10 +580,19 @@ export default tseslint.config(
         { '**/*.{ts,tsx}': 'KEBAB_CASE' },
         { ignoreMiddleExtensions: true },
       ],
-      // `electron/**` earns the same naming discipline as `src/**` (story 080).
+      // `electron/**` and the roots that left it earn the same naming discipline as `src/**` (story 080).
       'check-file/folder-naming-convention': [
         'error',
-        { 'src/**/': 'KEBAB_CASE', 'electron/**/': 'KEBAB_CASE' },
+        {
+          'src/**/': 'KEBAB_CASE',
+          'electron/**/': 'KEBAB_CASE',
+          'core/**/': 'KEBAB_CASE',
+          'shared/**/': 'KEBAB_CASE',
+          'pty-host/**/': 'KEBAB_CASE',
+          'mcp-host/**/': 'KEBAB_CASE',
+          'remote-host/**/': 'KEBAB_CASE',
+          'remote-channel/**/': 'KEBAB_CASE',
+        },
       ],
 
       '@typescript-eslint/consistent-type-imports': [
@@ -643,7 +664,7 @@ export default tseslint.config(
      * `electron/preload/` is deliberately absent: it runs inside a renderer and
      * legitimately touches browser globals, so it keeps the default.
      */
-    files: ['electron/main/**/*.ts'],
+    files: ['core/**/*.ts', 'electron/main/**/*.ts'],
     languageOptions: { globals: globals.node },
   },
 );

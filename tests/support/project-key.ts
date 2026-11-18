@@ -2,7 +2,7 @@
  * A plausible project key for a fixture (HIVE-94).
  *
  * Deliberately **not** `deriveProjectKey`. That function is production code
- * under test in `tests/electron/main/config/identity.test.ts`, and a fixture
+ * under test in `tests/core/config/identity.test.ts`, and a fixture
  * factory that called it would assert its own behaviour into every other file —
  * a change to the generation rule would then rewrite the expectations of thirty
  * tests that have nothing to do with key generation.

@@ -10,12 +10,12 @@ import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
-} from '../../electron/shared/hook-contract';
+} from '../../shared/hook-contract';
 
-import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
-import { writeHookSettings } from '../../electron/main/harness/claude-code/settings';
-import { renderSkills } from '../../electron/main/skills/render';
-import type { SkillsRead } from '../../electron/main/skills/read';
+import { createReceiver, type Receiver } from '../../core/hooks/receiver';
+import { writeHookSettings } from '../../core/harness/claude-code/settings';
+import { renderSkills } from '../../core/skills/render';
+import type { SkillsRead } from '../../core/skills/read';
 
 /** Not exercised by this suite — `/done`, not the ledger. */
 const noLedger = {

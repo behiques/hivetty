@@ -5,12 +5,12 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseAgent } from '../../../electron/main/agents/definition';
+import { parseAgent } from '../../../core/agents/definition';
 import { AGENT_ICON_NAMES } from '@features/shared/components/agent-form';
-import { matches } from '../../../electron/shared/permission-rules';
-import { createScheduler } from '../../../electron/main/agents/scheduler';
-import { createAgentState } from '../../../electron/main/agents/state';
-import type { LedgerEntry } from '../../../electron/shared/ledger-contract';
+import { matches } from '../../../shared/permission-rules';
+import { createScheduler } from '../../../core/agents/scheduler';
+import { createAgentState } from '../../../core/agents/state';
+import type { LedgerEntry } from '../../../shared/ledger-contract';
 
 /**
  * Every agent the app ships parses against the skills the app ships

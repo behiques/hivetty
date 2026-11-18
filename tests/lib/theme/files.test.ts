@@ -68,7 +68,7 @@ describe('the bridge is never consulted', () => {
   });
 
   /**
-   * `electron/main/theme/index.ts` used to `stat` before it read, so an
+   * `core/theme/index.ts` used to `stat` before it read, so an
    * oversize file was refused without ever being buffered. `validate.ts` still
    * caps the contents, but only once the whole file is in renderer memory;
    * this keeps the cheaper refusal that deleting main's copy would have lost.

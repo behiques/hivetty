@@ -42,8 +42,8 @@ if (
  * races, so the next spec that registers the handlers cannot bring it back.
  * The seed's own spec opts back in with `vi.unmock`.
  */
-vi.mock('../electron/main/seed', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../electron/main/seed')>()),
+vi.mock('../core/seed', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../core/seed')>()),
   seedShippedIntoHive: () => Promise.resolve(null),
 }));
 

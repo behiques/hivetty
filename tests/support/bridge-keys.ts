@@ -1,4 +1,4 @@
-import type { HiveBridge } from '../../electron/shared/ipc-contract';
+import type { HiveBridge } from '../../shared/ipc-contract';
 
 /**
  * The exact key sets of `window.hive` and each namespace on it. Test-only:

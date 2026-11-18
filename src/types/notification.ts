@@ -7,7 +7,7 @@
  * sorted, deduped, aged or subscribed to, and `time` was a clock that stopped
  * the moment the fixture was written.
  *
- * The declaration moved to `electron/shared/notification-contract.ts`, because
+ * The declaration moved to `shared/notification-contract.ts`, because
  * the producer is now the **main process** and a type only one side knows is
  * not a contract. This module stays as the renderer's door onto it, so feature
  * code keeps importing `@/types/notification` and never reaches across the

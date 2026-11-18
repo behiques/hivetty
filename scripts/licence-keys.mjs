@@ -1,8 +1,8 @@
-// Rewrites electron/main/licence/keys.ts from each cloud's GET /api/lease/keys (HIVE-267, D2).
+// Rewrites core/licence/keys.ts from each cloud's GET /api/lease/keys (HIVE-267, D2).
 // An environment that does not answer keeps the keys it had, with a warning.
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const FILE = new URL('../electron/main/licence/keys.ts', import.meta.url);
+const FILE = new URL('../core/licence/keys.ts', import.meta.url);
 const CLOUDS = { prod: 'https://api.hivetty.dev', dev: 'https://api.dev.hivetty.dev' };
 
 const source = readFileSync(FILE, 'utf8');

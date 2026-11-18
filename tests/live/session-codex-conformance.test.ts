@@ -18,34 +18,34 @@ import { createInterface } from 'node:readline';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { codexAdapter } from '../../electron/main/harness/codex';
-import { codexDeveloperInstructions } from '../../electron/main/harness/codex/instructions';
-import { launchCodexSession } from '../../electron/main/harness/codex/launch';
-import { foldCodexMeters } from '../../electron/main/harness/codex/meters';
-import { codexRecord } from '../../electron/main/harness/codex/record';
-import { toml } from '../../electron/main/harness/codex/toml';
-import { shellQuote } from '../../electron/main/container/shell-quote';
-import type { LaunchSpec } from '../../electron/main/harness/port';
-import { createHarnessRegistry } from '../../electron/main/harness/registry';
-import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
-import { createStatusTracker, type StatusTracker } from '../../electron/main/hooks/tracker';
-import { createLedger } from '../../electron/main/ledger';
-import { hiveServerSpec } from '../../electron/main/mcp/config';
-import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
-import { EXIT_COMMAND } from '../../electron/main/sessions/exit-command';
-import { createRecordAborts, type RecordAborts } from '../../electron/main/sessions/record-aborts';
-import { createSkillsRuntime } from '../../electron/main/skills';
+import { codexAdapter } from '../../core/harness/codex';
+import { codexDeveloperInstructions } from '../../core/harness/codex/instructions';
+import { launchCodexSession } from '../../core/harness/codex/launch';
+import { foldCodexMeters } from '../../core/harness/codex/meters';
+import { codexRecord } from '../../core/harness/codex/record';
+import { toml } from '../../core/harness/codex/toml';
+import { shellQuote } from '../../core/container/shell-quote';
+import type { LaunchSpec } from '../../core/harness/port';
+import { createHarnessRegistry } from '../../core/harness/registry';
+import { createReceiver, type Receiver } from '../../core/hooks/receiver';
+import { createStatusTracker, type StatusTracker } from '../../core/hooks/tracker';
+import { createLedger } from '../../core/ledger';
+import { hiveServerSpec } from '../../core/mcp/config';
+import { createNotificationHub, createNotifier } from '../../core/notifications';
+import { EXIT_COMMAND } from '../../core/sessions/exit-command';
+import { createRecordAborts, type RecordAborts } from '../../core/sessions/record-aborts';
+import { createSkillsRuntime } from '../../core/skills';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
   HOOK_PATH,
   type HookStatusEvent,
-} from '../../electron/shared/hook-contract';
-import { CH } from '../../electron/shared/ipc-contract';
-import type { HiveNotification } from '../../electron/shared/notification-contract';
-import type { PlanUpdate } from '../../electron/shared/plan-contract';
-import { ticketStart } from '../../electron/shared/ticket-workflow';
+} from '../../shared/hook-contract';
+import { CH } from '../../shared/ipc-contract';
+import type { HiveNotification } from '../../shared/notification-contract';
+import type { PlanUpdate } from '../../shared/plan-contract';
+import { ticketStart } from '../../shared/ticket-workflow';
 
 /**
  * What only a real interactive `codex` can prove about a Codex session (HIVE-279).

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ABOUT_SIZE,
   ABOUT_TRAFFIC_LIGHT_POSITION,
-} from '../../../electron/shared/about';
+} from '../../../shared/about';
 
 /**
  * The About window, with `electron` mocked.

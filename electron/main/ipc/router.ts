@@ -4,6 +4,22 @@ import { isRemoteTarget, type SwitchOutcome } from '@shared/config-contract';
 import { CH, type AppInfo, type RemoteLinkStatus } from '@shared/ipc-contract';
 import { RELAY_CLOSE } from '@shared/relay-contract';
 
+import { getConfig } from '../../../core/config';
+import { createWindowBroadcaster, type Broadcaster } from '../../../core/ipc/broadcaster';
+import {
+  ipcBindingsSize,
+  readRemoteCredential,
+  registerIpcHandlers,
+  remoteCredentialStore,
+  resetIpcHandlers,
+  sessionsLayer,
+} from '../../../core/ipc/index';
+import { createReattachLoop, type ReattachLoop } from '../../../core/ipc/reattach';
+import { applyRemoteForget, applyRemotePair } from '../../../core/ipc/remote-pairing';
+import { composeResumeFrom, createResumeTracker, type ResumeTracker } from '../../../core/ipc/resume-tracker';
+import { applySetRemote, targetOf, type ConfiguredTarget } from '../../../core/ipc/set-remote';
+import { cloudSession, type CloudSession } from '../../../core/licence';
+import { isServerMode } from '../../../core/server-mode';
 import {
   AddressRefusedError,
   RelayClosedError,
@@ -14,25 +30,9 @@ import {
   type RemoteTarget,
 } from '../../remote-client/socket';
 import type { StoredDeviceCredential } from '../../remote-client/token-store';
-import { getConfig } from '../config';
-import { cloudSession, type CloudSession } from '../licence';
-import { isServerMode } from '../server-mode';
 
-import { createWindowBroadcaster, type Broadcaster } from './broadcaster';
-import { createReattachLoop, type ReattachLoop } from './reattach';
-import { applyRemoteForget, applyRemotePair } from './remote-pairing';
 import { registerRemoteProxy, remoteProxyBindingsSize, resetRemoteProxy } from './remote-proxy';
-import { composeResumeFrom, createResumeTracker, type ResumeTracker } from './resume-tracker';
-import { applySetRemote, targetOf, type ConfiguredTarget } from './set-remote';
 
-import {
-  ipcBindingsSize,
-  readRemoteCredential,
-  registerIpcHandlers,
-  remoteCredentialStore,
-  resetIpcHandlers,
-  sessionsLayer,
-} from './index';
 
 /**
  * Where this process's IPC is answered (HIVE-141).
@@ -77,9 +77,9 @@ interface RegisterIpcOptions {
  *
  * Local mode forwards to `registerIpcHandlers` and nothing else — no wrapping,
  * no filtering, no authorization check. The table in
- * `electron/shared/remote-contract.ts` is consulted by nothing in this path on
+ * `shared/remote-contract.ts` is consulted by nothing in this path on
  * purpose: local callers are the sandboxed renderer of the app's own window,
- * already vouched for by `electron/main/ipc/sender.ts`, and adding a second gate
+ * already vouched for by `core/ipc/sender.ts`, and adding a second gate
  * that always passes would be a gate nobody could tell was working.
  *
  * Remote mode forwards to `registerRemoteProxy`, which consults the same
@@ -619,7 +619,7 @@ export async function switchIpcMode(
     is called on from exactly one place, inside `whenReady`. A boot attach on
     a serving machine therefore tore the listener down *before* it was ever
     started, and that machine stopped serving permanently — across relaunches,
-    with the tray still claiming server mode. `electron/main/server-mode.ts`
+    with the tray still claiming server mode. `core/server-mode.ts`
     carries the reasoning for refusing rather than preserving the listener.
 
     `connect-failed` rather than an arm of its own: the pane already renders

@@ -6,28 +6,28 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { createReceiver } from '../../electron/main/hooks/receiver';
-import { hookSettings } from '../../electron/main/harness/claude-code/settings';
-import { createStatusTracker } from '../../electron/main/hooks/tracker';
+import { createReceiver } from '../../core/hooks/receiver';
+import { hookSettings } from '../../core/harness/claude-code/settings';
+import { createStatusTracker } from '../../core/hooks/tracker';
 import {
   createNotifier,
   createNotificationHub,
-} from '../../electron/main/notifications';
+} from '../../core/notifications';
 import {
   noticeSignal,
   type NOTIFICATION_TYPES,
   toSignal,
-} from '../../electron/main/harness/claude-code/hook-vocabulary';
+} from '../../core/harness/claude-code/hook-vocabulary';
 import {
   type IdleDetail,
   type ObservedStatus,
-} from '../../electron/shared/hook-contract';
-import { CH } from '../../electron/shared/ipc-contract';
+} from '../../shared/hook-contract';
+import { CH } from '../../shared/ipc-contract';
 import type {
   HiveNotification,
   NotificationKind,
-} from '../../electron/shared/notification-contract';
-import type { SessionStatusEvent } from '../../electron/shared/session-contract';
+} from '../../shared/notification-contract';
+import type { SessionStatusEvent } from '../../shared/session-contract';
 
 /**
  * Hook conformance: the whole chain against a real `claude`.

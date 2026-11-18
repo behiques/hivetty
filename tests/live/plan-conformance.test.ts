@@ -10,13 +10,13 @@ import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
-} from '../../electron/shared/hook-contract';
-import { CH } from '../../electron/shared/ipc-contract';
-import type { PlanChangedEvent } from '../../electron/shared/plan-contract';
+} from '../../shared/hook-contract';
+import { CH } from '../../shared/ipc-contract';
+import type { PlanChangedEvent } from '../../shared/plan-contract';
 
-import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
-import { writeHookSettings } from '../../electron/main/harness/claude-code/settings';
-import { createPlans, type Plans } from '../../electron/main/plans';
+import { createReceiver, type Receiver } from '../../core/hooks/receiver';
+import { writeHookSettings } from '../../core/harness/claude-code/settings';
+import { createPlans, type Plans } from '../../core/plans';
 
 /**
  * Plan state against a real `claude` (HIVE-179).

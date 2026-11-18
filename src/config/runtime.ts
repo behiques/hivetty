@@ -69,7 +69,7 @@ export const isDesktop = (): boolean =>
  * encounters it.
  */
 /**
- * The four capabilities `WINDOW_BOUND` (`electron/shared/remote-contract.ts`)
+ * The four capabilities `WINDOW_BOUND` (`shared/remote-contract.ts`)
  * refuses while this window is attached to someone else's Hive (HIVE-144,
  * narrowed by HIVE-146).
  *

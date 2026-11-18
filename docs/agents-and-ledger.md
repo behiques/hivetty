@@ -4,8 +4,8 @@
 every party in HiveTTY reads from and writes to, and the **agent definition**,
 the file that makes a party an agent in the first place.
 
-Load this when working on `electron/main/ledger/`, `electron/main/agents/`,
-`electron/mcp-host/`, `electron/shared/{ledger,agent}-*`, the hook receiver's
+Load this when working on `core/ledger/`, `core/agents/`,
+`mcp-host/`, `shared/{ledger,agent}-*`, the hook receiver's
 two ledger routes, the renderer's mirrors of either (`use-ledger-sync.ts`,
 `use-agents-sync.ts`, the `useLedger*` and `useAgent*` selectors in
 `hive-store.ts`), the `ledger` / `ask` / `answer` console verbs, Settings ›
@@ -62,7 +62,7 @@ belongs somewhere the person can open, `grep`, and back up, not inside an
 app-private directory they'd need Finder's "Show Package Contents" instinct to
 find.
 
-`createLedgerStore` (`electron/main/ledger/store.ts`) loads **today's file and
+`createLedgerStore` (`core/ledger/store.ts`) loads **today's file and
 yesterday's** on start, in that order, then sorts by id. Yesterday matters
 because an ask made late last night is still open the next morning — dropping
 it from memory the moment the calendar rolls over would silently retire every
@@ -123,7 +123,7 @@ across a quiet day because a ref only has to be unambiguous among *currently
 open* asks, and an ask that's aged out no longer needs one.
 
 `ledger.answer` accepts **either** form in its `thread` field —
-`resolveRef` (`electron/shared/ledger-derive.ts`) checks for an exact id match
+`resolveRef` (`shared/ledger-derive.ts`) checks for an exact id match
 first, then a ref match, and refuses a handle that matches more than one entry
 as ambiguous rather than taking the first (HIVE-227) — and always stores the
 resolved canonical id, never the ref, in the written entry's `thread`. That's
@@ -139,12 +139,12 @@ ref itself has been forgotten.
 
 - **Over IPC**, the renderer's `window.hive.ledger.post` and `.answer` don't
   even have a `from` parameter in their type (`Omit<LedgerPostRequest,
-  'from'>`). `electron/main/ipc/index.ts` supplies `OVERMIND` itself when it
+  'from'>`). `core/ipc/index.ts` supplies `OVERMIND` itself when it
   calls `ledger.append` / `ledger.answer`. The renderer is the overmind's only
   mouth, and there is nothing to strip because there is nowhere to put it.
-- **Over the receiver** (`electron/main/hooks/receiver.ts`), a session or
+- **Over the receiver** (`core/hooks/receiver.ts`), a session or
   agent process posts JSON that *may* contain a `from` field, and
-  `parseLedgerPostBody` (`electron/shared/guards.ts`) throws it away before it
+  `parseLedgerPostBody` (`shared/guards.ts`) throws it away before it
   reaches the handler. The caller's real identity comes from the
   `x-hive-session` header, which `handleLedgerPost` and `handleLedgerRead`
   read and pass down as `caller` — the same header, the same discipline, every
@@ -196,14 +196,14 @@ silent.
 
 ## Delivery
 
-The ledger records; it does not tell anyone. `electron/main/ledger/deliver.ts`
+The ledger records; it does not tell anyone. `core/ledger/deliver.ts`
 is the first rule on top of it: an `ask`, `answer`, `post`, `failed` or `done`
 addressed to a **live session** is announced in that session's terminal as one line, through
 the same `sessions.write` primitive `send` uses. The trailing `\r` submits it,
 which is the intent — the nudge becomes a turn the agent takes.
 
 **The line is a marker, not the entry.** `ledgerMarkers` in
-`electron/shared/ledger-contract.ts` names entries and nothing else: `a12`
+`shared/ledger-contract.ts` names entries and nothing else: `a12`
 for an ask, by its ref, the handle the woken session answers with; the id
 for anything else, which has no ref. One line names the whole backlog, in
 ledger order, space-separated: `📒 a12 20261110-100818-0001` (HIVE-408). The
@@ -212,7 +212,7 @@ prompt, so it arrives at the hook receiver on `UserPromptSubmit` like every
 prompt does; the receiver recognises it (`parseLedgerMarkers`), resolves each
 token among the entries addressed to that session, and answers `200` with
 `hookSpecificOutput.additionalContext` carrying, per entry and in order,
-what `electron/main/ledger/context.ts` renders: that the line was the app's
+what `core/ledger/context.ts` renders: that the line was the app's
 doing and not the user's words, who posted, the ref, the body verbatim, every
 meta key as one JSON line, the asker's own `intent` on an answer, and what is
 owed back. Claude Code puts that text in the model's context beside the prompt
@@ -238,7 +238,7 @@ is an empty `204`, so it prints nothing, and a marker's context prints whole.
 Two things follow. No party-authored byte reaches a pty from delivery any more:
 the truncation to one line and the control-character stripping that used to
 be `deliver.ts`'s security boundary went with the body, which now travels as
-JSON the model reads. And the hook `timeout` in `electron/main/harness/claude-code/settings.ts`
+JSON the model reads. And the hook `timeout` in `core/harness/claude-code/settings.ts`
 is 3 s with a new reason: the prompt waits behind the hook, and the reply now
 matters, so the number bounds what a stalled main process can add to a prompt
 rather than hiding a dead one (it cannot; a refused connection is drawn at
@@ -322,7 +322,7 @@ delivered.
 
 ### Where an ask stands
 
-`askStates(entries, now)` in `electron/shared/ledger-derive.ts` is the one loop
+`askStates(entries, now)` in `shared/ledger-derive.ts` is the one loop
 that decides it (HIVE-410). `openAsks` and `expiredAsks` are views over it, and
 nothing else re-derives an open ask. `closedAskThreads` and `isClosedLane` keep
 their own loop on purpose: they answer "is this thread id closed" without the
@@ -421,7 +421,7 @@ session resumed later is not nudged for an ask settled while it was away:
 
 ### Wakes
 
-`electron/main/agents/scheduler.ts` is the third consumer of that same
+`core/agents/scheduler.ts` is the third consumer of that same
 `ledger.onChange` — an agent has no terminal to nudge, so an entry addressed to
 one starts a run instead. The decision itself is a pure function in
 `scheduler-rules.ts`, so every state × kind pair is a test rather than a
@@ -1000,7 +1000,7 @@ agent is a known party).
 ### The watchdog (HIVE-411)
 
 Delivery and the lane contracts above act when something happens. The
-watchdog acts when nothing does. [`electron/main/ledger/watchdog.ts`](../electron/main/ledger/watchdog.ts)
+watchdog acts when nothing does. [`core/ledger/watchdog.ts`](../core/ledger/watchdog.ts)
 is a pure function, `watchSteps(entries, now, facts)`, that reads the log and
 returns the steps now due. The scheduler's sixty-second sweep calls it after
 its expiry and moot passes, and applies each step with one `ledger.append`
@@ -1036,7 +1036,7 @@ getting nowhere never trips it.
 
 ### Notifications
 
-`electron/main/ledger/notify.ts` is `deliver.ts`'s counterpart for the
+`core/ledger/notify.ts` is `deliver.ts`'s counterpart for the
 overmind's own copy: one function, `entry => void`, wired to the same
 `ledger.onChange`, deciding what — if anything — becomes an inbox card. The
 notification's id **is** the ask's entry id, which is what makes answering
@@ -1115,7 +1115,7 @@ exists for.
 
 Two questions get asked constantly and answered nowhere on disk: *is this ask
 still open*, and *who holds this task*. Both are computed, not stored, by pure
-functions in `electron/shared/ledger-derive.ts`:
+functions in `shared/ledger-derive.ts`:
 
 - **`openAsks`** — an ask is open until something *closes* it, or until
   `LEDGER_ASK_TTL_MS` (24h) has passed since it was made, whichever comes
@@ -1147,15 +1147,15 @@ functions in `electron/shared/ledger-derive.ts`:
   `Ledger.append` rather than here, because `claims()` reads the log and
   `append` decides what may enter it.
 
-`ledger-derive.ts` lives in `electron/shared/`, not beside `ledger/store.ts`
-in `electron/main/`, for a structural reason rather than a stylistic one:
-`src/**` may not import `electron/main/**` — that's an ESLint-enforced
+`ledger-derive.ts` lives in `shared/`, not beside `ledger/store.ts`
+in `core/`, for a structural reason rather than a stylistic one:
+`src/**` may not import `core/**` or `electron/main/**` — that's an ESLint-enforced
 boundary, not a convention — and the renderer's own selectors
 (`useOpenAskCount`, `useThread` in `src/stores/hive-store.ts`)
 need exactly these same rules to stay in sync with what main computes from the
 authoritative log. Two copies of "what counts as open" would drift the first
 time one of them changed; one function main and the renderer both import
-cannot. It qualifies for `electron/shared/` the same way `guards.ts` does:
+cannot. It qualifies for `shared/` the same way `guards.ts` does:
 pure, dependency-free logic with no runtime imports and nothing Node- or
 DOM-specific in it — see the note on that file below.
 
@@ -1203,7 +1203,7 @@ most 64 characters. The MCP `ledger_read` tool does not expose it.
 
 ## The routes
 
-The hook receiver (`electron/main/hooks/receiver.ts`) — the same loopback
+The hook receiver (`core/hooks/receiver.ts`) — the same loopback
 HTTP socket Claude Code's hooks and the status line already post to — adds two
 ledger paths, and the hook path itself carries one ledger answer:
 
@@ -1247,7 +1247,7 @@ Two callers, one `append`:
   the `x-hive-session` header.
 
 Both land on the same `Ledger.append` / `Ledger.read` in
-`electron/main/ledger/index.ts`, which is deliberate: there is exactly one
+`core/ledger/index.ts`, which is deliberate: there is exactly one
 place a rule about what may be written can be stated, and exactly one place
 it can be broken. **Every** write rule therefore lives on `append` — including
 the ask-openness rule, which `Ledger.answer` also states for the ref-naming
@@ -1302,8 +1302,8 @@ already has.
 ## The MCP host
 
 Every `claude` session HiveTTY launches is handed `--mcp-config` pointing at
-a generated file (`electron/main/harness/claude-code/mcp-config.ts`) naming one server: the built
-output of `electron/mcp-host/`, run as `${execPath} out/main/mcp-host.js`
+a generated file (`core/harness/claude-code/mcp-config.ts`) naming one server: the built
+output of `mcp-host/`, run as `${execPath} out/main/mcp-host.js`
 with `ELECTRON_RUN_AS_NODE=1` so the app's own binary runs it as plain Node
 instead of booting Chromium. `claude` starts one host process per session and
 keeps it for that session's life — it talks JSON-RPC over stdio, the same
@@ -1402,7 +1402,7 @@ may write to the ledger as it.
 **What it deliberately does not return.** `AgentSummary` also carries
 `sessionUuid` — a live conversation id — along with `cost`, `today`,
 `dailyUsd`, the whole run history, `icon` and the agents root. None of it
-crosses. The projection (`electron/main/agents/directory.ts`) is a whitelist
+crosses. The projection (`core/agents/directory.ts`) is a whitelist
 written field by field rather than a spread-and-delete, and it is built **in
 main**, so the host process never holds a `sessionUuid` it could leak. A field
 added to `AgentSummary` later is therefore ignored rather than forwarded —
@@ -1521,7 +1521,7 @@ answer: the sweep covers PRs the user authored, open or merged in the last day,
 on configured projects only.
 
 **The `ship` block** (HIVE-411). Every answer also carries `ship`: what the PR
-is waiting on, computed in main by `shipStatus` (`electron/main/ledger/ship-status.ts`)
+is waiting on, computed in main by `shipStatus` (`core/ledger/ship-status.ts`)
 from the **whole** ledger, not the renderer's tail, and present whether or not the
 sweep lists the PR. `stage` is the shipper's current stop and `since` when that
 visit opened (both `null` when the shipper does not hold it); `rounds` counts the
@@ -1654,7 +1654,7 @@ line enforces, what the scheduler enforces, and the few things still waiting.
 
 ### One table, three requirements
 
-`AGENT_FIELDS` in `electron/shared/agent-contract.ts` lists every legal key with
+`AGENT_FIELDS` in `shared/agent-contract.ts` lists every legal key with
 its kind and its validator. Three requirements that look separate collapse into
 that one artifact:
 
@@ -1665,8 +1665,8 @@ that one artifact:
 - **The form is generated from the same table**, so the two cannot drift.
 
 The reader and the patcher live in the contract rather than under
-`electron/main/agents/` because the Settings form needs both at runtime and
-`src/**` may not import `electron/main/**`. One reader is what stops the pane
+`core/agents/` because the Settings form needs both at runtime and
+`src/**` may not import `core/**` or `electron/main/**`. One reader is what stops the pane
 and main disagreeing about what a file says.
 
 ### The comment rule
@@ -1754,7 +1754,7 @@ rule. The seed never changes it and never shows it as a customisation, so
 shipped updates to `tools:` keep arriving. Before `grants:` existed a card
 wrote into `tools:`, which made that list the person's and held every later
 shipped change back. On the first seed after HIVE-409, `liftGrants`
-(`electron/main/seed/lift-grants.ts`) does a one-time lift for a file with no
+(`core/seed/lift-grants.ts`) does a one-time lift for a file with no
 `grants:` yet: `tools:` becomes the shipped list, and every entry beyond it
 moves to `grants:`, except a scoped `X(…)` that a bare `X` already covers.
 Rules naming the merge always move, since no bare rule allows a merge. What a
@@ -1810,7 +1810,7 @@ does not exist).
 
 An agent whose `mcp:` list is non-empty gets its own `--mcp-config` file,
 written fresh on every wake to `<userData>/hive/agents/<name>.mcp.json`
-(`wake-command.ts`, `agentMcpConfig` in `electron/main/mcp/agent-config.ts`).
+(`wake-command.ts`, `agentMcpConfig` in `core/mcp/agent-config.ts`).
 It carries the hive server (so `ledger_*` tools keep working) plus one entry
 per name in `mcp:`, resolved through `agent-config.ts`'s `SPECS` map — today
 just `slack`, via `slackServerSpec()`.
@@ -1841,7 +1841,7 @@ a perfectly healthy connection every time. It now passes `slackOnlyMcpConfig()`
 (measured, 2.1.252) — so the probe needs no temp file, and it grants
 `ToolSearch` beside `mcp__slack__*` for the same reason every wake does: MCP
 tool schemas are deferred, so a glob without `ToolSearch` grants nothing the
-model can actually call. `tests/electron/main/integrations/slack/probe.test.ts`
+model can actually call. `tests/core/integrations/slack/probe.test.ts`
 pins that argv exactly, because it is the only place a regression in it is
 caught.
 
@@ -2078,7 +2078,7 @@ In the agent's Form tab, the **Runs on** group sits above Limits and edits these
 A project's `autoMerge: true` becomes, at wake time and for the agent named
 `shipper` only, one rule on `HIVE_GRANTS`: `Bash(gh pr merge * --repo
 <owner>/<name>)`, with the slug pinned as the last thing on the line because
-`gh` honours the last `--repo` it sees. `electron/main/agents/auto-merge.ts` composes it from the
+`gh` honours the last `--repo` it sees. `core/agents/auto-merge.ts` composes it from the
 config and from the GitHub integration's per-project resolver
 (`Github.resolveProjects`, the same `gh repo view` and cache the PR sweep
 uses); `ipc/index.ts` folds it into `pendingGrants` beside the one-shot
@@ -2146,7 +2146,7 @@ On Claude Code (the adapter's `headless.ts`; every CLI's is in [harness-architec
 
 A fence needs **two halves**, and neither works alone. `permissions.ask:
 ["*"]`, written into the agent-only settings file (`agentSettings`,
-`electron/main/harness/claude-code/settings.ts`) — never `hookSettings`, which carries no
+`core/harness/claude-code/settings.ts`) — never `hookSettings`, which carries no
 `ask` rule and would run an agent with no fence at all — is the *trigger*: the
 only thing, measured against `claude` 2.1.251, that makes a permission check
 fire under `-p` at all. `--permission-prompt-tool mcp__hive__approve`
@@ -2161,7 +2161,7 @@ named in `ask` routes to the prompt tool even when `allow` or
 `--allowedTools` also names it. This is why a one-shot grant cannot be
 implemented by appending to `--allowedTools` — the blanket `ask: ["*"]` rule
 would still win — and why `mcp__hive__approve` decides against `HIVE_GRANTS`
-itself, via `matches()` in `electron/shared/permission-rules.ts`, rather than
+itself, via `matches()` in `shared/permission-rules.ts`, rather than
 the app trying to widen the command line per wake. A bare `*` is valid in
 `ask` and in `deny`, but is silently skipped, with a warning, in `allow` — so
 `allow` can never be a catch-all, which is part of why `def.tools` rides
@@ -2180,14 +2180,14 @@ tool_use_id }` — there is no `suggestions` field. **The return shape it
 accepts:** `{"behavior":"deny","message":"…"}` or
 `{"behavior":"allow","updatedInput":{…}}`, as JSON **text** in
 `content[0].text` — which is exactly what `decision()` in
-`electron/mcp-host/tools.ts` builds. Also setting `structuredContent` makes
+`mcp-host/tools.ts` builds. Also setting `structuredContent` makes
 the CLI reject the result outright with "The permission prompt tool is
 returning an invalid result", so `decision()` deliberately never sets it. An
 `isError: true` result is treated as a denial — measured, it fails closed —
 which is why `approve` never lets a thrown error surface as an MCP error:
 every path through `approve` itself returns a `decision(...)` instead. The one
 place a permission prompt still answers with `isError: true` is the
-unreachable-environment branch in `electron/mcp-host/host.ts`, which refuses
+unreachable-environment branch in `mcp-host/host.ts`, which refuses
 *every* call — `approve` included — when the host was started outside HiveTTY.
 That is deliberate and safe precisely because `isError` fails closed: a Hive
 that is not running denies rather than allows.
@@ -2302,7 +2302,7 @@ allowlist: a draft has no business on a permission prompt whoever wrote it.
 It is closed at **`Ledger.append`**, not at the tool. `hive_approve` only sees
 the asks it wrote itself, and the attack is an agent that never calls it;
 `append` is the one door both callers pass through. `honestPermissionAsk`
-(`electron/shared/permission-rules.ts`) rebuilds `body` from `meta.tool` and
+(`shared/permission-rules.ts`) rebuilds `body` from `meta.tool` and
 `meta.input`, replaces the ladder with `rungsFor`'s, recomputes `default`, and
 trims the bulk fields out of the input it stores.
 
@@ -2503,7 +2503,7 @@ guaranteed the failure it was meant to prevent.
 
 **`--max-turns` exists, and is merely undocumented.** It is absent from
 `--help`, which is how it was first written up here as an Agent-SDK-only option
-with no CLI counterpart — and why `electron/shared/agent-turns.ts` briefly
+with no CLI counterpart — and why `shared/agent-turns.ts` briefly
 existed to count `assistant` events off the child's stdout and kill the process
 past the limit. Measured at 2.1.251 the flag is real and the binary enforces it:
 a run that hits the cap ends `{"subtype": "error_max_turns"}` and **exits 1**.
@@ -2713,7 +2713,7 @@ switching between them cannot change a byte.
 ### What the app seeds into this folder (HIVE-162)
 
 `resources/agents/<name>/AGENT.md` and `resources/skills/<name>/` ship with the
-app and are copied into `~/.hivetty` at registration by `electron/main/seed/`.
+app and are copied into `~/.hivetty` at registration by `core/seed/`.
 The rule is one line and every branch of `seed.ts` serves it: **the user's
 edits win.** A file is copied when absent and never seeded before, left absent
 when the manifest says it was seeded once (a deletion is an edit), overwritten
@@ -2787,7 +2787,7 @@ Its progress is two posts per task, both in the build ask's thread
 (`thread: <the ask's id>`): `meta: { ticket, stage: "build", task: N, state:
 "started" }` when the task starts, and `meta: { ticket, stage: "build", task:
 N, worktree, checkout }` when its commit lands (HIVE-180). The plan panel reads
-them: `electron/main/plans/builder-progress.ts` links a build ask to any `hive:plan`
+them: `core/plans/builder-progress.ts` links a build ask to any `hive:plan`
 file the session read, and moves the panel to it on the builder's first post
 in the thread (HIVE-359). The link holds whether the session's main agent, a
 subagent or the shell wrote the plan: a subagent's `Write` or `Edit` to a
@@ -2841,7 +2841,7 @@ the shipped skills, so a definition the registry would refuse fails here.
 ### Run contract (HIVE-413)
 
 Every agent's rules for a wake live in one place: the **Run contract** section
-of `AGENT_PREAMBLE` (`electron/main/agents/preamble.ts`), which
+of `AGENT_PREAMBLE` (`core/agents/preamble.ts`), which
 `systemPromptFor` puts in every system prompt exactly once. It replaced the
 preamble's separate paragraphs on accepting, expiry and denied permission, so
 each rule is stated once: Start (which wake this is, 2a-2g), State (one state
@@ -2850,7 +2850,7 @@ and answered "held by <holder>", while `ledger_claim`'s "(already yours)" for
 the caller's own leftover claim means carry on), End in order (answer, release, then the one hand-off
 ask), and Blocked (one ask to `reply-to`; `NOT RUN` for a tool you do not
 hold; a denied call ends the turn; no sleeping except `merge-pr`'s bounded
-`UNKNOWN` re-read). `tests/electron/main/agents/definition.test.ts` renders
+`UNKNOWN` re-read). `tests/core/agents/definition.test.ts` renders
 every shipped agent's prompt and finds the section once; the shipped
 definitions point at its rule numbers rather than restating them.
 
@@ -2860,7 +2860,7 @@ but the last; the shipper's row records it as `closesTicket` (absent reads
 `closes-ticket: no` stops at In Review, and `merge-pr` reports `split: not the
 last PR`. The shipper claims `<owner>/<repo>#<N>` before it accepts the intake,
 and it resolves a merge conflict itself (`merge-pr` Step 2.6, with `Edit`).
-`tests/electron/main/skills/shipped-text.test.ts` pins where the shipped
+`tests/core/skills/shipped-text.test.ts` pins where the shipped
 skills and definitions must agree.
 
 An answer, accept or done on a closed thread is refused with what to do next:
@@ -2872,7 +2872,7 @@ at <HH:MM>: …`; a thread naming no ask keeps the bare `thread is not open:
 ### Skill fragments and includes (HIVE-413)
 
 A rule that more than one skill or agent definition states is written once, in
-`FRAGMENTS` (`electron/shared/skill-fragments.ts`), and pulled in with a line
+`FRAGMENTS` (`shared/skill-fragments.ts`), and pulled in with a line
 reading `{{include:<name>}}` on its own. Three ship: `ship-intake` (the
 `ledger_ask to: shipper` block and its `reply-to` rule; `ship` and the
 builder), `agent-worktree` (the detached worktree an agent works a PR branch
@@ -2886,7 +2886,7 @@ workspace and ticket key written out as literals in every command; `ship`,
   prompt gets them too. The preamble's run contract is a plain constant, not
   a fragment.
 - **One level.** A fragment holds no placeholder of any kind (no `{{`, pinned by
-  `tests/electron/shared/skill-fragments.test.ts`), so the one text serves a
+  `tests/shared/skill-fragments.test.ts`), so the one text serves a
   skill and an agent prompt alike and an include can never nest.
 - **Unknown names.** `{{include:nope}}` is left as written, and the Settings
   portability check (`portabilityIssues`) reports it: "No fragment is called
@@ -2894,7 +2894,7 @@ workspace and ticket key written out as literals in every command; `ship`,
 - **Changing one.** A fragment edit changes every skill and agent prompt that
   includes it; for the agents (today the builder and the fixer) the prompt hash
   rotates their lanes, as any body edit does.
-  `tests/electron/main/skills/shipped-text.test.ts` pins which shipped files
+  `tests/core/skills/shipped-text.test.ts` pins which shipped files
   include which fragment and that none restates it.
 
 ### Why this folder pushes where skills pull

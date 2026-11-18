@@ -1,4 +1,4 @@
-import { TITLEBAR_HEIGHT } from '../../../electron/shared/window';
+import { TITLEBAR_HEIGHT } from '../../../shared/window';
 import { goToOvermind, overmindNewSession } from '../fixtures/places';
 
 import { expect, test } from './fixtures/hive-app';

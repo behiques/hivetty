@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RemoteCallError, type CloseCause } from '../../../../electron/remote-client/socket';
-import { CH, type AppInfo } from '../../../../electron/shared/ipc-contract';
+import { CH, type AppInfo } from '../../../../shared/ipc-contract';
 import {
   FRAME_KIND,
   PAYLOAD_SCOPED,
@@ -10,7 +10,7 @@ import {
   WINDOW_BOUND,
   isLocalOnlyEvent,
   payloadScopeFor,
-} from '../../../../electron/shared/remote-contract';
+} from '../../../../shared/remote-contract';
 
 /**
  * `../updates` (`electron/main/updates/index.ts`) is mocked here for the
@@ -37,7 +37,7 @@ const readLocalRemote = vi.fn(() => ({
   host: 'mini.tail1234.ts.net',
   port: 7433,
 }));
-vi.mock('../../../../electron/main/ipc/get-remote', () => ({ readLocalRemote }));
+vi.mock('../../../../core/ipc/get-remote', () => ({ readLocalRemote }));
 
 /**
  * `../notifications/activate-here` is mocked for `../updates`' reason exactly
@@ -141,7 +141,7 @@ vi.mock('electron', () => ({
 const { countsAsAction, lostToTheLink, registerRemoteProxy, remoteProxyBindingsSize, resetRemoteProxy } = await import(
   '../../../../electron/main/ipc/remote-proxy'
 );
-const { createResumeTracker } = await import('../../../../electron/main/ipc/resume-tracker');
+const { createResumeTracker } = await import('../../../../core/ipc/resume-tracker');
 
 /** Matches `foreground.test.ts`'s trusted-sender fixture: identity, not shape. */
 const mainFrame = { url: 'file:///out/renderer/index.html' };

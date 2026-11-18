@@ -44,9 +44,9 @@ const { registerLifecycle, resetQuitting } = await import(
   '../../../electron/main/lifecycle'
 );
 const { onShutdown, resetShutdownHooks } = await import(
-  '../../../electron/main/shutdown'
+  '../../../core/shutdown'
 );
-const { installSuspender } = await import('../../../electron/main/licence/suspend');
+const { installSuspender } = await import('../../../core/licence/suspend');
 
 /** Fire every handler registered for an event. */
 const fire = async (event: string, ...args: unknown[]) => {

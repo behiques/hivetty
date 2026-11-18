@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
  *
  * A reconnect is a **new surface** on the machine that answers it: surface ids
  * are minted from a `WeakMap` keyed on the socket object
- * (`electron/main/ipc/surfaces.ts`), and HIVE-145 wired every piece of
+ * (`core/ipc/surfaces.ts`), and HIVE-145 wired every piece of
  * per-surface state to be released when that socket goes away. The renderer
  * never unmounts, so nothing on this side would ever ask again.
  *

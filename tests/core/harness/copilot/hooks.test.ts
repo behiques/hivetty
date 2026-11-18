@@ -1,0 +1,326 @@
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { claudeCodeAdapter } from '../../../../core/harness/claude-code';
+import { readCopilotHook } from '../../../../core/harness/copilot/hooks';
+import { launchCopilotSession } from '../../../../core/harness/copilot/launch';
+import type { HookInput, HookReading } from '../../../../core/harness/port';
+import { createStatusTracker } from '../../../../core/hooks/tracker';
+
+const HOOKS = join(__dirname, '../../../fixtures/copilot/hooks-1.0.104');
+const fixture = (name: string): unknown => JSON.parse(readFileSync(join(HOOKS, name), 'utf8'));
+/** The body the hook command POSTs: `{"event":…,"payload":…}` (`hook-commands.ts`). */
+const wrapped = (payload: unknown, event = 'agentStop'): string => JSON.stringify({ event, payload });
+const agent = (body: string, truncated = false): HookInput => ({ lane: 'agent', entityId: 'cop-agent', body, truncated });
+const claudeStop = (sessionId: string) =>
+  claudeCodeAdapter.readHook(
+    agent(JSON.stringify({ hook_event_name: 'Stop', session_id: sessionId })),
+  );
+
+describe('readCopilotHook', () => {
+  it("reads agentStop as Claude's Stop on its own session", () => {
+    const reading = readCopilotHook(agent(wrapped(fixture('agent-stop.json'))));
+
+    expect(reading).toEqual(claudeStop('11111111-2222-4333-8444-555555555551'));
+    expect(reading.effects).toHaveLength(1);
+  });
+
+  it("never reads a subagent's stop: it must not arm the parent's watchdog", () => {
+    expect(readCopilotHook(agent(wrapped(fixture('agent-stop-subagent.json'))))).toEqual({ effects: [] });
+  });
+
+  it('reads the parent stop that follows a subagent for its own session', () => {
+    expect(readCopilotHook(agent(wrapped(fixture('agent-stop-after-subagent.json'))))).toEqual(
+      claudeStop('11111111-2222-4333-8444-555555555553'),
+    );
+  });
+
+  it.each([
+    ['an unknown event', wrapped(fixture('agent-stop.json'), 'preToolUse')],
+    ['no event', JSON.stringify({ payload: fixture('agent-stop.json') })],
+    ['no payload', JSON.stringify({ event: 'agentStop' })],
+    ['a null envelope', 'null'],
+  ])('publishes nothing for %s', (_label, body) => {
+    expect(readCopilotHook(agent(body))).toEqual({ effects: [] });
+  });
+
+  it('calls unparseable JSON malformed', () => {
+    expect(readCopilotHook(agent('{"event":'))).toEqual({ malformed: true, effects: [] });
+  });
+
+  it('calls a truncated body malformed', () => {
+    expect(readCopilotHook(agent(wrapped(fixture('agent-stop.json')), true))).toEqual({
+      malformed: true,
+      effects: [],
+    });
+  });
+});
+
+const LIVE = join(__dirname, '../../../fixtures/copilot/interactive-1.0.105');
+const tui = (name: string): Record<string, unknown> =>
+  JSON.parse(readFileSync(join(LIVE, name), 'utf8')) as Record<string, unknown>;
+const session = (body: string): HookInput => ({ lane: 'session', entityId: 'cop-sess', body, truncated: false });
+const claude = (body: Record<string, unknown>) => claudeCodeAdapter.readHook(session(JSON.stringify(body)));
+/** A request whose prompt Copilot then drew: the prompt's reading, which is the one that raises the card (P12). */
+const prompted = (request: Record<string, unknown>, entityId = 'cop-sess'): HookReading => {
+  readCopilotHook({ ...session(wrapped(request, 'permissionRequest')), entityId });
+  return readCopilotHook({ ...session(wrapped(tui('notification-permission_prompt.json'), 'notification')), entityId });
+};
+
+/** Feeds each reading's status effects to a real tracker, and answers its last derived status. */
+const track = (...readings: HookReading[]) => {
+  const tracker = createStatusTracker();
+  let last: ReturnType<typeof tracker.apply> | undefined;
+  for (const reading of readings) {
+    for (const effect of reading.effects) if (effect.kind === 'status') last = tracker.apply(effect.event);
+  }
+  return { last, held: tracker.held('cop-sess') };
+};
+
+describe('readCopilotHook, session lane (HIVE-280)', () => {
+  it.each([
+    ['sessionStart', 'session-start.json', 'SessionStart'],
+    ['userPromptSubmitted', 'user-prompt-submitted.json', 'UserPromptSubmit'],
+    ['agentStop', 'agent-stop.json', 'Stop'],
+  ])('reads %s (%s) as Claude %s', (event, file, name) => {
+    const payload = tui(file);
+    expect(readCopilotHook(session(wrapped(payload, event)))).toEqual(
+      claude({
+        hook_event_name: name,
+        session_id: payload['sessionId'],
+        cwd: payload['cwd'],
+        ...(payload['prompt'] === undefined ? {} : { prompt: payload['prompt'] }),
+        ...(payload['source'] === undefined ? {} : { source: payload['source'] }),
+      }),
+    );
+  });
+
+  it('raises nothing from permissionRequest alone: a call the user approved fires it with no prompt (FINDINGS P12)', () => {
+    expect(readCopilotHook(session(wrapped(tui('permission-request-bash.json'), 'permissionRequest')))).toEqual({
+      effects: [],
+    });
+  });
+
+  it("raises the request's permission block once Copilot draws its prompt, with no tool_use_id so the tracker clears it by name", () => {
+    const payload = tui('permission-request-bash.json');
+    const reading = prompted(payload);
+    expect(reading).toEqual(
+      claude({
+        hook_event_name: 'PermissionRequest',
+        session_id: payload['sessionId'],
+        cwd: payload['cwd'],
+        tool_name: 'bash',
+        tool_input: payload['toolInput'],
+      }),
+    );
+    expect(reading.effects.some((effect) => effect.kind === 'status')).toBe(true);
+  });
+
+  it('clears it from postToolUse with the same tool name', () => {
+    const payload = tui('post-tool-use-bash.json');
+    expect(readCopilotHook(session(wrapped(payload, 'postToolUse')))).toEqual(
+      claude({
+        hook_event_name: 'PostToolUse',
+        session_id: payload['sessionId'],
+        cwd: payload['cwd'],
+        tool_name: 'bash',
+        tool_input: payload['toolArgs'],
+      }),
+    );
+    const request = prompted(tui('permission-request-bash.json'));
+    expect(track(request).held.blocked).toBe(1);
+    expect(track(request, readCopilotHook(session(wrapped(payload, 'postToolUse')))).held.blocked).toBe(0);
+  });
+
+  it.each([
+    ['create', 'permission-request-create.json', 'post-tool-use-create.json'],
+    ['apply_patch', 'permission-request-edit.json', 'post-tool-use-apply-patch.json'],
+  ])("spells a %s write as the permission kind 'edit', so the write clears its own card", (_tool, request, done) => {
+    const asked = prompted(tui(request));
+    const wrote = readCopilotHook(session(wrapped(tui(done), 'postToolUse')));
+    const names = [asked, wrote].map(
+      (reading) => reading.effects.find((effect) => effect.kind === 'status')?.event.toolName,
+    );
+    expect(names).toEqual(['edit', 'edit']);
+    expect(track(asked, wrote).held.blocked).toBe(0);
+  });
+
+  it("does not clear an edit block from a bash call's postToolUse", () => {
+    const asked = prompted(tui('permission-request-edit.json'));
+    const ran = readCopilotHook(session(wrapped(tui('post-tool-use-bash.json'), 'postToolUse')));
+    expect(track(asked, ran).held.blocked).toBe(1);
+  });
+
+  it("ignores a subagent's agentStop in a session too", () => {
+    expect(readCopilotHook(session(wrapped(fixture('agent-stop-subagent.json'))))).toEqual({ effects: [] });
+  });
+
+  it('reads an unknown event as nothing, and a broken body as malformed', () => {
+    expect(readCopilotHook(session(wrapped(tui('agent-stop.json'), 'preCompact')))).toEqual({ effects: [] });
+    expect(readCopilotHook(session(JSON.stringify({ event: 'agentStop', payload: 'x' })))).toEqual({ effects: [] });
+    expect(readCopilotHook(session('{nope'))).toEqual({ malformed: true, effects: [] });
+    expect(readCopilotHook({ ...session('{}'), truncated: true })).toEqual({ malformed: true, effects: [] });
+  });
+
+  it("raises a question block from an ask_user dialog, read as Claude's AskUserQuestion (FINDINGS P2)", () => {
+    const payload = tui('notification-elicitation_dialog.json');
+    const reading = readCopilotHook(session(wrapped(payload, 'notification')));
+    expect(reading).toEqual(
+      claude({
+        hook_event_name: 'PermissionRequest',
+        session_id: payload['sessionId'],
+        cwd: payload['cwd'],
+        tool_name: 'AskUserQuestion',
+      }),
+    );
+    expect(reading.effects.find((effect) => effect.kind === 'status')?.event.signal).toEqual({
+      kind: 'waiting',
+      reason: 'question',
+    });
+  });
+
+  it("clears the question from ask_user's postToolUse once answered", () => {
+    const asked = readCopilotHook(session(wrapped(tui('notification-elicitation_dialog.json'), 'notification')));
+    const answered = readCopilotHook(session(wrapped(tui('post-tool-use-ask-user.json'), 'postToolUse')));
+    expect(track(asked).held.blocked).toBe(1);
+    expect(track(asked, answered).held.blocked).toBe(0);
+  });
+
+  it('reads a permission_prompt with no request before it as nothing: it names no tool', () => {
+    const prompt = session(wrapped(tui('notification-permission_prompt.json'), 'notification'));
+    expect(readCopilotHook(prompt)).toEqual({ effects: [] });
+    // One prompt per request: a second is not read off the first's request again.
+    prompted(tui('permission-request-bash.json'));
+    expect(readCopilotHook(prompt)).toEqual({ effects: [] });
+  });
+
+  it.each([
+    ['postToolUse', 'post-tool-use-bash.json'],
+    ['agentStop', 'agent-stop.json'],
+  ])('forgets a request its %s followed with no prompt: an approved call leaves nothing to raise later', (event, file) => {
+    readCopilotHook(session(wrapped(tui('permission-request-bash.json'), 'permissionRequest')));
+    readCopilotHook(session(wrapped(tui(file), event)));
+    expect(
+      readCopilotHook(session(wrapped(tui('notification-permission_prompt.json'), 'notification'))),
+    ).toEqual({ effects: [] });
+  });
+
+  it("pairs a prompt only with its own session's request", () => {
+    readCopilotHook({ ...session(wrapped(tui('permission-request-bash.json'), 'permissionRequest')), entityId: 'other' });
+    expect(
+      readCopilotHook(session(wrapped(tui('notification-permission_prompt.json'), 'notification'))),
+    ).toEqual({ effects: [] });
+    expect(track(prompted(tui('permission-request-bash.json'), 'other')).last).toBeDefined();
+  });
+
+  it('reads no notification on the agent lane', () => {
+    expect(readCopilotHook(agent(wrapped(tui('notification-elicitation_dialog.json'), 'notification')))).toEqual({
+      effects: [],
+    });
+  });
+
+  it('reads nothing on any other lane', () => {
+    expect(readCopilotHook({ ...session(wrapped(tui('agent-stop.json'))), lane: 'fence' as never })).toEqual({
+      effects: [],
+    });
+  });
+
+  it("raises no block for any tool the launch's --allow-tool approves: Copilot draws no prompt for it (FINDINGS P11, P12)", () => {
+    const { command } = launchCopilotSession({
+      command: 'copilot',
+      sessionUuid: '11111111-2222-4333-8444-555555555551',
+      stateDir: '/s',
+      hiveServer: { command: '/app/electron', args: ['/app/mcp-host.js'], env: {} },
+    });
+    const allowed = [...command.matchAll(/--allow-tool '([^']+)'/g)].map((match) => match[1]!);
+    expect(allowed).not.toEqual([]);
+    for (const allowTool of allowed) {
+      // Copilot's permissionRequest spells `server(tool)` as `server/tool` (FINDINGS P11).
+      const toolName = allowTool.replace(/^([^(]+)\((.+)\)$/, '$1/$2');
+      const asked = { ...tui('permission-request-hive-session-done.json'), toolName };
+      const ran = { ...tui('post-tool-use-bash.json'), toolName: toolName.replace('/', '-') };
+      const readings = [wrapped(asked, 'permissionRequest'), wrapped(ran, 'postToolUse')].map((body) =>
+        readCopilotHook(session(body)),
+      );
+      expect(track(...readings).held.blocked, allowTool).toBe(0);
+    }
+  });
+
+  it('still raises a block for any other hive tool', () => {
+    const other = { ...tui('permission-request-hive-session-done.json'), toolName: 'hive/ledger_post' };
+    expect(track(prompted(other)).held.blocked).toBe(1);
+  });
+});
+
+describe('readCopilotHook, the sql todo list (HIVE-361)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  /** The recorded UPDATE, with the session.db it left behind under a scratch `COPILOT_HOME`. */
+  const recorded = (db = true): Record<string, unknown> => {
+    const payload = tui('post-tool-use-sql-update.json');
+    const home = mkdtempSync(join(tmpdir(), 'cop-hooks-'));
+    const dir = join(home, 'session-state', String(payload['sessionId']));
+    mkdirSync(dir, { recursive: true });
+    if (db) copyFileSync(join(LIVE, 'session-todos.db'), join(dir, 'session.db'));
+    vi.stubEnv('COPILOT_HOME', home);
+    return payload;
+  };
+  const plans = (reading: HookReading) => reading.effects.filter((effect) => effect.kind === 'plan');
+
+  it("adds the whole table as the plan, in order, to the sql call's own reading", () => {
+    const payload = recorded();
+    const reading = readCopilotHook(session(wrapped(payload, 'postToolUse')));
+    const base = claude({
+      hook_event_name: 'PostToolUse',
+      session_id: payload['sessionId'],
+      cwd: payload['cwd'],
+      tool_name: 'sql',
+      tool_input: payload['toolArgs'],
+    });
+
+    expect(reading.effects.slice(0, base.effects.length)).toEqual(base.effects);
+    expect(plans(reading)).toEqual([
+      {
+        kind: 'plan',
+        update: {
+          entityId: 'cop-sess',
+          cwd: '/tmp/copilot-fixture/work',
+          op: {
+            kind: 'tasks-replaced',
+            tasks: [
+              { id: '1', title: 'Alpha', status: 'completed' },
+              { id: '2', title: 'Beta', status: 'pending' },
+              { id: '3', title: 'Gamma', status: 'pending' },
+            ],
+          },
+        },
+      },
+    ]);
+  });
+
+  it.each([
+    ["a subagent's call: its rows reach the plan on the parent's next one", { agentId: '00000000-0000-4000-8000-000000000002' }],
+    ['a query that never names todos', { toolArgs: { query: 'SELECT 1;' } }],
+    ['any other tool', { toolName: 'bash' }],
+  ])('reads no plan from %s', (_case, change) => {
+    const payload = { ...recorded(), ...change };
+    expect(plans(readCopilotHook(session(wrapped(payload, 'postToolUse'))))).toEqual([]);
+  });
+
+  it('reads no plan, and keeps the rest of the reading, when the session has no database', () => {
+    const payload = recorded(false);
+    const reading = readCopilotHook(session(wrapped(payload, 'postToolUse')));
+    expect(plans(reading)).toEqual([]);
+    expect(reading.effects.length).toBeGreaterThan(0);
+  });
+
+  it('reads no plan on the agent lane: its tool calls go through /fence', () => {
+    const payload = recorded();
+    expect(readCopilotHook(agent(wrapped(payload, 'postToolUse')))).toEqual({ effects: [] });
+  });
+});

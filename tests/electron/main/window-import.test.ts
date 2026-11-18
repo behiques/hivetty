@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  *
  * It was written when `window.ts` imported `notifyForegroundChange` from
  * `./ipc` to wire the main window's own `focus`/`blur`, which made importing
- * `window.ts` also evaluate the whole of `electron/main/ipc/index.ts`. **That
+ * `window.ts` also evaluate the whole of `core/ipc/index.ts`. **That
  * edge is gone**: the focus wiring moved to `app.on('browser-window-blur' |
  * 'browser-window-focus')` inside `registerIpcHandlers`, because watching one
  * window while the predicate counts every window lost a real notification
@@ -80,7 +80,7 @@ vi.mock('electron', () => ({
   Only `electron` is mocked. The three leaves this file used to stub as well —
   `pty-host`, `shutdown` and `config/index` — were needed to load
   `ipc/index.ts`, which `window.ts` no longer pulls in (see the note above).
-  Nothing under `electron/main/` or `electron/shared/` is replaced here, which
+  Nothing under `electron/main/` or `shared/` is replaced here, which
   is what makes the assertion below a statement about the real graph.
 */
 

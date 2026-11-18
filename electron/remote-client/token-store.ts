@@ -4,7 +4,7 @@ import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
  * The device credential this machine was handed when it attached to someone
  * else's Hive (HIVE-144).
  *
- * `electron/main/server/devices.ts:17-19` already states where the plaintext
+ * `core/server/devices.ts:17-19` already states where the plaintext
  * of a paired device's token is allowed to exist: stdout at mint time, on the
  * server that minted it, and "the client's own `safeStorage` in a later
  * story." This module is that later story, for the opposite side of the same

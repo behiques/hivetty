@@ -19,10 +19,10 @@ Phase 2, headless runs through the adapter, is Epic HIVE-336 and is done: see
 
 | Piece | Path | What it is |
 | --- | --- | --- |
-| The contract | `electron/shared/harness-contract.ts` | `HarnessId` (`'claude-code'` only, for now) and `Capabilities`. Types only. |
-| The port | `electron/main/harness/port.ts` | `HarnessAdapter`: `id`, `capabilities`, and the methods stories add. |
-| The registry | `electron/main/harness/registry.ts` | `createHarnessRegistry({ sessionHarness })` → `{ adapterFor, harnessOf }`, and `sessionAdapter()` for the shared runtimes. |
-| Adapter #1 | `electron/main/harness/claude-code/` | `claudeCodeAdapter`. |
+| The contract | `shared/harness-contract.ts` | `HarnessId` (`'claude-code'` only, for now) and `Capabilities`. Types only. |
+| The port | `core/harness/port.ts` | `HarnessAdapter`: `id`, `capabilities`, and the methods stories add. |
+| The registry | `core/harness/registry.ts` | `createHarnessRegistry({ sessionHarness })` → `{ adapterFor, harnessOf }`, and `sessionAdapter()` for the shared runtimes. |
+| Adapter #1 | `core/harness/claude-code/` | `claudeCodeAdapter`. |
 
 ### The port grows by story
 
@@ -80,7 +80,7 @@ permission hook fires and no card reaches the inbox. Copilot still unsets `COPIL
 Headless agent runs never read it: their fence is HIVE-119's.
 
 `shellQuote`, the `{env}` expansion (`container-command.ts`) and the host↔container path
-map live in `electron/main/container/`, not `sessions/`: the adapter needs them, fence 2
+map live in `core/container/`, not `sessions/`: the adapter needs them, fence 2
 forbids it `sessions/**`, and the headless agent waker uses them too.
 
 ### prepare
@@ -125,7 +125,7 @@ for a plain terminal or a command (story 102). Only the sessions closure knows w
 entity is: ids are minted by the renderer, so a prefix proves nothing. The fence below stops
 `harness/**` from importing `sessions/**`, so the core passes the fact in as
 `sessionHarness`. HIVE-234 made that the single source for the distinction, replacing
-`terminalEntities` in `electron/main/sessions/index.ts`.
+`terminalEntities` in `core/sessions/index.ts`.
 
 `sessions/index.ts` answers `sessionHarness` from a positive `agentSessions` map, entity to
 CLI: `spawn` adds the entity before its process starts, and `settleExit` removes it. A failed spawn
@@ -137,7 +137,7 @@ session versus plain terminal.
 `adapterFor(id)` indexes a `Record<HarnessId, HarnessAdapter>`, so a `HarnessId` with no
 adapter is a compile error, not a runtime miss.
 
-Outside `electron/main/harness/**` and the contract's `HarnessId` type, nothing names
+Outside `core/harness/**` and the contract's `HarnessId` type, nothing names
 `claude-code`.
 
 `harness/detect.ts` (HIVE-375) finds each CLI with `probeCommand` after the login-shell import, runs it with
@@ -149,7 +149,7 @@ shell can resolve it, so the CLI stays available rather than being refused for a
 
 ## The hook body (HIVE-236)
 
-The receiver (`electron/main/hooks/receiver.ts`) owns the socket: authentication, the body
+The receiver (`core/hooks/receiver.ts`) owns the socket: authentication, the body
 cap, the routes, and which lane a hook is on. A hook from an entity session is on the
 `session` lane; one from an agent's headless run is on the `agent` lane, decided before a
 byte of the body is read.
@@ -200,7 +200,7 @@ Meters have two sources, and an adapter has one of them:
 
 ## Context delivery (HIVE-240)
 
-- ***When* is shared:** `electron/main/ledger/deliver.ts` decides it: idle, the empty-prompt
+- ***When* is shared:** `core/ledger/deliver.ts` decides it: idle, the empty-prompt
   read, the HIVE-135 draft hold, and receipts written only for a write that landed.
 - ***What* is the adapter's:** `promptMarker(entries)`. Claude's is `📒 <ref> <id> …\r`, one line
   naming the backlog in order (HIVE-408), in `claude-code/prompt-marker.ts`.
@@ -398,7 +398,7 @@ The agents grep (HIVE-344):
 ```bash
 rg -n --type ts -e "'claude'" -e "'-p'" -e "--permission-prompt-tool" -e "'--resume'" -e "'--session-id'" \
    -e "stream-json" -e "CLAUDE_CODE_" -e "mcp__hive__" -e "total_cost_usd" -e "error_max_turns" \
-   -e "'(Bash|Read|Edit|Write|ToolSearch|TaskCreate)['(]" electron/main/agents/ \
+   -e "'(Bash|Read|Edit|Write|ToolSearch|TaskCreate)['(]" core/agents/ \
    | rg -v "^\S+:\d+:\s*(\*|//)" || true
 ```
 
@@ -408,7 +408,7 @@ Phase 1's core grep:
 rg -n --type ts -e "'(PreToolUse|PostToolUse|Stop|SubagentStop|SessionStart|SessionEnd|UserPromptSubmit|Notification|PreCompact|PermissionRequest)'" \
    -e "'(Bash|Read|Edit|Write|MultiEdit|Glob|Grep|Task|TaskCreate|TaskUpdate|TodoWrite|AskUserQuestion|ExitPlanMode|ToolSearch|WebFetch)'" \
    -e "\.claude/" -e "\.claude-plugin" -e "CLAUDE_CODE_" -e "'claude'" -e "mcp__hive__" \
-   electron/main/sessions electron/main/hooks electron/main/plans electron/main/notifications \
+   core/sessions core/hooks core/plans core/notifications electron/main/notifications \
    | rg -v "^\S+:\d+:\s*(\*|//)" || true
 ```
 
@@ -423,7 +423,7 @@ rg -n --type ts -e "'(PreToolUse|PostToolUse|Stop|SubagentStop|SessionStart|Sess
 
 ## Codex (headless, HIVE-342; sessions, HIVE-279)
 
-Adapter #2 lives in `electron/main/harness/codex/`: headless runs (below) and, since HIVE-279,
+Adapter #2 lives in `core/harness/codex/`: headless runs (below) and, since HIVE-279,
 interactive sessions (**Sessions**, after them). `installed` answers `[]`/`{}`, and
 `sessionAdapter()` stays Claude, so the shared runtimes still write Claude's files. Measured against `codex-cli 0.164.0`; the recorded
 output and hook payloads are in `tests/fixtures/codex/`.
@@ -654,7 +654,7 @@ Interactive: HIVE-279 (sessions); skills and markers HIVE-360; the opt-in plugin
 
 ## Copilot (headless, HIVE-343; sessions, HIVE-280)
 
-Adapter #3 lives in `electron/main/harness/copilot/`: headless runs (below) and, since HIVE-280,
+Adapter #3 lives in `core/harness/copilot/`: headless runs (below) and, since HIVE-280,
 interactive sessions (**Sessions**, after them), shaped as Codex's are.
 Measured against `GitHub Copilot CLI 1.0.104-4`; the recorded hook bodies, a usage file and a
 refused token's stderr are in `tests/fixtures/copilot/`; the `preToolUse` bodies for every tool
@@ -924,12 +924,12 @@ from the start: the totals are the session's, and the old conversation's context
 Both are `import/no-restricted-paths` zones in `eslint.config.mjs`, and
 `pnpm verify:boundaries` plants a violation for each.
 
-1. **The driven side stays sealed.** Nothing outside `electron/main/harness/**` may import
-   `electron/main/harness/claude-code/**`, `electron/main/harness/codex/**` or
-   `electron/main/harness/copilot/**`. Everyone else goes
+1. **The driven side stays sealed.** Nothing outside `core/harness/**` may import
+   `core/harness/claude-code/**`, `core/harness/codex/**` or
+   `core/harness/copilot/**`. Everyone else goes
    through the registry.
-2. **Adapters don't reach the core.** `electron/main/harness/**` may not import
-   `electron/main/{sessions,ipc,notifications,plans}/**`. The core passes what an adapter
+2. **Adapters don't reach the core.** `core/harness/**` may not import
+   `core/{sessions,ipc,notifications,plans}/**` or `electron/main/{ipc,notifications}/**`. The core passes what an adapter
    needs in as arguments.
 
 ## Skills per CLI (HIVE-369)
@@ -937,7 +937,7 @@ Both are `import/no-restricted-paths` zones in `eslint.config.mjs`, and
 HiveTTY's skills are written once, in `~/.hivetty/skills`, and rendered into one folder per CLI
 under `<userData>/hive`. Every skill reaches every CLI; only its wording changes.
 
-**The vocabulary** lives in `CAPABILITIES[cli].skills` (`electron/shared/harness-contract.ts`), so
+**The vocabulary** lives in `CAPABILITIES[cli].skills` (`shared/harness-contract.ts`), so
 the renderer reads it too:
 
 | | claude-code | codex | copilot |
@@ -952,17 +952,17 @@ folder, so `renderSkills` writes its `root` where `{{plugin_root}}` stood (a hos
 `catalog.md`'s). Nothing maps them for a container: Codex sessions and runs are refused in one,
 and whoever lifts that refusal maps them (HIVE-360 D5).
 
-**Rendering** is `electron/shared/skill-render.ts`, pure, so main and the renderer share it.
+**Rendering** is `shared/skill-render.ts`, pure, so main and the renderer share it.
 `renderSkillText(text, cli)` fills the three placeholders (`<name>` is `[a-z0-9_-]+`; any other
 text in braces is left alone), after first expanding each `{{include:<name>}}` line from
-`FRAGMENTS` (`electron/shared/skill-fragments.ts`, HIVE-413; see agents-and-ledger.md, "Skill
+`FRAGMENTS` (`shared/skill-fragments.ts`, HIVE-413; see agents-and-ledger.md, "Skill
 fragments and includes"), and drops the frontmatter keys `dropKeysFor(cli)` names: none for
 Claude Code, `hooks` and `allowed-tools` for Codex and Copilot, each with its indented block,
 blank lines included. A skill with no placeholder and none of those keys renders byte for byte as
 written. The shipped skills in `resources/skills` use placeholders; Claude's rendering of them
 equals what they said before this story, byte for byte.
 
-**The folders.** `electron/main/skills/render.ts`'s `renderSkills(root, cli, read, { version,
+**The folders.** `core/skills/render.ts`'s `renderSkills(root, cli, read, { version,
 doneUrl })` mirrors every valid skill into `<root>/skills/`, rendering each `.md` file through
 `renderSkillText` and copying the rest with `copyIfChanged`. It keeps the mirror's old rules: diff
 rather than wipe, stale-kind repair, no write through a symlink. Each adapter's `skills` part
@@ -985,7 +985,7 @@ markdown file as it is typed. It flags `mcp__hive__x`, `hive-x` (a hive tool), `
 `/hive:x` (a known skill), `$CLAUDE_PLUGIN_ROOT`, a placeholder that names no tool or skill,
 and an include that names no fragment.
 **Fix all** applies `makePortable`, which rewrites the buffer, unsaved. Save is never blocked: a
-skill may be meant for one CLI. `known.tools` is `HIVE_TOOL_NAMES` (`electron/shared/ledger-tools.ts`),
+skill may be meant for one CLI. `known.tools` is `HIVE_TOOL_NAMES` (`shared/ledger-tools.ts`),
 the same `HIVE_TOOLS` list the MCP host serves.
 
 **Next.** HIVE-360 hands Codex `catalog.md` as `developer_instructions` (no container mapping:
@@ -999,8 +999,8 @@ HIVE-371 words subagent dispatch per CLI.
 
 The checklist, member by member, with the live suite that proves each:
 
-- [ ] A `HarnessId` member in `electron/shared/harness-contract.ts`.
-- [ ] An adapter in `electron/main/harness/<id>/`, registered in `registry.ts` (`adapters` is a
+- [ ] A `HarnessId` member in `shared/harness-contract.ts`.
+- [ ] An adapter in `core/harness/<id>/`, registered in `registry.ts` (`adapters` is a
   `Record<HarnessId, …>`, so a missing one fails to compile).
 - [ ] `launch` (`test:pty` for the spawn, `test:ready` for boot).
 - [ ] `headless.launch` and `headless.containerCommand` (`test:agent:<id>`).
@@ -1008,9 +1008,9 @@ The checklist, member by member, with the live suite that proves each:
 - [ ] `headless.fence`, with `grants` for any built-in its runs need (the live fence case: an ungranted shell call, file write and MCP call each ask).
 - [ ] A `test:agent:<id>` script with a pinned CLI version, skipped when the CLI is absent or signed out.
 - [ ] The entitlement key: what `HarnessGate.entitled` answers for it (pending HIVE-332; every CLI is entitled today).
-- [ ] A row in `CLI_VOCAB` (`electron/shared/cli-contract.ts`).
-- [ ] The `clis.<id>.agents` fields in `electron/main/config/parse.ts`, `parseSetCliAgentsRequest` and `setCliAgents`, and the fields in `src/features/settings/components/harness-agents-group.tsx`.
-- [ ] What `createCliGate` (`electron/main/agents/cli-gate.ts`) answers for the new CLI.
+- [ ] A row in `CLI_VOCAB` (`shared/cli-contract.ts`).
+- [ ] The `clis.<id>.agents` fields in `core/config/parse.ts`, `parseSetCliAgentsRequest` and `setCliAgents`, and the fields in `src/features/settings/components/harness-agents-group.tsx`.
+- [ ] What `createCliGate` (`core/agents/cli-gate.ts`) answers for the new CLI.
 - [ ] `installed.skillPlaces`, '' when it reads no skills of its own.
 - [ ] `prepare` (`test:hooks`, `test:skills`, `test:mcp-http`, `test:container`).
 - [ ] `readHook` (`test:hooks`, `test:plan`, `test:done`).
@@ -1028,11 +1028,11 @@ The wiring, in order:
 
 **Its Settings page (HIVE-376).** A new CLI gets a pane id in `SettingsSection` (`src/types/settings.ts`), a
 `GROUPS` row under Harnesses and a `PANES` entry rendering `HarnessPage` (`settings-overlay.tsx`), an `ARGS`/`FIX`
-entry in `electron/main/harness/sign-in.ts` for its sign-in line, and a `CAPABILITIES` row, which
+entry in `core/harness/sign-in.ts` for its sign-in line, and a `CAPABILITIES` row, which
 `harness-capabilities.tsx` reads for its "What it supports" table.
 
-1. Add its id to `HarnessId` in `electron/shared/harness-contract.ts`.
-2. Add `electron/main/harness/<id>/index.ts` exporting a `HarnessAdapter`.
+1. Add its id to `HarnessId` in `shared/harness-contract.ts`.
+2. Add `core/harness/<id>/index.ts` exporting a `HarnessAdapter`.
 3. Add it to the registry's `adapters` table (the compiler insists).
 4. Add its folder to fence 1's `from` in `eslint.config.mjs`, and a planted case to
    `scripts/verify-boundaries.mjs`.

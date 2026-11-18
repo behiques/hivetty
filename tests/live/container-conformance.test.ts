@@ -15,38 +15,38 @@ import {
   containerOrigins,
   writeSessionContainerFiles,
   writeSharedContainerFiles,
-} from '../../electron/main/container/generated';
-import { agentPromptFile, agentWorkdir, agentsRoot, cliHome } from '../../electron/main/agents/paths';
-import { createRunTracker, type ChildLike, type RunTracker } from '../../electron/main/agents/runs';
-import { createAgentState, type AgentState } from '../../electron/main/agents/state';
-import { createWakeCommand } from '../../electron/main/agents/wake-command';
-import { createHookRuntime, type HookRuntime } from '../../electron/main/hooks';
-import { createReceiver } from '../../electron/main/hooks/receiver';
-import { createLedger, type Ledger } from '../../electron/main/ledger';
-import { agentMcpConfigFile } from '../../electron/main/mcp';
-import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
-import { PLUGIN_DIR } from '../../electron/main/skills/paths';
-import { renderSkills } from '../../electron/main/skills/render';
-import type { SkillsRead } from '../../electron/main/skills/read';
-import { resolveClis } from '../../electron/shared/cli-contract';
-import type { RunLine } from '../../electron/shared/agent-contract';
-import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
+} from '../../core/container/generated';
+import { agentPromptFile, agentWorkdir, agentsRoot, cliHome } from '../../core/agents/paths';
+import { createRunTracker, type ChildLike, type RunTracker } from '../../core/agents/runs';
+import { createAgentState, type AgentState } from '../../core/agents/state';
+import { createWakeCommand } from '../../core/agents/wake-command';
+import { createHookRuntime, type HookRuntime } from '../../core/hooks';
+import { createReceiver } from '../../core/hooks/receiver';
+import { createLedger, type Ledger } from '../../core/ledger';
+import { agentMcpConfigFile } from '../../core/mcp';
+import { mcpConfig } from '../../core/harness/claude-code/mcp-config';
+import { PLUGIN_DIR } from '../../core/skills/paths';
+import { renderSkills } from '../../core/skills/render';
+import type { SkillsRead } from '../../core/skills/read';
+import { resolveClis } from '../../shared/cli-contract';
+import type { RunLine } from '../../shared/agent-contract';
+import { CONFIG_PATH_ENV } from '../../shared/config-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
   type HookAgentEvent,
   type HookStatusEvent,
-} from '../../electron/shared/hook-contract';
-import { LEDGER_DIR, OVERMIND } from '../../electron/shared/ledger-contract';
+} from '../../shared/hook-contract';
+import { LEDGER_DIR, OVERMIND } from '../../shared/ledger-contract';
 
 /**
  * The container session profile, end to end (HIVE-133).
  *
  * Everything about `container` that can be asserted against a fake — the
  * `{env}` substitution, the path map, the generated `exec-env`/`rewrite`
- * file sets — already is, in `tests/electron/main/sessions/`,
- * `tests/electron/main/container/` and friends. None of it proves the thing
+ * file sets — already is, in `tests/core/sessions/`,
+ * `tests/core/container/` and friends. None of it proves the thing
  * a containerised session actually depends on: that `docker exec` really
  * carries an environment across, that the paths this app writes really
  * resolve on the other side of that boundary, and — the case no staged

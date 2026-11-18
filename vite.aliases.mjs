@@ -33,7 +33,7 @@ export const aliases = {
    * renderer reaches the contract's *types* without reaching into the main
    * process, which the ESLint zones forbid outright.
    */
-  '@shared': fileURLToPath(new URL('./electron/shared', import.meta.url)),
+  '@shared': fileURLToPath(new URL('./shared', import.meta.url)),
   /**
    * Shared test scaffolding — `tests/support/`, and nothing the app ships.
    *
@@ -46,18 +46,18 @@ export const aliases = {
    * depends on where in the mirrored tree the test happens to sit, and a path
    * that changes when a file moves is a path that will be wrong.
    *
-   * Nothing under `src/` or `electron/` may import through it — those are
+   * Nothing under `src/`, `core/`, `shared/` or `electron/` may import through it — those are
    * production bundles, and this resolves to test code. Listed before the bare
    * `@` entry for the same reason `@shared` is: insertion order decides.
    */
   '@tests': fileURLToPath(new URL('./tests', import.meta.url)),
   /**
-   * The server half of server mode (HIVE-142). Tests reach `electron/remote-host/**`
-   * through this alias; so may `electron/main/**`, which the zone comment in
+   * The server half of server mode (HIVE-142). Tests reach `remote-host/**`
+   * through this alias; so may `core/**`, which the zone comment in
    * `eslint.config.mjs` says is deliberate. `src/**` already may not — the
-   * renderer zone lists `electron/remote-host/**` among what it forbids — so
+   * renderer zone lists `remote-host/**` among what it forbids — so
    * this alias resolving is not a widening of that fence.
    */
-  '@remote-host': fileURLToPath(new URL('./electron/remote-host', import.meta.url)),
+  '@remote-host': fileURLToPath(new URL('./remote-host', import.meta.url)),
   '@': srcPath(),
 };

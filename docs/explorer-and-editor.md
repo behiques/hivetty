@@ -34,8 +34,8 @@ the config it wrote and validated itself, joins, `realpath`s, and asserts the
 result is still inside the realpath'd root before touching anything.
 
 **Two checks, and neither is redundant.** `assertRelPath` in
-`electron/shared/guards.ts` settles what a legal *string* is — relative, no `..`
-segment, no NUL, no control characters. `electron/main/fs/paths.ts` settles
+`shared/guards.ts` settles what a legal *string* is — relative, no `..`
+segment, no NUL, no control characters. `core/fs/paths.ts` settles
 where that string actually lands once symlinks are resolved. Neither can do the
 other's job:
 
@@ -177,7 +177,7 @@ A request is also stamped with a generation counter taken *before* its
 a fast session switch across projects — cannot settle out of order and leave the
 visible project unwatched.
 
-Two properties, both in `electron/main/fs/watcher.ts`:
+Two properties, both in `core/fs/watcher.ts`:
 
 - **Hidden paths are filtered in main, before emit.** A `pnpm install` rewrites
   tens of thousands of paths under `node_modules`; filtering in the renderer
@@ -197,7 +197,7 @@ Node 20. Electron 43 ships Node 22, so there is no fallback path and no polling.
 
 `.git` always; then `node_modules`, `dist`, `out`, `.next`, `coverage`,
 `.turbo`, `target`, `__pycache__`, `.venv`. The list lives in
-`electron/shared/fs-contract.ts` so both processes read one definition.
+`shared/fs-contract.ts` so both processes read one definition.
 
 Other dotfiles are deliberately **shown**. `.claude`, `.github`, `.env.example`,
 `.gitignore` and `AGENTS.md` are all things you open in this app, and a rule
@@ -231,13 +231,13 @@ beside each changed file in it (`tree-node.tsx:73`). A terminal has no main id,
 passes no `changesId`, and shows neither.
 
 The list is not git's. It comes from the session's transcript:
-`electron/main/sessions/changed-files.ts` folds each `toolUseResult`'s
+`core/sessions/changed-files.ts` folds each `toolUseResult`'s
 `structuredPatch` into per-file `+N −M` tallies, and `A` means the first write
 it saw was a create. Only the main agent counts; `isSidechain` lines are a
 subagent's and are skipped. The list carries across `/clear`, which starts a new
 transcript file, and goes with the session. A main-agent `Edit`, `Write`,
 `MultiEdit` or `NotebookEdit` tells main to read on from where it stopped
-(`electron/main/hooks/receiver.ts`, `onFileTool`), and each entity has a
+(`core/hooks/receiver.ts`, `onFileTool`), and each entity has a
 generation, so a read still in flight when the session is dropped publishes
 nothing. Paths outside the tree's root are left out, since the fs seam would
 refuse to open them.
@@ -332,7 +332,7 @@ both go through `useOpenFileAt().openPath(projectId, sessionId, path, { line })`
 built once in `pr-page.tsx`. `projectId` is the PR's live session's project, else
 the configured project whose folder name is the repository. `sessionId` is that
 session (`pr.session`) when it is live, so main roots the read at its worktree
-(`electron/main/fs/session-roots.ts` proves it a linked worktree of the project).
+(`core/fs/session-roots.ts` proves it a linked worktree of the project).
 With no session it is the project checkout as it is on disk, which may be on
 another branch than the PR, so the line can point elsewhere. A builder or fixer
 worktree under `~/.hivetty/work` is outside every project and unreachable unless a
@@ -504,7 +504,7 @@ onto `lib/markdown/` is the natural follow-up.
 
 ## Image preview
 
-A file whose extension is in `IMAGE_TYPES` (`electron/shared/fs-contract.ts`:
+A file whose extension is in `IMAGE_TYPES` (`shared/fs-contract.ts`:
 png, jpg, jpeg, gif, webp, bmp, ico, avif) is read whole by `readFileContent`
 and answered as `ImageContent`, a `data:` URL with its mtime and size. The
 extension is checked before the 1 MB cap and the NUL sniff, because every PNG
@@ -525,7 +525,7 @@ never inline markup: an SVG inside `<img>` runs no script and loads nothing.
 
 ## Testing
 
-- **The containment guard has its own suite** (`tests/electron/main/fs/`), with
+- **The containment guard has its own suite** (`tests/core/fs/`), with
   real directories and real symlinks. It is the only new code here where a bug
   is a security bug.
 - **CodeMirror runs for real in unit tests**, unlike xterm. It renders its

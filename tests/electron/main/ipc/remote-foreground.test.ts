@@ -31,7 +31,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-const { CH } = await import('../../../../electron/shared/ipc-contract');
+const { CH } = await import('../../../../shared/ipc-contract');
 const { createForegroundStamp } = await import(
   '../../../../electron/main/ipc/remote-foreground'
 );

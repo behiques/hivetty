@@ -62,7 +62,7 @@ describe('flattenLines', () => {
 
   it('strips the control characters main would refuse', () => {
     /**
-     * The point of the function. `electron/shared/guards.ts` rejects every code
+     * The point of the function. `shared/guards.ts` rejects every code
      * point below 0x20 and refuses the whole spawn, so anything that survives
      * here has to be something that guard will accept.
      */

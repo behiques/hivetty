@@ -540,7 +540,7 @@ interface ServerModeGroupProps {
    * What it gates: an install is the server or a client and never both
    * (`RemoteConfig`'s own doc comment). The two switches sat side by side
    * with nothing between them, and a serving machine that attached tore its
-   * own listener down permanently — see `electron/main/server-mode.ts`.
+   * own listener down permanently — see `core/server-mode.ts`.
    * `switchIpcMode` refuses the combination; this is what makes the refusal
    * visible on the control instead of after a click.
    */
@@ -668,7 +668,7 @@ export function ServerModeGroup({
     }
     const next = raw === '' ? DEFAULT_SERVER.bind.port : Number(raw);
     // 0 is a legal port number in general but not here — see PORT_INVALID
-    // and `assertServerBindPort` (`electron/shared/guards.ts`) for why.
+    // and `assertServerBindPort` (`shared/guards.ts`) for why.
     if (!Number.isInteger(next) || next < 1 || next > 65_535) {
       setPortInvalid(true);
       return;
@@ -972,7 +972,7 @@ export function ServerModeGroup({
    *
    * **Ruling 19, made concrete.** `config:set-remote` writes nothing at all
    * when the switch is refused — not `mode`, not `host`, not `port` from
-   * this same call (`electron/main/ipc/index.ts`'s handler returns
+   * this same call (`core/ipc/index.ts`'s handler returns
    * `getConfig()` untouched on any `!switched.ok`). So a refusal here resets
    * both drafts back to the *prop* values — which, because nothing was
    * written, are still exactly what `config.json` holds — rather than

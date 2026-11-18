@@ -13,9 +13,9 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { nameFromTitle } from '../../electron/main/harness/claude-code/title';
-import { createTitleReader } from '../../electron/main/sessions/title';
-import { hiveNameFromTitle } from '../../electron/shared/session-contract';
+import { nameFromTitle } from '../../core/harness/claude-code/title';
+import { createTitleReader } from '../../core/sessions/title';
+import { hiveNameFromTitle } from '../../shared/session-contract';
 
 /**
  * That a session left unnamed names *itself*, against a real `claude` (HIVE-108).

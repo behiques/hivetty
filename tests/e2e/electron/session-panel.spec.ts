@@ -10,8 +10,8 @@ import {
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
   HOOK_PATH,
-} from '../../../electron/shared/hook-contract';
-import { claudeProjectDir } from '../../../electron/main/harness/claude-code/title-origin';
+} from '../../../shared/hook-contract';
+import { claudeProjectDir } from '../../../core/harness/claude-code/title-origin';
 import { launchHive, writeProjectConfig } from './fixtures/hive-app';
 
 /**

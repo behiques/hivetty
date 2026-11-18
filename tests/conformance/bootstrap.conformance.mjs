@@ -10,7 +10,7 @@ import { assert, describe, emitSentinel, it, waitFor } from './harness.mjs';
  * ticket, agreed before implementation.
  *
  * The ticket asks this group to spawn "the real bootstrap". It cannot: the
- * bootstrap lives in `electron/main/sessions/`, above the host, and driving it
+ * bootstrap lives in `core/sessions/`, above the host, and driving it
  * needs the supervisor and `utilityProcess` — an Electron *main-process* API
  * that does not exist under `ELECTRON_RUN_AS_NODE`. What this layer can do, and
  * what actually matters, is prove the **sequence** against real processes:
@@ -18,7 +18,7 @@ import { assert, describe, emitSentinel, it, waitFor } from './harness.mjs';
  * shell survives it.
  *
  * The ordering constants are `BOOTSTRAP_DEBOUNCE_MS` and
- * `BOOTSTRAP_FALLBACK_MS` in `electron/shared/session-contract.ts`; the *policy*
+ * `BOOTSTRAP_FALLBACK_MS` in `shared/session-contract.ts`; the *policy*
  * of when to write is unit-tested there with fake timers. This asserts the part
  * fake timers cannot: that writing it that way works on a real pty.
  *

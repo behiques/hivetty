@@ -3,7 +3,7 @@
  *
  * The pure half of terminal file links: what in a line *looks like* a path,
  * and where its `:line:col` suffix ends. Whether any of it is a file on disk
- * is main's question (`electron/main/fs/resolve.ts`), and this module is
+ * is main's question (`core/fs/resolve.ts`), and this module is
  * deliberately generous because of that split — a false positive costs one
  * `null` in a round trip that was already being made, while a false negative
  * is a path the user can see and cannot click.

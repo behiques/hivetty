@@ -32,11 +32,11 @@ export default defineConfig({
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: './coverage',
       /*
-        Main-process code is measured too (retro D). `electron/main` and
-        `electron/shared` are what the unit suite exercises; the preload, the
+        Main-process code is measured too (retro D). `core`, `shared` and
+        `electron/main` are what the unit suite exercises; the preload, the
         pty host and the MCP host run only under the e2e suite.
       */
-      include: ['src/**/*.{ts,tsx}', 'electron/main/**/*.ts', 'electron/shared/**/*.ts'],
+      include: ['src/**/*.{ts,tsx}', 'core/**/*.ts', 'shared/**/*.ts', 'electron/main/**/*.ts'],
       exclude: [
         // Entry points — no logic to cover.
         'src/main.tsx',
@@ -50,7 +50,7 @@ export default defineConfig({
         // Type-only files contribute no executable statements.
         'src/types/**',
         'src/**/*.d.ts',
-        'electron/**/*.d.ts',
+        '{core,shared,electron}/**/*.d.ts',
       ],
       /**
        * 80% across all four metrics — the incorpx number, applied globally.
@@ -67,7 +67,7 @@ export default defineConfig({
           2026-09-13 and rounded down), so it cannot slide under the global 80
           unnoticed.
         */
-        'electron/**': {
+        '{core,shared,electron}/**': {
           statements: 91,
           branches: 88,
           functions: 87,

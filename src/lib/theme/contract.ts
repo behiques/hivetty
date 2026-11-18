@@ -13,7 +13,7 @@
  */
 
 /**
- * The byte cap lives in `electron/shared/` — the one module both processes
+ * The byte cap lives in `shared/` — the one module both processes
  * import — because main enforces it too and `electron/main/**` may not import
  * `src/**`. Re-exported here so every renderer-side consumer keeps importing
  * it from `@lib/theme/contract`, with a single definition underneath.

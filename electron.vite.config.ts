@@ -38,7 +38,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: 'electron/main/index.ts',
-          'pty-host': 'electron/pty-host/index.ts',
+          'pty-host': 'pty-host/index.ts',
           /**
            * A third input, for the conformance suite (story 098).
            *
@@ -56,7 +56,7 @@ export default defineConfig({
            * unbundled, and rollup hoists what this shares with `pty-host` into
            * the chunk they both import.
            */
-          'session-manager': 'electron/pty-host/session-manager.ts',
+          'session-manager': 'pty-host/session-manager.ts',
           /**
            * A fourth input: the MCP server every session is given (HIVE-112).
            *
@@ -75,7 +75,7 @@ export default defineConfig({
            * output and is read through Electron's asar-aware `fs`, the same
            * as `index.js` reading its own chunks.
            */
-          'mcp-host': 'electron/mcp-host/index.ts',
+          'mcp-host': 'mcp-host/index.ts',
         },
       },
     },

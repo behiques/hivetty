@@ -8,8 +8,8 @@ import {
   type UpdateStatus,
 } from '@shared/update-contract';
 
+import { claimServerLock, serverLockPath } from '../../../core/server/server-lock';
 import { primaryWindow } from '../aux-windows';
-import { claimServerLock, serverLockPath } from '../server/server-lock';
 
 import { probeUpdateCapability } from './capability';
 import { createElectronUpdaterEngine } from './engine';

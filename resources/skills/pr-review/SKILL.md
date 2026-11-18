@@ -167,7 +167,7 @@ pass; it never skips one.
 
 Fewer reviewers on a small diff, more candidates on a large or risky one,
 never more review everywhere. Record the tier and the fact that chose it ("62
-lines in 2 files", "touches `electron/shared/permission-rules.ts`"); the report
+lines in 2 files", "touches `shared/permission-rules.ts`"); the report
 names both.
 
 **Repo extensions.** If `REVIEW_DIR` holds `.claude/pr-review/extensions/*.md`,
@@ -361,7 +361,7 @@ calling agent then reports as its own instructions say, branching on it:
   "files_changed": <changedFiles>,
   "uncommitted_files": <uncommittedFiles>,
   "tier": "docs" | "small" | "full" | "deep",
-  "tier_reason": "<the fact that chose it: \"62 lines in 2 files\", \"touches electron/shared/permission-rules.ts\">",
+  "tier_reason": "<the fact that chose it: \"62 lines in 2 files\", \"touches shared/permission-rules.ts\">",
   "context": { "spec": "<path or null>", "plan": "<path or null>", "notes": "<path or null>", "unread": ["<path>: not found"] },
   "reviewers": ["bug scan", "bug scan (electron/)", "instruction compliance", "..."],
   "skipped": [{ "reviewer": "ACR", "reason": "acr not installed" }],

@@ -1543,7 +1543,7 @@ describe('SkillsSection renaming', () => {
 
 /**
  * `skills:file:import` while attached to someone else's Hive (HIVE-144) —
- * see `WINDOW_BOUND` (`electron/shared/remote-contract.ts`). Wired through
+ * see `WINDOW_BOUND` (`shared/remote-contract.ts`). Wired through
  * `SkillsSection`'s own `useRemoteCapabilities()` call, distinct from the
  * `SkillBundle` unit test, which only proves the button obeys a prop it is
  * handed directly.

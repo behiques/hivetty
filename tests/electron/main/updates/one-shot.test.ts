@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ServerLockClaim } from '../../../../electron/main/server/server-lock';
+import type { ServerLockClaim } from '../../../../core/server/server-lock';
 import {
   runUpdateOneShot,
   UPDATE_EXIT,
   type UpdateOneShotDeps,
 } from '../../../../electron/main/updates/one-shot';
 import type { UpdateEngine } from '../../../../electron/main/updates/updater';
-import type { UpdateCapability } from '../../../../electron/shared/update-contract';
+import type { UpdateCapability } from '../../../../shared/update-contract';
 
 const SELF_INSTALL: UpdateCapability = {
   canCheck: true,

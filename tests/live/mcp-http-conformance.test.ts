@@ -6,9 +6,9 @@ import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createReceiver } from '../../electron/main/hooks/receiver';
-import { createLedger } from '../../electron/main/ledger';
-import { containerMcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
+import { createReceiver } from '../../core/hooks/receiver';
+import { createLedger } from '../../core/ledger';
+import { containerMcpConfig } from '../../core/harness/claude-code/mcp-config';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_RUN,
@@ -19,14 +19,14 @@ import {
   HOOK_HEADER_RUN_TOKEN,
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
-} from '../../electron/shared/hook-contract';
-import { MCP_PATH, MCP_SERVER_NAME } from '../../electron/shared/mcp-contract';
+} from '../../shared/hook-contract';
+import { MCP_PATH, MCP_SERVER_NAME } from '../../shared/mcp-contract';
 
 /**
  * What only a real `claude` can prove about `POST /mcp` (HIVE-130).
  *
  * The route's own behaviour — envelope, auth, 202, 405, 403 — is asserted
- * against the server directly in `tests/electron/main/hooks/receiver.test.ts`.
+ * against the server directly in `tests/core/hooks/receiver.test.ts`.
  * Three things are left that no fake can answer, and all three are load-bearing
  * for the epic:
  *
@@ -34,7 +34,7 @@ import { MCP_PATH, MCP_SERVER_NAME } from '../../electron/shared/mcp-contract';
  *    on an SSE stream? The spec permits either and obliges the client to
  *    support both; this suite is what turns "permitted" into "observed".
  * 2. **Do the tools keep the `mcp__hive__*` name** when the same server arrives
- *    over HTTP instead of stdio? `electron/main/mcp/paths.ts` records that the
+ *    over HTTP instead of stdio? `core/mcp/paths.ts` records that the
  *    name follows the *delivery*, and the agent preamble and the permission
  *    tool both depend on it.
  * 3. **Does `${VAR}` expansion actually work in `url` and `headers`?** The

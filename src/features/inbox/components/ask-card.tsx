@@ -41,7 +41,7 @@ const NEGATIVE = /^(reject|deny|no)$/i;
  * The one option that opens the draft rather than answering with its own id.
  *
  * Anchored at both ends (whole-branch review, finding 5). `AGENT_PREAMBLE`
- * mandates the literal option `'edit'` — see `electron/main/agents/preamble.ts`
+ * mandates the literal option `'edit'` — see `core/agents/preamble.ts`
  * — and the button renders that string verbatim, with no "Edit…" copy layer
  * anywhere in this codebase to reuse. A prefix match therefore hijacks any
  * option that merely *starts* with those four letters — `editorial pass` — into

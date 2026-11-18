@@ -11,7 +11,7 @@
 # in-place updating across exactly one release.
 appId: com.behiques.hivetty-pro
 
-# The app's one name (`electron/shared/app-name.ts`): it names the bundle
+# The app's one name (`shared/app-name.ts`): it names the bundle
 # (`HiveTTY Pro.app`), its executable and helper apps. See "The app's name" in
 # `docs/packaging-and-updates.md`.
 productName: HiveTTY Pro
@@ -67,7 +67,7 @@ extraResources:
   - from: resources/tray
     to: tray
   # The skills and agents the app ships (HIVE-162), seeded into `~/.hivetty` on
-  # boot by `electron/main/seed/`. Read at runtime like the tray icon, so they
+  # boot by `core/seed/`. Read at runtime like the tray icon, so they
   # ride the same block; `shippedRoot` in `seed/paths.ts` names both locations.
   - from: resources/skills
     to: skills

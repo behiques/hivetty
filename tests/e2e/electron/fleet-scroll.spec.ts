@@ -49,7 +49,7 @@ const REAL_DIRECTORY = join(import.meta.dirname, '../../..');
 const ROWS = 20;
 
 /**
- * The smallest window the app allows (`MIN_WINDOW_SIZE`, `electron/shared/window.ts`).
+ * The smallest window the app allows (`MIN_WINDOW_SIZE`, `shared/window.ts`).
  *
  * Not an arbitrary small number — `setBounds` is clamped to it, so a spec that
  * asked for 500 would wait forever for a window that was never going to be

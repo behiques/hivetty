@@ -2,8 +2,8 @@ import { BrowserWindow, shell } from 'electron';
 
 import type { ThisMachineAction } from '@shared/notification-contract';
 
+import { isSafeExternalUrl } from '../../../core/external-links';
 import { bringForward } from '../background';
-import { isSafeExternalUrl } from '../external-links';
 import { downloadUpdate, installUpdate } from '../updates';
 
 /**

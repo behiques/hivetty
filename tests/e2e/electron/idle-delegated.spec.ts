@@ -10,8 +10,8 @@ import {
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
   HOOK_PATH,
-} from '../../../electron/shared/hook-contract';
-import { LEDGER_POST_PATH } from '../../../electron/shared/ledger-contract';
+} from '../../../shared/hook-contract';
+import { LEDGER_POST_PATH } from '../../../shared/ledger-contract';
 import { goToOvermind, overmindNewSession } from '../fixtures/places';
 import { launchHive } from './fixtures/hive-app';
 

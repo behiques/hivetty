@@ -5,7 +5,7 @@ import type { HiveBridge } from '@shared/ipc-contract';
  *
  * The import is **type-only**, and that matters: a value import from
  * `@shared/ipc-contract` would pull main-process-adjacent code into the
- * renderer bundle and trip the story 080 lint zone. `electron/shared/` is types
+ * renderer bundle and trip the story 080 lint zone. `shared/` is types
  * and constants precisely so this declaration can exist without a runtime edge
  * between the two processes.
  *

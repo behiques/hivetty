@@ -15,33 +15,33 @@ import {
   agentsRoot,
   cliHome,
   laneWorkdir,
-} from '../../electron/main/agents/paths';
-import { parseAgent } from '../../electron/main/agents/definition';
-import { createPermissions, type Permissions } from '../../electron/main/agents/permissions';
-import { agentsDirectoryFor } from '../../electron/main/agents/directory';
-import { createAgentRegistry, type AgentRegistry } from '../../electron/main/agents/registry';
-import { createRunTracker, type ChildLike, type RunTracker } from '../../electron/main/agents/runs';
+} from '../../core/agents/paths';
+import { parseAgent } from '../../core/agents/definition';
+import { createPermissions, type Permissions } from '../../core/agents/permissions';
+import { agentsDirectoryFor } from '../../core/agents/directory';
+import { createAgentRegistry, type AgentRegistry } from '../../core/agents/registry';
+import { createRunTracker, type ChildLike, type RunTracker } from '../../core/agents/runs';
 import {
   createScheduler,
   type Scheduler,
-} from '../../electron/main/agents/scheduler';
-import { createAgentState, type AgentState } from '../../electron/main/agents/state';
-import { createWakeCommand } from '../../electron/main/agents/wake-command';
-import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
-import { writeAgentSettings } from '../../electron/main/harness/claude-code/settings';
-import { runAsync } from '../../electron/main/integrations/github/run';
-import { createSlackBridge, type SlackBridge } from '../../electron/main/integrations/slack/bridge';
-import { openSlackSocket, openSlackWeb } from '../../electron/main/integrations/slack/clients';
-import { readSlackStatus } from '../../electron/main/integrations/slack/status';
+} from '../../core/agents/scheduler';
+import { createAgentState, type AgentState } from '../../core/agents/state';
+import { createWakeCommand } from '../../core/agents/wake-command';
+import { createReceiver, type Receiver } from '../../core/hooks/receiver';
+import { writeAgentSettings } from '../../core/harness/claude-code/settings';
+import { runAsync } from '../../core/integrations/github/run';
+import { createSlackBridge, type SlackBridge } from '../../core/integrations/slack/bridge';
+import { openSlackSocket, openSlackWeb } from '../../core/integrations/slack/clients';
+import { readSlackStatus } from '../../core/integrations/slack/status';
 import {
   readSubscriptions,
   type SlackSubscriptions,
-} from '../../electron/main/integrations/slack/subscriptions';
-import { createLedger, type Ledger } from '../../electron/main/ledger';
-import { agentMcpConfigFile } from '../../electron/main/mcp';
-import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
-import { hiveServerSpec } from '../../electron/main/mcp/config';
-import { createSkillsRuntime } from '../../electron/main/skills';
+} from '../../core/integrations/slack/subscriptions';
+import { createLedger, type Ledger } from '../../core/ledger';
+import { agentMcpConfigFile } from '../../core/mcp';
+import { mcpConfig } from '../../core/harness/claude-code/mcp-config';
+import { hiveServerSpec } from '../../core/mcp/config';
+import { createSkillsRuntime } from '../../core/skills';
 import {
   parseList,
   readFrontmatter,
@@ -49,24 +49,24 @@ import {
   type AgentRunState,
   type RunLine,
   type WakeSpec,
-} from '../../electron/shared/agent-contract';
+} from '../../shared/agent-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
   type HookAgentEvent,
   type HookStatusEvent,
-} from '../../electron/shared/hook-contract';
-import { resolveClis } from '../../electron/shared/cli-contract';
-import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
-import { LEDGER_DIR, OVERMIND } from '../../electron/shared/ledger-contract';
-import { laneOfRun } from '../../electron/shared/ledger-derive';
+} from '../../shared/hook-contract';
+import { resolveClis } from '../../shared/cli-contract';
+import { CONFIG_PATH_ENV } from '../../shared/config-contract';
+import { LEDGER_DIR, OVERMIND } from '../../shared/ledger-contract';
+import { laneOfRun } from '../../shared/ledger-derive';
 import {
   SLACK_TOOL_GLOB,
   SLACK_TOOL_PREFIX,
   SLACK_TRIGGER,
   type SlackSocketStatus,
-} from '../../electron/shared/slack-contract';
+} from '../../shared/slack-contract';
 
 /**
  * What only a real `claude` can prove about a wake (HIVE-115).
@@ -1896,7 +1896,7 @@ describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
    * has to reach a real model and come back as an `answer` naming the thread.
    * The other half — that answer written into the asking session's terminal as
    * a 📒 line — is `deliver.ts`'s, and belongs to a test that has a pty;
-   * `tests/electron/main/ledger/deliver.test.ts` covers it, and treats an
+   * `tests/core/ledger/deliver.test.ts` covers it, and treats an
    * agent's `from` no differently from anyone else's.
    */
   it('wakes an agent a session asked, and answers back to that session', async () => {

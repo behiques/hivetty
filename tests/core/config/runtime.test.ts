@@ -1,0 +1,621 @@
+// @vitest-environment node
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  DEFAULT_BIND,
+  DEFAULT_CLAUDE_COMMAND,
+  DEFAULT_RECEIVER,
+  DEFAULT_SHELL,
+  emptySnapshot,
+  type ConfigSnapshot,
+  type EffectiveRuntime,
+  type ProjectConfig,
+} from '../../../shared/config-contract';
+import {
+  diagnoseCommand,
+  effectiveRuntime,
+  receiverHostAliases,
+  runProbeCommand,
+} from '../../../core/config/runtime';
+
+/**
+ * Real files throughout (story 104), matching `write.test.ts`.
+ *
+ * The diagnostic's whole job is to report what is on disk and executable — a
+ * mocked `fs` would assert the mock rather than the behaviour, and the one bug
+ * worth catching here is a candidate that exists but is not executable.
+ */
+
+let dir: string;
+
+const snapshot = (over: Partial<ConfigSnapshot> = {}): ConfigSnapshot => ({
+  ...emptySnapshot('/tmp/hive/config.json'),
+  ...over,
+});
+
+/**
+ * An `EffectiveRuntime` built directly, for the container-precondition tests.
+ *
+ * Those tests are about `diagnoseCommand`'s reaction to `runtime.container`,
+ * not about how a snapshot and a project resolve into one — going through
+ * `effectiveRuntime` would make every case carry an unrelated snapshot/project
+ * pair just to reach the field under test.
+ */
+const runtime = (over: Partial<EffectiveRuntime> = {}): EffectiveRuntime => ({
+  shell: DEFAULT_SHELL,
+  claudeCommand: DEFAULT_CLAUDE_COMMAND,
+  env: {},
+  shellFromProject: false,
+  commandFromProject: false,
+  ...over,
+});
+
+const project = (over: Partial<ProjectConfig> = {}): ProjectConfig => ({
+  id: 'nova-web',
+  name: 'nova-web',
+  path: '/tmp/nova-web',
+  icon: 'ph-folder',
+  origin: 'local',
+  status: 'ok',
+  key: 'nw',
+  isRepo: true,
+  ...over,
+});
+
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'hive-runtime-'));
+});
+
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+});
+
+/** Write an executable file and return its path. */
+function executable(directory: string, name: string): string {
+  mkdirSync(directory, { recursive: true });
+  const file = join(directory, name);
+  writeFileSync(file, '#!/bin/sh\n');
+  chmodSync(file, 0o755);
+  return file;
+}
+
+/** Write a file that is present but not executable. */
+function plainFile(directory: string, name: string): string {
+  mkdirSync(directory, { recursive: true });
+  const file = join(directory, name);
+  writeFileSync(file, 'not executable\n');
+  chmodSync(file, 0o644);
+  return file;
+}
+
+describe('effectiveRuntime', () => {
+  it('falls back to the top-level values when a project overrides nothing', () => {
+    const runtime = effectiveRuntime(snapshot(), project());
+
+    expect(runtime).toMatchObject({
+      shell: DEFAULT_SHELL,
+      claudeCommand: DEFAULT_CLAUDE_COMMAND,
+      env: {},
+      shellFromProject: false,
+      commandFromProject: false,
+    });
+  });
+
+  it('prefers a project override and says where it came from', () => {
+    const runtime = effectiveRuntime(
+      snapshot({ shell: '/bin/zsh' }),
+      project({ shell: '/bin/bash', claudeCommand: '/opt/claude' }),
+    );
+
+    expect(runtime).toMatchObject({
+      shell: '/bin/bash',
+      claudeCommand: '/opt/claude',
+      shellFromProject: true,
+      commandFromProject: true,
+    });
+  });
+
+  it('resolves against the top level when there is no project at all', () => {
+    const runtime = effectiveRuntime(snapshot({ shell: '/bin/zsh' }), null);
+
+    expect(runtime.shell).toBe('/bin/zsh');
+    expect(runtime.shellFromProject).toBe(false);
+  });
+
+  it('copies the env rather than handing out the snapshot’s own map', () => {
+    const entry = project({ env: { FOO: 'bar' } });
+    const runtime = effectiveRuntime(snapshot(), entry);
+
+    runtime.env.FOO = 'mutated';
+
+    // The caller passes this to the pty-host; sharing the cached config's map
+    // would let a mutation downstream edit the config the app is running on.
+    expect(entry.env).toEqual({ FOO: 'bar' });
+  });
+});
+
+describe('effectiveRuntime env layering', () => {
+  it('uses the workspace env when the project has none', () => {
+    const runtime = effectiveRuntime(snapshot({ env: { A: '1' } }), null);
+
+    expect(runtime.env).toEqual({ A: '1' });
+  });
+
+  it('merges both layers, project winning per key', () => {
+    const runtime = effectiveRuntime(
+      snapshot({ env: { A: 'workspace', C: '3' } }),
+      project({ env: { A: 'project', B: '2' } }),
+    );
+
+    expect(runtime.env).toEqual({ A: 'project', B: '2', C: '3' });
+  });
+
+  it('returns a fresh object that does not alias the workspace map', () => {
+    const workspaceEnv = { A: '1' };
+    const runtime = effectiveRuntime(snapshot({ env: workspaceEnv }), null);
+
+    runtime.env.A = 'mutated';
+
+    // Same reasoning as the project-side aliasing test above: the caller
+    // passes this to the pty-host, and handing out the workspace's own map
+    // would let a mutation downstream edit the cached config.
+    expect(workspaceEnv.A).toBe('1');
+  });
+});
+
+describe('diagnoseCommand — searching PATH', () => {
+  it('finds an executable and reports where', async () => {
+    const bin = join(dir, 'bin');
+    const claude = executable(bin, 'claude');
+
+    const result = await diagnoseCommand(
+      effectiveRuntime(snapshot(), null),
+      null,
+      { PATH: bin },
+    );
+
+    expect(result.resolved).toBe(claude);
+    expect(result.isPath).toBe(false);
+    expect(result.probes).toEqual([{ directory: bin, found: true }]);
+  });
+
+  it('reports the first match when several directories have one', async () => {
+    const first = join(dir, 'first');
+    const second = join(dir, 'second');
+    const winner = executable(first, 'claude');
+    executable(second, 'claude');
+
+    const result = await diagnoseCommand(effectiveRuntime(snapshot(), null), null, {
+      PATH: [first, second].join(delimiter),
+    });
+
+    // First match wins, exactly as a shell resolves it.
+    expect(result.resolved).toBe(winner);
+    expect(result.probes).toHaveLength(2);
+  });
+
+  it('flags a candidate that exists but is not executable', async () => {
+    const bin = join(dir, 'bin');
+    plainFile(bin, 'claude');
+
+    const result = await diagnoseCommand(effectiveRuntime(snapshot(), null), null, {
+      PATH: bin,
+    });
+
+    // The genuinely confusing case: the file is right there and the only reason
+    // it does not run is a missing +x bit.
+    expect(result.resolved).toBeNull();
+    expect(result.probes).toEqual([
+      { directory: bin, found: false, notExecutable: true },
+    ]);
+  });
+
+  it('reports every directory searched when nothing is found', async () => {
+    const a = join(dir, 'a');
+    const b = join(dir, 'b');
+    mkdirSync(a);
+    mkdirSync(b);
+
+    const result = await diagnoseCommand(effectiveRuntime(snapshot(), null), null, {
+      PATH: [a, b].join(delimiter),
+    });
+
+    expect(result.resolved).toBeNull();
+    expect(result.probes.map((probe) => probe.directory)).toEqual([a, b]);
+    expect(result.probes.every((probe) => !probe.found)).toBe(true);
+  });
+
+  it('skips empty PATH entries rather than probing the cwd', async () => {
+    const bin = join(dir, 'bin');
+    executable(bin, 'claude');
+
+    const result = await diagnoseCommand(effectiveRuntime(snapshot(), null), null, {
+      PATH: `${bin}${delimiter}${delimiter}`,
+    });
+
+    // An empty entry means "the current directory" to some shells, and this
+    // process does not share a cwd with the session.
+    expect(result.probes).toHaveLength(1);
+  });
+
+  it('searches the project’s own PATH, not the process one', async () => {
+    const bin = join(dir, 'bin');
+    const claude = executable(bin, 'claude');
+
+    const result = await diagnoseCommand(
+      effectiveRuntime(snapshot(), project({ env: { PATH: bin } })),
+      'nova-web',
+      { PATH: '/nowhere' },
+    );
+
+    // A project that sets its own PATH must be diagnosed against that PATH, or
+    // the diagnostic describes a session nobody is running.
+    expect(result.path).toBe(bin);
+    expect(result.resolved).toBe(claude);
+    expect(result.projectId).toBe('nova-web');
+  });
+
+  it('reports an empty PATH rather than throwing', async () => {
+    const result = await diagnoseCommand(effectiveRuntime(snapshot(), null), null, {});
+
+    expect(result.path).toBe('');
+    expect(result.probes).toEqual([]);
+    expect(result.resolved).toBeNull();
+  });
+});
+
+describe('diagnoseCommand — a command used as a path', () => {
+  it('does not consult PATH for an absolute command', async () => {
+    const claude = executable(join(dir, 'opt'), 'claude');
+
+    const result = await diagnoseCommand(
+      effectiveRuntime(snapshot({ claudeCommand: claude }), null),
+      null,
+      { PATH: '/nowhere' },
+    );
+
+    expect(result.isPath).toBe(true);
+    expect(result.resolved).toBe(claude);
+    // Reporting "not found on PATH" here would send the user editing a PATH
+    // that was never consulted.
+    expect(result.probes).toEqual([]);
+  });
+
+  it('reports an absolute command that is missing', async () => {
+    const result = await diagnoseCommand(
+      effectiveRuntime(snapshot({ claudeCommand: join(dir, 'absent') }), null),
+      null,
+      { PATH: '/nowhere' },
+    );
+
+    expect(result.isPath).toBe(true);
+    expect(result.resolved).toBeNull();
+  });
+
+  it('leaves a relative path unresolved rather than guessing a cwd', async () => {
+    const result = await diagnoseCommand(
+      effectiveRuntime(snapshot({ claudeCommand: './bin/claude' }), null),
+      null,
+      { PATH: '/nowhere' },
+    );
+
+    // It would be resolved against the session's cwd — the project directory —
+    // which this process does not share.
+    expect(result.isPath).toBe(true);
+    expect(result.resolved).toBeNull();
+  });
+});
+
+describe('effectiveRuntime container (HIVE-133)', () => {
+  const minimal = { workspace: '/workspace', hiveDir: '/hive' };
+
+  it('is absent for a host project', () => {
+    expect(effectiveRuntime(snapshot(), project({ id: 'p' })).container).toBeUndefined();
+  });
+
+  it('is absent when no project is selected', () => {
+    expect(effectiveRuntime(snapshot(), null).container).toBeUndefined();
+  });
+
+  it('applies every default the file left out', () => {
+    const runtime = effectiveRuntime(snapshot(), project({ id: 'p', container: minimal }));
+
+    expect(runtime.container).toEqual({
+      workspace: '/workspace',
+      hiveDir: '/hive',
+      envArg: '-e {name}={value}',
+      freshness: 'exec-env',
+      hostAlias: 'host.docker.internal',
+    });
+  });
+
+  it('inherits hostAlias from the receiver, which is the only layer that can', () => {
+    const runtime = effectiveRuntime(
+      snapshot({ receiver: { hostAlias: 'gateway', bind: DEFAULT_BIND } }),
+      project({ id: 'p', container: minimal }),
+    );
+    expect(runtime.container?.hostAlias).toBe('gateway');
+  });
+
+  it('lets the project override the receiver alias', () => {
+    const runtime = effectiveRuntime(
+      snapshot({ receiver: { hostAlias: 'gateway', bind: DEFAULT_BIND } }),
+      project({ id: 'p', container: { ...minimal, hostAlias: 'bridge' } }),
+    );
+    expect(runtime.container?.hostAlias).toBe('bridge');
+  });
+
+  it('keeps the fields the file did set', () => {
+    const runtime = effectiveRuntime(
+      snapshot(),
+      project({
+        id: 'p',
+        container: { ...minimal, envArg: '--env {name}={value}', freshness: 'rewrite' },
+      }),
+    );
+    expect(runtime.container).toMatchObject({
+      envArg: '--env {name}={value}',
+      freshness: 'rewrite',
+    });
+  });
+
+  it('omits probe rather than defaulting it — absent means no precondition', () => {
+    const runtime = effectiveRuntime(snapshot(), project({ id: 'p', container: minimal }));
+    expect(runtime.container).not.toHaveProperty('probe');
+  });
+
+  it('does not merge with the top level, because there is no top-level block', () => {
+    // A project either is containerised or is not — unlike `env`, which layers.
+    const runtime = effectiveRuntime(
+      snapshot({ env: { A: '1' } }),
+      project({ id: 'p', container: minimal }),
+    );
+    expect(runtime.env).toEqual({ A: '1' });
+    expect(runtime.container?.workspace).toBe('/workspace');
+  });
+});
+
+describe('receiverHostAliases (HIVE-134 follow-up)', () => {
+  const minimal = { workspace: '/workspace', hiveDir: '/hive' };
+
+  it('is exactly the global alias with no projects and no agents', () => {
+    expect(receiverHostAliases(snapshot())).toEqual(
+      new Set([DEFAULT_RECEIVER.hostAlias]),
+    );
+  });
+
+  it("includes a project's diverged alias alongside the global one", () => {
+    const aliases = receiverHostAliases(
+      snapshot({
+        receiver: { hostAlias: 'gateway', bind: DEFAULT_BIND },
+        projects: [project({ id: 'p', container: { ...minimal, hostAlias: 'bridge' } })],
+      }),
+    );
+
+    expect(aliases).toEqual(new Set(['gateway', 'bridge']));
+  });
+
+  it("does not add a project's own field twice when it matches the global alias", () => {
+    // `effectiveRuntime` already resolves an absent project override to the
+    // global alias, so a project with no override of its own contributes
+    // nothing new here — proven by the size staying 1, not by a `has` that
+    // would pass whether this collapsed into the same entry or silently
+    // duplicated it.
+    const aliases = receiverHostAliases(
+      snapshot({
+        receiver: { hostAlias: 'gateway', bind: DEFAULT_BIND },
+        projects: [project({ id: 'p', container: minimal })],
+      }),
+    );
+
+    expect(aliases.size).toBe(1);
+    expect(aliases).toEqual(new Set(['gateway']));
+  });
+
+  it('folds in more than one diverged project alias', () => {
+    const aliases = receiverHostAliases(
+      snapshot({
+        projects: [
+          project({ id: 'a', container: { ...minimal, hostAlias: 'bridge' } }),
+          project({ id: 'b', container: { ...minimal, hostAlias: 'span' } }),
+        ],
+      }),
+    );
+
+    expect(aliases).toEqual(new Set([DEFAULT_RECEIVER.hostAlias, 'bridge', 'span']));
+  });
+
+  it('leaves a host project — no `container` block at all — contributing nothing', () => {
+    const aliases = receiverHostAliases(
+      snapshot({ projects: [project({ id: 'p' })] }),
+    );
+
+    expect(aliases).toEqual(new Set([DEFAULT_RECEIVER.hostAlias]));
+  });
+
+  it("folds in every agent's alias the caller supplies", () => {
+    const aliases = receiverHostAliases(snapshot(), ['bridge', 'span']);
+
+    expect(aliases).toEqual(new Set([DEFAULT_RECEIVER.hostAlias, 'bridge', 'span']));
+  });
+
+  it('de-duplicates an agent alias that already equals a project or the global one', () => {
+    const aliases = receiverHostAliases(
+      snapshot({
+        receiver: { hostAlias: 'gateway', bind: DEFAULT_BIND },
+        projects: [project({ id: 'p', container: { ...minimal, hostAlias: 'bridge' } })],
+      }),
+      ['gateway', 'bridge'],
+    );
+
+    expect(aliases.size).toBe(2);
+  });
+});
+
+describe('diagnoseCommand container precondition', () => {
+  const container = {
+    workspace: '/workspace',
+    hiveDir: '/hive',
+    envArg: '-e {name}={value}',
+    freshness: 'exec-env' as const,
+    hostAlias: 'host.docker.internal',
+  };
+
+  it('is absent for a host project', async () => {
+    const result = await diagnoseCommand(runtime({ claudeCommand: 'claude' }), null);
+    expect(result.container).toBeUndefined();
+  });
+
+  /* Injected, never executed — a test that shelled out would assert the machine
+     it runs on. Same reason `login-env.ts` injects `RunLoginShell`. */
+  const fakeRun = (code: number | null, stderr = '') =>
+    vi.fn(async () => ({ code, stderr }));
+
+  it('reports a passing probe', async () => {
+    const run = fakeRun(0);
+    const result = await diagnoseCommand(
+      runtime({
+        claudeCommand: 'docker exec {env} devbox claude',
+        container: { ...container, probe: 'docker exec devbox true' },
+      }),
+      'p',
+      process.env,
+      run,
+    );
+
+    expect(result.container).toMatchObject({ ok: true, exitCode: 0 });
+    expect(run).toHaveBeenCalledWith('docker exec devbox true', expect.anything());
+  });
+
+  it("reports a failing probe with the runtime's own stderr", async () => {
+    const result = await diagnoseCommand(
+      runtime({
+        claudeCommand: 'docker exec {env} devbox claude',
+        container: { ...container, probe: 'docker exec devbox true' },
+      }),
+      'p',
+      process.env,
+      fakeRun(1, 'Error response from daemon: container devbox is not running\n'),
+    );
+
+    expect(result.container).toMatchObject({ ok: false, exitCode: 1 });
+    // Verbatim, because nothing in the config knows the container's name.
+    expect(result.container?.stderr).toBe(
+      'Error response from daemon: container devbox is not running',
+    );
+  });
+
+  it('probes the command it is given, and skips the container for a non-Claude CLI (HIVE-376)', async () => {
+    const run = fakeRun(0);
+    const result = await diagnoseCommand(
+      runtime({
+        claudeCommand: 'docker exec {env} devbox claude',
+        container: { ...container, probe: 'docker exec devbox true' },
+      }),
+      'p',
+      { PATH: '/nowhere' },
+      run,
+      'codex',
+    );
+
+    expect(result.command).toBe('codex');
+    expect(result.container).toBeUndefined();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('runs no probe at all for a host project', async () => {
+    const run = fakeRun(0);
+    await diagnoseCommand(runtime({ claudeCommand: 'claude' }), null, process.env, run);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('runs no probe when the block sets none', async () => {
+    const run = fakeRun(0);
+    const result = await diagnoseCommand(
+      runtime({ claudeCommand: 'docker exec {env} devbox claude', container }),
+      'p',
+      process.env,
+      run,
+    );
+    expect(result.container).toMatchObject({ probe: null, ok: true });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('reports a command with no {env} placeholder, which could never authenticate', async () => {
+    const result = await diagnoseCommand(
+      runtime({ claudeCommand: 'docker exec -it devbox claude', container }),
+      'p',
+    );
+    expect(result.container?.missingEnvPlaceholder).toBe(true);
+  });
+
+  it('does not flag the placeholder when it is present', async () => {
+    const result = await diagnoseCommand(
+      runtime({ claudeCommand: 'docker exec -it {env} devbox claude', container }),
+      'p',
+    );
+    expect(result.container?.missingEnvPlaceholder).toBe(false);
+  });
+
+  it('flags the placeholder independently of a passing probe — the two preconditions do not interact', async () => {
+    const result = await diagnoseCommand(
+      runtime({
+        claudeCommand: 'docker exec -it devbox claude',
+        container: { ...container, probe: 'docker exec devbox true' },
+      }),
+      'p',
+      process.env,
+      fakeRun(0),
+    );
+
+    expect(result.container).toMatchObject({ ok: true, missingEnvPlaceholder: true });
+  });
+});
+
+describe('runProbeCommand', () => {
+  /**
+   * `execFile`'s own error is honest about this even where the old cast was
+   * not (final-review fix, Minor 8): a probe that ran and exited abnormally
+   * reports a *numeric* `code`, but one that never got that far — here, a
+   * `maxBuffer` overrun — reports a *string* one
+   * (`'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'`). The old `error.code ?? null`
+   * cast let that string through unchanged into a field the type checker
+   * believed was `number | null`. Real `execFile`, not a fake — this is
+   * exactly the boundary a fake `RunProbe` cannot see, since every other test
+   * in this file injects one.
+   */
+  it('reports a maxBuffer overrun (a string spawn-failure code) as a null exitCode, folding the code into stderr', async () => {
+    const result = await runProbeCommand('yes x | head -c 200000 >&2', {
+      env: process.env,
+      timeout: 5000,
+    });
+
+    expect(result.code).toBeNull();
+    expect(result.stderr).toContain('ERR_CHILD_PROCESS_STDIO_MAXBUFFER');
+  });
+
+  it('reports a normal, numeric exit code untouched', async () => {
+    const result = await runProbeCommand('exit 3', { env: process.env, timeout: 5000 });
+    expect(result.code).toBe(3);
+  });
+
+  /**
+   * The one failure the probe cannot leave unexplained is its own deadline.
+   *
+   * `execFile` reports a timeout as `killed: true` with a `null` code and a
+   * generic "Command failed" string, which the pane draws as
+   * "Probe failed (exit signal)" — true, and useless to someone trying to find
+   * out why their container is not answering. Real `execFile` again: the
+   * `killed` flag is exactly what an injected `RunProbe` cannot produce.
+   */
+  it('names the deadline when the probe is killed for exceeding it', async () => {
+    const result = await runProbeCommand('sleep 5', { env: process.env, timeout: 100 });
+
+    expect(result.code).toBeNull();
+    expect(result.stderr).toContain('timed out after 100ms');
+  });
+});

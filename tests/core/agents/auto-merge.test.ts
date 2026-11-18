@@ -1,0 +1,305 @@
+// @vitest-environment node
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  AUTO_MERGE_AGENT,
+  autoMergeRules,
+  autoMergeRulesFor,
+  createAutoMergeGrants,
+} from '../../../core/agents/auto-merge';
+import type { RepoRef } from '../../../core/integrations/github/query';
+import { matches } from '../../../shared/permission-rules';
+import type { ProjectConfig } from '../../../shared/config-contract';
+
+const project = (over: Partial<ProjectConfig> & { id: string }): ProjectConfig => ({
+  name: over.id,
+  path: `/repos/${over.id}`,
+  icon: 'ph-folder',
+  origin: 'local',
+  status: 'ok',
+  key: over.id.slice(0, 2),
+  isRepo: true,
+  ...over,
+});
+
+const hive: RepoRef = { owner: 'yunidbauza', name: 'the-hive' };
+
+describe('autoMergeRule', () => {
+  it('composes the narrowest rule the grammar allows, and the real merge command matches it', () => {
+    const rule = autoMergeRules(hive)[0];
+
+    expect(rule).toBe('Bash(gh pr merge * --repo yunidbauza/the-hive)');
+    expect(
+      matches(rule!, 'Bash', {
+        command:
+          'gh pr merge 214 --squash --match-head-commit 0211110354 --repo yunidbauza/the-hive',
+      }),
+    ).toBe(true);
+  });
+
+  it('matches the merge line merge-pr documents, explicit squash message included (HIVE-349)', () => {
+    const skill = readFileSync(join(__dirname, '../../../resources/skills/merge-pr/SKILL.md'), 'utf8');
+    const line = skill.split('\n').find((l) => l.startsWith('gh pr merge <N> --squash'));
+    const command = line!
+      .replaceAll('<N>', '214')
+      .replace('<the SHA the CLEAR line printed>', '0211110354')
+      .replace('<PR title, stripped>', 'Plan tab follows the builder')
+      .replace('<KEY> · ', 'HIVE-349 · ')
+      .replaceAll('<owner>/<repo>', 'yunidbauza/the-hive');
+
+    // GitHub's default squash body lists every commit and a Co-authored-by line per author.
+    expect(command).toContain('--subject "Plan tab follows the builder (#214)"');
+    expect(command).toContain('--body "HIVE-349 · https://github.com/yunidbauza/the-hive/pull/214"');
+    expect(command).not.toContain('<');
+    expect(matches(autoMergeRules(hive)[0]!, 'Bash', { command })).toBe(true);
+  });
+
+  it('does not match another repository, another verb, or a chained command', () => {
+    const rule = autoMergeRules(hive)[0]!;
+
+    expect(matches(rule, 'Bash', { command: 'gh pr merge 1 --squash --repo yunidbauza/other' })).toBe(false);
+    expect(matches(rule, 'Bash', { command: 'gh pr close 1 --repo yunidbauza/the-hive' })).toBe(false);
+    expect(
+      matches(rule, 'Bash', {
+        command: 'gh pr merge 1 --repo yunidbauza/the-hive; rm -rf /',
+      }),
+    ).toBe(false);
+  });
+
+  it('cannot be widened by a second --repo after the granted one; an earlier one is overridden', () => {
+    // `gh` takes the last `--repo`. Nothing may follow the granted slug.
+    const rule = autoMergeRules(hive)[0]!;
+
+    expect(
+      matches(rule, 'Bash', {
+        command: 'gh pr merge 1 --repo yunidbauza/the-hive --repo victim/secret',
+      }),
+    ).toBe(false);
+    // Read as gh reads it (#281): an option after the granted slug changes nothing, the last --repo is still it.
+    expect(
+      matches(rule, 'Bash', {
+        command: 'gh pr merge 1 --repo yunidbauza/the-hive --squash',
+      }),
+    ).toBe(true);
+    expect(
+      matches(rule, 'Bash', {
+        command: 'gh pr merge 1 --repo victim/secret --squash --repo yunidbauza/the-hive',
+      }),
+    ).toBe(true);
+  });
+
+  it('refuses a slug that carries anything the glob or the rule list reads', () => {
+    expect(autoMergeRules({ owner: 'a*b', name: 'x' })).toEqual([]);
+    expect(autoMergeRules({ owner: 'a', name: 'x,y' })).toEqual([]);
+    expect(autoMergeRules({ owner: 'a b', name: 'x' })).toEqual([]);
+  });
+});
+
+describe('autoMergeRules (HIVE-409)', () => {
+  it('an auto-merge project grants both merge paths', () => {
+    expect(autoMergeRules({ owner: 'behiques', name: 'hivetty' })).toEqual([
+      'Bash(gh pr merge * --repo behiques/hivetty)',
+      'mcp__hive__pr_merge(behiques/hivetty#*)',
+    ]);
+  });
+
+  it('the MCP rule allows that repository and no other', () => {
+    const rule = autoMergeRules(hive)[1]!;
+    const input = { repo: 'yunidbauza/the-hive', number: 214, sha: 'a'.repeat(40) };
+    expect(matches(rule, 'mcp__hive__pr_merge', input)).toBe(true);
+    expect(matches(rule, 'mcp__hive__pr_merge', { ...input, repo: 'yunidbauza/the-hive-2' })).toBe(false);
+  });
+});
+
+describe('autoMergeRulesFor', () => {
+  const projects = [
+    project({ id: 'the-hive', autoMerge: true }),
+    project({ id: 'incorpx', autoMerge: true }),
+    project({ id: 'ai-sdk' }),
+  ];
+  const repoOf = (id: string): RepoRef | undefined =>
+    id === 'the-hive' ? hive : id === 'incorpx' ? { owner: 'behiques', name: 'incorpx' } : undefined;
+
+  it('grants only the shipper', () => {
+    expect(autoMergeRulesFor('fixer', projects, repoOf)).toEqual([]);
+    expect(autoMergeRulesFor('builder', projects, repoOf)).toEqual([]);
+    // Two projects, each with both merge paths (HIVE-409).
+    expect(autoMergeRulesFor(AUTO_MERGE_AGENT, projects, repoOf)).toHaveLength(4);
+  });
+
+  it('grants nothing for a project without consent, or without a known slug', () => {
+    const rules = autoMergeRulesFor(AUTO_MERGE_AGENT, projects, (id) =>
+      id === 'the-hive' ? hive : undefined,
+    );
+
+    expect(rules).toEqual(['Bash(gh pr merge * --repo yunidbauza/the-hive)', 'mcp__hive__pr_merge(yunidbauza/the-hive#*)']);
+  });
+});
+
+describe('createAutoMergeGrants', () => {
+  it('answers from the last refresh and schedules one when a flagged project has no slug yet', async () => {
+    const resolve = vi.fn(async () => new Map([['the-hive', hive]]));
+    const grants = createAutoMergeGrants({
+      projects: () => [project({ id: 'the-hive', autoMerge: true })],
+      resolve,
+    });
+
+    // Nothing known yet: no grant, and a refresh in flight.
+    expect(grants.grantsFor(AUTO_MERGE_AGENT)).toEqual([]);
+    expect(resolve).toHaveBeenCalledTimes(1);
+    await grants.refresh();
+
+    expect(grants.grantsFor(AUTO_MERGE_AGENT)).toEqual([
+      'Bash(gh pr merge * --repo yunidbauza/the-hive)',
+      'mcp__hive__pr_merge(yunidbauza/the-hive#*)',
+    ]);
+    // Known now: no second resolve for the same wake.
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it('never refreshes for an agent that cannot receive the grant', () => {
+    const resolve = vi.fn(async () => new Map<string, RepoRef>());
+    const grants = createAutoMergeGrants({
+      projects: () => [project({ id: 'the-hive', autoMerge: true })],
+      resolve,
+    });
+
+    expect(grants.grantsFor('fixer')).toEqual([]);
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it('keeps a slug it knew through an offline refresh, and drops one for a removed project', async () => {
+    let projects = [project({ id: 'the-hive', autoMerge: true }), project({ id: 'gone', autoMerge: true })];
+    let answer: () => Promise<Map<string, RepoRef>> = async () =>
+      new Map([
+        ['the-hive', hive],
+        ['gone', { owner: 'x', name: 'gone' }],
+      ]);
+    const grants = createAutoMergeGrants({ projects: () => projects, resolve: () => answer() });
+    await grants.refresh();
+    expect(grants.grantsFor(AUTO_MERGE_AGENT)).toHaveLength(4);
+
+    answer = async () => {
+      throw new Error('offline');
+    };
+    await grants.refresh();
+    projects = [project({ id: 'the-hive', autoMerge: true })];
+
+    expect(grants.grantsFor(AUTO_MERGE_AGENT)).toEqual([
+      'Bash(gh pr merge * --repo yunidbauza/the-hive)',
+      'mcp__hive__pr_merge(yunidbauza/the-hive#*)',
+    ]);
+  });
+
+  it('projectFor names the project a repository belongs to, after a refresh (HIVE-409)', async () => {
+    let projects = [project({ id: 'p1' })];
+    const grants = createAutoMergeGrants({
+      projects: () => projects,
+      resolve: async () => new Map([['p1', { owner: 'behiques', name: 'hivetty' }]]),
+    });
+    expect(grants.projectFor('behiques/hivetty')).toBeUndefined();
+    await grants.refresh();
+    expect(grants.projectFor('Behiques/HiveTTY')).toBe('p1');
+    expect(grants.projectFor('other/repo')).toBeUndefined();
+    projects = [];
+    expect(grants.projectFor('behiques/hivetty')).toBeUndefined();
+  });
+
+  it('collapses concurrent refreshes into one resolve', async () => {
+    const resolve = vi.fn(async () => new Map<string, RepoRef>());
+    const grants = createAutoMergeGrants({ projects: () => [], resolve });
+
+    await Promise.all([grants.refresh(), grants.refresh(), grants.refresh()]);
+
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+});
+
+import { autoMergeNotices } from '../../../core/agents/auto-merge';
+import { emptySnapshot } from '../../../shared/config-contract';
+import { OVERMIND } from '../../../shared/ledger-contract';
+
+/*
+  Retro C, Task 5: turning auto-merge on or off wakes the shipper. A config
+  change reaches no agent through the ledger, so the composition turns each
+  flip into one directed post, which wakes the shipper at once.
+*/
+describe('autoMergeNotices (retro C)', () => {
+  const snapshot = (projects: { id: string; path: string; autoMerge: boolean; name?: string }[]) => ({
+    ...emptySnapshot('/home/dev/.hive/config.json', '/bin/zsh'),
+    projects: projects.map((project) => ({ ...project, name: project.name ?? project.id }) as unknown as ProjectConfig),
+  });
+  const before = snapshot([
+    { id: 'the-hive', path: '/repos/the-hive', autoMerge: false },
+    { id: 'other', path: '/repos/other', autoMerge: false },
+  ]);
+
+  it('posts to the shipper when a project turns auto-merge on, naming it and its path', () => {
+    const after = snapshot([
+      { id: 'the-hive', path: '/repos/the-hive', autoMerge: true },
+      { id: 'other', path: '/repos/other', autoMerge: false },
+    ]);
+
+    const posts = autoMergeNotices(before, after, true, new Map());
+
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({
+      from: OVERMIND,
+      to: 'shipper',
+      kind: 'post',
+      meta: { kind: 'auto-merge', project: 'the-hive', path: '/repos/the-hive', autoMerge: true },
+    });
+    expect(posts[0]?.body).toContain('the-hive');
+    expect(posts[0]?.body).toContain('/repos/the-hive');
+  });
+
+  it('posts autoMerge false when consent is withdrawn', () => {
+    const on = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: true }]);
+    const off = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: false }]);
+
+    expect(autoMergeNotices(on, off, true, new Map())[0]?.meta).toMatchObject({ autoMerge: false });
+  });
+
+  it('posts nothing for no change, a change to another field, the first load, or no shipper', () => {
+    const renamed = snapshot([
+      { id: 'the-hive', path: '/repos/the-hive', autoMerge: false, name: 'The Hive' },
+      { id: 'other', path: '/repos/other', autoMerge: false },
+    ]);
+    const flipped = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: true }]);
+
+    expect(autoMergeNotices(before, before, true, new Map())).toEqual([]);
+    expect(autoMergeNotices(before, renamed, true, new Map())).toEqual([]);
+    expect(autoMergeNotices(null, flipped, true, new Map())).toEqual([]);
+    expect(autoMergeNotices(before, flipped, false, new Map())).toEqual([]);
+  });
+
+  it('names the repository and the merge tool when the project resolves (HIVE-412)', () => {
+    const repos = new Map([['the-hive', hive]]);
+    const on = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: true }]);
+    const off = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: false }]);
+
+    const [turnedOn] = autoMergeNotices(off, on, true, repos);
+    expect(turnedOn?.meta).toEqual({
+      kind: 'auto-merge', project: 'the-hive', path: '/repos/the-hive', autoMerge: true, repo: 'yunidbauza/the-hive',
+    });
+    expect(turnedOn?.body).toBe(
+      'Auto-merge turned on for the-hive (yunidbauza/the-hive). `mcp__hive__pr_merge` is granted for yunidbauza/the-hive#* without a card.\n' +
+        'Re-run approval for every row in yunidbauza/the-hive in this wake.',
+    );
+
+    const [turnedOff] = autoMergeNotices(on, off, true, repos);
+    expect(turnedOff?.body).toContain('`mcp__hive__pr_merge` is no longer granted for yunidbauza/the-hive#*: merges go back to a card.');
+  });
+
+  it('keeps the notice without a repo when the project cannot be placed, or its slug is unsafe (HIVE-412)', () => {
+    const flipped = snapshot([{ id: 'the-hive', path: '/repos/the-hive', autoMerge: true }]);
+    for (const repos of [new Map([['other', hive]]), new Map([['the-hive', { owner: 'a b', name: 'x' }]])]) {
+      const [post] = autoMergeNotices(before, flipped, true, repos);
+      expect(post?.meta).not.toHaveProperty('repo');
+      expect(post?.body).toContain('Re-run approval for every row whose path is /repos/the-hive in this wake.');
+    }
+  });
+});

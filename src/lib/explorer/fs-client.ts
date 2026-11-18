@@ -51,7 +51,7 @@ export function hasFsBridge(): boolean {
  * browser target and every caller that has no session behave exactly as before.
  *
  * The renderer never sends a path for this. It sends an id, and main answers
- * from the cwd it observed itself; see `electron/main/fs/session-roots.ts`.
+ * from the cwd it observed itself; see `core/fs/session-roots.ts`.
  */
 /**
  * Which root a read for this project and session resolves under.

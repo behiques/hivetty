@@ -186,7 +186,7 @@ jobs:
           echo "$assets" | jq -e 'index("latest-mac.yml")' >/dev/null \
             || { echo "ABORT: latest-mac.yml is missing — refusing to publish a release no app can use."; exit 1; }
           # A semver prerelease tag (`v1.0.0-rc.1`) is a release candidate: published as a GitHub prerelease and
-          # never `latest`. Its build talks to the dev cloud (`electron/main/licence/cloud.ts`), and only a copy
+          # never `latest`. Its build talks to the dev cloud (`core/licence/cloud.ts`), and only a copy
           # already on a prerelease is offered it — electron-updater turns on `allowPrerelease` from the version.
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
             gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false

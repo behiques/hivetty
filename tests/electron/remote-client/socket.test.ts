@@ -27,7 +27,7 @@ import {
   pskOfToken,
   respond,
   type SecureSocket,
-} from '../../../electron/remote-channel/secure-socket';
+} from '../../../remote-channel/secure-socket';
 import {
   AttachFrameTooLargeError,
   AttachRefusedError,

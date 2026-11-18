@@ -30,7 +30,7 @@ import {
 import {
   CH,
   EVENT_CHANNELS,
-} from '../../../electron/shared/ipc-contract';
+} from '../../../shared/ipc-contract';
 
 /**
  * The bridge's *surface* (story 082).

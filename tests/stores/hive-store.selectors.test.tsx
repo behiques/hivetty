@@ -10,8 +10,8 @@ import type { PlanTaskStatus, SessionPlan } from '@shared/plan-contract';
 import {
   emptySnapshot,
   type ConfigSnapshot,
-} from '../../electron/shared/config-contract';
-import type { PrRecord, PrTimeline } from '../../electron/shared/github-contract';
+} from '../../shared/config-contract';
+import type { PrRecord, PrTimeline } from '../../shared/github-contract';
 import {
   resetProjectConfig,
   setProjectConfigForTest,

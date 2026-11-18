@@ -1,0 +1,239 @@
+import type { AgentsDirectory } from './agent-contract';
+import type { ProjectAutoMergeRequest, ProjectsDirectory } from './config-contract';
+import type { PrLookup, PrLookupReply, PrMergeReply, PrMergeRequest } from './github-contract';
+import type {
+  JiraComment,
+  JiraResult,
+  JiraToolCommentRequest,
+  JiraToolIssue,
+  JiraToolKeyRequest,
+  JiraToolTransitionReply,
+  JiraTransitionByName,
+  JiraUser,
+  JiraUsersRequest,
+} from './jira-contract';
+import type {
+  LedgerPostRequest,
+  LedgerReadQuery,
+  LedgerSnapshot,
+} from './ledger-contract';
+
+/**
+ * The MCP wire protocol, as this app speaks it (HIVE-112).
+ *
+ * `shared` is compiled into the renderer, main, and the MCP host
+ * alike, so nothing here may have a **runtime import**, touch a Node API, or
+ * touch a DOM API. That is the constraint, and it is narrower than the "types
+ * and constants only" shorthand this file used to carry: a value with no
+ * imports behind it — {@link ReceiverError} below — costs a consumer nothing
+ * and is already the established pattern next door, where `guards.ts` exports
+ * `IpcValidationError` and a hundred lines of parsing logic that main and the
+ * renderer both call at runtime. The line that matters is what a module
+ * *drags in*, not whether it happens to be a value.
+ *
+ * ## Why these values are pinned rather than negotiated
+ *
+ * Every constant below was **observed**, not read off a doc page: a throwaway
+ * stdio server was run against real `claude` 2.1.251 and its `initialize`
+ * params recorded. That matters because the whole server is hand-rolled — there
+ * is no SDK to absorb a protocol change, so the version we claim to speak has
+ * to be the version we were actually handed.
+ */
+
+/** The protocol version Claude Code negotiates. Observed, not assumed. */
+export const MCP_PROTOCOL_VERSION = '2025-11-25';
+
+/**
+ * The server's key in the generated config, and therefore the middle segment of
+ * every tool name the model sees: `mcp__hive__ledger_read`.
+ *
+ * Load-bearing across stories. A server delivered through `--plugin-dir`
+ * instead would be `mcp__plugin_hive_hive__ledger_read`, and HIVE-115's
+ * preamble and HIVE-119's `--permission-prompt-tool` both name the short form.
+ */
+export const MCP_SERVER_NAME = 'hive';
+
+/** Reported in `initialize`. Not the app's version: the protocol surface's. */
+export const MCP_SERVER_VERSION = '1.0.0';
+
+/**
+ * How many entries a first `ledger_read` returns when the caller names no
+ * `since` and the process has no cursor yet.
+ *
+ * A bound rather than "everything": the first read of a long-lived ledger would
+ * otherwise put months of history into one tool result.
+ */
+export const LEDGER_READ_DEFAULT_LIMIT = 50;
+
+/** How long a receiver call may take before the tool reports a failure. */
+export const RECEIVER_TIMEOUT_MS = 5_000;
+
+/**
+ * The `pr` call's own limit. A lookup the last sweep cannot answer runs a fresh
+ * one, three to four seconds and sometimes more, so five was too tight. Above
+ * the `gh` runner's twenty seconds, so a stuck sweep ends in `gh`'s own
+ * readable error rather than this timeout.
+ */
+export const PR_LOOKUP_TIMEOUT_MS = 25_000;
+
+/** The `pr_merge` call's own limit (HIVE-409): above `github.merge`'s sixty seconds, so `gh`'s timeout is the one read. */
+export const PR_MERGE_TIMEOUT_MS = 70_000;
+
+/** The only JSON-RPC version MCP uses. */
+export const JSONRPC_VERSION = '2.0';
+
+/** Standard JSON-RPC: the method is not one this server implements. */
+export const RPC_METHOD_NOT_FOUND = -32601;
+
+/** Standard JSON-RPC: the params were the wrong shape, or named no such tool. */
+export const RPC_INVALID_PARAMS = -32602;
+
+/** Standard JSON-RPC: a handler threw instead of producing a result. */
+export const RPC_INTERNAL_ERROR = -32603;
+
+/**
+ * A message from the client. A request has an `id`; a notification does not.
+ *
+ * `id` is typed `null` as well as absent because the spec allows a client to
+ * send `"id": null` on a genuine request — but this server treats a `null` id
+ * exactly like a missing one: both draw no reply, per `handleMessage`.
+ */
+export interface JsonRpcRequest {
+  jsonrpc: typeof JSONRPC_VERSION;
+  id?: string | number | null;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+interface JsonRpcSuccess {
+  jsonrpc: typeof JSONRPC_VERSION;
+  id: string | number;
+  result: unknown;
+}
+
+interface JsonRpcFailure {
+  jsonrpc: typeof JSONRPC_VERSION;
+  id: string | number;
+  error: { code: number; message: string };
+}
+
+export type JsonRpcResponse = JsonRpcSuccess | JsonRpcFailure;
+
+/** One tool, as `tools/list` reports it. */
+export interface McpToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+}
+
+/**
+ * What `tools/call` answers with.
+ *
+ * A tool **failure is a result**, not a JSON-RPC error: `isError: true` with the
+ * reason as text, so the model can read what went wrong and choose differently.
+ * A JSON-RPC error is reserved for the protocol failing — an unknown method or
+ * an unknown tool name — which the model cannot act on.
+ */
+export interface CallToolResult {
+  content: { type: 'text'; text: string }[];
+  isError: boolean;
+  /**
+   * The same payload as the text block, as data rather than a string to parse.
+   *
+   * Observed against real `claude` 2.1.251: the client reads this field and
+   * **prefers it over `content`'s text** when both are present and disagree.
+   * It does that without the tool having declared an `outputSchema` — so this
+   * is additive, not a contract. `outputSchema` is deliberately never declared
+   * on any tool here: it would oblige every successful result to validate
+   * against it, which is a sharp edge for an `isError` result that carries no
+   * payload at all. Optional, and present on only the two tools where a model
+   * would otherwise have to parse a JSON string or a sentence to get at it.
+   */
+  structuredContent?: Record<string, unknown>;
+}
+
+/**
+ * The one way the tools reach the ledger (HIVE-112, moved HIVE-130).
+ *
+ * Two implementations satisfy it and must stay indistinguishable to
+ * `mcp-tools.ts`: the stdio host's HTTP client (`mcp-host/client.ts`), and
+ * main's in-process client, which calls the receiver's own route handlers with
+ * no socket in between. Both are adapters over the same handlers, which is
+ * what keeps identity stamping, the caller-visibility filter and the body
+ * guards running exactly once, in the place they already live.
+ *
+ * No method takes a `from`: the caller is the authenticated session, so a model
+ * has no argument through which to name a different one.
+ */
+export interface ReceiverClient {
+  read(query: LedgerReadQuery): Promise<LedgerSnapshot>;
+  post(request: Omit<LedgerPostRequest, 'from'>): Promise<{ id: string; ref?: string; duplicate?: { from: string; mine: boolean } }>;
+  /**
+   * Who else is on this machine (HIVE-127).
+   *
+   * Takes nothing, for the reason the tool behind it publishes no arguments:
+   * the caller is the session header this client already sends, and a
+   * parameter naming who is asking is a parameter a model can lie in.
+   */
+  agents(): Promise<AgentsDirectory>;
+  /** The config's projects, as an agent may see them (HIVE-173). Takes nothing, as `agents` does. */
+  projects(): Promise<ProjectsDirectory>;
+  /** One PR record from the Hive's own GitHub sweep (HIVE-173). */
+  pr(lookup: PrLookup): Promise<PrLookupReply>;
+  /** Merge one PR (HIVE-409). The fence decided consent before this is called. */
+  prMerge(request: PrMergeRequest): Promise<PrMergeReply>;
+  /** The Jira tools (HIVE-174), each a `JiraResult` so a Jira refusal is an answer, not a transport error. */
+  jiraGet(request: JiraToolKeyRequest): Promise<JiraResult<JiraToolIssue>>;
+  jiraTransition(request: JiraTransitionByName): Promise<JiraResult<JiraToolTransitionReply>>;
+  jiraComment(request: JiraToolCommentRequest): Promise<JiraResult<JiraComment>>;
+  /** People to mention (HIVE-216). */
+  jiraUsers(request: JiraUsersRequest): Promise<JiraResult<JiraUser[]>>;
+  /**
+   * Flip one project's auto-merge (retro B), answered with the directory
+   * `projects` returns. A refusal is a `ReceiverError` carrying its reason.
+   */
+  projectAutoMerge(request: ProjectAutoMergeRequest): Promise<ProjectsDirectory>;
+  /**
+   * This session is finished (HIVE-368): POST `/done`, which arms the close for the end of the
+   * turn. Resolves on the route's 204; a refusal is a `ReceiverError` carrying its reason.
+   */
+  done(): Promise<void>;
+}
+
+/** The path `POST /mcp` is served on (HIVE-130). */
+export const MCP_PATH = '/mcp';
+
+/**
+ * The cap on an MCP request body (HIVE-130).
+ *
+ * One JSON-RPC envelope wrapping one tool call, so it must comfortably hold a
+ * `ledger_post` body — which `Ledger.append` caps at `LEDGER_BODY_MAX` (16 KiB)
+ * on its own. Matching the hook path's 64 KiB leaves room for the envelope and
+ * keeps one number in the reader's head rather than two.
+ */
+export const MCP_MAX_BODY_BYTES = 64 * 1024;
+
+/**
+ * A refusal from the Hive, carrying the reason it gave (HIVE-112, moved 130).
+ *
+ * Lives here rather than beside either caller because there are now two: the
+ * stdio host's HTTP client throws it when the receiver answers non-2xx, and
+ * main's in-process client throws it when the very same handler returns a
+ * non-200 `Reply` with no socket in between. `mcp-tools.ts` catches it by
+ * `instanceof`, so a single definition is what keeps that check working for
+ * both transports — two copies would make a refusal raised in main invisible
+ * to a `catch` written against the host's.
+ */
+export class ReceiverError extends Error {
+  readonly status: number;
+
+  constructor(status: number, reason: string) {
+    super(reason);
+    this.name = 'ReceiverError';
+    this.status = status;
+  }
+}

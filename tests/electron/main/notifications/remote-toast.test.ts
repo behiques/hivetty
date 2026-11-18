@@ -97,7 +97,7 @@ vi.mock('../../../../electron/main/notifications/activate-here', () => ({
   },
 }));
 
-const { CH } = await import('../../../../electron/shared/ipc-contract');
+const { CH } = await import('../../../../shared/ipc-contract');
 const { notificationDelivery } = await import(
   '../../../../electron/main/notifications/delivery'
 );

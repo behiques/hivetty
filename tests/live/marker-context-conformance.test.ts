@@ -7,12 +7,12 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
-import { hookSettings } from '../../electron/main/harness/claude-code/settings';
-import type { HookTransport } from '../../electron/main/harness/port';
-import { readTranscript as readScreen } from '../../electron/main/integrations/slack/tty';
-import { createLedger } from '../../electron/main/ledger';
-import { ledgerMarkers } from '../../electron/shared/ledger-contract';
+import { createReceiver, type Receiver } from '../../core/hooks/receiver';
+import { hookSettings } from '../../core/harness/claude-code/settings';
+import type { HookTransport } from '../../core/harness/port';
+import { readTranscript as readScreen } from '../../core/integrations/slack/tty';
+import { createLedger } from '../../core/ledger';
+import { ledgerMarkers } from '../../shared/ledger-contract';
 
 /**
  * A marker landing in a real session carries its entry whole (HIVE-138).

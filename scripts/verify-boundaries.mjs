@@ -236,30 +236,30 @@ const CASES = [
     },
   },
   {
-    name: 'zone: electron/ may not import tests/',
+    name: 'zone: core/ may not import tests/',
     rule: 'import/no-restricted-paths',
     files: {
       'tests/support/probe-target.ts': 'export const scaffolding = 1;\n',
-      'electron/main/probe.ts':
+      'core/probe.ts':
         "import { scaffolding } from '@tests/support/probe-target';\nexport const probe = scaffolding;\n",
     },
   },
   {
-    name: 'zone: electron/main/ may not import src/',
+    name: 'zone: core/ may not import src/',
     rule: 'import/no-restricted-paths',
     files: {
       'src/utils/probe-target.ts': 'export const renderer = 1;\n',
-      'electron/main/probe.ts':
+      'core/probe.ts':
         "import { renderer } from '@/utils/probe-target';\nexport const probe = renderer;\n",
     },
   },
   {
-    name: 'zone: electron/preload/ may not import electron/main/',
+    name: 'zone: electron/preload/ may not import core/',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/main/probe-target.ts': 'export const main = 1;\n',
+      'core/probe-target.ts': 'export const main = 1;\n',
       'electron/preload/probe.ts':
-        "import { main } from '../main/probe-target';\nexport const probe = main;\n",
+        "import { main } from '../../core/probe-target';\nexport const probe = main;\n",
     },
   },
   {
@@ -272,12 +272,12 @@ const CASES = [
     },
   },
   {
-    name: 'zone: src/ may not import electron/main/',
+    name: 'zone: src/ may not import core/',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/main/probe-target.ts': 'export const main = 1;\n',
+      'core/probe-target.ts': 'export const main = 1;\n',
       'src/utils/probe.ts':
-        "import { main } from '../../electron/main/probe-target';\nexport const probe = main;\n",
+        "import { main } from '../../core/probe-target';\nexport const probe = main;\n",
     },
   },
   {
@@ -311,84 +311,84 @@ const CASES = [
     },
   },
   {
-    name: 'zone: electron/pty-host/ may not import electron/main/ (story 091)',
+    name: 'zone: pty-host/ may not import core/ (story 091)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/main/probe-target.ts': 'export const main = 1;\n',
-      'electron/pty-host/probe.ts':
-        "import { main } from '../main/probe-target';\nexport const probe = main;\n",
+      'core/probe-target.ts': 'export const main = 1;\n',
+      'pty-host/probe.ts':
+        "import { main } from '../core/probe-target';\nexport const probe = main;\n",
     },
   },
   {
-    name: 'zone: electron/pty-host/ may not import src/ — no config, no fixtures',
+    name: 'zone: pty-host/ may not import src/ — no config, no fixtures',
     rule: 'import/no-restricted-paths',
     files: {
       'src/utils/probe-target.ts': 'export const renderer = 1;\n',
-      'electron/pty-host/probe.ts':
+      'pty-host/probe.ts':
         "import { renderer } from '@/utils/probe-target';\nexport const probe = renderer;\n",
     },
   },
   {
-    name: 'zone: src/ may not import electron/pty-host/',
+    name: 'zone: src/ may not import pty-host/',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/pty-host/probe-target.ts': 'export const host = 1;\n',
+      'pty-host/probe-target.ts': 'export const host = 1;\n',
       'src/utils/probe.ts':
-        "import { host } from '../../electron/pty-host/probe-target';\nexport const probe = host;\n",
+        "import { host } from '../../pty-host/probe-target';\nexport const probe = host;\n",
     },
   },
   {
-    name: 'zone: electron/mcp-host/ may not import electron/main/ (HIVE-112)',
+    name: 'zone: mcp-host/ may not import core/ (HIVE-112)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/main/probe-target.ts': 'export const main = 1;\n',
-      'electron/mcp-host/probe.ts':
-        "import { main } from '../main/probe-target';\nexport const probe = main;\n",
+      'core/probe-target.ts': 'export const main = 1;\n',
+      'mcp-host/probe.ts':
+        "import { main } from '../core/probe-target';\nexport const probe = main;\n",
     },
   },
   {
-    name: 'zone: electron/mcp-host/ may not import src/ — no store, no config',
+    name: 'zone: mcp-host/ may not import src/ — no store, no config',
     rule: 'import/no-restricted-paths',
     files: {
       'src/utils/probe-target.ts': 'export const renderer = 1;\n',
-      'electron/mcp-host/probe.ts':
+      'mcp-host/probe.ts':
         "import { renderer } from '@/utils/probe-target';\nexport const probe = renderer;\n",
     },
   },
   {
-    name: 'zone: src/ may not import electron/mcp-host/',
+    name: 'zone: src/ may not import mcp-host/',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/mcp-host/probe-target.ts': 'export const host = 1;\n',
+      'mcp-host/probe-target.ts': 'export const host = 1;\n',
       'src/utils/probe.ts':
-        "import { host } from '../../electron/mcp-host/probe-target';\nexport const probe = host;\n",
+        "import { host } from '../../mcp-host/probe-target';\nexport const probe = host;\n",
     },
   },
   {
-    name: 'zone: electron/remote-host/ may not import electron/remote-client/ (HIVE-141)',
+    name: 'zone: remote-host/ may not import electron/remote-client/ (HIVE-141)',
     rule: 'import/no-restricted-paths',
     files: {
       'electron/remote-client/probe-target.ts': 'export const client = 1;\n',
-      'electron/remote-host/probe.ts':
-        "import { client } from '../remote-client/probe-target';\nexport const probe = client;\n",
+      'remote-host/probe.ts':
+        "import { client } from '../electron/remote-client/probe-target';\nexport const probe = client;\n",
     },
   },
   {
-    name: 'zone: electron/remote-host/ may not import src/ — the cut is below preload',
+    name: 'zone: remote-host/ may not import src/ — the cut is below preload',
     rule: 'import/no-restricted-paths',
     files: {
       'src/utils/probe-target.ts': 'export const renderer = 1;\n',
-      'electron/remote-host/probe.ts':
+      'remote-host/probe.ts':
         "import { renderer } from '@/utils/probe-target';\nexport const probe = renderer;\n",
     },
   },
   {
-    name: 'zone: electron/remote-client/ may not import electron/remote-host/ (HIVE-141)',
+    name: 'zone: electron/remote-client/ may not import remote-host/ (HIVE-141)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/remote-host/probe-target.ts': 'export const host = 1;\n',
+      'remote-host/probe-target.ts': 'export const host = 1;\n',
       'electron/remote-client/probe.ts':
-        "import { host } from '../remote-host/probe-target';\nexport const probe = host;\n",
+        "import { host } from '../../remote-host/probe-target';\nexport const probe = host;\n",
     },
   },
   {
@@ -410,12 +410,12 @@ const CASES = [
     },
   },
   {
-    name: 'zone: electron/remote-host/ may not import electron/preload/',
+    name: 'zone: remote-host/ may not import electron/preload/',
     rule: 'import/no-restricted-paths',
     files: {
       'electron/preload/probe-target.ts': 'export const preload = 1;\n',
-      'electron/remote-host/probe.ts':
-        "import { preload } from '../preload/probe-target';\nexport const probe = preload;\n",
+      'remote-host/probe.ts':
+        "import { preload } from '../electron/preload/probe-target';\nexport const probe = preload;\n",
     },
   },
   /**
@@ -435,12 +435,12 @@ const CASES = [
     },
   },
   {
-    name: 'zone: src/ may not import electron/remote-host/',
+    name: 'zone: src/ may not import remote-host/',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/remote-host/probe-target.ts': 'export const host = 1;\n',
+      'remote-host/probe-target.ts': 'export const host = 1;\n',
       'src/utils/probe.ts':
-        "import { host } from '../../electron/remote-host/probe-target';\nexport const probe = host;\n",
+        "import { host } from '../../remote-host/probe-target';\nexport const probe = host;\n",
     },
   },
   {
@@ -457,45 +457,45 @@ const CASES = [
    * and nothing above it either, so the cipher can never pick up a dependency on main or a socket.
    */
   {
-    name: 'zone: electron/remote-channel/ may not import electron/main/ (HIVE-428)',
+    name: 'zone: remote-channel/ may not import core/ (HIVE-428)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/main/probe-target.ts': 'export const main = 1;\n',
-      'electron/remote-channel/probe.ts':
-        "import { main } from '../main/probe-target';\nexport const probe = main;\n",
+      'core/probe-target.ts': 'export const main = 1;\n',
+      'remote-channel/probe.ts':
+        "import { main } from '../core/probe-target';\nexport const probe = main;\n",
     },
   },
   {
-    name: 'zone: electron/remote-channel/ may not import electron/remote-host/ (HIVE-428)',
+    name: 'zone: remote-channel/ may not import remote-host/ (HIVE-428)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/remote-host/probe-target.ts': 'export const host = 1;\n',
-      'electron/remote-channel/probe.ts':
+      'remote-host/probe-target.ts': 'export const host = 1;\n',
+      'remote-channel/probe.ts':
         "import { host } from '../remote-host/probe-target';\nexport const probe = host;\n",
     },
   },
   {
-    name: 'zone: src/ may not import electron/remote-channel/ (HIVE-428)',
+    name: 'zone: src/ may not import remote-channel/ (HIVE-428)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/remote-channel/probe-target.ts': 'export const channel = 1;\n',
+      'remote-channel/probe-target.ts': 'export const channel = 1;\n',
       'src/utils/probe.ts':
-        "import { channel } from '../../electron/remote-channel/probe-target';\nexport const probe = channel;\n",
+        "import { channel } from '../../remote-channel/probe-target';\nexport const probe = channel;\n",
     },
   },
   {
-    name: 'zone: electron/preload/ may not import electron/remote-channel/ (HIVE-428)',
+    name: 'zone: electron/preload/ may not import remote-channel/ (HIVE-428)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/remote-channel/probe-target.ts': 'export const channel = 1;\n',
+      'remote-channel/probe-target.ts': 'export const channel = 1;\n',
       'electron/preload/probe.ts':
-        "import { channel } from '../remote-channel/probe-target';\nexport const probe = channel;\n",
+        "import { channel } from '../../remote-channel/probe-target';\nexport const probe = channel;\n",
     },
   },
   {
-    name: 'PascalCase folder name is rejected under electron/ too',
+    name: 'PascalCase folder name is rejected under core/ too',
     rule: 'check-file/folder-naming-convention',
-    files: { 'electron/main/ProbeFolder/probe.ts': 'export const probe = 1;\n' },
+    files: { 'core/ProbeFolder/probe.ts': 'export const probe = 1;\n' },
   },
   {
     name: 'no circular dependencies',
@@ -526,47 +526,47 @@ const CASES = [
     },
   },
   {
-    name: 'zone: electron/main/harness/ may not import electron/main/sessions/ (HIVE-233)',
+    name: 'zone: core/harness/ may not import core/sessions/ (HIVE-233)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/main/sessions/probe-target.ts': 'export const core = 1;\n',
-      'electron/main/harness/claude-code/probe.ts':
+      'core/sessions/probe-target.ts': 'export const core = 1;\n',
+      'core/harness/claude-code/probe.ts':
         "import { core } from '../../sessions/probe-target';\nexport const probe = core;\n",
     },
   },
   {
-    name: 'zone: electron/main/sessions/ may not import electron/main/harness/claude-code/ (HIVE-233)',
+    name: 'zone: core/sessions/ may not import core/harness/claude-code/ (HIVE-233)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/main/harness/claude-code/probe-target.ts': 'export const adapter = 1;\n',
-      'electron/main/sessions/probe.ts':
+      'core/harness/claude-code/probe-target.ts': 'export const adapter = 1;\n',
+      'core/sessions/probe.ts':
         "import { adapter } from '../harness/claude-code/probe-target';\nexport const probe = adapter;\n",
     },
   },
   {
-    name: 'zone: electron/main/agents/ may not import electron/main/harness/codex/ (HIVE-342)',
+    name: 'zone: core/agents/ may not import core/harness/codex/ (HIVE-342)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/main/harness/codex/probe-target.ts': 'export const adapter = 1;\n',
-      'electron/main/agents/probe.ts':
+      'core/harness/codex/probe-target.ts': 'export const adapter = 1;\n',
+      'core/agents/probe.ts':
         "import { adapter } from '../harness/codex/probe-target';\nexport const probe = adapter;\n",
     },
   },
   {
-    name: 'zone: electron/main/agents/ may not import electron/main/harness/copilot/ (HIVE-343)',
+    name: 'zone: core/agents/ may not import core/harness/copilot/ (HIVE-343)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/main/harness/copilot/probe-target.ts': 'export const adapter = 1;\n',
-      'electron/main/agents/probe.ts':
+      'core/harness/copilot/probe-target.ts': 'export const adapter = 1;\n',
+      'core/agents/probe.ts':
         "import { adapter } from '../harness/copilot/probe-target';\nexport const probe = adapter;\n",
     },
   },
   {
-    name: 'zone: electron/main/hooks/ may not import the Claude hook vocabulary (HIVE-236)',
+    name: 'zone: core/hooks/ may not import the Claude hook vocabulary (HIVE-236)',
     rule: 'import/no-restricted-paths',
     files: {
-      'electron/main/harness/claude-code/probe-target.ts': 'export const vocabulary = 1;\n',
-      'electron/main/hooks/probe.ts':
+      'core/harness/claude-code/probe-target.ts': 'export const vocabulary = 1;\n',
+      'core/hooks/probe.ts':
         "import { vocabulary } from '../harness/claude-code/probe-target';\nexport const probe = vocabulary;\n",
     },
   },
@@ -600,19 +600,19 @@ const CASES = [
     },
   },
   {
-    name: 'ALLOWED: electron/main/ may import electron/shared/',
+    name: 'ALLOWED: core/ may import shared/',
     rule: null,
     files: {
-      'electron/shared/probe-target.ts': 'export const contract = 1;\n',
-      'electron/main/probe.ts':
+      'shared/probe-target.ts': 'export const contract = 1;\n',
+      'core/probe.ts':
         "import { contract } from '@shared/probe-target';\nexport const probe = contract;\n",
     },
   },
   {
-    name: 'ALLOWED: src/ may import electron/shared/ (the contract types)',
+    name: 'ALLOWED: src/ may import shared/ (the contract types)',
     rule: null,
     files: {
-      'electron/shared/probe-target.ts': 'export const contract = 1;\n',
+      'shared/probe-target.ts': 'export const contract = 1;\n',
       'src/utils/probe.ts':
         "import { contract } from '@shared/probe-target';\nexport const probe = contract;\n",
     },
@@ -621,32 +621,32 @@ const CASES = [
    * The deliberate hole in the remote fences (HIVE-141).
    *
    * Unlike `pty-host` and `mcp-host`, the remote halves are NOT cut off from
-   * `electron/main/**`: `remote-host` reuses the hook receiver's timing-safe
+   * `core/**`: `remote-host` reuses the hook receiver's timing-safe
    * compare and its Origin/Host allowlist rather than growing a second copy, and
    * `remote-client` is driven by the router that lives in main. A negative case
    * cannot express that, and without this the allowance looks like an oversight
    * to the next person tightening the zones.
    */
   {
-    name: 'ALLOWED: electron/remote-host/ may import electron/main/ (HIVE-134 reuse)',
+    name: 'ALLOWED: remote-host/ may import core/ (HIVE-134 reuse)',
     rule: null,
     files: {
-      'electron/main/probe-target.ts': 'export const main = 1;\n',
-      'electron/remote-host/probe.ts':
-        "import { main } from '../main/probe-target';\nexport const probe = main;\n",
+      'core/probe-target.ts': 'export const main = 1;\n',
+      'remote-host/probe.ts':
+        "import { main } from '../core/probe-target';\nexport const probe = main;\n",
     },
   },
   /**
    * The registry is the adapter's one door (HIVE-233). The sealing zone's target
-   * is an extglob (`electron/main/!(harness)/**`); this proves it did not also
+   * is an extglob (`core/!(harness)/**`); this proves it did not also
    * seal `harness/` itself.
    */
   {
-    name: 'ALLOWED: electron/main/harness/ may import electron/main/harness/claude-code/ (HIVE-233)',
+    name: 'ALLOWED: core/harness/ may import core/harness/claude-code/ (HIVE-233)',
     rule: null,
     files: {
-      'electron/main/harness/claude-code/probe-target.ts': 'export const adapter = 1;\n',
-      'electron/main/harness/probe.ts':
+      'core/harness/claude-code/probe-target.ts': 'export const adapter = 1;\n',
+      'core/harness/probe.ts':
         "import { adapter } from './claude-code/probe-target';\nexport const probe = adapter;\n",
     },
   },
@@ -698,7 +698,7 @@ for (const testCase of CASES) {
       .filter(Boolean);
   } finally {
     for (const { absolutePath } of written) rmSync(absolutePath, { force: true });
-    for (const dir of ['src/utils/ProbeFolder', 'electron/main/ProbeFolder']) {
+    for (const dir of ['src/utils/ProbeFolder', 'core/ProbeFolder']) {
       rmSync(join(appRoot, dir), { recursive: true, force: true });
     }
   }

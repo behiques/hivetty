@@ -6,10 +6,10 @@ import { join, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { createCodexPluginInstaller, readCodexPluginState } from '../../electron/main/harness/codex/plugin-install';
-import { runVersion } from '../../electron/main/harness/detect';
-import { writeCodexMarketplace } from '../../electron/main/skills/codex-marketplace';
-import { readUserSkills } from '../../electron/main/skills/read';
+import { createCodexPluginInstaller, readCodexPluginState } from '../../core/harness/codex/plugin-install';
+import { runVersion } from '../../core/harness/detect';
+import { writeCodexMarketplace } from '../../core/skills/codex-marketplace';
+import { readUserSkills } from '../../core/skills/read';
 
 /**
  * HIVE-372, live: HiveTTY's real skills, rendered as the marketplace, installed by the real installer into a scratch

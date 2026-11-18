@@ -7,41 +7,41 @@ import { createInterface } from 'node:readline';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { copilotAdapter } from '../../electron/main/harness/copilot';
-import { shellQuote } from '../../electron/main/container/shell-quote';
+import { copilotAdapter } from '../../core/harness/copilot';
+import { shellQuote } from '../../core/container/shell-quote';
 import {
   COPILOT_INSTRUCTIONS_ENV,
   COPILOT_OTEL_EXPORT_ENV,
   COPILOT_OTEL_USER_KEYS,
   launchCopilotSession,
-} from '../../electron/main/harness/copilot/launch';
-import { copilotRecord } from '../../electron/main/harness/copilot/record';
-import type { LaunchSpec } from '../../electron/main/harness/port';
-import { createHarnessRegistry } from '../../electron/main/harness/registry';
-import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
-import { createStatusTracker, type StatusTracker } from '../../electron/main/hooks/tracker';
-import { createLedger } from '../../electron/main/ledger';
-import type { StdioServerSpec } from '../../electron/main/mcp/agent-config';
-import { hiveServerSpec } from '../../electron/main/mcp/config';
-import { createNotificationHub, createNotifier } from '../../electron/main/notifications';
-import { meterExportPath } from '../../electron/main/sessions/meter-exports';
-import { createRecordAborts, type RecordAborts } from '../../electron/main/sessions/record-aborts';
-import { createRecordMeters, METER_EXPORT_SETTLE_MS, type RecordMeters } from '../../electron/main/sessions/record-meters';
-import { readUserSkills } from '../../electron/main/skills/read';
-import { renderSkills } from '../../electron/main/skills/render';
+} from '../../core/harness/copilot/launch';
+import { copilotRecord } from '../../core/harness/copilot/record';
+import type { LaunchSpec } from '../../core/harness/port';
+import { createHarnessRegistry } from '../../core/harness/registry';
+import { createReceiver, type Receiver } from '../../core/hooks/receiver';
+import { createStatusTracker, type StatusTracker } from '../../core/hooks/tracker';
+import { createLedger } from '../../core/ledger';
+import type { StdioServerSpec } from '../../core/mcp/agent-config';
+import { hiveServerSpec } from '../../core/mcp/config';
+import { createNotificationHub, createNotifier } from '../../core/notifications';
+import { meterExportPath } from '../../core/sessions/meter-exports';
+import { createRecordAborts, type RecordAborts } from '../../core/sessions/record-aborts';
+import { createRecordMeters, METER_EXPORT_SETTLE_MS, type RecordMeters } from '../../core/sessions/record-meters';
+import { readUserSkills } from '../../core/skills/read';
+import { renderSkills } from '../../core/skills/render';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
   HOOK_PATH,
   type HookStatusEvent,
-} from '../../electron/shared/hook-contract';
-import { CH } from '../../electron/shared/ipc-contract';
-import type { SessionMetrics, SessionMetricsEvent } from '../../electron/shared/metrics-contract';
-import type { LedgerEntry, LedgerReadQuery, LedgerSnapshot, OpenAsk } from '../../electron/shared/ledger-contract';
-import type { HiveNotification } from '../../electron/shared/notification-contract';
-import type { PlanUpdate } from '../../electron/shared/plan-contract';
-import { typedSkill } from '../../electron/shared/skill-render';
+} from '../../shared/hook-contract';
+import { CH } from '../../shared/ipc-contract';
+import type { SessionMetrics, SessionMetricsEvent } from '../../shared/metrics-contract';
+import type { LedgerEntry, LedgerReadQuery, LedgerSnapshot, OpenAsk } from '../../shared/ledger-contract';
+import type { HiveNotification } from '../../shared/notification-contract';
+import type { PlanUpdate } from '../../shared/plan-contract';
+import { typedSkill } from '../../shared/skill-render';
 
 /**
  * What only a real interactive `copilot` can prove about a Copilot session (HIVE-280).
