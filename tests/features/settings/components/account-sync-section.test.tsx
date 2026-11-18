@@ -204,6 +204,16 @@ describe('AccountSyncSection', () => {
     expect(screen.getByText('1 conflict kept')).toBeInTheDocument();
   });
 
+  it('says before the confirm that the passphrase cannot be recovered and that Reset deletes the cloud copy', () => {
+    status.current = ON();
+    render(<AccountSyncSection />);
+    expect(
+      screen.getByText(
+        "Forgot the passphrase? It can't be recovered. Reset deletes the cloud copy, and this Mac's setup becomes the new start.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('resets only after the confirm, and Cancel calls nothing', async () => {
     status.current = ON();
     render(<AccountSyncSection />);
