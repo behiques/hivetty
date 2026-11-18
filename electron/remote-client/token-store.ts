@@ -1,5 +1,7 @@
 import { chmodSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 
+import type { Secrets } from '../../core/platform';
+
 /**
  * The device credential this machine was handed when it attached to someone
  * else's Hive (HIVE-144).
@@ -98,10 +100,7 @@ export interface TokenStore {
  * and `slack/tokens.ts` take theirs by injection rather than importing
  * Electron's global.
  */
-export type RemoteSafeStorage = Pick<
-  Electron.SafeStorage,
-  'isEncryptionAvailable' | 'encryptString' | 'decryptString'
->;
+export type RemoteSafeStorage = Secrets;
 
 export function createTokenStore(deps: {
   safeStorage: RemoteSafeStorage;

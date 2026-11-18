@@ -1,6 +1,8 @@
 import type { JsonWebKey } from 'node:crypto';
 import { chmodSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 
+import type { Secrets } from '../platform';
+
 /**
  * `<userData>/account.bin`: the signed-in account (HIVE-264), one safeStorage-encrypted JSON.
  * The shape of `electron/remote-client/token-store.ts`: `read` never throws, `write` refuses plaintext and
@@ -30,10 +32,7 @@ export interface AccountStore {
   exists(): boolean;
 }
 
-export type AccountSafeStorage = Pick<
-  Electron.SafeStorage,
-  'isEncryptionAvailable' | 'encryptString' | 'decryptString'
->;
+export type AccountSafeStorage = Secrets;
 
 export const NO_ENCRYPTION =
   'This Mac has no keychain available to encrypt your HiveTTY account, so signing in cannot be saved. ' +

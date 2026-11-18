@@ -13,6 +13,8 @@ import {
   type SyncStatus,
 } from '@shared/sync-contract';
 
+import type { Secrets } from '../platform';
+
 import { applyMerge, conflictsSummary, CONFLICTS_DIR } from './apply';
 import { collectFiles } from './bundle';
 import { deriveKey } from './crypto';
@@ -41,7 +43,7 @@ export interface SyncDeps {
   onFocus: (listener: () => void) => () => void;
   /** `leaseSubject`: the user the key is bound to. */
   userId: () => string | null;
-  safeStorage: Pick<Electron.SafeStorage, 'isEncryptionAvailable' | 'encryptString' | 'decryptString'>;
+  safeStorage: Secrets;
   userData: string;
   /** The folder holding config.json, skills/ and agents/. */
   hiveDir: string;
