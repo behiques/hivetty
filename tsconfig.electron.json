@@ -41,5 +41,5 @@
       "@remote-host/*": ["./remote-host/*"]
     }
   },
-  "include": ["electron", "core", "shared", "pty-host", "mcp-host", "remote-host", "remote-channel"]
+  "include": ["electron", "core", "shared", "pty-host", "mcp-host", "remote-host", "remote-channel", "server"]
 }

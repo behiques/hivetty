@@ -712,7 +712,7 @@ export default tseslint.config(
      * `electron/preload/` is deliberately absent: it runs inside a renderer and
      * legitimately touches browser globals, so it keeps the default.
      */
-    files: ['core/**/*.ts', 'electron/main/**/*.ts'],
+    files: ['core/**/*.ts', 'electron/main/**/*.ts', 'server/**/*.ts'],
     languageOptions: { globals: globals.node },
   },
 );
