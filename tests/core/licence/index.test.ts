@@ -10,6 +10,7 @@ import {
   ACCOUNT_CALLS,
   cloudSession,
   LICENCE_CALLS,
+  leaseFeatures,
   leaseSubject,
   licence,
   onLicenceChange,
@@ -676,5 +677,86 @@ describe('the renewal asks for the stored org (HIVE-291)', () => {
     // A macrotask turn drains every microtask a renewal would have queued (the fetch mock resolves at once).
     await new Promise((resolve) => setImmediate(resolve));
     expect(leaseBodies(fetch).length).toBe(before);
+  });
+});
+
+describe('leaseFeatures: the features of the lease on disk (HIVE-422)', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-lease-features-'));
+  });
+  afterEach(() => {
+    resetLicence();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const start = (keys: unknown[], cloud = ISS): void => {
+    startLicence({
+      app: { isPackaged: false, getPath: () => dir, getVersion: () => '1.0.0' },
+      safeStorage,
+      openExternal: vi.fn(),
+      env: { HIVETTY_LEASE_KEYS: JSON.stringify(keys), HIVETTY_CLOUD_URL: cloud },
+      fetch: vi.fn(),
+      broadcast: vi.fn(),
+      broadcastLicence: vi.fn(),
+      onWake: vi.fn(),
+      watch: vi.fn(() => () => undefined),
+      broadcastDeviceCode: vi.fn(),
+    });
+  };
+
+  it('is null before startLicence ran', () => {
+    const signer = makeSigner('kid-f0');
+    writeFileSync(join(dir, 'lease.jws'), signer.sign(claimsFor({ features: ['runners.byo'] })));
+    expect(leaseFeatures()).toBeNull();
+  });
+
+  it('answers the features as written by a trusted key', () => {
+    const signer = makeSigner('kid-f1');
+    writeFileSync(join(dir, 'lease.jws'), signer.sign(claimsFor({ features: ['runners.byo', 'relay'] })));
+    start([signer.jwk]);
+    expect(leaseFeatures()).toEqual(['runners.byo', 'relay']);
+  });
+
+  it('answers the features of an expired lease, for another device', () => {
+    const signer = makeSigner('kid-f2');
+    writeFileSync(
+      join(dir, 'lease.jws'),
+      signer.sign(claimsFor({ features: ['runners.byo'], device: 'someone-else', iat: 1000, exp: 2000 })),
+    );
+    start([signer.jwk]);
+    expect(leaseFeatures()).toEqual(['runners.byo']);
+  });
+
+  it('is null for a lease signed by an untrusted key', () => {
+    const trusted = makeSigner('kid-f3');
+    const stranger = makeSigner('kid-f3');
+    writeFileSync(join(dir, 'lease.jws'), stranger.sign(claimsFor({ features: ['runners.byo'] })));
+    start([trusted.jwk]);
+    expect(leaseFeatures()).toBeNull();
+  });
+
+  it('is null for a lease from another issuer', () => {
+    const signer = makeSigner('kid-f4');
+    writeFileSync(
+      join(dir, 'lease.jws'),
+      signer.sign(claimsFor({ features: ['runners.byo'], iss: 'https://elsewhere.test' })),
+    );
+    start([signer.jwk]);
+    expect(leaseFeatures()).toBeNull();
+  });
+
+  it('is null with no lease file', () => {
+    start([makeSigner('kid-f5').jwk]);
+    expect(leaseFeatures()).toBeNull();
+  });
+
+  it('is null after resetLicence', () => {
+    const signer = makeSigner('kid-f6');
+    writeFileSync(join(dir, 'lease.jws'), signer.sign(claimsFor({ features: ['runners.byo'] })));
+    start([signer.jwk]);
+    expect(leaseFeatures()).toEqual(['runners.byo']);
+    resetLicence();
+    expect(leaseFeatures()).toBeNull();
   });
 });
