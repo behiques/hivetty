@@ -65,7 +65,7 @@ function ResetSync({ label = 'Reset sync' }: { label?: string }) {
   return (
     <SettingsGroup
       title="Reset sync"
-      description="Starts over from this Mac with a new passphrase. Use it if the passphrase is lost."
+      description="Forgot the passphrase? It can't be recovered. Reset deletes the cloud copy, and this Mac's setup becomes the new start."
     >
       {confirming ? (
         <InlineConfirm
