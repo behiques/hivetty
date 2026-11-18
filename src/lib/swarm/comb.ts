@@ -184,7 +184,8 @@ const urgencyOf = (entities: CombInput[], project: string): number =>
 /**
  * The heavy day: cells nest like real comb. The swarm is two staggered rows of
  * seven; each project a 2×2 patch of at most four with a "+N" rest cell, the
- * rule the rail combs already follow; names only as tags (drawn later).
+ * rule the rail combs already follow. Agents keep their names under the cell;
+ * a session's name shows only as a tag (drawn later).
  */
 function scale(entities: CombInput[], projects: CombProject[]): CombLayout {
   const R = 21;
@@ -486,17 +487,18 @@ function drawCell(ctx: CanvasRenderingContext2D, c: CombCell, layout: CombLayout
     ctx.shadowBlur = 0;
   }
 
-  if (!sc) {
-    ctx.font = `500 11px ${SANS}`;
+  // At scale only agents are named: their staggered rows leave a band under each cell, a session's 2×2 patch does not.
+  if (!sc || c.project === SWARM) {
+    ctx.font = sc ? `500 9px ${SANS}` : `500 11px ${SANS}`;
     ctx.fillStyle = c.state === 'burrowed' ? p.subtle : p.ink;
-    ctx.fillText(truncate(c.name, 14), c.x, c.y + R + 16);
+    ctx.fillText(truncate(c.name, sc ? 12 : 14), c.x, c.y + R + (sc ? 11 : 16));
   }
 }
 
-/** At scale a name shows only where it needs you, failed, or an agent is working, as a tag drawn over the comb. */
+/** At scale a session's name shows only where it needs you or failed, as a tag drawn over the comb. */
 function drawTag(ctx: CanvasRenderingContext2D, c: CombCell, R: number, p: SwarmPalette): void {
   const col = colourOf(p, c.state);
-  // Small and cut to 12: a long agent name must not cover the next cell. The hover card has the whole name.
+  // Small and cut to 12: a long name must not cover the next cell. The hover card has the whole name.
   const name = truncate(c.name, 12);
   ctx.font = `600 8px ${SANS}`;
   const tw = ctx.measureText(name).width + 6;
@@ -554,11 +556,10 @@ export function drawComb(
     for (const f of flyers) drawMuta(ctx, f.spine, t, f.k * 3.7, f.turn, scale, ps, tone);
   });
 
-  // Working agents' tags first, so a long one never covers a tag that needs you or failed.
+  // Agents carry their names under the cell, and colour and motion carry their state, so only sessions get tags.
   if (sc) {
-    const working = layout.cells.filter((c) => c.state === 'morphing' && c.project === SWARM);
-    const urgent = layout.cells.filter((c) => c.state === 'summons' || c.state === 'failed');
-    for (const cell of [...working, ...urgent]) drawTag(ctx, cell, layout.R, palette);
+    const urgent = layout.cells.filter((c) => c.project !== SWARM && (c.state === 'summons' || c.state === 'failed'));
+    for (const cell of urgent) drawTag(ctx, cell, layout.R, palette);
   }
 
   // A keyboard-focused cell (HIVE-223): the sr-only buttons are invisible, so the canvas shows which one has focus.

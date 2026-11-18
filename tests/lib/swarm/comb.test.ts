@@ -17,6 +17,7 @@ import {
   stillFlyers,
   SWARM,
   syncFlyers,
+  truncate,
 } from '@lib/swarm/comb';
 import { createSpine, drawMuta, spineNodes } from '@lib/swarm/muta';
 import type { SwarmPalette } from '@lib/swarm/palette';
@@ -316,38 +317,35 @@ describe('drawComb', () => {
     expect(texts).toContain('THE SWARM');
   });
 
-  it('tags Summons and Failed cells, and Morphing agents, at scale', () => {
-    const l = layoutComb(heavy(HEAVY_COUNTS).entities, heavy(HEAVY_COUNTS).projects);
-    const { texts } = draw(l);
-    expect(texts).toContain('agent-0'); // summons
-    expect(texts).toContain('agent-1'); // failed
-    expect(texts).toContain('agent-2'); // morphing agent
-    expect(l.cells.some((c) => c.id === 'the-hive-0')).toBe(true);
-    expect(texts).not.toContain('the-hive-0'); // morphing session
-  });
-
-  it('draws a tag small, and cuts a long name to 12, at scale', () => {
+  it('names every agent under its cell at scale, whatever its state, and tags none', () => {
     const { entities, projects } = heavy(HEAVY_COUNTS);
-    const long = 'release-notes-writer';
-    const { calls, texts } = draw(layoutComb([...entities, agent(long, 'summons')], projects));
-    expect(texts).toContain('release-not…');
-    expect(texts).not.toContain(long);
-    const at = calls.findIndex((c) => c.op === 'fillText' && c.args[0] === 'release-not…');
-    const font = calls.slice(0, at).findLast((c) => c.op === 'set:font')?.args[0];
-    expect(font).toMatch(/^600 8px /);
-    const box = calls.slice(0, at).findLast((c) => c.op === 'roundRect')?.args as number[];
-    expect(box[3]).toBe(12);
+    const l = layoutComb([...entities.slice(0, 12), agent('idle-one', 'burrowed'), ...entities.slice(14)], projects);
+    const { calls } = draw(l);
+    for (const c of l.cells.filter((cell) => cell.project === SWARM && cell.kind === 'entity')) {
+      const at = calls.findIndex((call) => call.op === 'fillText' && call.args[0] === c.name);
+      expect(at, c.name).toBeGreaterThanOrEqual(0);
+      expect(calls[at]!.args.slice(1)).toEqual([c.x, c.y + l.R + 11]);
+      expect(calls.slice(0, at).findLast((call) => call.op === 'set:font')?.args[0]).toMatch(/^500 9px /);
+    }
   });
 
-  it('draws Morphing tags under Summons and Failed tags at scale', () => {
+  it('cuts a long agent name to 12 under its cell at scale', () => {
+    const { entities, projects } = heavy(HEAVY_COUNTS);
+    const { texts } = draw(layoutComb([...entities.slice(0, 13), agent('release-notes-writer', 'burrowed')], projects));
+    expect(texts).toContain('release-not…');
+    expect(texts).not.toContain('release-notes-writer');
+  });
+
+  it('tags only Summons and Failed sessions at scale, small', () => {
     const l = layoutComb(heavy(HEAVY_COUNTS).entities, heavy(HEAVY_COUNTS).projects);
-    const { texts } = draw(l);
-    const stateOf = new Map(l.cells.map((c) => [c.name, c.state]));
-    const tagStates = texts.map((t) => stateOf.get(String(t))).filter((s) => s === 'morphing' || s === 'summons' || s === 'failed');
-    const lastMorphing = tagStates.lastIndexOf('morphing');
-    const firstUrgent = tagStates.findIndex((s) => s === 'summons' || s === 'failed');
-    expect(lastMorphing).toBeGreaterThanOrEqual(0);
-    expect(firstUrgent).toBeGreaterThan(lastMorphing);
+    const { calls, texts } = draw(l);
+    const urgent = l.cells.filter((c) => c.project !== SWARM && (c.state === 'summons' || c.state === 'failed'));
+    expect(urgent.length).toBeGreaterThan(0);
+    expect(calls.filter((c) => c.op === 'roundRect')).toHaveLength(urgent.length);
+    for (const c of urgent) expect(texts).toContain(truncate(c.name, 12));
+    expect(texts).not.toContain('the-hive-0'); // morphing session
+    const at = calls.findIndex((c) => c.op === 'fillText' && c.args[0] === truncate(urgent[0]!.name, 12));
+    expect(calls.slice(0, at).findLast((c) => c.op === 'set:font')?.args[0]).toMatch(/^600 8px /);
   });
 
   it('rings the focused cell in brand, and nothing without one (HIVE-223)', () => {
