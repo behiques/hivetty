@@ -7,7 +7,7 @@ import { expandPreview } from '@features/settings/container-preview';
 /**
  * Pins `expandPreview` — the renderer's own copy of the env-expansion logic —
  * against the same shapes `container-command.test.ts` asserts for the real
- * `expandEnvArgs`/`substituteEnv` pair in `electron/main/sessions/`. `src/**`
+ * `expandEnvArgs`/`substituteEnv` pair in `core/sessions/`. `src/**`
  * cannot import that module (the fence bans `electron/main/**`), so this is a
  * second implementation and these tests are what keeps the two from drifting.
  *

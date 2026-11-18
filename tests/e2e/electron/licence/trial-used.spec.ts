@@ -20,7 +20,7 @@ test('trial already used: Start trial is refused and goes away, Choose a plan st
     const page = await mainWindow(app);
     const opened = await recordExternal(app);
     await signInWithBrowser(app, page, opened);
-    // Deviation 1: the app learns this only from the 409 (`electron/main/licence/trial.ts:6`).
+    // Deviation 1: the app learns this only from the 409 (`core/licence/trial.ts:6`).
     await page.getByRole('button', { name: 'Start 14-day free trial' }).click();
     await expect(page.getByRole('button', { name: 'Start 14-day free trial' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Choose a plan' })).toBeVisible();

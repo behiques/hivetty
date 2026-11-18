@@ -10,7 +10,7 @@ import {
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
   HOOK_PATH,
-} from '../../../electron/shared/hook-contract';
+} from '../../../shared/hook-contract';
 import { goToOvermind, overmindNewSession } from '../fixtures/places';
 import { launchHive } from './fixtures/hive-app';
 

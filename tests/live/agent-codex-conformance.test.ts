@@ -8,37 +8,37 @@ import { dirname, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { agentPromptFile, agentStateFile, agentsRoot, cliHome, laneWorkdir } from '../../electron/main/agents/paths';
-import { createPermissions, type Permissions } from '../../electron/main/agents/permissions';
-import { createAgentRegistry, type AgentRegistry } from '../../electron/main/agents/registry';
-import type { HarnessGate } from '../../electron/main/agents/resolve-harness';
-import { createRunTracker, type ChildLike, type RunTracker } from '../../electron/main/agents/runs';
-import { createScheduler, type Scheduler } from '../../electron/main/agents/scheduler';
-import { createAgentState, type AgentState } from '../../electron/main/agents/state';
-import { createWakeCommand } from '../../electron/main/agents/wake-command';
-import { toml } from '../../electron/main/harness/codex/headless';
-import { hookCommand } from '../../electron/main/harness/hook-commands';
-import { headlessAdapter } from '../../electron/main/harness/registry';
-import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
-import { writeAgentSettings } from '../../electron/main/harness/claude-code/settings';
-import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
-import { createLedger, type Ledger } from '../../electron/main/ledger';
-import { createPlans } from '../../electron/main/plans';
-import { agentMcpConfigFile } from '../../electron/main/mcp';
-import { createSkillsRuntime } from '../../electron/main/skills';
-import { hiveServerSpec } from '../../electron/main/mcp/config';
-import { resolveClis } from '../../electron/shared/cli-contract';
-import type { AgentRunState, RunLine } from '../../electron/shared/agent-contract';
-import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
+import { agentPromptFile, agentStateFile, agentsRoot, cliHome, laneWorkdir } from '../../core/agents/paths';
+import { createPermissions, type Permissions } from '../../core/agents/permissions';
+import { createAgentRegistry, type AgentRegistry } from '../../core/agents/registry';
+import type { HarnessGate } from '../../core/agents/resolve-harness';
+import { createRunTracker, type ChildLike, type RunTracker } from '../../core/agents/runs';
+import { createScheduler, type Scheduler } from '../../core/agents/scheduler';
+import { createAgentState, type AgentState } from '../../core/agents/state';
+import { createWakeCommand } from '../../core/agents/wake-command';
+import { toml } from '../../core/harness/codex/headless';
+import { hookCommand } from '../../core/harness/hook-commands';
+import { headlessAdapter } from '../../core/harness/registry';
+import { createReceiver, type Receiver } from '../../core/hooks/receiver';
+import { writeAgentSettings } from '../../core/harness/claude-code/settings';
+import { mcpConfig } from '../../core/harness/claude-code/mcp-config';
+import { createLedger, type Ledger } from '../../core/ledger';
+import { createPlans } from '../../core/plans';
+import { agentMcpConfigFile } from '../../core/mcp';
+import { createSkillsRuntime } from '../../core/skills';
+import { hiveServerSpec } from '../../core/mcp/config';
+import { resolveClis } from '../../shared/cli-contract';
+import type { AgentRunState, RunLine } from '../../shared/agent-contract';
+import { CONFIG_PATH_ENV } from '../../shared/config-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
   type HookAgentEvent,
-} from '../../electron/shared/hook-contract';
-import { CH } from '../../electron/shared/ipc-contract';
-import { LEDGER_DIR, OVERMIND } from '../../electron/shared/ledger-contract';
-import type { PlanChangedEvent } from '../../electron/shared/plan-contract';
+} from '../../shared/hook-contract';
+import { CH } from '../../shared/ipc-contract';
+import { LEDGER_DIR, OVERMIND } from '../../shared/ledger-contract';
+import type { PlanChangedEvent } from '../../shared/plan-contract';
 
 /**
  * What only a real `codex` can prove about a Codex wake (HIVE-342).

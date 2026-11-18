@@ -3,9 +3,9 @@ import { fileURLToPath } from 'node:url';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AccountState } from '../../../electron/shared/account-contract';
-import type { ServerDevice } from '../../../electron/shared/config-contract';
-import type { LicenceState } from '../../../electron/shared/licence-contract';
+import type { AccountState } from '../../../shared/account-contract';
+import type { ServerDevice } from '../../../shared/config-contract';
+import type { LicenceState } from '../../../shared/licence-contract';
 
 /**
  * The server-mode tray's content and wiring (HIVE-142).

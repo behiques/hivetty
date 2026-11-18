@@ -14,23 +14,23 @@ import {
 import type { SetSyncGroupRequest, SyncedAppearance } from '@shared/sync-contract';
 
 import { RemoteCallError, type RemoteClient } from '../../remote-client/socket';
-import { ACCOUNT_CALLS, cloudSession, LICENCE_CALLS } from '../licence';
+import { ACCOUNT_CALLS, cloudSession, LICENCE_CALLS } from '../../../core/licence';
 import { activateOnThisMachine } from '../notifications/activate-here';
 import { notificationDelivery } from '../notifications/delivery';
 import { badgeDock, clearDockBadgeWithLastWindow } from '../notifications/dock-badge';
 import { createRemoteToasts, type RemoteToasts } from '../notifications/remote-toast';
-import { relayStatus } from '../relay';
-import { relayHostsFor } from '../relay/hosts';
-import { syncCalls } from '../sync';
+import { relayStatus } from '../../../core/relay';
+import { relayHostsFor } from '../../../core/relay/hosts';
+import { syncCalls } from '../../../core/sync';
 import { checkForUpdatesInteractively, updateStatus } from '../updates';
 
 
-import { createBindings, type Bindings } from './bindings';
-import type { Broadcaster } from './broadcaster';
-import { readLocalRemote } from './get-remote';
+import { createBindings, type Bindings } from '../../../core/ipc/bindings';
+import type { Broadcaster } from '../../../core/ipc/broadcaster';
+import { readLocalRemote } from '../../../core/ipc/get-remote';
 import { createForegroundStamp, type ForegroundStamp } from './remote-foreground';
-import type { ResumeTracker } from './resume-tracker';
-import { assertSender } from './sender';
+import type { ResumeTracker } from '../../../core/ipc/resume-tracker';
+import { assertSender } from '../../../core/ipc/sender';
 
 /**
  * What each `PROCESS_LOCAL` channel is actually answered with (HIVE-144,
@@ -53,7 +53,7 @@ import { assertSender } from './sender';
  * `CH.configGetRemote` is the seventh (HIVE-149), and it goes back to
  * `updateStatus`'s shape rather than `localSetRemote`'s: a read verb the
  * renderer calls with nothing, whose answerer is a module function this file
- * may import outright. `electron/main/ipc/get-remote.ts` exists so that this
+ * may import outright. `core/ipc/get-remote.ts` exists so that this
  * arm and `ipc/index.ts`'s local handler answer the channel with the same
  * expression rather than with two copies of it that can drift.
  *
@@ -109,7 +109,7 @@ function localAnswerFor(
     /*
       HIVE-149. Imported rather than handed down, like `updateStatus` above and
       unlike `localSetRemote` below it: `readLocalRemote` closes over no
-      registration state, and `electron/main/config/index.ts` reaches nothing
+      registration state, and `core/config/index.ts` reaches nothing
       under `ipc/`, so there is no cycle to route around.
     */
     case CH.configGetRemote:

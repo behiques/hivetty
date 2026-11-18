@@ -1,4 +1,4 @@
-import type { ShippedStatus } from '../../electron/shared/shipped-contract';
+import type { ShippedStatus } from '../../shared/shipped-contract';
 
 /** A shipped agent or skill status, as shipped unless `over` says otherwise. */
 export const shippedStatus = (over: Partial<ShippedStatus> = {}): ShippedStatus => ({

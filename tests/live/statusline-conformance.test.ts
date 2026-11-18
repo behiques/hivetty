@@ -6,13 +6,13 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { createReceiver } from '../../electron/main/hooks/receiver';
-import { metricsScript } from '../../electron/main/harness/claude-code/settings';
+import { createReceiver } from '../../core/hooks/receiver';
+import { metricsScript } from '../../core/harness/claude-code/settings';
 import {
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
-} from '../../electron/shared/hook-contract';
-import type { SessionMetrics } from '../../electron/shared/metrics-contract';
+} from '../../shared/hook-contract';
+import type { SessionMetrics } from '../../shared/metrics-contract';
 
 /** Not exercised by this suite — the status line path, not the ledger. */
 const noLedger = {

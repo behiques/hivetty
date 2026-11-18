@@ -15,8 +15,8 @@ import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { renderSkills } from '../../electron/main/skills/render';
-import { readUserSkills, type SkillsRead } from '../../electron/main/skills/read';
+import { renderSkills } from '../../core/skills/render';
+import { readUserSkills, type SkillsRead } from '../../core/skills/read';
 
 /**
  * Custom-skills conformance: a real `claude`, actually run (HIVE-96).

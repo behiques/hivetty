@@ -1,0 +1,1178 @@
+// @vitest-environment node
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import {
+  LEDGER_ASK_TTL_MS,
+  LEDGER_BODY_MAX,
+  OVERMIND,
+} from '../../../shared/ledger-contract';
+import { decide } from '../../../core/agents/scheduler-rules';
+import { createLedger, type Ledger } from '../../../core/ledger/index';
+
+const AT = new Date(2026, 7, 28, 14, 15, 30).getTime();
+
+describe('createLedger', () => {
+  let dir: string;
+  let clock: number;
+  let ledger: Ledger;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-ledger-'));
+    clock = AT;
+    ledger = createLedger({
+      dir,
+      now: () => clock,
+      // Every party is known except the one explicitly named as gone.
+      knowsParty: (id) => id !== 'sess-gone',
+    });
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('reads a thread by its short ref (HIVE-408)', () => {
+    const asked = ledger.append({ from: 'sess-a', to: 'builder', kind: 'ask', body: 'build it' });
+    const ref = asked.ok ? (asked.ref ?? '') : '';
+    ledger.append({ from: 'builder', to: 'sess-a', kind: 'answer', thread: asked.ok ? asked.id : '', body: 'built' });
+
+    expect(ledger.read({ thread: ref }).entries.map((e) => e.body)).toEqual(['build it', 'built']);
+    expect(ledger.read({ thread: ref.toUpperCase() }).entries).toHaveLength(2);
+    // An unknown ref reads as it always did: nothing.
+    expect(ledger.read({ thread: 'a999' }).entries).toEqual([]);
+  });
+
+  it('refuses a ref two writers both minted, and still takes the full id (HIVE-227)', () => {
+    const ask = (id: string, to: string): string =>
+      JSON.stringify({ id, ts: AT - 1000, from: 'builder', to, kind: 'ask', ref: 'a5', body: 'which?' });
+    writeFileSync(
+      join(dir, '2026-08-28.jsonl'),
+      `${ask('20260828-141529-0001', 'sess-a')}\n${ask('20260828-141529-0002', 'sess-b')}\n`,
+    );
+    const twice = createLedger({ dir, now: () => clock, knowsParty: (id) => id !== 'sess-gone' });
+    const refusal = { ok: false, status: 400, reason: 'a5 is ambiguous: use the full id' };
+
+    expect(twice.answer({ thread: 'a5', body: 'yes' }, 'sess-a')).toMatchObject(refusal);
+    expect(twice.append({ from: 'builder', kind: 'done', thread: 'a5', body: 'never mind' })).toMatchObject(refusal);
+    expect(twice.append({ from: 'builder', to: 'sess-gone', kind: 'done', thread: 'a5', body: 'x' })).toMatchObject(refusal);
+    expect(twice.read({}).entries).toHaveLength(2);
+
+    expect(twice.answer({ thread: '20260828-141529-0001', body: 'yes' }, 'sess-a')).toMatchObject({ ok: true });
+  });
+
+  it('re-addresses an ask to a session that is gone to the overmind, naming who it was for (HIVE-167)', () => {
+    const redirecting = createLedger({
+      dir,
+      now: () => clock,
+      knowsParty: () => true,
+      isGoneSession: (id) => id === 'sess-closed',
+    });
+
+    const result = redirecting.append({
+      from: 'builder',
+      to: 'sess-closed',
+      kind: 'ask',
+      body: 'which colour?',
+      meta: { options: ['red', 'blue'] },
+    });
+
+    expect(result.ok).toBe(true);
+    const stored = redirecting.read({}).entries.at(-1)!;
+    expect(stored.to).toBe('overmind');
+    expect(stored.meta).toEqual({ options: ['red', 'blue'], redirectedFrom: 'sess-closed' });
+    // A live session, an agent, and the overmind itself are left alone.
+    for (const to of ['sess-live', 'watcher', 'overmind']) {
+      redirecting.append({ from: 'builder', to, kind: 'ask', body: 'x' });
+      expect(redirecting.read({}).entries.at(-1)!.to).toBe(to);
+    }
+  });
+
+  it('refuses an ask to a paused agent, so the asker is not left asking for a day', () => {
+    const pausing = createLedger({
+      dir,
+      now: () => clock,
+      knowsParty: () => true,
+      isPausedAgent: (id) => id === 'slack',
+    });
+
+    expect(pausing.append({ from: 'shipper', to: 'slack', kind: 'ask', body: 'announce?' })).toEqual({
+      ok: false,
+      status: 409,
+      reason: 'slack is paused: an ask would wait unanswered until someone resumes it. Post instead, or ask another party.',
+    });
+    expect(pausing.read({}).entries).toHaveLength(0);
+
+    // A post is still held for its resume (HIVE-120), its own ask to itself still lands, and other agents are asked as before.
+    for (const entry of [
+      { from: 'shipper', to: 'slack', kind: 'post' },
+      { from: 'slack', to: 'slack', kind: 'ask' },
+      { from: 'shipper', to: 'acr', kind: 'ask' },
+    ] as const) {
+      expect(pausing.append({ ...entry, body: 'x' })).toMatchObject({ ok: true });
+    }
+  });
+
+  it('accepts a post from a known party', () => {
+    const result = ledger.append({ from: 'sess-a', kind: 'post', body: 'hello' });
+
+    expect(result).toMatchObject({ ok: true, id: '20260828-141530-0001' });
+  });
+
+  it('refuses a post from a party it does not know', () => {
+    const result = ledger.append({ from: 'sess-gone', kind: 'post', body: 'hello' });
+
+    expect(result).toMatchObject({ ok: false, status: 404 });
+    expect(ledger.read({}).entries).toHaveLength(0);
+  });
+
+  it('refuses an entry addressed to a party it does not know, so no ask is orphaned', () => {
+    // A goal session once wrote its Claude session UUID as `reply-to`; the
+    // shipper's final ask went there, was accepted, and nobody could see it.
+    for (const kind of ['ask', 'post'] as const) {
+      const result = ledger.append({ from: 'shipper', to: 'sess-gone', kind, body: 'merged?' });
+
+      expect(result).toEqual({ ok: false, status: 404, reason: 'unknown party: sess-gone' });
+    }
+    expect(ledger.read({}).entries).toHaveLength(0);
+  });
+
+  /*
+    scheduler.ts's expiry sweep, and five sites in permissions.ts, all set
+    `to: ask.from` directly alongside `thread: ask.id` — the exact shape the
+    thread-derivation exemption is meant to cover, but written by the caller
+    rather than defaulted here. A party that was known when the ask was
+    written can age out of session history by the time the sweep or a grant
+    reply runs; the write addressing it back must still land, or (in the
+    sweep's case, where the write *is* the dedup) it retries, refused the
+    same way, every sixty seconds forever — the exact orphaned-ask failure
+    this guard exists to close, reintroduced in its own bookkeeping.
+  */
+  describe('a to matching the resolved thread\'s own party is trusted (HIVE-115 review)', () => {
+    it('accepts to: ask.from set directly, even once that party has aged out', () => {
+      const asked = ledger.append({ from: 'sess-live', to: OVERMIND, kind: 'ask', body: 'grant?' });
+      if (!asked.ok) throw new Error('setup failed');
+
+      // A later wake, after `sess-live` no longer resolves — the exact shape
+      // `deps.append({ from: OVERMIND, to: ask.from, kind: 'event', thread: ask.id, ... })`
+      // takes in scheduler.ts and permissions.ts.
+      const agedOut = createLedger({
+        dir,
+        now: () => clock,
+        knowsParty: (id) => id !== 'sess-live',
+      });
+
+      const result = agedOut.append({
+        from: OVERMIND,
+        to: 'sess-live',
+        kind: 'event',
+        thread: asked.id,
+        body: 'ask expired',
+      });
+
+      expect(result).toMatchObject({ ok: true });
+      expect(agedOut.read({}).entries.at(-1)).toMatchObject({ to: 'sess-live' });
+    });
+
+    it('still refuses an unknown to that is not actually a party to the named thread', () => {
+      const asked = ledger.append({ from: 'sess-a', to: 'sess-b', kind: 'ask', body: 'ship?' });
+      if (!asked.ok) throw new Error('setup failed');
+
+      const result = ledger.append({
+        from: OVERMIND,
+        to: 'sess-gone',
+        kind: 'event',
+        thread: asked.id,
+        body: 'unrelated',
+      });
+
+      expect(result).toEqual({ ok: false, status: 404, reason: 'unknown party: sess-gone' });
+    });
+  });
+
+  it('refuses a body over the cap without appending', () => {
+    const result = ledger.append({
+      from: 'sess-a',
+      kind: 'post',
+      body: 'x'.repeat(LEDGER_BODY_MAX + 1),
+    });
+
+    expect(result).toMatchObject({ ok: false, status: 413 });
+    expect(ledger.read({}).entries).toHaveLength(0);
+  });
+
+  it('refuses an unknown kind without appending', () => {
+    const result = ledger.append({
+      from: 'sess-a',
+      // @ts-expect-error — the runtime guard is the subject here.
+      kind: 'nonsense',
+      body: 'hello',
+    });
+
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect(ledger.read({}).entries).toHaveLength(0);
+  });
+
+  it('returns the ref it allocated for an ask', () => {
+    const result = ledger.append({
+      from: 'sess-a',
+      to: OVERMIND,
+      kind: 'ask',
+      body: 'ship it?',
+    });
+
+    expect(result).toMatchObject({ ok: true, ref: 'a1' });
+  });
+
+  it('closes a thread named by its canonical id', () => {
+    const ask = ledger.append({ from: 'sess-a', to: OVERMIND, kind: 'ask', body: 'ship?' });
+    if (!ask.ok) throw new Error('setup failed');
+
+    expect(ledger.answer({ thread: ask.id, body: 'yes' }, OVERMIND)).toMatchObject({ ok: true });
+    expect(ledger.read({}).openAsks).toHaveLength(0);
+  });
+
+  it('closes a thread named by its short ref, storing the canonical id', () => {
+    const ask = ledger.append({ from: 'sess-a', to: OVERMIND, kind: 'ask', body: 'ship?' });
+    if (!ask.ok) throw new Error('setup failed');
+
+    expect(ledger.answer({ thread: 'a1', body: 'yes' }, OVERMIND)).toMatchObject({ ok: true });
+
+    const answer = ledger.read({ kind: 'answer' }).entries[0];
+    expect(answer.thread).toBe(ask.id);
+  });
+
+  it('reports every closed ask thread, derived from the whole log (HIVE-198)', () => {
+    const ask = ledger.append({ from: 'sess-a', to: OVERMIND, kind: 'ask', body: 'ship it?' });
+    if (!ask.ok) throw new Error('setup failed');
+    ledger.answer({ thread: ask.id, body: 'yes' }, OVERMIND);
+    const open = ledger.append({ from: 'sess-a', to: OVERMIND, kind: 'ask', body: 'and this?' });
+    if (!open.ok) throw new Error('setup failed');
+
+    // A query filtered to someone else still reports the close: it is a fact about the log.
+    const snapshot = ledger.read({ from: 'nobody' });
+
+    expect(snapshot.closedAsks).toEqual([ask.id]);
+    expect(snapshot.closedAsks).not.toContain(open.id);
+  });
+
+  it('refuses an answer to a thread that is not open, with a reason', () => {
+    const result = ledger.answer({ thread: 'a99', body: 'yes' }, OVERMIND);
+
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    if (result.ok) throw new Error('expected a refusal');
+    expect(result.reason).toContain('a99');
+    expect(ledger.read({}).entries).toHaveLength(0);
+  });
+
+  it('refuses a second answer to an already-closed thread', () => {
+    const ask = ledger.append({ from: 'sess-a', to: OVERMIND, kind: 'ask', body: 'ship?' });
+    if (!ask.ok) throw new Error('setup failed');
+    ledger.answer({ thread: ask.id, body: 'yes' }, OVERMIND);
+
+    expect(ledger.answer({ thread: ask.id, body: 'no' }, OVERMIND)).toMatchObject({
+      ok: false,
+      status: 400,
+    });
+  });
+
+  it('says who closed the thread and where to post instead (HIVE-413)', () => {
+    const ask = ledger.append({ from: 'sess-a', to: OVERMIND, kind: 'ask', body: 'ship?' });
+    if (!ask.ok) throw new Error('setup failed');
+    ledger.answer({ thread: ask.id, body: 'yes' }, OVERMIND);
+
+    const second = ledger.answer({ thread: ask.id, body: 'no' }, OVERMIND);
+
+    if (second.ok) throw new Error('expected a refusal');
+    expect(second.reason).toContain('closed by overmind at');
+    expect(second.reason).toContain('post to sess-a on this thread instead');
+  });
+
+  /**
+   * The openness rule belongs to `append`, not to `answer` (HIVE-111 final
+   * review, finding 1).
+   *
+   * `answer()` is reachable over IPC alone; every out-of-process party comes
+   * through `append`. These three cover it directly rather than through the
+   * HTTP route, so a later refactor of the receiver cannot quietly take the
+   * rule with it.
+   */
+  describe('an answer appended directly', () => {
+    /*
+      Addressed to `sess-b`, which answers it below: only a party to a thread
+      may close it (see the party rules further down), and these specs are
+      about the *openness* rule, not that one.
+    */
+    const ask = (): string => {
+      const result = ledger.append({ from: 'sess-a', to: 'sess-b', kind: 'ask', body: 'ship?' });
+      if (!result.ok) throw new Error('setup failed');
+      return result.id;
+    };
+
+    it('closes an open thread', () => {
+      const thread = ask();
+
+      expect(ledger.append({ from: 'sess-b', kind: 'answer', thread, body: 'yes' })).toMatchObject({
+        ok: true,
+      });
+      expect(ledger.read({}).openAsks).toHaveLength(0);
+    });
+
+    it('is refused once the thread is already closed, and appends nothing', () => {
+      const thread = ask();
+      ledger.append({ from: 'sess-b', kind: 'answer', thread, body: 'yes' });
+
+      const second = ledger.append({ from: 'sess-b', kind: 'answer', thread, body: 'no' });
+
+      expect(second).toMatchObject({ ok: false, status: 400 });
+      if (second.ok) throw new Error('expected a refusal');
+      expect(second.reason).toContain('not open');
+      expect(second.reason).toContain('closed by sess-b at');
+      expect(second.reason).toContain('post to sess-a on this thread instead');
+      expect(ledger.read({}).entries).toHaveLength(2);
+    });
+
+    it('is refused once the thread has aged past the TTL', () => {
+      const thread = ask();
+      clock = AT + LEDGER_ASK_TTL_MS;
+
+      expect(ledger.append({ from: 'sess-b', kind: 'answer', thread, body: 'late' })).toMatchObject(
+        { ok: false, status: 400 },
+      );
+      expect(ledger.read({}).entries).toHaveLength(1);
+    });
+
+    /*
+      `resolveRef` matches any entry id, so a thread naming an ordinary post
+      resolves — only the openness check tells the two apart.
+    */
+    it('is refused when its thread names something that was never an ask', () => {
+      const posted = ledger.append({ from: 'sess-a', kind: 'post', body: 'talking' });
+      if (!posted.ok) throw new Error('setup failed');
+
+      expect(
+        ledger.append({ from: 'sess-b', kind: 'answer', thread: posted.id, body: 'eh' }),
+      ).toMatchObject({ ok: false, status: 400 });
+      expect(ledger.read({}).entries).toHaveLength(1);
+    });
+
+    /*
+      Every other kind keeps the looser rule: a `post` may carry a `thread` to
+      say "about that question" without pretending to close it.
+    */
+    it('does not stop a non-answer kind from naming a closed thread', () => {
+      const thread = ask();
+      ledger.append({ from: 'sess-b', kind: 'answer', thread, body: 'yes' });
+
+      expect(
+        ledger.append({ from: 'sess-c', kind: 'post', thread, body: 'noted' }),
+      ).toMatchObject({ ok: true });
+    });
+  });
+
+  it('filters a read and reports derived state', () => {
+    ledger.append({ from: 'sess-a', kind: 'post', body: 'one' });
+    ledger.append({ from: 'sess-b', kind: 'post', body: 'two' });
+    ledger.append({ from: 'sess-a', kind: 'claim', body: '', meta: { task: 'HIVE-9' } });
+
+    const snapshot = ledger.read({ from: 'sess-a' });
+
+    expect(snapshot.entries.map((entry) => entry.from)).toEqual(['sess-a', 'sess-a']);
+    expect(snapshot.claims).toEqual({ 'HIVE-9': 'sess-a' });
+  });
+
+  it('keeps the newest when a limit is given', () => {
+    ledger.append({ from: 'sess-a', kind: 'post', body: 'one' });
+    ledger.append({ from: 'sess-a', kind: 'post', body: 'two' });
+    ledger.append({ from: 'sess-a', kind: 'post', body: 'three' });
+
+    expect(ledger.read({ limit: 2 }).entries.map((entry) => entry.body)).toEqual([
+      'two',
+      'three',
+    ]);
+  });
+
+  /**
+   * `slice(-0)` is `slice(0)` — a whole copy — so the narrowest request a
+   * caller can make used to return the widest possible answer. And `0` is not
+   * an exotic input: `parseLedgerReadQuery` explicitly admits it, so
+   * `{"limit": 0}` returned the entire log over both the HTTP and IPC paths.
+   */
+  it('returns nothing, not everything, for a limit of zero', () => {
+    ledger.append({ from: 'sess-a', kind: 'post', body: 'one' });
+    ledger.append({ from: 'sess-a', kind: 'post', body: 'two' });
+
+    const snapshot = ledger.read({ limit: 0 });
+
+    expect(snapshot.entries).toEqual([]);
+    // The derived halves are computed from the whole log and are unaffected.
+    expect(snapshot.claims).toEqual({});
+  });
+
+  /**
+   * Only a party to a thread may close it (HIVE-111 ship review).
+   *
+   * `openAsks` retires an ask on *any* answer naming it, so an answer from a
+   * bystander does not merely add noise — it takes the question out of the
+   * recipient's inbox, and the party who was actually asked never sees it.
+   */
+  describe('who may answer', () => {
+    const askOf = (to: string | undefined): string => {
+      const result = ledger.append({
+        from: 'sess-a',
+        kind: 'ask',
+        body: 'ship?',
+        ...(to === undefined ? {} : { to }),
+      });
+      if (!result.ok) throw new Error('setup failed');
+      return result.id;
+    };
+
+    it('refuses a session that is neither the recipient nor the asker', () => {
+      const thread = askOf(OVERMIND);
+
+      const result = ledger.append({ from: 'sess-c', kind: 'answer', thread, body: 'sure' });
+
+      expect(result).toMatchObject({ ok: false, status: 403 });
+      if (result.ok) throw new Error('expected a refusal');
+      expect(result.reason).toContain('sess-c');
+      // Nothing written, so the question is still in the recipient's inbox.
+      expect(ledger.read({}).openAsks).toHaveLength(1);
+    });
+
+    it('lets the recipient answer', () => {
+      const thread = askOf('sess-b');
+
+      expect(ledger.append({ from: 'sess-b', kind: 'answer', thread, body: 'yes' })).toMatchObject({
+        ok: true,
+      });
+    });
+
+    it('lets the asker close its own question', () => {
+      const thread = askOf('sess-b');
+
+      expect(ledger.append({ from: 'sess-a', kind: 'answer', thread, body: 'never mind' })).toMatchObject(
+        { ok: true },
+      );
+    });
+
+    it('lets the overmind answer anything', () => {
+      const thread = askOf('sess-b');
+
+      expect(ledger.append({ from: OVERMIND, kind: 'answer', thread, body: 'yes' })).toMatchObject({
+        ok: true,
+      });
+    });
+
+    // A broadcast ask is addressed to everyone, so everyone is its recipient.
+    it('lets anyone answer a broadcast ask', () => {
+      const thread = askOf(undefined);
+
+      expect(ledger.append({ from: 'sess-c', kind: 'answer', thread, body: 'me' })).toMatchObject({
+        ok: true,
+      });
+    });
+  });
+
+  /**
+   * Only the holder may release a claim (HIVE-111 ship review).
+   *
+   * `claims()` deletes on any `release` naming the task regardless of `from`,
+   * so a release written by a third party moves the task exactly as if that
+   * party had posted as the holder — which the party rule promises can never
+   * happen. There is no matching rule for `claim`: the tool layer reports the
+   * current holder rather than refusing, so a losing claim is a fact.
+   */
+  describe('who may release a claim', () => {
+    const claim = (): void => {
+      ledger.append({ from: 'sess-a', kind: 'claim', body: '', meta: { task: 'HIVE-9' } });
+    };
+
+    it('refuses a release from a party that does not hold the task', () => {
+      claim();
+
+      const result = ledger.append({
+        from: 'sess-b',
+        kind: 'release',
+        body: '',
+        meta: { task: 'HIVE-9' },
+      });
+
+      expect(result).toMatchObject({ ok: false, status: 403 });
+      if (result.ok) throw new Error('expected a refusal');
+      expect(result.reason).toContain('sess-a');
+      expect(ledger.read({}).claims).toEqual({ 'HIVE-9': 'sess-a' });
+    });
+
+    it('lets the holder release it', () => {
+      claim();
+
+      expect(
+        ledger.append({ from: 'sess-a', kind: 'release', body: '', meta: { task: 'HIVE-9' } }),
+      ).toMatchObject({ ok: true });
+      expect(ledger.read({}).claims).toEqual({});
+    });
+
+    it('lets the overmind release a claim it does not hold', () => {
+      claim();
+
+      expect(
+        ledger.append({ from: OVERMIND, kind: 'release', body: '', meta: { task: 'HIVE-9' } }),
+      ).toMatchObject({ ok: true });
+      expect(ledger.read({}).claims).toEqual({});
+    });
+
+    // Nobody holds it, so there is nothing to misappropriate.
+    it('allows a release naming a task nobody holds', () => {
+      expect(
+        ledger.append({ from: 'sess-b', kind: 'release', body: '', meta: { task: 'HIVE-9' } }),
+      ).toMatchObject({ ok: true });
+    });
+
+    describe('across lanes (HIVE-188)', () => {
+      const begun = (run: string, lane?: string): void => {
+        ledger.append({
+          from: 'builder', kind: 'event', body: 'run.started — ledger',
+          meta: { run, ...(lane === undefined ? {} : { lane }) },
+        });
+      };
+
+      beforeEach(() => {
+        begun('r1', 'thread:A');
+        begun('r2', 'thread:B');
+        begun('r3', 'thread:A');
+        ledger.append({ from: 'builder', kind: 'claim', body: '', meta: { task: 'HIVE-9', run: 'r1' } });
+      });
+
+      it('refuses a release from a run of another lane, with a reason', () => {
+        const result = ledger.append({ from: 'builder', kind: 'release', body: '', meta: { task: 'HIVE-9', run: 'r2' } });
+
+        expect(result).toMatchObject({ ok: false, status: 403 });
+        if (result.ok) throw new Error('expected a refusal');
+        expect(result.reason).toBe("HIVE-9 is held by builder's thread:A lane");
+        expect(ledger.read({}).claims).toEqual({ 'HIVE-9': 'builder' });
+      });
+
+      it('lets a later run of the same lane release it', () => {
+        expect(
+          ledger.append({ from: 'builder', kind: 'release', body: '', meta: { task: 'HIVE-9', run: 'r3' } }),
+        ).toMatchObject({ ok: true });
+      });
+
+      it('still lets the overmind release it', () => {
+        expect(
+          ledger.append({ from: OVERMIND, kind: 'release', body: '', meta: { task: 'HIVE-9' } }),
+        ).toMatchObject({ ok: true });
+      });
+
+      it('keeps the party rule for a release that names no run', () => {
+        expect(
+          ledger.append({ from: 'builder', kind: 'release', body: '', meta: { task: 'HIVE-9' } }),
+        ).toMatchObject({ ok: true });
+      });
+
+      it('lets the agent\'s standing lane release a claim held by one of its lanes (HIVE-189)', () => {
+        begun('r0'); // no meta.lane: the standing lane
+        expect(
+          ledger.append({ from: 'builder', kind: 'release', body: '', meta: { task: 'HIVE-9', run: 'r0' } }),
+        ).toMatchObject({ ok: true });
+      });
+    });
+
+    it('does not refuse a second claim on a held task', () => {
+      claim();
+
+      expect(
+        ledger.append({ from: 'sess-b', kind: 'claim', body: '', meta: { task: 'HIVE-9' } }),
+      ).toMatchObject({ ok: true });
+    });
+  });
+
+  /**
+   * An answer is addressed to whoever asked (HIVE-111 ship review).
+   *
+   * `LedgerAnswerRequest` carries no `to` and should not — the recipient of an
+   * answer is not a choice. Leaving it absent made every overmind answer a
+   * broadcast, and `visibleTo` in the receiver treats an absent `to` as
+   * "everyone", so a private reply was readable by every other session.
+   */
+  it('addresses an answer to the asker rather than broadcasting it', () => {
+    const asked = ledger.append({ from: 'sess-a', to: OVERMIND, kind: 'ask', body: 'ship?' });
+    if (!asked.ok) throw new Error('setup failed');
+
+    ledger.answer({ thread: asked.id, body: 'yes' }, OVERMIND);
+
+    expect(ledger.read({ kind: 'answer' }).entries[0]).toMatchObject({
+      from: OVERMIND,
+      to: 'sess-a',
+    });
+  });
+
+  /**
+   * `to` defaults to the ask's `from` on the direct-`append` path too
+   * (HIVE-112 self-review).
+   *
+   * `Ledger.answer()` — the IPC entry point — has always set `to: ask.from`
+   * itself, but the MCP host reaches `append` directly and its tool schema
+   * exposes no `to`, so a POST-ed answer left it `undefined` — which
+   * `visibleTo` in the receiver treats as "everyone". These three prove the
+   * default lives in `append` now, for both callers alike.
+   */
+  describe('an answer defaults `to` to the asker', () => {
+    it('stores `to` as the ask\'s `from` when the request omits it', () => {
+      const asked = ledger.append({ from: 'sess-a', to: 'sess-b', kind: 'ask', body: 'ship?' });
+      if (!asked.ok) throw new Error('setup failed');
+
+      ledger.append({ from: 'sess-b', kind: 'answer', thread: asked.id, body: 'yes' });
+
+      expect(ledger.read({ kind: 'answer' }).entries[0]).toMatchObject({
+        from: 'sess-b',
+        to: 'sess-a',
+      });
+    });
+
+    it('preserves an explicit `to`', () => {
+      const asked = ledger.append({ from: 'sess-a', to: 'sess-b', kind: 'ask', body: 'ship?' });
+      if (!asked.ok) throw new Error('setup failed');
+
+      ledger.append({
+        from: 'sess-b',
+        to: 'sess-z',
+        kind: 'answer',
+        thread: asked.id,
+        body: 'redirected',
+      });
+
+      expect(ledger.read({ kind: 'answer' }).entries[0]).toMatchObject({ to: 'sess-z' });
+    });
+
+    it('produces the same `to` from both `append` directly and from `answer()`', () => {
+      const askedForAppend = ledger.append({
+        from: 'sess-a',
+        to: 'sess-b',
+        kind: 'ask',
+        body: 'ship one?',
+      });
+      const askedForAnswer = ledger.append({
+        from: 'sess-a',
+        to: OVERMIND,
+        kind: 'ask',
+        body: 'ship two?',
+      });
+      if (!askedForAppend.ok || !askedForAnswer.ok) throw new Error('setup failed');
+
+      ledger.append({ from: 'sess-b', kind: 'answer', thread: askedForAppend.id, body: 'yes' });
+      ledger.answer({ thread: askedForAnswer.id, body: 'yes' }, OVERMIND);
+
+      const answers = ledger.read({ kind: 'answer' }).entries;
+      expect(answers.find((entry) => entry.thread === askedForAppend.id)).toMatchObject({
+        to: 'sess-a',
+      });
+      expect(answers.find((entry) => entry.thread === askedForAnswer.id)).toMatchObject({
+        to: 'sess-a',
+      });
+    });
+  });
+
+  /**
+   * A threaded `done` or `failed` is addressed to the asker too.
+   *
+   * `WAKING_KINDS` in `scheduler-rules.ts` has always listed both, so that "an
+   * agent waiting on a thread learns it was abandoned" — and it could never
+   * fire: neither tool's schema exposes a `to`, `decide()` discards a
+   * broadcast, so every `done` an agent ever wrote woke nobody. A real
+   * hand-off died on it: `acr` reviewed a PR for `pr-patrol`, reported with
+   * `ledger_done`, and `pr-patrol` sat on `asking` until the 24-hour expiry.
+   */
+  describe('a done or failed that closes an ask is addressed to the asker', () => {
+    for (const kind of ['done', 'failed'] as const) {
+      it(`stores \`to\` as the ask's \`from\` on a ${kind}`, () => {
+        const asked = ledger.append({
+          from: 'sess-a',
+          to: 'sess-b',
+          kind: 'ask',
+          body: 'review?',
+        });
+        if (!asked.ok) throw new Error('setup failed');
+
+        ledger.append({ from: 'sess-b', kind, thread: asked.id, body: 'reviewed' });
+
+        expect(ledger.read({ kind }).entries[0]).toMatchObject({
+          from: 'sess-b',
+          to: 'sess-a',
+        });
+      });
+    }
+
+    it('preserves an explicit `to`', () => {
+      const asked = ledger.append({ from: 'sess-a', to: 'sess-b', kind: 'ask', body: 'review?' });
+      if (!asked.ok) throw new Error('setup failed');
+
+      ledger.append({
+        from: 'sess-b',
+        to: 'sess-z',
+        kind: 'done',
+        thread: asked.id,
+        body: 'reviewed',
+      });
+
+      expect(ledger.read({ kind: 'done' }).entries[0]).toMatchObject({ to: 'sess-z' });
+    });
+
+    /*
+      The abandonment direction — the one `WAKING_KINDS` actually names.
+
+      `scheduler-rules.ts` justifies `done`/`failed` as "how an asker takes its
+      question back, so an agent waiting on a thread learns it was abandoned".
+      Addressing only the completion left that sentence still describing
+      nothing, so the asker's own close goes to whoever it asked.
+    */
+    it('addresses an asker closing its own ask to the party it asked', () => {
+      const asked = ledger.append({ from: 'sess-a', to: 'sess-b', kind: 'ask', body: 'review?' });
+      if (!asked.ok) throw new Error('setup failed');
+
+      ledger.append({ from: 'sess-a', kind: 'done', thread: asked.id, body: 'never mind' });
+
+      expect(ledger.read({ kind: 'done' }).entries[0]).toMatchObject({ to: 'sess-b' });
+    });
+
+    it('addresses an overmind failed on an agent\'s thread to the asker (HIVE-354)', () => {
+      const asked = ledger.append({ from: 'sess-a', to: 'builder', kind: 'ask', body: 'build it' });
+      if (!asked.ok) throw new Error('setup failed');
+
+      ledger.append({ from: OVERMIND, kind: 'failed', thread: asked.id, body: 'builder run ended' });
+
+      expect(ledger.read({ kind: 'failed' }).entries[0]).toMatchObject({ from: OVERMIND, to: 'sess-a' });
+    });
+
+    /*
+      A broadcast ask has no single party to tell, so abandoning one stays a
+      broadcast rather than inventing a recipient.
+    */
+    it('leaves an abandoned broadcast ask unaddressed', () => {
+      const asked = ledger.append({ from: 'sess-a', kind: 'ask', body: 'anyone?' });
+      if (!asked.ok) throw new Error('setup failed');
+
+      ledger.append({ from: 'sess-a', kind: 'done', thread: asked.id, body: 'never mind' });
+
+      expect(ledger.read({ kind: 'done' }).entries[0]?.to).toBeUndefined();
+    });
+
+    /*
+      The party rule now covers every closing kind, not just `answer`.
+
+      A third party's threaded `done` was survivable while it was inert — it
+      closed the thread but reached nobody. Addressed, it would wake the asker
+      with a false completion and dismiss its card, so the guard has to cover
+      all three or the addressing above opens a hole.
+    */
+    for (const kind of ['done', 'failed'] as const) {
+      it(`refuses a ${kind} on a thread the writer is not a party to`, () => {
+        const asked = ledger.append({
+          from: 'sess-a',
+          to: 'sess-b',
+          kind: 'ask',
+          body: 'review?',
+        });
+        if (!asked.ok) throw new Error('setup failed');
+
+        const result = ledger.append({
+          from: 'sess-z',
+          kind,
+          thread: asked.id,
+          body: 'not mine to close',
+        });
+
+        expect(result).toMatchObject({ ok: false, status: 403 });
+        expect(ledger.read({ kind }).entries).toHaveLength(0);
+      });
+    }
+
+    it('still lets the overmind close any thread', () => {
+      const asked = ledger.append({ from: 'sess-a', to: 'sess-b', kind: 'ask', body: 'review?' });
+      if (!asked.ok) throw new Error('setup failed');
+
+      const result = ledger.append({
+        from: OVERMIND,
+        kind: 'done',
+        thread: asked.id,
+        body: 'arbitrated',
+      });
+
+      expect(result).toMatchObject({ ok: true });
+    });
+
+    /*
+      The two halves of the fix, joined.
+
+      `Ledger.append` setting `to` is only useful because `decide()` then
+      returns a wake instead of discarding a broadcast — and nothing else
+      asserts the chain end to end. `decide` is pure, so the real function is
+      used rather than a restatement of it.
+    */
+    it('produces an entry that decide() turns into a wake', () => {
+      const asked = ledger.append({ from: 'agent-a', to: 'agent-b', kind: 'ask', body: 'review?' });
+      if (!asked.ok) throw new Error('setup failed');
+
+      ledger.append({ from: 'agent-b', kind: 'done', thread: asked.id, body: 'reviewed' });
+      const closed = ledger.read({ kind: 'done' }).entries[0];
+      if (closed === undefined) throw new Error('nothing was written');
+
+      expect(decide('sleeping', closed)).toBe('wake');
+    });
+
+    /*
+      A close on a thread nobody is waiting on is recorded but not addressed.
+
+      Accepted, because an asker may legitimately abandon a question time
+      already retired and the entry is a fact worth keeping — but unaddressed,
+      because addressing is what wakes a party. Without this a party could
+      re-post the same threaded `done` on every wake and spawn a run each time.
+    */
+    it('records a done on an already-closed ask without addressing it', () => {
+      const asked = ledger.append({ from: 'sess-a', to: 'sess-b', kind: 'ask', body: 'review?' });
+      if (!asked.ok) throw new Error('setup failed');
+      ledger.append({ from: 'sess-b', kind: 'answer', thread: asked.id, body: 'done' });
+
+      const second = ledger.append({
+        from: 'sess-b',
+        kind: 'done',
+        thread: asked.id,
+        body: 'and reported',
+      });
+
+      expect(second).toMatchObject({ ok: true });
+      expect(ledger.read({ kind: 'done' }).entries[0]?.to).toBeUndefined();
+    });
+
+    /*
+      The same rule from the other end: the FIRST threaded close is addressed
+      (the ask was open), a repeat of it is not. Paired with the case above so
+      the boundary is pinned rather than the two sides asserted separately.
+    */
+    it('addresses the first close and not a repeat of it', () => {
+      const asked = ledger.append({ from: 'sess-a', to: 'sess-b', kind: 'ask', body: 'review?' });
+      if (!asked.ok) throw new Error('setup failed');
+
+      ledger.append({ from: 'sess-b', kind: 'done', thread: asked.id, body: 'first' });
+      ledger.append({ from: 'sess-b', kind: 'done', thread: asked.id, body: 'again' });
+
+      const dones = ledger.read({ kind: 'done' }).entries;
+      expect(dones.map((entry) => entry.to)).toEqual(['sess-a', undefined]);
+    });
+
+    /*
+      An ask time retired wakes nobody either — the expiry sweep has already
+      told the asker, so a late `done` must not start a second run.
+    */
+    it('does not address a close on an ask the TTL already retired', () => {
+      const asked = ledger.append({ from: 'sess-a', to: 'sess-b', kind: 'ask', body: 'review?' });
+      if (!asked.ok) throw new Error('setup failed');
+      clock = AT + LEDGER_ASK_TTL_MS;
+
+      ledger.append({ from: 'sess-b', kind: 'done', thread: asked.id, body: 'late' });
+
+      expect(ledger.read({ kind: 'done' }).entries[0]?.to).toBeUndefined();
+    });
+
+    it('leaves a done threaded onto a non-ask unaddressed', () => {
+      const posted = ledger.append({ from: 'sess-a', kind: 'post', body: 'fyi' });
+      if (!posted.ok) throw new Error('setup failed');
+
+      ledger.append({ from: 'sess-b', kind: 'done', thread: posted.id, body: 'noted' });
+
+      expect(ledger.read({ kind: 'done' }).entries[0]?.to).toBeUndefined();
+    });
+  });
+
+  /**
+   * A `thread` query returns the whole conversation, question included —
+   * the same definition `thread()` uses. Two readings of "the thread" in one
+   * contract would mean a read for `thread: <askId>` came back with the
+   * replies and not the ask they reply to.
+   */
+  it('includes the ask itself in a read filtered by its thread', () => {
+    const asked = ledger.append({ from: 'sess-a', to: OVERMIND, kind: 'ask', body: 'ship?' });
+    if (!asked.ok) throw new Error('setup failed');
+    ledger.answer({ thread: asked.id, body: 'yes' }, OVERMIND);
+
+    expect(ledger.read({ thread: asked.id }).entries.map((entry) => entry.body)).toEqual([
+      'ship?',
+      'yes',
+    ]);
+  });
+
+  it('notifies listeners on an accepted write and not on a refused one', () => {
+    const seen: string[] = [];
+    ledger.onChange((entry) => seen.push(entry.body));
+
+    ledger.append({ from: 'sess-a', kind: 'post', body: 'kept' });
+    ledger.append({ from: 'sess-gone', kind: 'post', body: 'refused' });
+
+    expect(seen).toEqual(['kept']);
+  });
+
+  /**
+   * HIVE-125. `meta` is a free-form rider, so an agent can post this ask
+   * itself and make the card read one thing while the grant authorises
+   * another. The log must never hold the deceptive version.
+   */
+  it('stores a permission ask rebuilt from its meta, not from its body', () => {
+    ledger.append({
+      from: 'sess-a',
+      to: OVERMIND,
+      kind: 'ask',
+      body: 'Allow Read?\n/repo/a.ts',
+      meta: { kind: 'permission', tool: 'Bash', input: { command: 'rm -rf /' } },
+    });
+
+    const [entry] = ledger.read({}).entries;
+
+    expect(entry?.body).toBe('Allow Bash?\nrm -rf /');
+    expect(entry?.meta?.['default']).toBe('allow-family');
+  });
+
+  /**
+   * The trim `mcp-host/tools.ts` used to do, now at the door a direct
+   * `ledger_ask` also passes through. The log never rotates and `store.all()`
+   * holds every entry in memory, so an untrimmed `Write` parks 64 KiB
+   * permanently.
+   */
+  it('bounds a permission ask input that arrived untrimmed', () => {
+    ledger.append({
+      from: 'sess-a',
+      to: OVERMIND,
+      kind: 'ask',
+      body: '',
+      meta: {
+        kind: 'permission',
+        tool: 'Write',
+        input: { file_path: '/repo/a.ts', content: 'x'.repeat(64_000) },
+      },
+    });
+
+    const input = ledger.read({}).entries[0]?.meta?.['input'] as Record<string, unknown>;
+
+    expect(input['content']).toBe('[omitted from the ledger: 64000 chars]');
+    expect(input['file_path']).toBe('/repo/a.ts');
+  });
+
+  it('leaves an ordinary ask body untouched', () => {
+    ledger.append({
+      from: 'sess-a',
+      to: OVERMIND,
+      kind: 'ask',
+      body: 'ship it?',
+      meta: { options: ['yes', 'no'] },
+    });
+
+    const [entry] = ledger.read({}).entries;
+
+    expect(entry?.body).toBe('ship it?');
+    expect(entry?.meta).toEqual({ options: ['yes', 'no'] });
+  });
+
+  /**
+   * An entry that never had a `meta` must not gain an empty one: the absence
+   * is what `visibleTo` and the derive helpers read.
+   */
+  it('does not give a post without meta an empty meta', () => {
+    ledger.append({ from: 'sess-a', kind: 'post', body: 'hello' });
+
+    expect(ledger.read({}).entries[0]?.meta).toBeUndefined();
+  });
+
+  /**
+   * The size refusal runs first, so an oversized body is still refused rather
+   * than silently replaced by a short honest one.
+   */
+  it('still refuses an oversized body on a permission ask', () => {
+    const result = ledger.append({
+      from: 'sess-a',
+      to: OVERMIND,
+      kind: 'ask',
+      body: 'x'.repeat(LEDGER_BODY_MAX + 1),
+      meta: { kind: 'permission', tool: 'Bash', input: { command: 'npm test' } },
+    });
+
+    expect(result).toMatchObject({ ok: false, status: 413 });
+  });
+
+  /**
+   * Self review, finding 1. The cap above tests the body that was *sent*; a
+   * permission ask's stored body is composed here, from a `meta.input` that
+   * nothing bounds — `command` is not a bulk field and `summarise` returns it
+   * verbatim. So an empty sent body carrying a 60 KB command wrote 60 KB into
+   * a log capped at 16 KiB, that never rotates, and that `store.all()` holds
+   * whole in memory.
+   */
+  it('refuses a composed body over the cap, however short the sent one', () => {
+    const result = ledger.append({
+      from: 'sess-a',
+      to: OVERMIND,
+      kind: 'ask',
+      body: '',
+      meta: {
+        kind: 'permission',
+        tool: 'Bash',
+        input: { command: `echo ${'x'.repeat(LEDGER_BODY_MAX)}` },
+      },
+    });
+
+    expect(result).toMatchObject({ ok: false, status: 413 });
+    expect(ledger.read({}).entries).toHaveLength(0);
+  });
+
+  /**
+   * Self review, finding 3. Every other reader of the discriminator requires
+   * the entry kind too. Keyed on `meta.kind` alone this rewrote a `post`,
+   * destroying its author's text to compose a permission line for an entry
+   * that is a permission ask to nobody.
+   */
+  it('leaves a non-ask carrying permission meta exactly as written', () => {
+    ledger.append({
+      from: 'sess-a',
+      kind: 'post',
+      body: 'just a note',
+      meta: { kind: 'permission', tool: 'Bash', input: { command: 'rm -rf /' } },
+    });
+
+    expect(ledger.read({}).entries[0]?.body).toBe('just a note');
+  });
+
+  describe('an accept (HIVE-410)', () => {
+    const asked = (): string => {
+      const result = ledger.append({ from: 'sess-a', to: 'shipper', kind: 'ask', body: 'Ship PR #1' });
+      if (!result.ok) throw new Error('setup failed');
+      return result.id;
+    };
+    const accept = (from: string, thread?: string) =>
+      ledger.append({
+        from,
+        kind: 'post',
+        body: 'accepted',
+        meta: { accepted: true },
+        ...(thread === undefined ? {} : { thread }),
+      });
+
+    it('is stored addressed to the asker, and leaves the ask open and accepted', () => {
+      const id = asked();
+
+      expect(accept('shipper', id)).toMatchObject({ ok: true });
+      expect(ledger.read({ kind: 'post' }).entries[0]).toMatchObject({ to: 'sess-a', thread: id });
+      expect(ledger.read({}).openAsks.map((ask) => [ask.id, ask.state])).toEqual([[id, 'accepted']]);
+    });
+
+    it('still takes the answer that closes it', () => {
+      const id = asked();
+      accept('shipper', id);
+
+      expect(ledger.append({ from: 'shipper', kind: 'answer', thread: id, body: 'PR #1 merged' })).toMatchObject({ ok: true });
+      expect(ledger.read({}).openAsks).toEqual([]);
+    });
+
+    it('is refused from anyone but the party asked, with no thread, and on a closed thread', () => {
+      const id = asked();
+
+      expect(accept('builder', id)).toMatchObject({ ok: false, status: 403 });
+      expect(accept('shipper')).toMatchObject({ ok: false, status: 400 });
+      ledger.append({ from: 'shipper', kind: 'answer', thread: id, body: 'done' });
+      const late = accept('shipper', id);
+      expect(late).toMatchObject({ ok: false, status: 400 });
+      if (late.ok) throw new Error('expected a refusal');
+      expect(late.reason).toContain('closed by shipper at');
+      expect(late.reason).toContain('post to sess-a on this thread instead');
+      expect(ledger.read({ kind: 'post' }).entries).toEqual([]);
+    });
+
+    it('is refused on a held ask: it is owed to nobody until its PR closes', () => {
+      const held = ledger.append({ from: 'sess-a', to: 'shipper', kind: 'ask', body: 'next', meta: { after: 'a/x#3' } });
+      if (!held.ok) throw new Error('setup failed');
+
+      expect(accept('shipper', held.id)).toMatchObject({ ok: false, status: 400 });
+    });
+
+    it('is refused on a closing kind: an answer cannot also leave the ask open', () => {
+      const id = asked();
+
+      expect(
+        ledger.append({ from: 'shipper', kind: 'answer', thread: id, body: 'done', meta: { accepted: true } }),
+      ).toMatchObject({ ok: false, status: 400 });
+      expect(ledger.read({}).openAsks.map((ask) => ask.id)).toEqual([id]);
+    });
+  });
+
+  describe('an ask with a key (HIVE-410)', () => {
+    const ship = (from: string) =>
+      ledger.append({ from, to: 'shipper', kind: 'ask', body: 'Ship PR #1', meta: { key: 'ship:a/x#1' } });
+
+    it('is written once: a second one returns the first, and says whose it is', () => {
+      const first = ship('builder');
+      if (!first.ok) throw new Error('setup failed');
+
+      expect(ship('builder')).toEqual({ ok: true, id: first.id, ref: first.ref, duplicate: { from: 'builder', mine: true } });
+      expect(ship('sess-a')).toEqual({ ok: true, id: first.id, ref: first.ref, duplicate: { from: 'builder', mine: false } });
+      expect(ledger.read({ kind: 'ask' }).entries).toHaveLength(1);
+    });
+
+    it('still matches while the first is accepted, and is free again once it closes', () => {
+      const first = ship('builder');
+      if (!first.ok) throw new Error('setup failed');
+      ledger.append({ from: 'shipper', kind: 'post', thread: first.id, body: 'accepted', meta: { accepted: true } });
+      expect(ship('builder')).toMatchObject({ id: first.id, duplicate: { mine: true } });
+
+      ledger.append({ from: 'shipper', kind: 'answer', thread: first.id, body: 'PR #1 merged' });
+      const again = ship('builder');
+      expect(again).toMatchObject({ ok: true });
+      expect(again.ok && again.id).not.toBe(first.id);
+      expect(again).not.toHaveProperty('duplicate');
+    });
+
+    it('matches on the recipient too, and ignores a key on anything but an ask', () => {
+      const first = ship('builder');
+      if (!first.ok) throw new Error('setup failed');
+
+      const other = ledger.append({ from: 'builder', to: 'fixer', kind: 'ask', body: 'fix', meta: { key: 'ship:a/x#1' } });
+      expect(other).not.toHaveProperty('duplicate');
+      const note = ledger.append({ from: 'builder', to: 'shipper', kind: 'post', body: 'note', meta: { key: 'ship:a/x#1' } });
+      expect(note).not.toHaveProperty('duplicate');
+    });
+
+    it("takes the watchdog's card, an overmind ask to the overmind, once per key (HIVE-411)", () => {
+      const card = () =>
+        ledger.append({
+          from: OVERMIND,
+          to: OVERMIND,
+          kind: 'ask',
+          body: 'x',
+          meta: { watch: 'card', watched: 'z', options: ['Dismiss'], key: 'watch:card:z' },
+        });
+      const first = card();
+      if (!first.ok) throw new Error(`card refused: ${first.reason}`);
+
+      expect(card()).toMatchObject({ ok: true, id: first.id });
+      expect(ledger.read({ kind: 'ask' }).entries).toHaveLength(1);
+    });
+  });
+
+  it('keeps an ask held three days across a restart, and releases it when its PR closes (HIVE-410)', () => {
+    const ts = AT - 3 * 24 * 60 * 60 * 1_000;
+    const at = new Date(ts);
+    const day = `${String(at.getFullYear())}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+    // Shaped like a real id, so it sorts before today's entries as a real one would.
+    const id = `${day.replaceAll('-', '')}-090000-0001`;
+    writeFileSync(
+      join(dir, `${day}.jsonl`),
+      `${JSON.stringify({ id, ts, from: 'sess-a', to: 'builder', kind: 'ask', ref: 'a1', body: 'Build B', meta: { after: 'a/x#3' } })}\n`,
+    );
+
+    const reopened = createLedger({ dir, now: () => clock, knowsParty: () => true });
+    expect(reopened.read({}).openAsks.map((ask) => [ask.id, ask.state])).toEqual([[id, 'held']]);
+
+    reopened.append({ from: 'shipper', kind: 'post', body: 'PR #3 merged', meta: { pr: 3, repo: 'a/x', stage: 'closed' } });
+    expect(reopened.read({}).openAsks.map((ask) => [ask.id, ask.state])).toEqual([[id, 'open']]);
+  });
+});

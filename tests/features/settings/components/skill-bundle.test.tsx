@@ -307,7 +307,7 @@ describe('SkillBundle', () => {
 
   /**
    * `skills:file:import` while attached to someone else's Hive (HIVE-144) —
-   * see `WINDOW_BOUND` (`electron/shared/remote-contract.ts`). The caller
+   * see `WINDOW_BOUND` (`shared/remote-contract.ts`). The caller
    * (`skills-section.tsx`) computes `importDisabled` from
    * `can.importSkillFiles()`; this only proves the button disables on the
    * prop, carries the reason, and never fires `onImport` when it does.

@@ -5,9 +5,9 @@ import { APP_NAME } from '@shared/app-name';
 import { showAboutWindow } from './about';
 import { appWindows, primaryWindow } from './aux-windows';
 import { applyBackgroundPolicy, bringForward } from './background';
-import { releaseForQuit } from './licence/suspend';
+import { releaseForQuit } from '../../core/licence/suspend';
 import { installApplicationMenu } from './menu';
-import { runShutdown } from './shutdown';
+import { runShutdown } from '../../core/shutdown';
 import { checkForUpdatesInteractively } from './updates';
 
 /** HIVE-267: how long quit waits for a licence suspension to be released before it shuts down anyway. */

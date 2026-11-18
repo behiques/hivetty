@@ -89,7 +89,7 @@ import { useActiveTab, useExpandEnded, useSelId, useSessionsProject, useSetSelId
  * `overflow-y-auto`, but nothing here is wider than its own scroll box, so
  * `overflow-x` never triggers. The cells simply draw on top of one another.
  * Measured in the built app at `MIN_WINDOW_SIZE` (1100px,
- * `electron/shared/window.ts`) with one resumable row, the header's `PR` sat
+ * `shared/window.ts`) with one resumable row, the header's `PR` sat
  * **54px** right of the row's, and the `#124` link was painted over the middle
  * of the branch name — both unreadable, with nothing on screen to say so.
  *

@@ -10,7 +10,7 @@
  *
  * ## Why this is a prefix and not a new root
  *
- * `electron/main/fs/paths.ts` is the explorer's security boundary: every read
+ * `core/fs/paths.ts` is the explorer's security boundary: every read
  * resolves under `projectRoot(projectId)` and refuses anything outside it. That
  * boundary is **not** widened here and does not need to be, because the
  * interesting case already lives inside it — a worktree at
@@ -31,7 +31,7 @@ const SEP = '/';
 /**
  * Whether `candidate` is `root` or lives underneath it.
  *
- * Deliberately the same rule as `contains()` in `electron/main/fs/paths.ts`,
+ * Deliberately the same rule as `contains()` in `core/fs/paths.ts`,
  * including the trailing-separator detail that file calls load-bearing: without
  * it a project at `/w/app` would consider `/w/app-secrets` contained, because
  * the string starts with the root. Two copies of one rule is a real cost, and

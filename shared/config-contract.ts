@@ -1,0 +1,2655 @@
+import { resolveClis, type ClisConfig } from './cli-contract';
+import type { HarnessId } from './harness-contract';
+import type { JiraMention } from './jira-contract';
+import {
+  NOTIFICATION_KINDS,
+  defaultNotificationPrefs,
+  type NotificationDelivery,
+  type NotificationKind,
+  type NotificationPrefs,
+} from './notification-contract';
+import type { TicketWorkflow } from './ticket-workflow';
+
+/**
+ * The workspace config contract (story 090).
+ *
+ * `~/.hivetty/config.json` is where the user says which of the fixture projects
+ * map to real directories on this machine. A PTY needs a `cwd`; this file is
+ * the smallest thing that supplies one.
+ *
+ * It lives in `shared/` for the same reason `ipc-contract.ts` does:
+ * main validates the file, the renderer renders the verdict, and both must
+ * agree about the shape at compile time rather than by convention. Types and
+ * constants only — no Node APIs, no DOM APIs.
+ */
+
+/**
+ * Why an entry is or is not usable.
+ *
+ * A closed set, and each member names something the *user* can act on. A
+ * generic `'invalid'` would be honest and useless: the whole point of surfacing
+ * the reason is that "I typed the path wrong" and "I pointed at a file" are
+ * different mistakes with different fixes.
+ */
+export type ProjectStatus =
+  | 'ok'
+  | 'missing'
+  | 'not-a-directory'
+  | 'not-absolute'
+  | 'duplicate-id';
+
+/** Where a project entry came from. `cloned` is written by story 102. */
+export type ProjectOrigin = 'local' | 'cloned';
+
+export interface ProjectConfig {
+  /**
+   * Stable, derived once from the directory basename (story 101).
+   *
+   * Story 090 required this to match a fixture project id. Story 101 reverses
+   * that: the config now *declares* projects, and the fixtures are the
+   * fallback rather than the schema.
+   */
+  id: string;
+  /**
+   * A short alias the user can type instead of the id (HIVE-94).
+   *
+   * Two to four lowercase letters, unique across the file, **derived** from the
+   * name when the entry does not declare one and editable afterwards. It exists
+   * because the id is a kebab slug of the folder name — up to forty characters
+   * — and `spawn incorpx-server …` is the whole name every time.
+   *
+   * An **alias, never an identity**: sessions reference projects through
+   * `entity.project`, so the id stays the thing that is stored and the key
+   * stays the thing that is typed. Changing a key strands nothing.
+   *
+   * Required here but optional in the file: `parse.ts` accepts an entry without
+   * one and {@link ProjectConfig} is the *resolved* shape, so by the time a
+   * snapshot exists every project has a key — see `resolveProjects`.
+   */
+  key: string;
+  /** Display name. Defaults to the resolved directory's basename. */
+  name: string;
+  /** The resolved, symlink-free absolute path — or `null` when unusable. */
+  path: string | null;
+  /** Phosphor icon name, as `Icon` spells them. */
+  icon: string;
+  origin: ProjectOrigin;
+  status: ProjectStatus;
+  /**
+   * Whether the resolved directory is a git repository.
+   *
+   * Derived on load and **never written to the file** — like {@link status}.
+   * Keeping it out of the config means a hand-edited file cannot lie about it,
+   * and a directory that is `git init`-ed after being added reports correctly
+   * on the next load.
+   */
+  isRepo: boolean;
+  /**
+   * Per-project runtime overrides (story 104). All three are optional, and
+   * absent means "use the top-level value" — never "use an empty string".
+   *
+   * They are stored on the entry rather than in a parallel map so that removing
+   * a project takes its overrides with it, and so a hand-edited file keeps a
+   * project's settings next to the project they belong to.
+   */
+  shell?: string;
+  claudeCommand?: string;
+  /**
+   * Extra environment for every session in this project.
+   *
+   * Merged by the pty-host on top of the inherited environment (see
+   * {@link buildSessionEnv}), which then forces `TERM`, `COLORTERM` and `PWD` — so
+   * those three are rejected at the guard rather than accepted and silently
+   * overwritten.
+   */
+  env?: Record<string, string>;
+  /**
+   * Present means every session for this project runs inside the container
+   * `claudeCommand` addresses (HIVE-133). Absent means a host session, whose
+   * spawn is byte-identical to what it was before this key existed.
+   */
+  container?: ContainerConfig;
+  /**
+   * Whether the shipper agent may merge this project's pull requests without
+   * a card (HIVE-166).
+   *
+   * A grant, not a flag a skill reads: at wake time main turns every project
+   * with this set into a `Bash(gh pr merge * --repo <owner/name> *)` rule on
+   * the shipper's `HIVE_GRANTS`, so the one call the fence would otherwise
+   * stop goes through. Every other project's merge still lands on the inbox
+   * as a permission card. Absent means `false`.
+   */
+  autoMerge?: boolean;
+  /**
+   * The CLI this project's new sessions start with (HIVE-378), when nothing was picked this run. Absent means
+   * the global default (`sessionsDefaultCli`). Agents never read it.
+   */
+  harness?: HarnessId;
+}
+
+/**
+ * The runtime values a session actually spawns with (story 104).
+ *
+ * Resolved per project: an override when the entry declares one, the top-level
+ * value otherwise. Returned by `effectiveRuntime` and used both by the spawn
+ * path and by the diagnostic, so the thing being explained is the same thing
+ * being run.
+ */
+export interface EffectiveRuntime {
+  shell: string;
+  claudeCommand: string;
+  env: Record<string, string>;
+  /** Which of the two scalars came from the project rather than the top level. */
+  shellFromProject: boolean;
+  commandFromProject: boolean;
+  /**
+   * The project's container block with defaults applied, or absent for a host
+   * project (HIVE-133).
+   *
+   * Unlike {@link env} there is **no merge**: a project either is containerised
+   * or is not, and there is no top-level container block to layer under it. The
+   * one field that inherits is `hostAlias`, which falls back to
+   * `receiver.hostAlias` — and this is the only layer that can do it, because
+   * `resolveProject` sees a raw entry and never the receiver.
+   */
+  container?: ResolvedContainer;
+}
+
+/** One `PATH` entry the diagnostic looked in, and what it found. */
+export interface PathProbe {
+  directory: string;
+  /** True when an executable file of that name exists there. */
+  found: boolean;
+  /** Present when a file exists but is not executable — the confusing case. */
+  notExecutable?: boolean;
+}
+
+/**
+ * Why `claude` was or was not found (story 104).
+ *
+ * The epic's story table asks for "a PATH diagnostic that says why `claude` was
+ * not found". The answer is almost always that the app's `PATH` is not the
+ * login shell's `PATH` — a GUI app on macOS inherits launchd's environment, not
+ * the one `.zshrc` builds — so the diagnostic reports the `PATH` it actually
+ * searched rather than asserting the command is missing.
+ */
+export interface CommandDiagnostic {
+  /** The project the diagnostic ran for, or `null` for the top-level command. */
+  projectId: string | null;
+  /** The command as resolved, before any lookup. */
+  command: string;
+  /** True when the command contains a separator and is used as a path directly. */
+  isPath: boolean;
+  /** Where it was found, or `null` when no candidate was executable. */
+  resolved: string | null;
+  /** The `PATH` that was searched — the merged env's, never `process.env`'s. */
+  path: string;
+  probes: PathProbe[];
+  /** Present only for a container project (HIVE-133). */
+  container?: ContainerDiagnostic;
+}
+
+/**
+ * Whether a container project could actually start a session (HIVE-133).
+ *
+ * Two independent preconditions, because they fail differently. A stopped
+ * container is transient and the user fixes it outside this app; a command with
+ * no `{env}` is a configuration error that would start a session which can
+ * never authenticate.
+ */
+export interface ContainerDiagnostic {
+  /** The probe that ran, or `null` when the block configures none. */
+  probe: string | null;
+  ok: boolean;
+  /** `null` when the probe was killed by a signal or timed out. */
+  exitCode: number | null;
+  /**
+   * The probe's stderr, trimmed.
+   *
+   * Reported verbatim because it is the only thing that can name the container:
+   * nothing in the config does, by design.
+   */
+  stderr: string;
+  /**
+   * `claudeCommand` has no `{env}`, so no `HIVE_*` variable would reach the
+   * container and every hook, ledger and `/done` call would 403.
+   */
+  missingEnvPlaceholder: boolean;
+}
+
+/**
+ * One configured variable, and what the shell actually ended up with (story
+ * 108).
+ *
+ * The design decision this exists to make observable: injected environment
+ * is applied before the shell starts, and a login shell's rc file — which
+ * runs afterward — can overwrite anything set here. `overridden` is the
+ * user-facing signal for exactly that; `actual: null` is the sub-case where
+ * the rc file did not merely change the value but dropped the variable
+ * entirely, which the view names differently ("dropped" vs "overridden by").
+ */
+export interface EnvVarVerdict {
+  key: string;
+  /** What was injected — the value from the merged workspace+project env. */
+  configured: string;
+  /** What the shell reported for this key, or `null` if it had none at all. */
+  actual: string | null;
+  /** True when the shell reported a different value than was injected. */
+  overridden: boolean;
+}
+
+/**
+ * Why a configured variable did or did not survive to reach the shell's own
+ * environment (story 108).
+ *
+ * Scoped to one project's runtime, exactly like {@link CommandDiagnostic} —
+ * the shell probed is the shell that project's sessions would actually spawn,
+ * via the same `effectiveRuntime`. Only the variables the user configured are
+ * reported; see {@link EnvVarVerdict} and `compareEnv` for why dumping the
+ * shell's whole environment would be the wrong answer.
+ */
+export interface EnvDiagnostic {
+  /** The project the diagnostic ran for, or `null` for the top-level env. */
+  projectId: string | null;
+  /** The shell that was probed — `effectiveRuntime(...).shell`. */
+  shell: string;
+  /**
+   * Present when the probe itself could not run — the shell could not be
+   * started, or did not exit cleanly. `vars` is always empty when this is
+   * set: a failed observation is not a partial one.
+   */
+  error: string | null;
+  vars: EnvVarVerdict[];
+}
+
+/**
+ * The exact argv the environment diagnostic runs the shell with (story 108).
+ *
+ * A shared constant rather than a string literal duplicated in
+ * `env-diagnostic.ts` (which runs it) and `env-diagnostic-view.tsx` (which
+ * displays it) — a second, hand-typed copy is exactly the kind of drift that
+ * turned a missing `-i` into a defect in the first place.
+ *
+ * **`-i`, not just `-l -c`.** zsh sources `.zshrc` only for *interactive*
+ * shells, and a real session's `<shell> -l` on a PTY is interactive — so a
+ * merely-login, non-interactive probe misses the exact file this diagnostic
+ * exists to expose, reporting a variable as "kept" while a real session would
+ * have gotten the rc file's value. Measured directly: `zsh -l -c printenv`
+ * does not see a variable set in `.zshrc`; `zsh -l -i -c printenv` does.
+ *
+ * **A residual gap remains, and is surfaced rather than hidden.** The probe
+ * has no TTY, so an rc file gated on `[[ -t 0 ]]` can still diverge from a
+ * real session. `EnvDiagnosticView` renders this exact argv next to the
+ * result precisely so the user can see what was, and was not, exercised.
+ */
+export const ENV_PROBE_ARGS: readonly string[] = ['-l', '-i', '-c', 'printenv'];
+
+/**
+ * The marker that brackets the login-env probe's own output (HIVE-84).
+ *
+ * A login shell is *expected* to print things this app did not ask for — a
+ * version-manager banner, an oh-my-zsh update notice, a motd. Reading a
+ * transcript that has been prefixed by a banner would treat the banner's tail
+ * as a variable, and a banner containing an `=` would silently produce a
+ * plausible-looking bogus entry. Taking only what falls between the first and
+ * last marker removes that whole class of failure rather than trying to filter
+ * it record by record.
+ *
+ * Deliberately not a value anybody would set: it exists to be absent from a
+ * real environment.
+ */
+export const LOGIN_ENV_DELIMITER = '__hive_login_env_boundary__';
+
+/**
+ * What separates one variable from the next in the login-env transcript
+ * (HIVE-86).
+ *
+ * **NUL, because it is the one byte an environment variable cannot contain.**
+ * `execve` stores the environment as NUL-terminated strings, so a value holding
+ * a NUL is not representable — which makes it the only separator a value can
+ * never counterfeit. A newline is *not* such a byte, and assuming it was is the
+ * defect this replaced.
+ *
+ * @see LOGIN_ENV_PROBE_ARGS for the transcript this delimits.
+ */
+export const LOGIN_ENV_RECORD_SEPARATOR = '\0';
+
+/**
+ * The only variables the login shell is allowed to hand back (HIVE-84).
+ *
+ * An allowlist rather than a merge, because "import my environment" and
+ * "import the three things this app actually reads" differ by an unbounded set
+ * of variables that would change app behaviour with no diagnostic — an rc file
+ * exporting `NODE_OPTIONS`, `ELECTRON_RUN_AS_NODE` or a proxy setting would be
+ * doing so to a process the user is not thinking about.
+ *
+ * `PATH` is the one that matters and the reason this exists: a GUI-launched
+ * app inherits launchd's four-entry `PATH`, so a Homebrew `gh` is genuinely
+ * invisible. The two token variables are here because Settings reports on them
+ * by name — and reports them as *absent* today for the same rc-file reason.
+ *
+ * **Presence, never value, leaves this process.** The values are written into
+ * `process.env` so `gh` can use them; what the renderer is told is which names
+ * were imported. See `integrations/gh.ts` for the same rule stated for reads.
+ *
+ * Since HIVE-86 this list is also enforced **at the shell**, not merely
+ * filtered after the fact — see {@link LOGIN_ENV_PROBE_ARGS}.
+ */
+export const LOGIN_ENV_IMPORT_KEYS: readonly string[] = [
+  'PATH',
+  'GH_TOKEN',
+  'GITHUB_TOKEN',
+];
+
+/**
+ * The shell commands that print one `KEY=VALUE` record, NUL-terminated.
+ *
+ * **Deliberately free of variable-expansion syntax.** An earlier draft used
+ * `"KEY=${KEY-}"`, which is POSIX and reads better — and which fish rejects at
+ * parse time (`${` is not a variable there; fish spells it `{$VAR}`), aborting
+ * the whole `-c` string before a single byte is printed. `defaultShell()` reads
+ * `getpwuid`, so a fish user's login shell is genuinely what gets probed, and
+ * that draft would have handed them no markers, no import, and the HIVE-84
+ * defect back — a regression, since the `printenv` protocol it replaced used
+ * only `printf`, `printenv` and `;`, all of which fish supports.
+ *
+ * So the value is fetched by `printenv KEY`, an external command, and the `=`
+ * is printed separately. Nothing here is interpreted as syntax by any shell
+ * this app can be pointed at.
+ *
+ * Two consequences the parser must know about, both handled in `parseLoginEnv`:
+ *
+ * - `printenv` terminates its output with a newline of its own, so every record
+ *   carries exactly one trailing `\n` that is not part of the value.
+ * - An **unset** variable makes `printenv` print nothing and exit non-zero. The
+ *   record is then bare `KEY=` with no trailing newline, which reads as unset —
+ *   the answer we want. (An rc file running `set -e` would abort the probe at
+ *   that point; the result is a reported failure, never a wrong value.)
+ *
+ * The name is checked rather than trusted. Every caller today passes a
+ * compile-time constant, so this can only fire during development — which is
+ * exactly when a key like `FOO'; rm -rf ~; :'` should stop the build instead of
+ * becoming a shell command. It is the guard that lets the interpolation below
+ * be read as safe without having to re-derive that fact from the call site.
+ */
+function loginEnvRecordExpr(key: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+    throw new Error(
+      `LOGIN_ENV_IMPORT_KEYS: ${JSON.stringify(key)} is not a shell-safe variable name`,
+    );
+  }
+  return `printf '%s=' '${key}'; printenv '${key}'; printf '\\0';`;
+}
+
+/**
+ * The exact argv the login-environment import runs the shell with (HIVE-84,
+ * reshaped by HIVE-86).
+ *
+ * The same `-l -i -c` as {@link ENV_PROBE_ARGS}, and for the same measured
+ * reason: zsh sources `.zshrc` only for *interactive* shells, and `.zshrc` is
+ * overwhelmingly where a developer's `PATH` is actually assembled — Homebrew's
+ * shellenv, nvm, mise, pyenv. A merely-login, non-interactive probe would come
+ * back with a `PATH` missing exactly the entries this import exists to
+ * recover.
+ *
+ * ## Why not `printenv` (HIVE-86)
+ *
+ * The original protocol printed the whole environment, one `KEY=VALUE` per
+ * line, and split the transcript on newlines. That is only lossless while no
+ * value contains a newline — and values do. The case that broke it is
+ * completely ordinary: `~/.zshrc` running
+ * `export PATH="$PATH:$(npm bin -g)"`, where `npm bin` was removed in npm 9+
+ * and substitutes a multi-line error message *into `PATH` itself*. `printenv`
+ * emitted it faithfully; the parser then truncated `PATH` at the first newline
+ * and dropped every entry after it. A continuation line that happened to read
+ * `GH_TOKEN=…` would have been adopted as a real variable.
+ *
+ * So the transcript is now **NUL-delimited** — see
+ * {@link LOGIN_ENV_RECORD_SEPARATOR} for why that byte in particular — and the
+ * shell is asked for {@link LOGIN_ENV_IMPORT_KEYS} **by name** rather than for
+ * everything. Naming them moves the allowlist to the only place it is fully
+ * effective: a value this app never asked for is now never printed, never
+ * buffered, and never in reach of a parsing mistake. The JS-side filter in
+ * `importLoginEnv` stays as the second line of defence.
+ *
+ * The leading `\0` before the opening marker keeps rc-file banner output — a
+ * version-manager notice, a motd — in a record of its own instead of glued to
+ * the marker, so the marker is still matched by equality.
+ *
+ * The command is a single `-c` string, which is the one place in this codebase
+ * a shell is handed a string to interpret — unavoidable, since asking a shell
+ * what its environment is means asking the shell. It is safe because every
+ * part of the string is a **compile-time constant**: the marker, and the
+ * allowlist's own key names, each checked by {@link loginEnvRecordExpr}.
+ * Nothing from the renderer, the config file, or the environment reaches it.
+ * The shell *path* is still an argv entry, never part of this string.
+ */
+export const LOGIN_ENV_PROBE_ARGS: readonly string[] = [
+  '-l',
+  '-i',
+  '-c',
+  [
+    `printf '\\0%s\\0' '${LOGIN_ENV_DELIMITER}';`,
+    ...LOGIN_ENV_IMPORT_KEYS.map(loginEnvRecordExpr),
+    `printf '%s\\0' '${LOGIN_ENV_DELIMITER}'`,
+  ].join(' '),
+];
+
+/**
+ * Whether the app imports its `PATH` from the login shell. Default **on**.
+ *
+ * On, because the failure it fixes is the default experience of an installed
+ * build, and the workaround — hand-editing a `PATH` into the config file —
+ * requires the user to first understand launchd. Off exists for the rc file
+ * this app should not fight: one that is slow, prompts, or has side effects
+ * worth not triggering once per launch.
+ */
+export const DEFAULT_IMPORT_LOGIN_ENV = true;
+
+/** Which project's environment to diagnose. Omitted id means the top-level env. */
+export interface DiagnoseEnvRequest {
+  id?: string;
+}
+
+/**
+ * Which events raise an OS notification (story 106).
+ *
+ * Only classes backed by an event main can actually observe. There is
+ * deliberately no `waiting`: it is not derivable from a pty — a TUI that has
+ * asked a question and a TUI that is thinking both produce no output (story
+ * 096) — and the real mechanism is the Claude Code hook named as the next
+ * epic's work. Shipping the switch before the event would be a control that
+ * silently does nothing, and the epic's rule for the section nav applies here
+ * too: absent rather than disabled.
+ */
+export type { NotificationPrefs } from './notification-contract';
+
+/**
+ * `sessionIdle` is off, and the other two are on.
+ *
+ * Idle is a real event but a chatty one: a build that pauses to download is not
+ * news, and a notification stream the user stops trusting is worse than no
+ * notifications at all. Finishing a session and finishing a clone are both
+ * discrete, both worth interrupting for, and both things the user walked away
+ * from.
+ */
+export const DEFAULT_NOTIFICATIONS = defaultNotificationPrefs();
+
+/** The preference keys, in the order the settings section shows them. */
+export const NOTIFICATION_KEYS: readonly NotificationKind[] = NOTIFICATION_KINDS;
+
+/**
+ * The Jira connection, as the config file declares it (HIVE-67).
+ *
+ * Site and email only. The API token is a secret and lives in `safeStorage`
+ * under `userData` — this file is deliberately hand-editable, which is exactly
+ * what makes it the wrong home for a credential.
+ */
+export interface JiraConfig {
+  /**
+   * The Atlassian host, e.g. `behiques.atlassian.net`.
+   *
+   * A bare hostname, never a URL. `integrations/jira/client.ts` builds
+   * `https://<site>/…` and nothing else, so a scheme or a path stored here
+   * would produce a malformed request rather than a cleverer one. `assertJiraSite`
+   * strips a pasted `https://` and refuses everything else.
+   */
+  site: string | null;
+  /** The account the API token belongs to. Half of the Basic credential. */
+  email: string | null;
+  /**
+   * A JQL override for the WORK tab (HIVE-69).
+   *
+   * `null` means the default query. When set it **replaces** the default
+   * wholesale rather than being appended to — a user who writes JQL expects
+   * their query to be the query.
+   */
+  jql: string | null;
+  /**
+   * What a session started from a ticket does first (`ticket-workflow.ts`).
+   * `null` just opens it, at an empty prompt.
+   */
+  workflow: TicketWorkflow | null;
+}
+
+/** Nothing configured. Both halves are needed before a request can be made. */
+export const DEFAULT_JIRA: JiraConfig = {
+  site: null,
+  email: null,
+  jql: null,
+  workflow: null,
+};
+
+/** The block's keys, for the parser's exact-key check. */
+export const JIRA_KEYS: readonly (keyof JiraConfig)[] = [
+  'site',
+  'email',
+  'jql',
+  'workflow',
+];
+
+/**
+ * Real-time Slack events (HIVE-124).
+ *
+ * The switch and the allow-list live here; the two tokens live in
+ * `slack-tokens.bin` under `userData`. Exactly the split `jira` uses, and for
+ * the same reason: a secret and a preference have different homes.
+ */
+export interface SlackConfig {
+  /** Off by default. Nothing connects and no token is required while it is. */
+  socketMode: boolean;
+  /**
+   * Slack user ids allowed to command an agent with `@hive`.
+   *
+   * **Defaults to empty, deliberately.** Nothing in this app can honestly
+   * discover the user's own Slack id: `auth.test` with the bot token returns
+   * the *bot's* identity, and the human's id is known only to the MCP server
+   * the agents talk to. Guessing it would repeat the paraphrase mistake
+   * HIVE-123 corrected. Empty means nobody can command, and the pane says so.
+   */
+  commanders: string[];
+}
+
+/** Off, and nobody allowed to command. See {@link SlackConfig.commanders}. */
+export const DEFAULT_SLACK: SlackConfig = {
+  socketMode: false,
+  commanders: [],
+};
+
+export const SLACK_KEYS: readonly (keyof SlackConfig)[] = [
+  'socketMode',
+  'commanders',
+];
+
+/**
+ * How a containerised session addresses this machine (HIVE-131).
+ *
+ * A container cannot reach `127.0.0.1` — inside one that is the container's own
+ * loopback. Docker Desktop and every comparable runtime on macOS proxy the
+ * connection from the host side, so the receiver's loopback bind is already
+ * reachable and only the *name* has to change. Measured against Docker Desktop
+ * 29.5.2, with the socket bound to `127.0.0.1` alone:
+ * `container → host.docker.internal:<port>` answers 200, while that same
+ * container's `127.0.0.1:<port>` is refused.
+ *
+ * A nested block rather than a flat `hostAlias` key, so the opt-in non-loopback
+ * bind — deferred, because it serves native Linux Docker and this app ships
+ * macOS only — has a namespace waiting rather than needing a second top-level
+ * key later.
+ */
+/**
+ * The address the receiver listens on (HIVE-134).
+ *
+ * Off by default in the only sense that matters: {@link DEFAULT_BIND} is
+ * byte-for-byte the behaviour that shipped before this block existed, so a user
+ * who never touches it has no new listening surface.
+ *
+ * **Read once, at bind time.** Unlike {@link ReceiverConfig.hostAlias}, which
+ * `ipc/index.ts` passes as a getter so a config reload is picked up, this cannot
+ * be re-read: a socket that is already listening cannot be moved, and rebinding
+ * would mint a new `launchSecret` and 403 every live session until its generated
+ * set was rewritten. Settings says "takes effect at next launch" for that reason.
+ *
+ * **What widening the bind does not buy.** Claude Code refuses an http hook to
+ * any non-loopback private or link-local address (`ERR_HTTP_HOOK_BLOCKED_ADDRESS`,
+ * measured on HIVE-133), which is why `container/generated.ts` spells its status
+ * hooks as `curl` command hooks. So this serves MCP over HTTP and command hooks,
+ * not http hooks.
+ */
+export interface ReceiverBindConfig {
+  /**
+   * A hostname or an IPv4 literal, validated by {@link isHostAlias}.
+   *
+   * Prefer the bridge address a runtime names over `0.0.0.0`: binding every
+   * interface is a wider surface than the problem needs. `0.0.0.0` is accepted
+   * rather than refused, because a user whose runtime names no bridge has
+   * nothing else to write — but it leaves the receiver reachable, not
+   * *addressable*: binding it opens every interface, yet `guard()` still only
+   * admits a `Host` of loopback, the literal `0.0.0.0`, or a configured alias
+   * — no real client ever names a server by its listen address, so a
+   * container reaching this machine by its actual LAN or bridge address is
+   * refused all the same (verified live — a request with `Host:
+   * 192.168.1.20:<port>` against a `0.0.0.0` bind is 403). The documented
+   * happy path is binding the bridge address specifically, or setting that
+   * real address as an alias alongside the wide bind, either of which the
+   * guard does admit.
+   */
+  host: string;
+  /** 0 asks the OS for any free port, which is what shipped. */
+  port: number;
+  /**
+   * Full origins, as {@link isOrigin} defines one.
+   *
+   * Empty refuses every request that carries an `Origin` at all — the rule
+   * `POST /mcp` has had since HIVE-130, now on every route. A non-empty list
+   * turns that into an allowlist.
+   */
+  allowedOrigins: readonly string[];
+}
+
+export interface ReceiverConfig {
+  /**
+   * The name a container resolves to reach the host.
+   *
+   * A plain string so any BYO runtime works — `host.docker.internal` for Docker
+   * Desktop, OrbStack and Rancher, `host.containers.internal` for podman, or a
+   * literal address for something exotic.
+   *
+   * **Never carries a port.** The port is the receiver's, assigned by the OS at
+   * bind time, and the substitution keeps it — which is why the parser rejects
+   * an alias containing `:`.
+   */
+  hostAlias: string;
+  /** Where the receiver listens (HIVE-134). */
+  bind: ReceiverBindConfig;
+}
+
+/** Exactly what shipped before the block existed: loopback, OS-assigned port. */
+export const DEFAULT_BIND: ReceiverBindConfig = {
+  host: '127.0.0.1',
+  port: 0,
+  allowedOrigins: [],
+};
+
+/** Docker Desktop, OrbStack and Rancher all answer to this one. */
+export const DEFAULT_RECEIVER: ReceiverConfig = {
+  hostAlias: 'host.docker.internal',
+  bind: DEFAULT_BIND,
+};
+
+/** The block's keys, for the parser's exact-key check. */
+export const RECEIVER_KEYS: readonly (keyof ReceiverConfig)[] = ['hostAlias', 'bind'];
+
+/** The nested block's keys, for the same check one level down. */
+export const BIND_KEYS: readonly (keyof ReceiverBindConfig)[] = [
+  'host',
+  'port',
+  'allowedOrigins',
+];
+
+/**
+ * The wildcard bind, refused for a served machine — see {@link isServerBindHost}.
+ *
+ * Exported so a renderer that wants to name this value in a hint — the
+ * settings pane refuses it before ever sending the request, and says why —
+ * reads the same literal `isServerBindHost` refuses, rather than a second
+ * `'0.0.0.0'` typed by hand that could drift from it.
+ */
+export const WILDCARD_BIND = '0.0.0.0';
+
+/**
+ * Whether a value may be `server.bind.host`.
+ *
+ * Exactly the set a client may dial directly ({@link isRemoteTarget}):
+ * loopback, the local network, or a Tailscale address (HIVE-428). A server
+ * never binds a public address; the relay is the only route off a private
+ * network. `ReceiverBindConfig.host` accepts `0.0.0.0` deliberately, because a
+ * user whose container runtime names no bridge has nothing else to write. That
+ * reasoning does not transfer: a served machine is reached at a nameable
+ * address, so the wildcard here is a wider surface with nothing to buy for it.
+ *
+ * Every numeral spelling of that wildcard (`0`, `00`, `0x0`,
+ * `000.000.000.000`, all of which `inet_aton` folds to `0.0.0.0`; HIVE-142
+ * review, I1) falls outside the set by construction: none is loopback, a
+ * private range written in canonical octets, a `.local` name or a tailnet
+ * address. That is why the dedicated wildcard check this predicate used to
+ * carry is gone, and why its test cases stay, as refusals. It remains the one
+ * predicate every validation surface (the file reader, the IPC guard, and the
+ * Settings pane) calls.
+ */
+export function isServerBindHost(value: unknown): value is string {
+  return isRemoteTarget(value);
+}
+
+/**
+ * Where the server listens (HIVE-142).
+ *
+ * A sibling of {@link ReceiverBindConfig}, not a reuse of it: the two differ in
+ * exactly the ways `isServerBindHost`'s doc comment explains, and in the
+ * default port, which has to be fixed rather than OS-assigned — see
+ * {@link ServerBindConfig.port}.
+ */
+export interface ServerBindConfig {
+  /**
+   * A hostname or an IPv4 literal, validated by {@link isServerBindHost}.
+   *
+   * **A client must address this machine by this exact value.** The Host
+   * guard (`createOriginGuard`, `remote-host/listener.ts`) admits loopback and
+   * this string, and nothing else — not a MagicDNS name or any other alias
+   * that merely *resolves* to the same address. A Tailscale node typically
+   * has both a `100.x` address and a name; if a client reaches this socket
+   * through the name, it is refused with a bare 403 (logged here, but not on
+   * the wire, so an unauthenticated peer learns nothing about what this app
+   * would have admitted). Naming a wider admissible set is HIVE-144's
+   * decision, not this story's.
+   */
+  host: string;
+  /**
+   * Fixed, not ephemeral — unlike {@link ReceiverBindConfig.port}, whose `0`
+   * asks the OS for any free port. A client's config and a LaunchAgent both
+   * have to name this port ahead of time, and neither can be told a number the
+   * kernel picks at boot.
+   */
+  port: number;
+  /** Full origins, as {@link isOrigin} defines one. Empty refuses every Origin. */
+  allowedOrigins: readonly string[];
+}
+
+/**
+ * How a device proves itself.
+ *
+ * A tagged union rather than a bare digest, so device public keys (Ed25519,
+ * verified with `crypto.verify`, no dependency) are an additive variant later
+ * rather than a migration. `sha256` is the only variant this build mints.
+ */
+type ServerCredential = { kind: 'sha256'; digest: string };
+
+export interface ServerDevice {
+  id: string;
+  name: string;
+  /** ISO date, the day it was paired. */
+  paired: string;
+  revoked: boolean;
+  /**
+   * The digest, and deliberately not the token.
+   *
+   * A server verifying a credential never needs to hold one. The token is 80
+   * uniform bits (`randomBytes(10)`, rendered as 16 Crockford-base32
+   * characters — see `devices.ts`'s `mintDevice`), so a SHA-256 digest of it
+   * is not brute-forceable and no KDF is warranted — that is why there is no
+   * salt here, rather than an omission. The plaintext exists in exactly two
+   * places: stdout at mint time, and the client's own `safeStorage`.
+   *
+   * **The digest is key material (HIVE-428).** It is the encrypted channel's
+   * pre-shared key for this device: the client derives the same 32 bytes from
+   * its token (`pskOfToken`), and the server reads them from here on every
+   * handshake. Whoever holds this file's digest and sits on the path between
+   * this server and that device can impersonate the server to the device. It
+   * is not enough to attach as the device, which still needs the token itself.
+   */
+  credential: ServerCredential;
+}
+
+/**
+ * The managed relay, serving side (HIVE-429). With `enabled`, a Mac that booted in server mode, signed in
+ * and entitled to `relay`, holds the cloud's `/relay/serve`, so paired devices reach it from any network.
+ * The relay's address is the cloud the app signs in to; there is no address field.
+ */
+export interface ServerRelayConfig {
+  enabled: boolean;
+}
+
+export interface ServerConfig {
+  enabled: boolean;
+  bind: ServerBindConfig;
+  devices: readonly ServerDevice[];
+  relay: ServerRelayConfig;
+}
+
+export const DEFAULT_SERVER: ServerConfig = {
+  enabled: false,
+  // 7434, one above The Hive's default, so both can serve on one Mac (HIVE-242).
+  bind: { host: '127.0.0.1', port: 7434, allowedOrigins: [] },
+  devices: [],
+  relay: { enabled: false },
+};
+
+/** The block's keys, for the parser's exact-key check. */
+export const SERVER_KEYS: readonly (keyof ServerConfig)[] = ['enabled', 'bind', 'devices', 'relay'];
+
+/** The nested relay block's keys, for the same check one level down (HIVE-429). */
+export const SERVER_RELAY_KEYS = ['enabled'] as const satisfies readonly (keyof ServerRelayConfig)[];
+
+/** The nested bind block's keys, for the same check one level down. */
+export const SERVER_BIND_KEYS: readonly (keyof ServerBindConfig)[] = [
+  'host',
+  'port',
+  'allowedOrigins',
+];
+
+/** One device's keys, for the same check on each entry in `devices`. */
+export const SERVER_DEVICE_KEYS: readonly (keyof ServerDevice)[] = [
+  'id',
+  'name',
+  'paired',
+  'revoked',
+  'credential',
+];
+
+/**
+ * `'local'` is every existing install: PTYs spawn in this process and no
+ * socket exists. `'remote'` means this window is a client attaching to a
+ * Hive running as a server elsewhere on the tailnet — see {@link ServerConfig}
+ * for the side that listens. There is no third mode: a PTY's owner has to be
+ * a single process for its lifecycle to be well-defined, so an install is
+ * either the server or a client, never a hybrid.
+ */
+export type RemoteMode = 'local' | 'remote';
+
+/**
+ * Where a client attaches when {@link RemoteMode} is `'remote'` (HIVE-144).
+ *
+ * **The token is not in this block, and never will be.** `host` and `port`
+ * name a socket; the credential that authenticates against it lives in
+ * `safeStorage`, mirroring why {@link ServerDevice.credential} holds a digest
+ * and not the token it was derived from — what authenticates a session must
+ * not sit inside a file this product invites the user to hand-edit.
+ *
+ * A new key in an existing file is advisory to a reader built before it
+ * existed, so `CONFIG_VERSION` stays 2 for this block exactly as it did for
+ * `server` (HIVE-134's precedent): a build that predates this key simply does
+ * not recognise `remote` and ignores it, rather than refusing to launch.
+ */
+export interface RemoteConfig {
+  mode: RemoteMode;
+  /**
+   * A hostname or an IPv4 literal.
+   *
+   * Validated by {@link isRemoteTarget} **only when {@link mode} is
+   * `'remote'`** — see that function's doc comment for the reasoning, and
+   * {@link DEFAULT_REMOTE} for why an empty value in `'local'` mode is the
+   * normal state, not a mistake.
+   */
+  host: string;
+  port: number;
+  /**
+   * HIVE-429. How `'remote'` mode reaches the server: `'direct'` dials {@link host} and
+   * {@link port}; `'relay'` dials {@link relayServerId} through the HiveTTY relay, and `host` is
+   * then neither dialled nor fenced.
+   */
+  via: RemoteVia;
+  /** HIVE-429. The relay id of the server a relay attach dials; `''` until one is chosen. */
+  relayServerId: string;
+}
+
+/** HIVE-429. A direct dial to a private address, or the HiveTTY relay. */
+export type RemoteVia = 'direct' | 'relay';
+
+/**
+ * HIVE-264. Only where the cloud is, for self-hosted Enterprise (HIVE-316); hand-edited, read at launch.
+ * No credential ever goes here: the account lives in safeStorage (`<userData>/account.bin`).
+ */
+export interface AccountConfig {
+  cloudUrl?: string;
+}
+
+/**
+ * Every install that has never attached carries exactly this. `host` is
+ * empty because there is nothing to validate in `'local'` mode — see
+ * {@link isRemoteTarget}. The port is 7434, one above The Hive's default, so
+ * both can serve on one Mac (HIVE-242).
+ */
+export const DEFAULT_REMOTE: RemoteConfig = {
+  mode: 'local',
+  host: '',
+  port: 7434,
+  via: 'direct',
+  relayServerId: '',
+};
+
+/** HIVE-429. What `attachedServer` names on a relay block, whose `host` is never dialled. */
+export const RELAY_ATTACHED_NAME = 'a server through the relay';
+
+/**
+ * `ConfigSnapshot.attachedServer` from a resolved block: the one derivation `loadConfig` and
+ * `writeConfig` share. A relay block names the relay, since its `host` is unused and often empty.
+ */
+export function attachedServerOf(remote: RemoteConfig): { name: string; host: string } | null {
+  if (remote.mode !== 'remote') return null;
+  if (remote.via === 'relay') return { name: RELAY_ATTACHED_NAME, host: '' };
+  return { name: remote.host, host: remote.host };
+}
+
+/** The block's keys, for the parser's exact-key check. */
+export const REMOTE_KEYS: readonly (keyof RemoteConfig)[] = [
+  'mode',
+  'host',
+  'port',
+  'via',
+  'relayServerId',
+];
+
+/**
+ * How a containerised session's `${VAR}` references get their values (HIVE-132).
+ *
+ * `exec-env` — `docker exec -e …` and friends. Env is per-exec, so every launch
+ * carries current values, `${VAR}` works as designed, and the generated file
+ * holds no secret: it can be mounted read-only or baked into an image.
+ *
+ * `rewrite` — reattach-model tools whose env is fixed at container creation and
+ * therefore goes stale. `tokenFor` is `HMAC(launchSecret, id)` and
+ * `launchSecret` is minted per receiver, so *every* token changes when the Hive
+ * restarts; a reattached sandbox holding creation-time env 403s on every call.
+ * The host writes resolved files per session instead, which puts a real token
+ * on disk inside the container — the trade this mode exists to make.
+ *
+ * Declared here rather than in `main/` because HIVE-133's per-project
+ * `container.freshness` field is the same enum, and two spellings of one
+ * vocabulary is how they drift.
+ */
+export type ContainerFreshness = 'exec-env' | 'rewrite';
+
+/** Secret-free and correct for every non-reattach runtime. */
+export const DEFAULT_FRESHNESS: ContainerFreshness = 'exec-env';
+
+/** Where a container project's expanded environment goes in its command line. */
+export const ENV_PLACEHOLDER = '{env}';
+
+/** The commonest spelling, and the one the settings placeholder shows. */
+export const DEFAULT_ENV_ARG = '-e {name}={value}';
+
+/**
+ * A project whose sessions run inside a container (HIVE-133).
+ *
+ * Its **presence is the switch** — there is no `enabled` flag. Every field is a
+ * string or an enum so a BYO runtime nobody has thought of yet needs
+ * configuration rather than code.
+ *
+ * This is the **file** shape: only `workspace` and `hiveDir` are required, and
+ * an absent field means "inherit", never "empty". `parse.ts` validates it and
+ * deliberately does not default it — `ParsedConfig` reports what the file said
+ * and the caller applies defaults, exactly as it does for `shell` and
+ * `subscriptionAuth`. {@link ResolvedContainer} is what a spawn actually uses,
+ * and `effectiveRuntime` is what turns one into the other.
+ *
+ * Hive never starts, stops or names a container. The name lives only inside
+ * `claudeCommand`, which is why {@link ContainerConfig.probe} exists rather
+ * than a `name` key.
+ */
+export interface ContainerConfig {
+  /**
+   * Container-side path of `project.path`.
+   *
+   * The host side is already known, so this is one field rather than a pair.
+   */
+  workspace: string;
+  /**
+   * Container-side path of `<userData>/hive`.
+   *
+   * Required, and the reason acceptance criterion 2 is reachable at all:
+   * `--settings`, `--mcp-config` and `--plugin-dir` all name paths under this
+   * directory and none is under {@link workspace}. The user mounts it; this
+   * says where it landed.
+   */
+  hiveDir: string;
+  /**
+   * How one variable is spelled, expanded at `{env}` in `claudeCommand`.
+   *
+   * A template so podman, devcontainer, sbx and anything else spell env
+   * injection their own way.
+   */
+  envArg?: string;
+  /**
+   * A command that must exit 0 before a session starts.
+   *
+   * Absent means no precondition. Its failure is reported with the runtime's
+   * own stderr, which names the container in the runtime's words — Hive cannot,
+   * because nothing here knows the name.
+   */
+  probe?: string;
+  /** See {@link ContainerFreshness}. Absent inherits {@link DEFAULT_FRESHNESS}. */
+  freshness?: ContainerFreshness;
+  /** Overrides `receiver.hostAlias`. Absent inherits it. */
+  hostAlias?: string;
+}
+
+/**
+ * The same block with every default applied — what a spawn actually uses.
+ *
+ * Produced by `effectiveRuntime`, which is the only layer that can: `hostAlias`
+ * falls back to `receiver.hostAlias`, and `resolveProject` sees one raw entry
+ * and never the receiver.
+ */
+export interface ResolvedContainer {
+  workspace: string;
+  hiveDir: string;
+  envArg: string;
+  probe?: string;
+  freshness: ContainerFreshness;
+  hostAlias: string;
+}
+
+/**
+ * The rules `config/parse.ts` and `guards.ts` **both** apply to a container block.
+ *
+ * One spelling each, deliberately shared, exactly as {@link isHostAlias} is. The
+ * set the file reader accepts and the set the IPC guard accepts have to be one
+ * set, or the settings pane stores a value that vanishes on the next load.
+ *
+ * The two callers still differ where they should: the reader reports and drops a
+ * bad block because a hand-edited file is a user mid-edit, and the guard throws
+ * because an IPC payload is either what the pane built or has no business being
+ * written. That difference is in the error handling, not in the rules.
+ */
+export const isAbsoluteContainerPath = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim() !== '' && value.startsWith('/');
+
+/** A template is useless without both placeholders — it would inject nothing. */
+export const isEnvArgTemplate = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  value.includes('{name}') &&
+  value.includes('{value}');
+
+export const isContainerFreshness = (value: unknown): value is ContainerFreshness =>
+  value === 'exec-env' || value === 'rewrite';
+
+/** A probe is a command to run; whitespace is not one. */
+export const isContainerProbe = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim() !== '';
+
+/** One DNS label: alphanumeric, inner hyphens allowed, no leading or trailing one. */
+const HOST_ALIAS_LABEL = /^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$/;
+
+/** The DNS ceiling, and the same bound `assertJiraSite` applies to a site. */
+const MAX_HOST_ALIAS = 253;
+
+/**
+ * Whether a value is usable as {@link ReceiverConfig.hostAlias}.
+ *
+ * **One predicate, deliberately shared** by the file reader
+ * (`config/parse.ts`) and the IPC guard (`guards.ts`). Two independent
+ * spellings of "looks like a hostname" drift, and the drift is not cosmetic:
+ * the set the reader accepts and the set the writer accepts have to be the same
+ * one, or a value the UI stores is refused on the next load, or worse, a value
+ * hand-written into the file is one the guard would have refused.
+ *
+ * ## Why per-label, and not a blocklist
+ *
+ * The first spelling of this rule rejected `[\s/:]` and nothing else, which let
+ * every other URL delimiter through — and each one *ends the authority*.
+ * `hostAlias = '10.0.0.5?'` turned `http://127.0.0.1:63999/hook` into
+ * `http://10.0.0.5?:63999/hook`: a request to **port 80 of 10.0.0.5**, with the
+ * real port and path demoted into a query string. `#`, `@` and `\` do the same
+ * thing by other routes. A blocklist here is a list of the delimiters someone
+ * thought of; an allowlist is the set of characters a hostname may contain.
+ *
+ * So this validates each dot-separated label the way {@link assertJiraSite}
+ * validates a site's, with two deliberate differences: a **single label is
+ * allowed** (`gateway` on a custom bridge is legitimate, and a site is not),
+ * and so is a dotted-quad IP literal, which falls out of the same rule.
+ *
+ * An IPv6 literal is not accepted. It would need brackets, and brackets are not
+ * hostname characters — a documented limit rather than an oversight, and the
+ * reason `withHostAlias` documents its input as an address this app produced.
+ */
+export function isHostAlias(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  if (value.length === 0 || value.length > MAX_HOST_ALIAS) return false;
+  return value.split('.').every((label) => HOST_ALIAS_LABEL.test(label));
+}
+
+/**
+ * `127.0.0.0/8`, in the dotted-quad spelling {@link isHostAlias} admits.
+ *
+ * Every octet after the fixed `127` is bounded `(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)`
+ * — 0 through 255 and nothing past it — exactly as {@link TAILNET_V4} bounds
+ * its own, and for the same reason spelled out there. The looser `\d{1,3}` this
+ * regex used through HIVE-134 admits `256` through `999`, and `127.999.999.999`
+ * is not an IPv4 address at all: `net.isIPv4` says `false`, so `net.connect`
+ * hands the whole string to the **DNS resolver as a hostname**.
+ *
+ * That was inert while this predicate only classified a *bind* address — a
+ * nonsense host was refused by the OS at bind time either way. HIVE-144 gave it
+ * a second job through {@link isRemoteTarget}, where it decides what this app
+ * will **dial with a device credential**, and a loose
+ * octet there is the exfiltration path `TAILNET_V4` documents: a typo plus a
+ * `search` suffix plus a resolver that hijacks NXDOMAIN sends the credential to
+ * an arbitrary public address, with this predicate having called it loopback.
+ *
+ * Tightening cuts nothing real loose. The strings it stops matching were never
+ * IPv4 literals, so no bind, dial or `Host` header they appear in could have
+ * reached this machine; every one of them now classifies as *not* loopback,
+ * which is the failing-closed direction at all four call sites.
+ */
+const LOOPBACK_V4 = /^127\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+/**
+ * Whether a bind address reaches only this machine (HIVE-134).
+ *
+ * **The one definition of "exposed"**, and the reason there is no
+ * `bind.enabled` boolean: exposure is a property of the address, so deriving it
+ * leaves nothing for a flag and a host to disagree about. Main uses it to decide
+ * what the Host guard admits; the renderer uses it to decide whether the header
+ * says anything at all.
+ *
+ * The whole `127.0.0.0/8` block counts, not just `127.0.0.1` — a bind to
+ * `127.0.0.2` is every bit as unreachable from off the machine, and treating it
+ * as exposure would put an amber chip in the header over nothing.
+ *
+ * Brackets are stripped so this reads a `Host` header's IPv6 literal
+ * (`[::1]:63999` arrives as `[::1]`) as well as a config value.
+ */
+export function isLoopbackHost(host: string): boolean {
+  const bare = host.trim().toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
+  if (bare === 'localhost' || bare === '::1' || bare === '::ffff:127.0.0.1') return true;
+  return LOOPBACK_V4.test(bare);
+}
+
+/**
+ * `100.64.0.0/10`, the CGNAT range Tailscale hands every node in a tailnet, in
+ * the dotted-quad spelling {@link isHostAlias} admits.
+ *
+ * Get the arithmetic exactly right: a `/10` is the top two bits of the second
+ * octet fixed at `01`, i.e. `100.64.0.0` through `100.127.255.255` — **not**
+ * "every `100.x`". `100.63.255.255` and `100.128.0.0` are one address either
+ * side of the range and were never Tailscale's to hand out; a predicate that
+ * loosens this to the whole second octet admits half the internet's `100.x`
+ * space as if it were the tailnet.
+ *
+ * The third and fourth octets are bounded exactly as the first two are —
+ * `(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)`, 0 through 255 and nothing past it —
+ * rather than the looser `\d{1,3}` a first draft of this regex used. `\d{1,3}`
+ * admits `256` through `999`, and a string like `100.64.0.257` is not an IPv4
+ * address at all: `net.isIPv4('100.64.0.257')` is `false`, so `net.connect`
+ * hands the whole string to the DNS **resolver as a hostname**. A user who
+ * typos `100.64.0.25` as `100.64.0.257` on a machine with a `search` suffix
+ * gets a query for `100.64.0.257.<suffix>`; a resolver that hijacks NXDOMAIN
+ * can answer with an arbitrary public address, and the device credential this
+ * predicate is supposed to keep on the tailnet goes there instead — with this
+ * function having said the address was in range. Bounding every octet is what
+ * makes "in the CGNAT range" a claim that can only be true of a real IPv4
+ * literal.
+ */
+const TAILNET_V4 =
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+/**
+ * Whether a value is a Tailscale address for this node's tailnet (HIVE-144).
+ *
+ * `isHostAlias` for shape first, exactly as {@link isServerBindHost} does —
+ * one shape predicate, not two, per that function's own doc comment. What
+ * remains is the two spellings Tailscale actually assigns: a MagicDNS name
+ * (`mini.tail1234.ts.net`) and a CGNAT literal ({@link TAILNET_V4}). A bare
+ * hostname like `mini.local` is neither — mDNS resolves it to whatever
+ * answers on the local LAN right now, off the tailnet entirely — so this
+ * predicate refuses it; it is {@link isLanHost}'s case (HIVE-428).
+ */
+export function isTailnetHost(value: string): boolean {
+  if (!isHostAlias(value)) return false;
+  if (value.toLowerCase().endsWith('.ts.net')) return true;
+  return TAILNET_V4.test(value);
+}
+
+/**
+ * The private IPv4 ranges a LAN uses: RFC 1918 (10/8, 172.16/12, 192.168/16)
+ * and link-local 169.254/16. Every octet is bounded 0-255 for the reason
+ * {@link TAILNET_V4} documents: a string that is not an IPv4 literal goes to
+ * the resolver as a hostname. No alternative admits a leading zero, so
+ * `010.0.0.1` (octal to `inet_aton`) is refused rather than misread.
+ */
+const LAN_V4 =
+  /^(10\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)|172\.(1[6-9]|2\d|3[01])|192\.168|169\.254)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+/**
+ * Whether a value is an address on a local network (HIVE-428): an mDNS name
+ * (`*.local`) or a private IPv4 literal ({@link LAN_V4}). IPv4 only, as the
+ * rest of this file is.
+ */
+export function isLanHost(value: string): boolean {
+  if (!isHostAlias(value)) return false;
+  if (value.toLowerCase().endsWith('.local')) return true;
+  return LAN_V4.test(value);
+}
+
+/**
+ * Whether a direct attach may dial `value` (HIVE-144, widened by HIVE-428).
+ *
+ * **The rule: direct attach stays on a private network; the relay is the only
+ * route off one.** Every attach now runs inside an end-to-end encrypted
+ * channel (`remote-channel/`), so this predicate is no longer what
+ * keeps the device credential confidential. It keeps a direct dial on
+ * loopback, the local network ({@link isLanHost}) or the tailnet
+ * ({@link isTailnetHost}); a public address is reached through the relay
+ * instead. `fencedLookup` (`electron/remote-client/socket.ts`) re-runs it on
+ * the resolved address, so a `.local` or `.ts.net` name that resolves to a
+ * public address is still refused at connect.
+ *
+ * `isHostAlias` for shape first — exactly as {@link isServerBindHost} does —
+ * *before* either branch below, not merely inside {@link isTailnetHost}.
+ * `isLoopbackHost`'s own rule trims, lowercases and strips brackets, so
+ * `' 127.0.0.1 '` and `'[127.0.0.1]'` satisfy it; without this gate a value
+ * shaped that way would pass validation and be stored verbatim, then fail at
+ * `net.connect` with `ENOTFOUND` — failing closed, so not a hole, but not the
+ * value that was actually validated either. Gating here means the string this
+ * predicate approves is the string that gets dialled.
+ *
+ * `unknown`, and a type guard, matching {@link isServerBindHost} at `:707` —
+ * Task 5's `setRemote` IPC verb validates a payload of unknown shape through
+ * this same predicate, so the signature has to widen for that caller anyway.
+ *
+ * `isLoopbackHost(value) || isLanHost(value) || isTailnetHost(value)` —
+ * deliberately an "or" of independently-reasoned predicates rather than one
+ * merged rule, so each keeps its own doc comment and its own tests.
+ */
+export function isRemoteTarget(value: unknown): value is string {
+  if (!isHostAlias(value)) return false;
+  return isLoopbackHost(value) || isLanHost(value) || isTailnetHost(value);
+}
+
+/**
+ * Whether a value is usable as a {@link ReceiverBindConfig.allowedOrigins} entry.
+ *
+ * A second predicate beside {@link isHostAlias}, which the ticket asked not to
+ * write. It is unavoidable: an origin carries a **scheme** and an optional
+ * **port**, and `isHostAlias` refuses both by design — it validates DNS labels,
+ * and `:` is not one. `bind.host` does reuse `isHostAlias`, which is the half of
+ * that instruction that survives.
+ *
+ * The check is `url.origin === value`, which is stricter than it looks and does
+ * the work of five separate rejections at once. `URL` normalises an origin to
+ * scheme, host and non-default port and nothing else, so a trailing slash, a
+ * path, a query, a fragment, embedded credentials and a redundant default port
+ * all fail the comparison rather than needing a clause each. That matters here
+ * for `isHostAlias`'s reason: a stored value that does not match what the
+ * browser actually sends in `Origin` is an allowlist entry that silently never
+ * fires, and the user cannot tell that from a working one.
+ */
+export function isOrigin(value: unknown): value is string {
+  if (typeof value !== 'string' || value === '') return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  return parsed.origin === value;
+}
+
+/**
+ * What `window.hive.config.get()` answers with.
+ *
+ * Note there is no `ok` / `valid` flag. A snapshot is always returned, even for
+ * a malformed file: one mistyped path must not stop the app from launching, so
+ * failure is expressed per entry and in {@link ConfigSnapshot.errors}, never as
+ * an absent snapshot.
+ */
+export interface ConfigSnapshot {
+  /** The file that was read — `HIVE_CONFIG_PATH` or `~/.hivetty/config.json`. */
+  configPath: string;
+  /**
+   * True when no file existed and a template was written during this load.
+   *
+   * The renderer uses it for the first-run notice. It is deliberately not an
+   * error: no config file is the normal state on a fresh machine.
+   */
+  templateWritten: boolean;
+  /** The login shell for every session, already defaulted by `defaultShell()`. */
+  shell: string;
+  /** The bootstrap command a session runs (story 096), already defaulted. */
+  claudeCommand: string;
+  /**
+   * Environment applied to every session, under any project's own (story 108).
+   *
+   * Always fully resolved — `{}` rather than absent — for the reason
+   * `notifications` is: main reads this on every spawn, and a consumer that
+   * must remember to apply a default is one that will forget on one branch.
+   */
+  env: Record<string, string>;
+  /** Every entry the file declared, in file order, each with its verdict. */
+  projects: ProjectConfig[];
+  /**
+   * Notification preferences, always fully resolved (story 106).
+   *
+   * Defaulted here rather than left partial for the same reason `shell` and
+   * `claudeCommand` are: main reads this on every event it might announce, and
+   * a consumer that had to remember to apply defaults is one that will
+   * eventually forget on one branch.
+   */
+  notifications: NotificationPrefs;
+  /**
+   * The Jira connection, always fully resolved (HIVE-67).
+   *
+   * Defaulted here for the same reason `notifications` is: main reads it on
+   * every Jira verb, and a consumer that had to remember to apply defaults is
+   * one that will eventually forget on one branch.
+   */
+  jira: JiraConfig;
+  /**
+   * How a container addresses this app, always fully resolved (HIVE-131).
+   *
+   * Defaulted here for the same reason `jira` and `notifications` are: main
+   * reads it wherever a container-flavoured file is generated, and a consumer
+   * that had to remember to apply defaults is one that will eventually forget
+   * on one branch.
+   */
+  receiver: ReceiverConfig;
+  /**
+   * Server mode, always fully resolved (HIVE-142).
+   *
+   * Defaulted here for the same reason `receiver` and `jira` are: main reads it
+   * at boot to decide whether to listen at all, and a consumer that had to
+   * remember to apply defaults is one that will eventually forget on one branch.
+   */
+  server: ServerConfig;
+  /**
+   * How this window reaches its own PTYs, always fully resolved (HIVE-144).
+   *
+   * Defaulted here for the same reason `server` is: main reads
+   * `remote.mode` at boot to decide whether to spawn PTYs locally or attach
+   * as a client, and a consumer that had to remember to apply defaults is one
+   * that will eventually forget on one branch. There is no separate `mode`
+   * field on this snapshot — `remote.mode` is the one stored value, so a
+   * reader that wants a flatter shape gets a derived getter, never a second
+   * place for the same fact to drift from this one.
+   */
+  remote: RemoteConfig;
+  /** HIVE-264. Present only when the file names a valid `account.cloudUrl`. */
+  account?: AccountConfig;
+  /**
+   * What this window is attached to over a socket, or `null` in `'local'`
+   * mode (HIVE-144).
+   *
+   * **A control's readout, not a status readout — see `AppInfo.attachedServerName`
+   * (Task 13, `ipc-contract.ts`) for the other half of this line, and read
+   * both doc comments together before touching either.** This repo already
+   * draws that line and HIVE-134 wrote down why (`:276-278` above,
+   * `ipc-contract.ts:1382-1405`): a *control* over the file reads from
+   * config, a *status readout* reads from what is actually running. Settings
+   * names the machine whose config file this window is editing — while
+   * attached, `config:get` itself is answered by the far end, exactly as
+   * {@link RemoteConfig}'s own doc comment says — so that question is
+   * config-derived and belongs here. The header chip claims a **live**
+   * attachment, which is a different question this field would answer
+   * wrongly in both directions: Ruling 19 deliberately leaves `remote.mode`
+   * saying `'remote'` in `config.json` after an already-remote re-switch
+   * fails and rebinds local, so a config-derived chip would keep claiming an
+   * attachment that is no longer there — and, symmetrically, would deny one
+   * on the next launch before the boot attach has even been attempted. The
+   * chip reads `AppInfo.attachedServerName` instead, sourced from the running
+   * socket, for exactly that reason.
+   *
+   * `name` is `remote.host` today — the file carries no friendlier label for
+   * the far end, only the address it dials. The runtime side genuinely does
+   * have a name — `RemoteClient.serverName()` (Task 7), what the header chip
+   * reads — which is the config-versus-runtime split demonstrated rather than
+   * merely asserted: config knows the host, runtime knows the name.
+   *
+   * **Required, not optional.** A snapshot is documented above as "always
+   * returned, even for a malformed file", and every other resolved field on
+   * this interface (`jira`, `receiver`, `server`, `remote` itself) keeps that
+   * promise the same way — fully computed, never left for a caller to
+   * default. An optional field here would let a hand-rolled fixture declare
+   * `remote.mode: 'remote'` while naming no attached server at all, which
+   * describes a state the app cannot be in, with `tsc` saying nothing about
+   * it. That is the exact shape of a real defect this repo already paid for
+   * once (HIVE-139's vitest teardown flake, traced back to a fixture missing
+   * a required field on a partial `ConfigSnapshot`) — the fix recorded from
+   * it was to never hand-roll a partial snapshot, and a required field is
+   * what makes the compiler enforce that rather than a comment.
+   */
+  attachedServer: { name: string; host: string } | null;
+  /**
+   * Real-time Slack events, always fully resolved (HIVE-124).
+   *
+   * Defaulted here for the reason `jira` and `receiver` are: main reads it on
+   * every socket decision, and a consumer that had to remember to apply
+   * defaults is one that will eventually forget on one branch.
+   */
+  slack: SlackConfig;
+  /** Per-CLI headless agent defaults, always resolved: every CLI present (HIVE-341). */
+  clis: ClisConfig;
+  /** "Default CLI for agents" (HIVE-341). Absent: resolution falls back to `claude-code`. */
+  agentsDefaultCli?: HarnessId;
+  /** HIVE-375. The CLI a new session starts with; absent means claude-code. */
+  sessionsDefaultCli?: HarnessId;
+  /**
+   * Whether sessions authenticate on the Claude.ai plan (HIVE-79).
+   *
+   * `true` — the default — strips {@link AUTH_ENV_KEYS} from every session the
+   * app spawns, so `claude` uses the subscription credentials and its status
+   * line reports the rate limits the header renders. `false` inherits whatever
+   * the user exported, which is the pre-HIVE-79 behaviour and means the two
+   * limit gauges stay empty.
+   */
+  subscriptionAuth: boolean;
+  /**
+   * Whether the app injects its status line, and so whether the header's gauges
+   * have anything to show (HIVE-79).
+   *
+   * See {@link DEFAULT_SESSION_METRICS} for what turning it off costs and buys.
+   */
+  sessionMetrics: boolean;
+  /**
+   * Plugin names a Hive session does not load (HIVE-176). Absent in the file
+   * means {@link DEFAULT_DISABLED_SESSION_PLUGINS}; an explicit `[]` means
+   * every installed plugin loads. Sessions only: agents already load none of
+   * the user's plugins.
+   */
+  disabledSessionPlugins: string[];
+  /**
+   * Whether the app imports {@link LOGIN_ENV_IMPORT_KEYS} from the login shell
+   * at startup (HIVE-84).
+   *
+   * `true` — the default — is what makes a Finder-launched build see the same
+   * `PATH` a terminal does, and so the only reason `gh` is findable in a
+   * packaged app at all. `false` keeps launchd's inherited environment, which
+   * is the pre-HIVE-84 behaviour.
+   */
+  importLoginEnv: boolean;
+  /**
+   * Human-readable problems, in the order they were found.
+   *
+   * Populated for file-level failures (unreadable, malformed JSON, wrong
+   * version, an unknown top-level key) *and* for every rejected entry, so the
+   * renderer can show a reason without re-deriving one from a status code.
+   */
+  errors: string[];
+}
+
+/**
+ * What Settings › Advanced › Reload answers with: the snapshot it installed,
+ * plus the fields it read but cannot apply until the app relaunches
+ * (`core/config/restart-required.ts`). Empty when nothing is waiting.
+ */
+export type ConfigReloadResult = ConfigSnapshot & { restartRequired: string[] };
+
+/** The schema version this build writes (story 101). */
+export const CONFIG_VERSION = 2;
+
+/**
+ * Versions the reader accepts.
+ *
+ * A v1 file is read normally and upgraded **in memory** — `name` from the
+ * resolved directory's basename, a default `icon`, `origin: 'local'` — and
+ * rewritten as v2 only when the user first saves something. Reading someone's
+ * file and rewriting it before they asked for anything is not a migration, it
+ * is a surprise. A v1 file the user never edits through the UI stays v1 forever
+ * and keeps working.
+ */
+export const SUPPORTED_CONFIG_VERSIONS: readonly number[] = [1, 2];
+
+/** What a project entry gets when the file names no icon. */
+export const DEFAULT_PROJECT_ICON = 'ph-folder';
+
+/**
+ * What a project key is allowed to look like (HIVE-94).
+ *
+ * Two to four lowercase letters — no digits, no separators. The bound is what
+ * makes the key worth having: a key that could be eight characters long would
+ * drift back towards the id it exists to shorten, and one that could carry a
+ * digit would let the collision fallback mint `is2`, which is a slug rather
+ * than an alias.
+ *
+ * It lives in the contract rather than in `guards.ts` because **three** layers
+ * need it and they must not disagree: the IPC guard refuses a bad one, the
+ * config reader reports one, and the inline editor in Settings has to grey out
+ * *Enter to save* while the user is still typing. `guards.ts` is the boundary
+ * and pulls in the whole request surface behind it, so the renderer imports
+ * this file — as it already does for `unsafeEnvReason`.
+ */
+export const PROJECT_KEY_PATTERN = /^[a-z]{2,4}$/;
+
+/** The one sentence every layer uses to say what a key must be. */
+export const PROJECT_KEY_HINT = '2–4 lowercase letters';
+
+/**
+ * Whether a string is a usable project key.
+ *
+ * A function rather than a bare `.test()` at each call site so the pattern is
+ * never copied, and never accidentally given the `g` flag's stateful `lastIndex`
+ * by a future edit.
+ */
+export const isProjectKey = (value: string): boolean =>
+  PROJECT_KEY_PATTERN.test(value);
+
+/**
+ * Every string a project already answers to, lowercased (HIVE-94).
+ *
+ * A key is not unique merely by being unlike the other keys. `resolveProjectRef`
+ * searches **one address space** — key, then id, then name — and it searches key
+ * *first*, so a key that happens to equal another project's id silently takes
+ * that id's spawns. That is not hypothetical: a project at `~/repos/web` (id
+ * `web`) renamed to "Frontend" derives the key `fro` and leaves `web` free, and
+ * the next project called "Web Extension Builder" mints exactly `web` — after
+ * which `spawn web`, which had always meant the first, starts an agent in the
+ * second with no warning anywhere.
+ *
+ * So this is the set every *generated* key must avoid and every *typed* key is
+ * refused against. Ids and names are folded to lowercase because the resolver
+ * matches case-insensitively; a value that could never be a key (a forty
+ * character id) is harmless in the set and cheaper to include than to filter.
+ *
+ * A project's own handles are not excluded here — callers drop the entry being
+ * keyed, because a project answering to its own id under two fields is not a
+ * collision with anything.
+ */
+export function projectAliases(project: {
+  id: string;
+  name?: string | null;
+  key?: string | null;
+}): string[] {
+  const aliases = [project.id.toLowerCase()];
+  if (project.name) aliases.push(project.name.toLowerCase());
+  if (project.key) aliases.push(project.key.toLowerCase());
+  return aliases;
+}
+
+/** The last-resort shell: used off darwin when the password database has no usable entry. */
+export const DEFAULT_SHELL = '/bin/sh';
+
+/** Used when the file names no bootstrap command (story 096). */
+export const DEFAULT_CLAUDE_COMMAND = 'claude';
+
+/**
+ * Environment variables a project may never set (story 104).
+ *
+ * Two groups, refused for two different reasons.
+ *
+ * **The dynamic loader.** `LD_*` and `DYLD_*` tell the OS to load arbitrary
+ * shared libraries into *every* process the spawned shell goes on to fork.
+ * That is native code execution, and it is a genuine escalation rather than a
+ * theoretical one: story 082's posture is that **the renderer is untrusted
+ * input**, so a compromised renderer that can write the config file must not
+ * thereby be able to run native code. Before this story `injected` was always
+ * `{}`, so this path did not exist; refusing these keeps it from opening.
+ *
+ * The `pty-host` deny-list is not the answer here — it exists to strip
+ * *Electron's own* leakage from the inherited environment (`ELECTRON_*`,
+ * `NODE_OPTIONS`), a different job, and it runs a process boundary away from
+ * the guard that should have refused the value in the first place.
+ *
+ * **Interpreter hooks.** `NODE_OPTIONS` (`--require` runs a file),
+ * `BASH_ENV` (sourced by non-interactive bash) and `ELECTRON_RUN_AS_NODE` are
+ * the same trick in a different coat.
+ *
+ * Refused rather than silently dropped: a setting that vanishes is worse than
+ * one that names itself.
+ */
+const UNSAFE_ENV_PREFIXES: readonly string[] = ['LD_', 'DYLD_'];
+
+export const UNSAFE_ENV_KEYS: readonly string[] = [
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'BASH_ENV',
+  'ELECTRON_RUN_AS_NODE',
+];
+
+/**
+ * Variables the pty-host sets for itself, after merging anything injected.
+ *
+ * Accepting one would store a setting that `buildSessionEnv` then overwrites — a
+ * setting that does nothing is worse than a setting that is refused.
+ */
+export const RESERVED_ENV_KEYS: readonly string[] = ['TERM', 'COLORTERM', 'PWD'];
+
+/**
+ * The variables that identify a **Claude session** (HIVE-64).
+ *
+ * A third group, refused for a third reason. The two lists above are security
+ * boundaries; this one is an identity boundary. `claude` reads these to decide
+ * which conversation it belongs to, so a session that inherits them joins the
+ * launching session instead of starting its own — every new session opening
+ * under somebody else's name, and renaming one renaming all of them.
+ *
+ * {@link buildSessionEnv} strips these from the inherited environment, and
+ * **reads these constants rather than restating them**. Two lists that must agree is
+ * exactly how the message row and the terminal drifted apart in HIVE-65; one
+ * definition with two consumers cannot.
+ *
+ * Refused here as well as stripped there, for the reason the loader list
+ * already gives: *a setting that vanishes is worse than one that names
+ * itself.* Without this, `CLAUDE_CONFIG_DIR` typed into a project's runtime
+ * settings would save, display as set, and then be silently discarded on every
+ * spawn — the user watching `claude` ignore a setting the UI says is applied.
+ *
+ * The cost is real and is the point: a project cannot set any `CLAUDE_*`
+ * variable. Anything the user exports from their own shell profile still
+ * arrives, because sessions run a login shell.
+ */
+const SESSION_ENV_PREFIXES: readonly string[] = ['CLAUDE_'];
+
+/**
+ * The session marker with no underscore, which no prefix above can catch.
+ *
+ * Separate from {@link SESSION_ENV_PREFIXES} because `'CLAUDECODE'` does not
+ * start with `'CLAUDE_'`. Dropping it would reopen the leak on its own.
+ */
+const SESSION_ENV_KEYS: readonly string[] = ['CLAUDECODE'];
+
+/**
+ * The credentials that make `claude` bill an API account instead of a plan.
+ *
+ * Removed from every session the Hive spawns unless
+ * {@link ConfigSnapshot.subscriptionAuth} is turned off (HIVE-79).
+ *
+ * ## Why an app would touch a user's credentials at all
+ *
+ * Because leaving them alone silently costs the user the feature this epic
+ * exists for. `claude` prefers `ANTHROPIC_API_KEY` when it is exported, and a
+ * session authenticated that way reports **no `rate_limits` at all** in its
+ * status line — the field is documented as subscriber-only. So on any machine
+ * where the key is exported (which is most machines belonging to people who
+ * also build against the API), the header's session and weekly gauges would
+ * read `—` forever, for a reason nothing on screen could explain.
+ *
+ * ## Why this is not the app quietly deciding how the user pays
+ *
+ * It is a **billing** change and it is treated as one: it is a documented
+ * config key, not a hidden behaviour, and setting `"subscriptionAuth": false`
+ * restores the inherited credentials exactly. What it changes is only which of
+ * the user's *own* two credentials a session picks up, and the default matches
+ * what a session manager for a Claude.ai plan is for.
+ *
+ * Unlike {@link SESSION_ENV_KEYS} these are **not** in the pty host's
+ * unconditional deny list, because the removal is a choice rather than a
+ * correctness fix — the host is told which names to drop on each spawn.
+ */
+export const AUTH_ENV_KEYS: readonly string[] = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+];
+
+/**
+ * Sessions authenticate on the user's Claude.ai plan by default.
+ *
+ * See {@link AUTH_ENV_KEYS} for why the default is this way round.
+ */
+export const DEFAULT_SUBSCRIPTION_AUTH = true;
+
+/**
+ * Whether the app injects its own status line into the sessions it spawns.
+ *
+ * On by default, because it is the only source of the context and rate-limit
+ * numbers the header renders — see `metrics-contract.ts`. Off restores the
+ * user's own status line inside Hive sessions and leaves all three header
+ * gauges empty.
+ *
+ * It is switchable at all because injecting a status line is **not free inside
+ * the terminal**: Claude Code drops most of its footer keyboard hints (`esc to
+ * interrupt`, `? for shortcuts`, the voice-dictation hint) whenever one is
+ * configured, whether or not it renders anything. A user who would rather keep
+ * those hints than see the gauges is making a reasonable trade, and before this
+ * key existed they had no way to make it.
+ */
+export const DEFAULT_SESSION_METRICS = true;
+
+/**
+ * The plugins a Hive session does not load until the user says otherwise
+ * (HIVE-176): the two whose skills the Hive's own replace. `hive:work-on` and
+ * `workstream:work-on` side by side, with near-identical descriptions, is a
+ * coin toss on "work on HIVE-123". Names, not `name@marketplace` keys: the
+ * marketplace differs between machines, and the session writer resolves the
+ * exact keys from the plugin registry at write time.
+ */
+export const DEFAULT_DISABLED_SESSION_PLUGINS: readonly string[] = ['workstream', 'superpowers'];
+
+/** A plugin name as Claude Code's registry spells the part before `@`. */
+export const SESSION_PLUGIN_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+/**
+ * The one definition of "what a spawned session's environment looks like"
+ * (story 092, extended by story 108's fix round).
+ *
+ * Originally lived only in the pty-host's own `env.ts`, which was fine for the
+ * pty-host itself but wrong for the env diagnostic
+ * (`core/config/env-diagnostic.ts`): main may not import
+ * `pty-host/**` (the process-boundary zone in `eslint.config.mjs`
+ * only grants it `shared/**`), so the diagnostic had been building
+ * its own, slightly different environment by hand — `{ ...baseEnv,
+ * ...runtime.env }`, with none of what follows applied.
+ *
+ * That divergence was not cosmetic. A packaged app launched from Finder has
+ * no `TERM` in main's own environment (the same launch mode `shell.ts`
+ * already distrusts `$SHELL` for), while every real session gets
+ * `TERM=xterm-256color` forced on it below. An rc file that branches on
+ * `TERM` — `[[ $TERM == dumb ]] && return`, which oh-my-zsh and
+ * powerlevel10k both do — would take a different branch under the probe than
+ * under a real session, and the diagnostic would report a variable as "kept"
+ * that a real session would actually see overridden. Living here and being
+ * called by both the session manager (pty-host) and `diagnoseEnv` (main) is what
+ * makes that impossible: there is exactly one place this logic can drift.
+ */
+export const TERM = 'xterm-256color';
+
+/** See {@link TERM} — advertises 24-bit colour so tools do not quantise to 256. */
+export const COLORTERM = 'truecolor';
+
+/**
+ * Variables stripped by exact name before a session's environment is built.
+ *
+ * `ELECTRON_RUN_AS_NODE` is Electron's own leakage — a child that itself
+ * launches Electron would silently become a Node process instead.
+ * `NODE_OPTIONS` and `NODE_PATH` point a `node` the user runs at Electron's
+ * own bundled runtime and `node_modules` rather than their project's.
+ *
+ * {@link SESSION_ENV_KEYS} is spread in rather than spelled out: the config
+ * layer refuses those names and this layer strips them, and two hand-maintained
+ * copies of the same list is how the message row and the terminal drifted apart
+ * in HIVE-65.
+ */
+const SESSION_ENV_DENY_EXACT: readonly string[] = [
+  'ELECTRON_RUN_AS_NODE',
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  ...SESSION_ENV_KEYS,
+];
+
+/**
+ * Variables stripped by prefix before a session's environment is built.
+ *
+ * `ELECTRON_*` is internal wiring never meaningful to a user shell;
+ * `GDK_PIXBUF_*` and `CHROME_*` are Chromium sandbox/runtime leakage.
+ *
+ * ## Why `CLAUDE_*` is on this list, and why it matters most here
+ *
+ * Launch HiveTTY from a terminal that is *itself* inside a Claude Code session
+ * — `pnpm desktop:dev` typed into one, which is exactly how it gets developed —
+ * and Electron inherits that session's variables: `CLAUDE_CODE_SESSION_ID`,
+ * `CLAUDE_CODE_CHILD_SESSION=1`, `CLAUDECODE=1`, and the rest. Every pty then
+ * hands them to `claude`, and every agent HiveTTY spawns **joins the launching
+ * session instead of starting its own**.
+ *
+ * The symptoms are bizarre until the cause is known, and were all observed:
+ *
+ * - Every new session opened already carrying the launching session's display
+ *   name, ignoring the `--name` the app passed it.
+ * - Renaming any one session renamed *all* of them, and the developer's own
+ *   outer session along with them, because there was only ever one session.
+ * - `⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker`
+ *   in sessions nobody had configured that way.
+ *
+ * Stripping here is the right layer and is not lossy: {@link buildSessionEnv}
+ * seeds from the *ambient* environment, and sessions run a **login shell**, so
+ * any `CLAUDE_*` the user genuinely exports from their own profile is
+ * re-established by that shell. What is removed is only the leakage from
+ * however the app happened to be started. `unsafeEnvReason` refuses these names
+ * at the point they are typed so the removal is never *silent* — a setting that
+ * vanishes is worse than one that names itself.
+ */
+export const SESSION_ENV_DENY_PREFIXES: readonly string[] = [
+  'ELECTRON_',
+  'GDK_PIXBUF_',
+  'CHROME_',
+  ...SESSION_ENV_PREFIXES,
+];
+
+/**
+ * Is this a name that breaks whatever inherits it?
+ *
+ * Exported because {@link buildSessionEnv} is not the only place that spawns a
+ * `claude`. The waker (HIVE-115) builds a **headless** child's environment and
+ * cannot use `buildSessionEnv` wholesale — that function also forces `TERM`,
+ * `COLORTERM` and `PWD`, which are a terminal's identity and mean nothing to a
+ * process with no tty. What it does need is exactly this predicate, and it
+ * needs it for the reason spelled out on {@link SESSION_ENV_DENY_PREFIXES}: an
+ * agent that inherits `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID` and
+ * `CLAUDE_CODE_CHILD_SESSION` joins the launching session instead of starting
+ * its own — which would also defeat the uuid correlation the run tracker is
+ * built on, and disable the transcript saving `--resume` depends on.
+ *
+ * Sharing the predicate rather than the two lists is the point: a name added to
+ * either list reaches both spawn paths at once, which is the drift HIVE-65 was.
+ */
+export function isSessionEnvDenied(key: string): boolean {
+  return (
+    SESSION_ENV_DENY_EXACT.includes(key) ||
+    SESSION_ENV_DENY_PREFIXES.some((prefix) => key.startsWith(prefix))
+  );
+}
+
+/**
+ * Build the environment a spawned session ends up with — and, since story
+ * 108's fix round, the environment the env diagnostic probes, so the two can
+ * never quietly diverge again.
+ *
+ * **The non-obvious part of making a terminal real.** A child must not inherit
+ * the app's process environment verbatim: Electron sets variables that break or
+ * confuse child processes, and a shell spawned from a `utilityProcess` inherits
+ * several that make no sense for it. It is the bug class that produces "it works
+ * in my terminal but not in the app", invisible until something downstream
+ * behaves strangely — a `node` that silently runs with different options, an
+ * `electron` invocation that turns itself into a Node process. It gets a
+ * dedicated conformance assertion in story 098.
+ *
+ * Start from a copy of the base environment, delete the deny-list, apply
+ * whatever was injected explicitly, then force `TERM`, `COLORTERM` and `PWD`.
+ * Those three are last on purpose: they are the terminal's identity, and an
+ * injected override of `TERM` is far more likely to be a mistake than an
+ * intention.
+ *
+ * `stripEnv` is the caller's own names, on top of the deny list, and the
+ * distinction is worth keeping: everything on {@link SESSION_ENV_DENY_EXACT} is
+ * removed because inheriting it *breaks* a child process, which is a fact about
+ * the environment. `stripEnv` is whatever the caller was told to drop by the
+ * user's config, which is a preference — see {@link AUTH_ENV_KEYS}. It applies
+ * to `injected` as well as to the ambient copy, exactly as the deny list does:
+ * a project that could re-add a name the user asked to have removed would make
+ * the setting silently conditional on which project was open.
+ */
+export function buildSessionEnv(
+  base: NodeJS.ProcessEnv,
+  cwd: string,
+  injected: Record<string, string> = {},
+  stripEnv: readonly string[] = [],
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  const stripped = new Set(stripEnv);
+  const isRemoved = (key: string): boolean =>
+    isSessionEnvDenied(key) || stripped.has(key);
+
+  for (const [key, value] of Object.entries(base)) {
+    if (value === undefined || isRemoved(key)) continue;
+    env[key] = value;
+  }
+
+  for (const [key, value] of Object.entries(injected)) {
+    if (isRemoved(key)) continue;
+    env[key] = value;
+  }
+
+  env.TERM = TERM;
+  env.COLORTERM = COLORTERM;
+  env.PWD = cwd;
+
+  return env;
+}
+
+/** Why an environment variable name was refused, or `null` if it is fine. */
+export function unsafeEnvReason(key: string): string | null {
+  if (RESERVED_ENV_KEYS.includes(key)) {
+    return `"${key}" is set by the terminal and cannot be overridden`;
+  }
+  if (UNSAFE_ENV_KEYS.includes(key)) {
+    return `"${key}" can make other programs run code and cannot be set here`;
+  }
+  if (UNSAFE_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+    return `"${key}" controls the dynamic loader and cannot be set here`;
+  }
+  if (
+    SESSION_ENV_KEYS.includes(key) ||
+    SESSION_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))
+  ) {
+    return `"${key}" identifies a Claude session and is set per session, not per project`;
+  }
+  return null;
+}
+
+/**
+ * The env var that relocates the config file.
+ *
+ * The escape hatch story 085 already depends on — its Playwright fixture sets
+ * this so a spec can never point a real `claude` at the developer's real
+ * working tree.
+ */
+export const CONFIG_PATH_ENV = 'HIVE_CONFIG_PATH';
+
+/**
+ * A snapshot with nothing configured.
+ *
+ * Exported because both the first-run path and the malformed-file path need
+ * exactly this, and because the renderer's own tests want one without
+ * hand-assembling six fields.
+ */
+export function emptySnapshot(
+  configPath: string,
+  shell: string = DEFAULT_SHELL,
+): ConfigSnapshot {
+  return {
+    configPath,
+    templateWritten: false,
+    shell,
+    claudeCommand: DEFAULT_CLAUDE_COMMAND,
+    subscriptionAuth: DEFAULT_SUBSCRIPTION_AUTH,
+    sessionMetrics: DEFAULT_SESSION_METRICS,
+    disabledSessionPlugins: [...DEFAULT_DISABLED_SESSION_PLUGINS],
+    importLoginEnv: DEFAULT_IMPORT_LOGIN_ENV,
+    env: {},
+    projects: [],
+    notifications: { ...DEFAULT_NOTIFICATIONS },
+    jira: { ...DEFAULT_JIRA },
+    receiver: { ...DEFAULT_RECEIVER },
+    // `devices` gets its own fresh array rather than `DEFAULT_SERVER.devices`
+    // itself — the same reason `loadConfig` and `writeConfig` give it one:
+    // one shared array instance handed to every empty snapshot is exactly
+    // what `readServerDevicesFromDisk`'s own doc comment warns against.
+    server: { ...DEFAULT_SERVER, devices: [], relay: { ...DEFAULT_SERVER.relay } },
+    // No array field to worry about the way `server.devices` is — a plain
+    // spread is the whole story.
+    remote: { ...DEFAULT_REMOTE },
+    // `DEFAULT_REMOTE.mode` is `'local'` — nothing to name. See
+    // `ConfigSnapshot.attachedServer`'s own doc comment for what this answers
+    // and what it deliberately does not.
+    attachedServer: null,
+    slack: { ...DEFAULT_SLACK },
+    clis: resolveClis(undefined),
+    errors: [],
+  };
+}
+
+/**
+ * Payload of `config:add-project` (story 101).
+ *
+ * The path is one the user chose, usually through the native dialog. It is
+ * **re-validated in main from scratch** — expanded, made absolute, `realpath`'d,
+ * confirmed to be a directory — because the dialog is a UX step, not a
+ * capability grant: a renderer that skipped it and posted a path directly gets
+ * exactly the same treatment.
+ */
+export interface AddProjectRequest {
+  path: string;
+  /** Optional display name. Defaults to the directory basename. */
+  name?: string;
+}
+
+/**
+ * Payload of `config:browse-directory` (HIVE-146).
+ *
+ * An absolute path, or `''`/`'~'` for the answering machine's home directory.
+ *
+ * ## The one verb that takes a path, and why
+ *
+ * `fs-contract.ts` opens by stating that no verb takes a path: every request
+ * there names a `projectId` and a project-relative path, and main resolves
+ * against config it wrote itself. That works because the caller is always
+ * reading inside a project that has already been mapped.
+ *
+ * This verb is for the moment before that is true. The user is choosing a
+ * folder to *become* a project, so there is no id to name it by, and a browser
+ * that could only walk mapped projects would be useless for its one job. So
+ * the path comes from the renderer and the fence moves: from "which project"
+ * to "inside home, proven after `realpath`". See
+ * `core/fs/home-browse.ts` for what that fence is and, just as
+ * importantly, what it is not.
+ */
+export interface BrowseDirRequest {
+  path: string;
+}
+
+/** One directory offered by `config:browse-directory`. Files are never listed. */
+export interface BrowseEntry {
+  name: string;
+  /** Absolute, and inside the answering machine's home directory. */
+  path: string;
+  kind: 'directory';
+  /**
+   * How many visible children it has, or `null` when it could not be read.
+   *
+   * `null` is a directory this user may not open — the picker renders it as a
+   * folder you can see but not descend into. It is deliberately not `0`: an
+   * empty folder and an unreadable one are different facts, and collapsing
+   * them would have the picker offer a dead click.
+   */
+  childCount: number | null;
+}
+
+/**
+ * What `config:browse-directory` answers.
+ *
+ * Two paths and the entries, and nothing derived from them. A `parent` field
+ * was here and came out unread: the picker builds its whole breadcrumb from
+ * `path` and `home`, so "am I at the root" is `path === home` and "one level
+ * up" is the crumb before the last. A contract field no consumer reads is a
+ * thing later code starts believing in.
+ */
+export interface BrowseListing {
+  /** The directory that was listed, absolute and `realpath`'d. */
+  path: string;
+  /** The answering machine's home directory, so the picker can render `~`. */
+  home: string;
+  entries: BrowseEntry[];
+}
+
+/** Payload of `config:remove-project` (story 101). */
+export interface RemoveProjectRequest {
+  id: string;
+}
+
+/**
+ * Payload of `config:rename-project` (story 103).
+ *
+ * `name` only. The `id` is never rewritten: sessions reference projects by
+ * `entity.project`, so an id that drifted when a folder was renamed would
+ * strand them. The display name is what the user edits; the id is machinery.
+ */
+export interface RenameProjectRequest {
+  id: string;
+  name: string;
+}
+
+/**
+ * Payload of `config:set-project-key` (HIVE-94).
+ *
+ * A mirror of {@link RenameProjectRequest}, and for the same reason: `id` names
+ * the entry and is never rewritten. The difference is only in what is being
+ * edited — the name is what the project is *called*, the key is what it is
+ * *typed as* — and in uniqueness, which a name does not have to satisfy and a
+ * key does. Main checks that against the file it is about to write, not against
+ * the renderer's snapshot, because the config is deliberately not watched.
+ */
+export interface SetProjectKeyRequest {
+  id: string;
+  key: string;
+}
+
+/**
+ * Payload of `config:set-project-auto-merge` (HIVE-166).
+ *
+ * A boolean per project, written into the entry like `key` is. Turning it on
+ * is consent to an unattended merge of that repository's pull requests by the
+ * shipper agent; the settings row says so in those words.
+ */
+export interface SetProjectAutoMergeRequest {
+  id: string;
+  autoMerge: boolean;
+}
+
+/**
+ * Payload of `config:set-project-harness` (HIVE-378).
+ *
+ * The CLI a project's new sessions start with. `null` deletes the key, so the project uses the global default
+ * again: absent and "use the global default" are the same state.
+ */
+export interface SetProjectHarnessRequest {
+  id: string;
+  harness: HarnessId | null;
+}
+
+/**
+ * Payload of `config:repoint-project` (story 103).
+ *
+ * The path is re-validated in main from scratch, exactly like
+ * {@link AddProjectRequest} — the native dialog is a UX step, not a capability
+ * grant. `origin` is absent on purpose: re-pointing changes where a project
+ * *is*, never where it came from, and the mutation spreads the existing entry
+ * so a cloned project stays cloned without this having to say so.
+ */
+export interface RepointProjectRequest {
+  id: string;
+  path: string;
+}
+
+/**
+ * Payload of `config:reorder-projects` (story 103).
+ *
+ * The **whole** ordering, not a delta. Both input paths — a drop and a menu
+ * item — produce a full list, the verb is idempotent, and it can be validated
+ * exactly: main requires these ids to be a permutation of the ids on disk at
+ * write time.
+ *
+ * That check is the reason for the shape. The config is deliberately not
+ * watched (story 107 owns reload), so the renderer's list can be older than the
+ * file; a delta applied to a config someone hand-edited in between would
+ * silently drop the project that edit added, or resurrect one it removed.
+ */
+export interface ReorderProjectsRequest {
+  ids: readonly string[];
+}
+
+/**
+ * Change the top-level runtime settings (story 104, extended by 108).
+ *
+ * All fields are optional so the UI can save one without restating the
+ * others. `shell` and `claudeCommand` may not be cleared — there is no lower
+ * level to fall back to, and a session with no shell cannot start — but `env`
+ * is different: it is the whole map rather than a scalar, so `{}` is a real,
+ * offered value and is how the last workspace variable is removed. See
+ * {@link SetRuntimeRequest.env}.
+ */
+export interface SetRuntimeRequest {
+  shell?: string;
+  claudeCommand?: string;
+  /**
+   * The whole map, replacing what is stored — not a patch.
+   *
+   * `{}` is meaningful and is how the last variable is removed. Unlike `shell`,
+   * there is no `null` case: absent already means "leave it alone".
+   */
+  env?: Record<string, string>;
+  /**
+   * Whether to import the login shell's environment at startup (HIVE-84).
+   *
+   * A plain boolean, not nullable: unlike a per-project override there is no
+   * lower level to fall back to, so "off" is a value rather than an absence —
+   * the same reasoning {@link SetNotificationsRequest} states for a preference.
+   *
+   * **Takes effect on the next launch**, because the import runs once at boot.
+   * The Settings control says so rather than implying a live change.
+   */
+  importLoginEnv?: boolean;
+}
+
+/**
+ * Change notification preferences (story 106).
+ *
+ * Partial in the same way {@link SetRuntimeRequest} is: only the classes named
+ * are touched, so moving one switch never restates another. There is no `null`
+ * case — unlike a per-project override, a preference has no lower level to fall
+ * back to, so "off" is a value rather than an absence.
+ */
+export type SetNotificationsRequest = Partial<
+  Record<NotificationKind, NotificationDelivery>
+>;
+
+/**
+ * Change the Jira site and account email (HIVE-67).
+ *
+ * `null` clears a field and is distinct from absent, following
+ * {@link SetProjectRuntimeRequest}: without it the UI could set a site but
+ * never take it back, and an emptied field would have to be stored as `""`.
+ *
+ * There is deliberately no `token` here. The token is a secret and does not go
+ * in the config file — it reaches `safeStorage` through `jira:set-token`, which
+ * is a different channel with a different payload for exactly that reason.
+ */
+export interface SetJiraRequest {
+  site?: string | null;
+  email?: string | null;
+  /** HIVE-69's override. `null` restores the default query. */
+  jql?: string | null;
+  /** The ticket workflow. `null` goes back to just opening the session. */
+  workflow?: TicketWorkflow | null;
+}
+
+/** Payload of `config:set-receiver` (HIVE-131). */
+export interface SetReceiverRequest {
+  /**
+   * The container host alias. Absent leaves it untouched.
+   *
+   * There is no `null` arm, unlike {@link SetJiraRequest}: an unset alias is not
+   * a meaningful state — the substitution always needs a name, and `""` would
+   * produce `http://:63999` — so emptying the field in the UI restores
+   * {@link DEFAULT_RECEIVER}'s value rather than removing the key.
+   */
+  hostAlias?: string;
+
+  /**
+   * Where the receiver listens. Absent leaves it untouched (HIVE-134).
+   *
+   * `Partial`, and every field independently optional, because Settings
+   * commits one field at a time — a text field on blur writes only itself,
+   * and a payload that had to carry all three would make committing the host
+   * reset the port. `setReceiver` merges rather than replaces for the same
+   * reason.
+   */
+  bind?: Partial<ReceiverBindConfig>;
+}
+
+/**
+ * Payload of `config:set-server` (HIVE-142).
+ *
+ * There is deliberately no credential here. A device's digest is not a secret
+ * — see {@link ServerDevice.credential} — but minting one is a different verb
+ * with a different payload (the plaintext token), and this one only ever
+ * writes what {@link ServerConfig} already resolves to.
+ *
+ * `bind` takes effect at next launch, for the reason
+ * {@link ReceiverBindConfig} states for the receiver: a socket that is already
+ * listening cannot be moved. `setServer` spreads the current block and spreads
+ * `bind` one level down rather than rebuilding either, for the same reason
+ * `setReceiver` does — a key this build has not heard of must survive a save
+ * made by this one.
+ */
+export interface SetServerRequest {
+  /**
+   * Whether the server is on. Absent leaves it untouched.
+   *
+   * A plain boolean, not nullable: there is no lower level to fall back to, so
+   * "off" is a value rather than an absence, the same reasoning
+   * {@link SetSlackRequest.socketMode} states.
+   */
+  enabled?: boolean;
+
+  /**
+   * Where the server listens. Absent leaves it untouched.
+   *
+   * `Partial`, and every field independently optional, for the reason
+   * {@link SetReceiverRequest.bind} states: Settings commits one field at a
+   * time, and a payload that had to carry all three would make committing the
+   * host reset the port.
+   */
+  bind?: Partial<ServerBindConfig>;
+
+  /**
+   * The managed relay switch (HIVE-429). Absent leaves it untouched; merged
+   * one level down, as `bind` is, so a key this build has not heard of
+   * survives the write.
+   */
+  relay?: Partial<ServerRelayConfig>;
+
+  /**
+   * The full paired-device roster. Absent leaves it untouched.
+   *
+   * Replaced wholesale rather than merged, the same rule
+   * {@link SetSlackRequest.commanders} states: a roster is one list the caller
+   * already has in full — from pairing, revoking, or renaming a device — not a
+   * single field committed on blur.
+   */
+  devices?: readonly ServerDevice[];
+}
+
+/**
+ * Payload of `server:pair` and `server:revoke` (HIVE-142).
+ *
+ * Both verbs take just a device name. Pairing mints the credential and stores
+ * only its digest; revoking needs nothing else to find the record. `name` is
+ * freeform text a person typed — "Yunid's MacBook" — not
+ * {@link isProjectKey}'s or an agent's closed alphabet, so it is bounded the
+ * way any other pasted text on this bridge is (`assertText`) rather than
+ * pattern-matched.
+ */
+export interface DeviceNameRequest {
+  name: string;
+}
+
+/**
+ * Payload of `config:set-remote` (HIVE-144).
+ *
+ * The client-side mirror of {@link SetServerRequest}, and deliberately as thin:
+ * this verb writes exactly what {@link RemoteConfig} resolves to and nothing
+ * else — there is no credential field here, for the identical reason
+ * `SetServerRequest` carries no credential. Pairing this device is
+ * `remote:pair`'s job; this one only ever writes `mode`, `host` and `port`.
+ *
+ * All three optional and merged into the stored block, one field at a time,
+ * the same shape {@link SetReceiverRequest} and {@link SetServerRequest} take —
+ * Settings commits a field on blur or on a toggle, and a payload that had to
+ * restate all three every time would make committing one reset the others.
+ */
+export interface SetRemoteRequest {
+  mode?: RemoteMode;
+  host?: string;
+  port?: number;
+  /** HIVE-429. */
+  via?: RemoteVia;
+  /** HIVE-429. `''` or a `RELAY_ID` match. */
+  relayServerId?: string;
+}
+
+/**
+ * What a live mode switch did (HIVE-144).
+ *
+ * Produced by `switchIpcMode` in `electron/main/ipc/router.ts` and declared
+ * here rather than there for the reason Ruling 1 moved `SNAPSHOT_CHANNELS`:
+ * the settings pane renders this outcome, `src/**` may not import
+ * `electron/main/**`, and `shared/**` is the only module both sides
+ * may reach. A discriminated union of four plain fields drags in no runtime,
+ * no Node and no DOM, which is that fence's actual rule.
+ *
+ * Four arms, because a pane has four different things to say:
+ *
+ * - `live-sessions` — the one refusal the *user* can clear, by closing the
+ *   sessions this window is running. {@link sessions} names them so the pane
+ *   can list them rather than saying "some are live"; the order is the order
+ *   they were opened.
+ * - `address-refused` (HIVE-428) — the address is
+ *   not loopback, on the local network, or a Tailscale address, or a private
+ *   name resolved to something that is not. One arm
+ *   for both fences, matching `AddressRefusedError`'s own "one class, two
+ *   messages" reasoning: the remedy is the same sentence either way, and it
+ *   belongs in the pane's hint beside the address field rather than in a code
+ *   this union asks a caller to branch on.
+ * - `connect-failed` — a socket was attempted and did not become a session:
+ *   the server refused the handshake, the attach frame was too large to send,
+ *   the machine is not answering. Carries {@link message} because, unlike the
+ *   other three, the remedy differs per failure and only the sentence knows it.
+ * - `ok` — bound, and answering from the other machine.
+ */
+export type SwitchOutcome =
+  | { ok: true }
+  | { ok: false; reason: 'live-sessions'; sessions: readonly string[] }
+  | { ok: false; reason: 'address-refused' }
+  /** The server predates the encrypted channel (HIVE-428): update the server, never pair again. */
+  | { ok: false; reason: 'server-too-old' }
+  | { ok: false; reason: 'connect-failed'; message: string };
+
+/**
+ * What `config:set-remote` answers with (HIVE-144, Ruling 19).
+ *
+ * Both halves, because the verb does two things that can disagree and the
+ * pane needs to know which happened. `config` is the snapshot as it now
+ * stands — **the old one, untouched, whenever {@link switched} is not `ok`**.
+ * The handler validates, switches, and writes only on success, so there is no
+ * revert path: a refused switch leaves `config.json` exactly as it was, and
+ * the next launch does not attach to a server the user was just told it could
+ * not attach to.
+ *
+ * **This is not "the file always matches the running mode".** It cannot be,
+ * and should not be. An app already attached that re-dials and fails is
+ * rebound *local* while `config.json` still says `remote` — correctly, because
+ * that is still what the user asked for and the next launch should retry it.
+ * The same is true of a boot attach that fails. What the ruling actually
+ * guarantees is narrower and is the half that matters: **a target the app was
+ * never able to reach is never written**, so the file can say "attach to the
+ * mini" while this run could not, and can never say "attach to a machine you
+ * were just told is unreachable".
+ */
+export interface SetRemoteResult {
+  switched: SwitchOutcome;
+  config: ConfigSnapshot;
+  /**
+   * The mode change this call actually performed, or `null` for none
+   * (HIVE-144 review, I1).
+   *
+   * The one moment the renderer can know its fleet just changed machines, and
+   * the reason it is carried here rather than pushed on an event: `config:set-remote`
+   * is `PROCESS_LOCAL` (Ruling 28), so it is answered by the process holding
+   * the client, and it is the only call that knows a switch happened. An
+   * event would arrive over whichever surface is bound *after* the switch,
+   * which is the wrong one for a detach.
+   *
+   * **Derived from the runtime, never from `mode`.** A payload asking for
+   * `'local'` while this window is already local switches nothing, and Ruling
+   * 19 leaves the *file* saying `'remote'` after a failed boot attach — so a
+   * config-derived answer would report a change on a window whose own local
+   * sessions are on screen, and clearing those is the opposite of the fix.
+   * The handler compares the attached socket before and after.
+   *
+   * `null` also on every refusal: a refused switch changes nothing, so there
+   * is nothing for the renderer to re-seed.
+   */
+  changed: ModeChange | null;
+}
+
+/**
+ * What a completed mode switch leaves the renderer to do (HIVE-144 review, I1).
+ *
+ * Both arms mean "clear what is on screen, it belongs to the machine you just
+ * left" — `nextSpawnId` mints `sess-01` identically on both machines and
+ * `useSessionMetrics(id)` is a bare id lookup, so the departed mode's metrics
+ * would render against the newly attached session wearing the same id. That
+ * is the collision Ruling 22 exists to prevent. The `'remote'` arm carries the
+ * fleet to put back in its place, which is what makes the attach snapshot the
+ * server builds on every accept something other than six reads thrown away.
+ *
+ * `snapshot` is keyed by `SNAPSHOT_CHANNELS` (`shared/remote-contract.ts`)
+ * and typed with a bare `string` key rather than `Channel`: `Channel` lives in
+ * `ipc-contract.ts`, which imports *this* module, so naming it here would
+ * close a cycle. It can arrive with fewer keys than the server tried to send —
+ * `fitSnapshot` drops the heaviest first when a busy fleet would not fit the
+ * frame — which is why the store walks the payload's own keys.
+ */
+export type ModeChange =
+  | { to: 'remote'; snapshot: Readonly<Record<string, unknown>> }
+  | { to: 'local' };
+
+/**
+ * Payload of `remote:pair` (HIVE-144).
+ *
+ * The opposite direction from {@link DeviceNameRequest}: `server:pair` mints a
+ * credential *on* this machine *for* some other device; `remote:pair` stores a
+ * credential *given to* this machine so it can attach to someone else's
+ * server. Both halves — the id and the token — arrive together because a
+ * `server:pair` mint on the far end hands them back together, and a
+ * credential that stored one without the other could never authenticate a
+ * socket attach ({@link ResumePoint} and `AttachRequest` both need `deviceId`
+ * and `token` at once).
+ */
+export interface RemotePairRequest {
+  deviceId: string;
+  token: string;
+}
+
+/**
+ * Payload of `config:set-slack` (HIVE-124).
+ *
+ * Partial in the same way {@link SetRuntimeRequest} is: only the fields named
+ * are touched, so flipping the switch never restates the allow-list. There is
+ * no `token` here for the reason {@link SetJiraRequest} states — the two Slack
+ * tokens are secrets and reach `safeStorage` through their own channel, not
+ * this one.
+ */
+export interface SetSlackRequest {
+  socketMode?: boolean;
+  /**
+   * The whole list, replacing what is stored — not a patch, exactly the shape
+   * {@link SetRuntimeRequest.env} is and for the same reason: `[]` is a real,
+   * offered value and is how the last commander is removed.
+   */
+  commanders?: string[];
+}
+
+/** Payload of `jira:set-token` (HIVE-67). The one payload carrying a secret. */
+export interface SetJiraTokenRequest {
+  token: string;
+}
+
+/**
+ * Payload of `slack:set-tokens` (HIVE-124). The other payload carrying secrets.
+ *
+ * Both fields optional and **merged** rather than replacing: the pane commits
+ * one field at a time, and a save that dropped the token the user was not
+ * editing would clear half the configuration on every keystroke they finished.
+ * Clearing is {@link CH.slackClearTokens}, which takes both together — they are
+ * acquired from one Slack app and are useless apart.
+ */
+export interface SetSlackTokensRequest {
+  appToken?: string;
+  botToken?: string;
+}
+
+/**
+ * Payload of `jira:search` (HIVE-68).
+ *
+ * `jql` is optional, and absent means {@link JIRA_DEFAULT_JQL} rather than an
+ * empty query. Optional now so HIVE-69 wires a configured override into an
+ * existing parameter instead of changing a signature.
+ */
+export interface JiraSearchRequest {
+  jql?: string;
+}
+
+/** Payload of `jira:issue` (HIVE-68). */
+export interface JiraIssueRequest {
+  key: string;
+}
+
+/** Payload of `jira:transitions` (HIVE-70). Read per issue, always. */
+export interface JiraTransitionsRequest {
+  key: string;
+}
+
+/**
+ * Payload of `jira:apply-transition` (HIVE-70).
+ *
+ * The id came from a `jira:transitions` read for this same key. It is validated
+ * again here anyway: main does not trust that the renderer round-tripped a value
+ * it was handed, and the id reaches a request body.
+ */
+export interface ApplyJiraTransitionRequest {
+  key: string;
+  transitionId: string;
+}
+
+/** Payload of `jira:comments` and `jira:links` (HIVE-71). */
+export interface JiraConversationRequest {
+  key: string;
+  /** The newest page rather than the oldest; still returned oldest first (HIVE-203). Comments only. */
+  newest?: true;
+}
+
+/**
+ * Payload of `jira:add-comment` (HIVE-71).
+ *
+ * `markdown`, not ADF. The renderer sends what the user typed and main converts
+ * it — putting a document builder in the renderer would mean shipping the
+ * vendored parser into the browser bundle and trusting a structure the guard
+ * cannot meaningfully check.
+ */
+export interface AddJiraCommentRequest {
+  key: string;
+  markdown: string;
+  /** Mentioned at the front of the comment, in order (HIVE-216). Never `via`: the renderer cannot mark a comment as an agent's. */
+  mentions?: JiraMention[];
+}
+
+/**
+ * Change one project's runtime overrides (story 104).
+ *
+ * Here `null` is meaningful and distinct from absent: **absent leaves the
+ * override alone, `null` removes it.** The UI needs both — saving the shell
+ * field must not wipe an env map the user cannot see from that row, and
+ * clearing a field has to mean "fall back to the top level" rather than
+ * "override with an empty string", which would spawn `""`.
+ */
+export interface SetProjectRuntimeRequest {
+  id: string;
+  shell?: string | null;
+  claudeCommand?: string | null;
+  env?: Record<string, string> | null;
+  /** HIVE-133. `null` removes the block, exactly as it does for the three above. */
+  container?: ContainerConfig | null;
+}
+
+/** Which command to explain. Omitted id means the top-level command. */
+export interface DiagnoseCommandRequest {
+  id?: string;
+  /** HIVE-376. Whose command to probe; absent is Claude's. */
+  cli?: HarnessId;
+}
+
+/**
+ * The entity id a clone's terminal runs under (story 102).
+ *
+ * Reserved, single, and not a real entity: it is the id the existing PTY
+ * channels carry clone traffic on, which is what lets the clone terminal be
+ * *typable*. `pty:write` routes through the sessions layer's id translation
+ * (`core/ipc/index.ts`), so a clone that bypassed the registry would
+ * stream output fine and silently swallow every keystroke — and no credential
+ * or host-key prompt could ever be answered, which is the whole reason this
+ * story runs `git` in a PTY at all.
+ *
+ * Being a single id also caps concurrency at one clone, which the focused
+ * sub-view already implies.
+ *
+ * **The dot is load-bearing, and so is the absence of a colon.**
+ *
+ * This id travels on `pty:write` as `sessionId`, where `assertId` requires
+ * `/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/`. An id with a colon fails that guard,
+ * and because `pty:write` is a `send` channel the rejection is logged and
+ * dropped rather than returned — so every keystroke would vanish silently and
+ * no credential prompt could ever be answered, which is the one thing this
+ * whole design exists to make possible.
+ *
+ * The dot also makes collision impossible: `deriveProjectId` (story 101) kebabs
+ * a directory basename to `[a-z0-9-]`, so no project can ever be given this id.
+ */
+export const CLONE_ENTITY_ID = 'hive.clone';
+
+/**
+ * Payload of `config:clone-start` (story 102).
+ *
+ * Note what is **absent**: a destination. The renderer supplies the *parent*
+ * directory and the URL; main derives the final path segment from the URL
+ * itself. That is how this story keeps the epic's rule that no verb takes a
+ * destination path (the settings epic, HIVE-51) while still writing a
+ * directory tree.
+ *
+ * `parentPath` is re-validated in main from scratch — expanded, made absolute,
+ * `realpath`'d, confirmed to be a directory — exactly like
+ * {@link AddProjectRequest}.
+ */
+export interface CloneRequest {
+  url: string;
+  parentPath: string;
+  /** The terminal's size at the moment the clone starts. */
+  cols: number;
+  rows: number;
+}
+
+/**
+ * What `startClone` answers with.
+ *
+ * Pre-flight only. It resolves as soon as the process is spawned — the clone
+ * itself streams through `pty:data` and concludes on {@link CloneDoneEvent}.
+ * `targetPath` is returned so the view can name the folder being created
+ * without deriving it a second time and risking a different answer.
+ */
+export type CloneStartResult =
+  | { ok: true; targetPath: string }
+  | { ok: false; reason: string };
+
+/**
+ * How a clone ended (story 102).
+ *
+ * Carries the fresh snapshot for the same reason every mutating config verb
+ * returns one: the renderer must never have to follow a write with a reload,
+ * and must never render a list the write already invalidated. On failure the
+ * snapshot is the unchanged current one.
+ */
+export interface CloneDoneEvent {
+  ok: boolean;
+  /** The directory that now exists, or `null` when the clone failed. */
+  targetPath: string | null;
+  /** Why it failed, or `null` on success. */
+  reason: string | null;
+  snapshot: ConfigSnapshot;
+}
+
+/**
+ * The receiver route the projects directory is served on (HIVE-173).
+ *
+ * Its own path for the reason `AGENTS_PATH` has one: the route set is closed
+ * and each entry carries a body cap sized to the document it expects. This one
+ * reads no body at all.
+ */
+export const PROJECTS_PATH = '/projects';
+
+/**
+ * One project, as an **agent** sees it (HIVE-173).
+ *
+ * A projection of {@link ProjectConfig}, not the record itself: `env`, `shell`
+ * and `claudeCommand` are the user's machine, and an agent asking "where is
+ * the-hive" has no business with any of them. `autoMerge` is here because the
+ * shipper reads it as consent (HIVE-166), and `container.workspace` because a
+ * containerised project's checkout has two addresses and a shell command needs
+ * the right one.
+ */
+export interface ProjectsDirectoryEntry {
+  id: string;
+  /** The short alias a person types; an ask body may use it in place of the path. */
+  key: string;
+  name: string;
+  /** The host checkout, or `null` when this machine does not have it. */
+  path: string | null;
+  status: ProjectStatus;
+  origin: ProjectOrigin;
+  autoMerge: boolean;
+  /** Where the checkout is mounted inside the container, when there is one. */
+  container?: { workspace: string };
+}
+
+/** What {@link PROJECTS_PATH} answers. */
+export interface ProjectsDirectory {
+  projects: ProjectsDirectoryEntry[];
+}
+
+/**
+ * The receiver route behind the `project_auto_merge` tool (retro B). It
+ * answers the {@link ProjectsDirectory} `projects` answers, read after the
+ * write, so the model sees the switch land.
+ */
+export const PROJECT_AUTO_MERGE_PATH = '/projects/auto-merge';
+
+/** Two short fields; a kilobyte is generous and keeps the route small. */
+export const PROJECT_AUTO_MERGE_MAX_BYTES = 1024;
+
+/** What `project_auto_merge` sends: a project by id or key, and the switch. */
+export interface ProjectAutoMergeRequest {
+  project: string;
+  on: boolean;
+}
+
+/**
+ * A refusal whose message is written for the model (retro B): an unknown
+ * project, a write that did not land, or nothing composed to do it. The
+ * receiver answers it as a 409 carrying the message; any other throw is a
+ * fixed sentence, since it could quote a path.
+ */
+export class ProjectAutoMergeRefused extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProjectAutoMergeRefused';
+  }
+}
+
+/**
+ * `config:set-session-plugin` (HIVE-176): one switch, one plugin. Main
+ * computes the list from the file as it stands, so two quick clicks cannot
+ * each send a list built from the same stale snapshot.
+ */
+export interface SetSessionPluginRequest {
+  plugin: string;
+  /** `true` keeps the plugin out of Hive sessions; `false` lets it load. */
+  off: boolean;
+}

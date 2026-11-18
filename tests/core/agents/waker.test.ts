@@ -1,0 +1,1151 @@
+import { describe, expect, it } from 'vitest';
+
+import { AGENT_PREAMBLE, HANDOFF_RULE } from '../../../core/agents/preamble';
+import { wakeEntries } from '../../../core/agents/wake-entries';
+import { claudeCodeAdapter } from '../../../core/harness/claude-code';
+import { codexAdapter } from '../../../core/harness/codex';
+import { copilotAdapter } from '../../../core/harness/copilot';
+import type { HarnessAdapter, HeadlessSpec } from '../../../core/harness/port';
+import type { AgentDefinition } from '../../../shared/agent-contract';
+import { FRAGMENTS } from '../../../shared/skill-fragments';
+import { HOOK_ENV_GRANTS } from '../../../shared/hook-contract';
+import { HIVE_STANDING_GRANTS } from '../../../shared/ledger-tools';
+import type { LedgerEntry } from '../../../shared/ledger-contract';
+import { matches } from '../../../shared/permission-rules';
+import {
+  fencedRules,
+  systemPromptFor,
+  wakeCommand,
+  wakePrompt,
+} from '../../../core/agents/waker';
+
+const def = (over: Partial<AgentDefinition> = {}): AgentDefinition => ({
+  name: 'slack-watcher',
+  description: 'Watches #incorp-dev.',
+  icon: 'ph-robot',
+  wake: { on: ['ledger'] },
+  skills: [],
+  mcp: [],
+  tools: ['Read', 'Grep'],
+  autonomy: 'ask',
+  limits: { turns: 40, rotateAfter: 50, parallel: 1 },
+  body: 'Watch the channel and report mentions.',
+  ...over,
+});
+
+const paths = {
+  settings: '/u/hive/claude-hooks.settings.json',
+  pluginDir: '/u/hive/plugin',
+  mcpConfig: '/u/hive/hive.mcp.json',
+  systemPrompt: '/u/hive/agents/slack-watcher.system.md',
+  workdir: '/home/me/.hive/work/slack-watcher',
+  cliHome: '/h/cli/fake',
+};
+
+const env = {
+  base: { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-leak', HOME: '/home/me' },
+  hook: {
+    HIVE_SESSION_ID: 'slack-watcher',
+    HIVE_HOOK_TOKEN: 'tok',
+    HIVE_RECEIVER_URL: 'http://127.0.0.1:5051',
+  },
+  subscriptionAuth: true,
+};
+
+const HIVE_SERVER = { command: '/App', args: ['/host.js'], env: { ELECTRON_RUN_AS_NODE: '1' } };
+
+const build = (over: Partial<Parameters<typeof wakeCommand>[0]> = {}) =>
+  wakeCommand({
+    binaryPath: '/opt/bin/claude',
+    adapter: claudeCodeAdapter,
+    def: def(),
+    newUuid: '11111111-2222-3333-4444-555555555555',
+    trigger: 'ledger',
+    paths,
+    env,
+    instructions: 'You are slack-watcher.',
+    hiveServer: HIVE_SERVER,
+    ...over,
+  });
+
+describe('wakeCommand', () => {
+  it('spawns the resolved binary, never a bare name', () => {
+    expect(build().file).toBe('/opt/bin/claude');
+  });
+
+  it('starts a first run with --session-id', () => {
+    const args = build().args;
+
+    expect(args).toContain('--session-id');
+    expect(args[args.indexOf('--session-id') + 1]).toBe(
+      '11111111-2222-3333-4444-555555555555',
+    );
+    expect(args).not.toContain('--resume');
+  });
+
+  it('resumes a later run with the stored uuid', () => {
+    const args = build({ sessionUuid: 'aaaa-bbbb' }).args;
+
+    expect(args[args.indexOf('--resume') + 1]).toBe('aaaa-bbbb');
+    expect(args).not.toContain('--session-id');
+  });
+
+  it('isolates the run from the user settings that would auto-approve it', () => {
+    const args = build().args;
+
+    expect(args[args.indexOf('--setting-sources') + 1]).toBe('');
+  });
+
+  it('grants the hive tools plus the definition tools', () => {
+    const args = build().args;
+
+    expect(args[args.indexOf('--allowedTools') + 1]).toBe(
+      `${HIVE_STANDING_GRANTS.join(',')},Read,Grep`,
+    );
+    // The writes to the person's Jira are not in the standing set (HIVE-174).
+    expect(args[args.indexOf('--allowedTools') + 1]).not.toContain('mcp__hive__*');
+    expect(args[args.indexOf('--allowedTools') + 1]).not.toContain('jira_transition');
+  });
+
+  it('caps turns from the definition limits', () => {
+    const args = build().args;
+
+    expect(args[args.indexOf('--max-turns') + 1]).toBe('40');
+  });
+
+  it('omits --max-budget-usd when the definition sets no budget', () => {
+    expect(build().args).not.toContain('--max-budget-usd');
+  });
+
+  it('passes a budget when the definition sets one', () => {
+    const args = build({
+      def: def({ limits: { turns: 40, budgetUsd: 2.5, rotateAfter: 50, parallel: 1 } }),
+    }).args;
+
+    expect(args[args.indexOf('--max-budget-usd') + 1]).toBe('2.5');
+  });
+
+  it('omits --model and --effort when the definition names neither', () => {
+    const args = build().args;
+
+    expect(args).not.toContain('--model');
+    expect(args).not.toContain('--effort');
+  });
+
+  it('passes model and effort when named', () => {
+    const args = build({ def: def({ model: 'opus', effort: 'high' }) }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('opus');
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
+  });
+
+  it('falls back to the card defaults when the definition names neither (HIVE-341)', () => {
+    const args = build({ def: def({}), defaults: { model: 'haiku', effort: 'low' } }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('haiku');
+    expect(args[args.indexOf('--effort') + 1]).toBe('low');
+  });
+
+  it("the definition's model and effort win over the card's", () => {
+    const args = build({
+      def: def({ model: 'opus', effort: 'high' }),
+      defaults: { model: 'haiku', effort: 'low' },
+    }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('opus');
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
+  });
+
+  it('asks for stream-json so the run log can be built', () => {
+    const args = build().args;
+
+    expect(args[args.indexOf('--output-format') + 1]).toBe('stream-json');
+    expect(args).toContain('--verbose');
+  });
+
+  it('ends with the wake prompt', () => {
+    const args = build().args;
+
+    expect(args[args.length - 1]).toBe(wakePrompt('ledger'));
+  });
+
+  it('runs in the agent workdir, not its definition folder', () => {
+    expect(build().cwd).toBe('/home/me/.hive/work/slack-watcher');
+  });
+
+  it('carries the four HIVE_ variables', () => {
+    const result = build().env;
+
+    expect(result['HIVE_SESSION_ID']).toBe('slack-watcher');
+    expect(result['HIVE_HOOK_TOKEN']).toBe('tok');
+    expect(result['HIVE_RECEIVER_URL']).toBe('http://127.0.0.1:5051');
+    expect(result['HIVE_AGENT']).toBe('1');
+  });
+
+  it('keeps subagents in the foreground, whatever main inherited', () => {
+    const result = build({
+      env: { ...env, base: { ...env.base, CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '0' } },
+    }).env;
+
+    expect(result['CLAUDE_CODE_DISABLE_BACKGROUND_TASKS']).toBe('1');
+  });
+
+  it('deletes the auth keys when the user is on subscription auth', () => {
+    expect(build().env['ANTHROPIC_API_KEY']).toBeUndefined();
+  });
+
+  it('keeps the auth keys when the user is not', () => {
+    const result = build({ env: { ...env, subscriptionAuth: false } }).env;
+
+    expect(result['ANTHROPIC_API_KEY']).toBe('sk-leak');
+  });
+
+  /*
+    The leak these two pin is the one `SESSION_ENV_DENY_PREFIXES` documents:
+    launched from inside a Claude Code session, main inherits that session's
+    markers, and an agent handed them joins it instead of starting its own.
+  */
+  it('strips a denied exact key, so a wake is not another session already', () => {
+    const leaky = {
+      ...env,
+      base: { ...env.base, CLAUDECODE: '1', NODE_OPTIONS: '--inspect' },
+    };
+    const result = build({ env: leaky }).env;
+
+    expect(result['CLAUDECODE']).toBeUndefined();
+    expect(result['NODE_OPTIONS']).toBeUndefined();
+  });
+
+  it('strips a denied prefix, so --resume still has a transcript to resume', () => {
+    const leaky = {
+      ...env,
+      base: {
+        ...env.base,
+        CLAUDE_CODE_SESSION_ID: 'outer',
+        CLAUDE_CODE_CHILD_SESSION: '1',
+        ELECTRON_RUN_AS_NODE: '1',
+      },
+    };
+    const result = build({ env: leaky }).env;
+
+    expect(result['CLAUDE_CODE_SESSION_ID']).toBeUndefined();
+    expect(result['CLAUDE_CODE_CHILD_SESSION']).toBeUndefined();
+    expect(result['ELECTRON_RUN_AS_NODE']).toBeUndefined();
+  });
+
+  it('keeps everything the deny list does not name', () => {
+    const result = build().env;
+
+    expect(result['PATH']).toBe('/usr/bin');
+    expect(result['HOME']).toBe('/home/me');
+  });
+
+  it('routes every permission decision to the hive approve tool', () => {
+    const { args } = build();
+    const at = args.indexOf('--permission-prompt-tool');
+    expect(at).toBeGreaterThan(-1);
+    expect(args[at + 1]).toBe('mcp__hive__approve');
+  });
+
+  it('never sets a permission mode, which would skip the prompt tool', () => {
+    expect(build().args).not.toContain('--permission-mode');
+  });
+
+  it('grants the ledger tools and the definition to the fence', () => {
+    const { env } = build({ def: def({ tools: ['Read', 'Grep'] }) });
+    expect(JSON.parse(env['HIVE_GRANTS']!)).toEqual([
+      ...HIVE_STANDING_GRANTS,
+      'ToolSearch',
+      'Workflow',
+      'Read',
+      'Grep',
+    ]);
+  });
+
+  it('adds a one-shot grant for this wake only', () => {
+    const withOnce = build({ def: def({ tools: ['Read'] }), grants: ['Bash'] });
+    expect(JSON.parse(withOnce.env['HIVE_GRANTS']!)).toEqual([
+      ...HIVE_STANDING_GRANTS,
+      'ToolSearch',
+      'Workflow',
+      'Read',
+      'Bash',
+    ]);
+
+    const next = build({ def: def({ tools: ['Read'] }) });
+    expect(JSON.parse(next.env['HIVE_GRANTS']!)).toEqual([
+      ...HIVE_STANDING_GRANTS,
+      'ToolSearch',
+      'Workflow',
+      'Read',
+    ]);
+  });
+
+  /**
+   * Found only by a real `claude` (`pnpm test:agent`), never by this suite on
+   * its own: MCP tool schemas are deferred, so the model must call the
+   * built-in `ToolSearch` to load `mcp__hive__ledger_read`'s schema before it
+   * can call the tool itself. No `def.tools` ever names a built-in, so
+   * without the Claude fence's own `grants` (HIVE-344) the fence denied the very first thing
+   * every agent's preamble tells it to do, and no agent could ever read its
+   * inbox. Pinned here so the next reader who wants to "tidy" this list finds
+   * out why before removing it.
+   */
+  it("grants ToolSearch on Claude Code, through its fence's own grants, for a definition that never lists it", () => {
+    const { env } = build({ adapter: claudeCodeAdapter, def: def({ tools: ['Read'] }) });
+    expect(JSON.parse(env['HIVE_GRANTS']!)).toContain('ToolSearch');
+  });
+
+  it('grants ToolSearch where the adapter asks for it, and only there (HIVE-344)', () => {
+    const grants = (adapter: HarnessAdapter) =>
+      JSON.parse(
+        build({ adapter, def: def({ tools: ['Read'] }), paths: { ...paths, cliHome: '/h/cli/copilot' } }).env[
+          'HIVE_GRANTS'
+        ]!,
+      ) as string[];
+    expect(grants(claudeCodeAdapter)).toContain('ToolSearch');
+    expect(grants(copilotAdapter)).toContain('ToolSearch');
+    expect(grants(codexAdapter)).not.toContain('ToolSearch');
+  });
+
+  it('grants Workflow on Claude Code alone, the one CLI that has it (HIVE-414)', () => {
+    const grants = (adapter: HarnessAdapter) =>
+      JSON.parse(
+        build({ adapter, def: def({ tools: ['Read'] }), paths: { ...paths, cliHome: '/h/cli/copilot' } }).env[
+          'HIVE_GRANTS'
+        ]!,
+      ) as string[];
+    expect(grants(claudeCodeAdapter)).toContain('Workflow');
+    expect(grants(copilotAdapter)).not.toContain('Workflow');
+    expect(grants(codexAdapter)).not.toContain('Workflow');
+  });
+
+  it('carries a last-turn prompt onto the command line', () => {
+    const command = build({ lastTurn: true });
+
+    expect(command.args.at(-1)).toContain(
+      'This is your last turn on this session.',
+    );
+  });
+
+  it('carries a handoff prefix onto the command line', () => {
+    const command = build({ handoff: 'I watch #ops.' });
+
+    expect(command.args.at(-1)).toContain('I watch #ops.');
+  });
+
+  it('ends a task run’s argv with the task prompt (HIVE-128)', () => {
+    const args = build({ kind: 'task', trigger: 'manual', extra: 'review PR 166' }).args;
+
+    expect(args[args.length - 1]).toBe(
+      wakePrompt('manual', 'review PR 166', { task: true }),
+    );
+  });
+});
+
+describe('wakePrompt', () => {
+  it('names the trigger', () => {
+    expect(wakePrompt('ledger')).toContain('You woke because: ledger');
+  });
+
+  it('appends the extra when there is one', () => {
+    expect(wakePrompt('ledger', 'an answer arrived')).toContain(
+      'You woke because: ledger — an answer arrived',
+    );
+  });
+
+  it('still names the reason on a last turn (HIVE-126)', () => {
+    /*
+      This branch returned before `extra` was read. Survivable while only the
+      scheduler set it — a ledger `extra` names entries the agent re-reads from
+      the log — and not once `run <agent> <prompt>` carried a person's words:
+      `lastTurn` turns on `forceRotate`/`runsSinceRotate` alone, so one wake in
+      fifty woke an agent that was never told what for, while the console
+      reported a started run. Through the queue it is worse — `flush` clears
+      `pendingWake` before the wake, so no other copy of those words survives.
+    */
+    const prompt = wakePrompt('manual', 'review PR 1234', { lastTurn: true });
+
+    expect(prompt).toContain('You woke because: manual — review PR 1234.');
+    expect(prompt).toContain('This is your last turn on this session.');
+  });
+
+  it('asks for a handoff on a last turn', () => {
+    const prompt = wakePrompt('schedule', undefined, { lastTurn: true });
+
+    expect(prompt).toContain('This is your last turn on this session.');
+    expect(prompt).toContain('ledger_handoff');
+    /*
+      The normal **instruction** is replaced, not appended to — that is what
+      this pins, and it still holds: the "read your ledger inbox, then carry
+      out the instructions you were given" sentence is absent here.
+
+      It used to be asserted as the absence of `You woke because`, which
+      conflated the instruction with the *reason*. HIVE-126 separated them: a
+      wake with no `extra` still says nothing beyond the trigger, and one
+      carrying a person's prompt has to name it, because `lastTurn` turns on
+      `forceRotate`/`runsSinceRotate` and would otherwise swallow the words on
+      one wake in fifty.
+    */
+    expect(prompt).not.toContain('Read your ledger inbox');
+    expect(prompt.startsWith('You woke because: schedule. This is your last turn')).toBe(
+      true,
+    );
+  });
+
+  it('opens a fresh session with the previous one’s handoff', () => {
+    const prompt = wakePrompt('schedule', undefined, {
+      handoff: 'I watch #ops.',
+    });
+
+    expect(prompt).toContain(
+      'You are continuing from a previous session of yourself.',
+    );
+    expect(prompt).toContain('I watch #ops.');
+    // …and then the ordinary wake instruction still follows it.
+    expect(prompt).toContain('You woke because: schedule.');
+    expect(prompt.indexOf('I watch #ops.')).toBeLessThan(
+      prompt.indexOf('You woke because'),
+    );
+  });
+
+  it('is unchanged when neither is asked for', () => {
+    expect(wakePrompt('manual')).toBe(wakePrompt('manual', undefined, {}));
+  });
+
+  /*
+    The defect this wording replaces. "Read your ledger inbox first, then do
+    your job" left "your job" undefined at the only moment it mattered: an
+    agent woken on an interval with an empty inbox concluded there was nothing
+    to do and ended its turn. Measured against a real agent — sixteen
+    consecutive interval wakes, each ~4s, none of which carried out the
+    standing instruction in its own body.
+
+    The instructions are named explicitly, and the inbox is demoted from "first"
+    to one of two inputs, because an empty inbox must not read as an empty turn.
+  */
+  it('names the agent’s own instructions as the work of the wake', () => {
+    const prompt = wakePrompt('interval');
+
+    expect(prompt).toContain('instructions');
+    expect(prompt).not.toContain('then do your job');
+  });
+
+  it('still says an empty inbox is not an empty turn', () => {
+    expect(wakePrompt('interval')).toContain(
+      'An empty inbox does not mean there is nothing to do',
+    );
+  });
+
+  it('tells a task run what it is, and what not to do (HIVE-128)', () => {
+    const prompt = wakePrompt('manual', 'review PR 166', { task: true });
+
+    expect(prompt).toContain('You woke because: manual — review PR 166.');
+    expect(prompt).toContain('This is a task run');
+    expect(prompt).toContain('do not act on your ledger inbox');
+    expect(prompt).toContain('ledger_done');
+    expect(prompt).toContain('ledger_failed');
+    expect(prompt).not.toContain('Read your ledger inbox, then carry out');
+    expect(prompt).not.toContain('ledger_handoff');
+  });
+
+  /*
+    The last-turn branch names the work the same way the ordinary one does. It
+    was missed when the other two strings were reworded and still said "do your
+    normal work if something is waiting" — the inbox-conditional framing this
+    change exists to remove, left alive on the one wake in `rotate_after` that
+    takes this branch.
+  */
+  it('asks a last turn to carry out the instructions too', () => {
+    const prompt = wakePrompt('schedule', undefined, { lastTurn: true });
+
+    expect(prompt).toContain('This is your last turn on this session.');
+    expect(prompt).toContain('Carry out your instructions');
+    expect(prompt).not.toContain('if something is waiting');
+  });
+});
+
+describe('systemPromptFor', () => {
+  it('expands an include in the definition body', () => {
+    const text = systemPromptFor('PREAMBLE', def({ body: 'before\n{{include:agent-worktree}}\nafter' }));
+    expect(text).toContain(FRAGMENTS['agent-worktree']);
+    expect(text).not.toContain('{{include:');
+  });
+
+  it('puts the app-owned preamble above the definition body', () => {
+    const text = systemPromptFor('PREAMBLE', def());
+
+    expect(text.indexOf('PREAMBLE')).toBeLessThan(
+      text.indexOf('Watch the channel'),
+    );
+  });
+
+  /*
+    `autonomy` parsed into the definition and was then read by nothing at all —
+    not the system prompt, not the argv, not the fence — while the form's help
+    text described in detail the behaviour it was supposed to produce. These
+    two tests are what make the field mean something.
+  */
+  it('tells an ask-first agent to check before acting', () => {
+    const text = systemPromptFor('PREAMBLE', def({ autonomy: 'ask' }));
+
+    expect(text).toContain('ledger_ask');
+    expect(text).toContain('before you act');
+  });
+
+  it('tells an act-first agent to proceed and report', () => {
+    const text = systemPromptFor('PREAMBLE', def({ autonomy: 'act' }));
+
+    expect(text).toContain('Proceed without asking');
+    expect(text).not.toContain('before you act');
+  });
+
+  it('act reports a job by closing its ask, ledger_done only for unasked work', () => {
+    const text = systemPromptFor('PREAMBLE', def({ autonomy: 'act' }));
+    expect(text).toMatch(/closing the ask that brought the work/);
+    expect(text).not.toMatch(/say what you did with `ledger_done`/);
+  });
+
+  /*
+    The body stays last. It is the part the *user* wrote, and an app-owned
+    sentence appended below it would read as theirs — and, worse, would be the
+    final instruction the model sees.
+  */
+  it('keeps the body below the separator, after the autonomy clause', () => {
+    const text = systemPromptFor('PREAMBLE', def({ autonomy: 'act' }));
+
+    expect(text.indexOf('Proceed without asking')).toBeLessThan(
+      text.indexOf('---'),
+    );
+    expect(text.indexOf('---')).toBeLessThan(text.indexOf('Watch the channel'));
+    expect(text.trimEnd().endsWith('Watch the channel and report mentions.')).toBe(
+      true,
+    );
+  });
+});
+
+describe("a CLI's secrets (HIVE-343)", () => {
+  it('lands after the strip, so a strip list naming the key keeps ours, and never on the argv', () => {
+    const command = build({
+      adapter: copilotAdapter,
+      env: {
+        ...env,
+        base: { ...env.base, GH_TOKEN: 'inherited', COPILOT_GITHUB_TOKEN: 'inherited' },
+        secrets: { COPILOT_GITHUB_TOKEN: 't0k', GH_TOKEN: 'ours' },
+      },
+    });
+
+    expect(command.env['COPILOT_GITHUB_TOKEN']).toBe('t0k');
+    expect(command.env['GH_TOKEN']).toBe('ours');
+    expect(command.args.join(' ')).not.toContain('t0k');
+  });
+
+  it('strips every inherited COPILOT_PROVIDER_ key, a future one included, and keeps the host (HIVE-357)', () => {
+    const command = build({
+      adapter: copilotAdapter,
+      env: {
+        ...env,
+        base: {
+          ...env.base,
+          COPILOT_PROVIDER_BASE_URL: 'https://elsewhere',
+          COPILOT_PROVIDER_SOMETHING_NEW: 'x',
+          GITHUB_ENTERPRISE_TOKEN: 'ghe',
+          GH_HOST: 'corp.ghe.com',
+        },
+      },
+    });
+
+    expect(command.env['COPILOT_PROVIDER_BASE_URL']).toBeUndefined();
+    expect(command.env['COPILOT_PROVIDER_SOMETHING_NEW']).toBeUndefined();
+    expect(command.env['GITHUB_ENTERPRISE_TOKEN']).toBeUndefined();
+    expect(command.env['GH_HOST']).toBe('corp.ghe.com');
+  });
+
+  it('strips by prefix only for a plan that names one', () => {
+    const command = build({ env: { ...env, base: { ...env.base, COPILOT_PROVIDER_TYPE: 'openai' } } });
+
+    expect(command.env['COPILOT_PROVIDER_TYPE']).toBe('openai');
+  });
+
+  it("carries the plan's usage file and files", () => {
+    const command = build({ adapter: copilotAdapter, paths: { ...paths, cliHome: '/h/cli/copilot' } });
+    const plan = copilotAdapter.headless.launch({
+      conversation: { start: '11111111-2222-3333-4444-555555555555' },
+      name: 'slack-watcher',
+      limits: { turns: 40 },
+      files: { settings: '', pluginDir: '', mcpConfig: '', systemPrompt: '' },
+      grants: [],
+      prompt: '',
+      subscriptionAuth: true,
+      instructions: 'You are slack-watcher.',
+      hiveServer: HIVE_SERVER,
+      stateDir: '/h/cli/copilot',
+      workdir: paths.workdir,
+    });
+
+    expect(command.usageFile).toBe(plan.usageFile);
+    expect(command.files).toEqual(plan.files);
+  });
+
+  it('carries neither for a CLI whose plan has none', () => {
+    const command = build();
+
+    expect(command).not.toHaveProperty('usageFile');
+    expect(command).not.toHaveProperty('files');
+  });
+});
+
+describe('what the launch is told (HIVE-343)', () => {
+  it('passes the CLI home, the workdir and the card deny list to the adapter', () => {
+    const seen: HeadlessSpec[] = [];
+    const adapter = {
+      ...codexAdapter,
+      headless: {
+        ...codexAdapter.headless,
+        launch: (spec: HeadlessSpec) => {
+          seen.push(spec);
+          return codexAdapter.headless.launch(spec);
+        },
+      },
+    };
+
+    build({ adapter, defaults: { deny: ['shell(rm)'] } });
+
+    expect(seen[0]).toMatchObject({
+      stateDir: '/h/cli/fake',
+      workdir: '/home/me/.hive/work/slack-watcher',
+      deny: ['shell(rm)'],
+    });
+  });
+
+  it('passes no deny when the card has none', () => {
+    const seen: HeadlessSpec[] = [];
+    const adapter = {
+      ...codexAdapter,
+      headless: {
+        ...codexAdapter.headless,
+        launch: (spec: HeadlessSpec) => {
+          seen.push(spec);
+          return codexAdapter.headless.launch(spec);
+        },
+      },
+    };
+
+    build({ adapter });
+
+    expect(seen[0]).not.toHaveProperty('deny');
+  });
+});
+
+describe('a container wake (HIVE-137)', () => {
+  const container = {
+    config: { runtime: 'docker', name: 'devbox', workspace: '/work', hiveDir: '/hive' },
+    userDataPath: '/u',
+    hostAlias: 'host.docker.internal',
+  };
+  const containerPaths = {
+    settings: '/u/hive/container/claude-agent.settings.json',
+    pluginDir: '/u/hive/plugin',
+    mcpConfig: '/u/hive/container/hive.mcp.json',
+    systemPrompt: '/u/hive/agents/slack-watcher.system.md',
+    workdir: '/home/me/.hive/work/slack-watcher',
+    cliHome: '/h/cli/fake',
+  };
+  const built = () => build({ container, paths: containerPaths });
+
+  it('maps every path flag into the container and carries the descriptor', () => {
+    const command = built();
+
+    expect(command.container).toEqual({
+      runtime: 'docker',
+      name: 'devbox',
+      command: 'claude',
+      envArg: '-e {name}={value}',
+      workspace: '/work',
+      sessionUuid: '11111111-2222-3333-4444-555555555555',
+    });
+    const joined = command.args.join(' ');
+    expect(joined).toContain('--settings /hive/container/claude-agent.settings.json');
+    expect(joined).toContain('--plugin-dir /hive/plugin');
+    expect(joined).toContain('--mcp-config /hive/container/hive.mcp.json');
+    expect(joined).toContain('--append-system-prompt-file /hive/agents/slack-watcher.system.md');
+    // The inner binary, informational: `runs.ts` spawns the runtime, not this.
+    expect(command.file).toBe('claude');
+  });
+
+  it('honours command, env_arg and the resumed uuid', () => {
+    const command = build({
+      container: {
+        ...container,
+        config: { ...container.config, command: '/opt/claude', envArg: '--env {name}={value}' },
+      },
+      paths: containerPaths,
+      sessionUuid: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    });
+
+    expect(command.container?.command).toBe('/opt/claude');
+    expect(command.container?.envArg).toBe('--env {name}={value}');
+    expect(command.container?.sessionUuid).toBe('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+  });
+
+  it('carries the model and effort on a container wake too (HIVE-401)', () => {
+    const command = build({ container, paths: containerPaths, def: def({ model: 'opus', effort: 'high' }) });
+
+    expect(command).toMatchObject({ model: 'opus', effort: 'high' });
+  });
+
+  it("crosses only HIVE_*, the marker and the foreground switch, re-addressed by the alias, never main's environment", () => {
+    const command = built();
+
+    expect(Object.keys(command.env).sort()).toEqual([
+      'CLAUDE_CODE_DISABLE_BACKGROUND_TASKS',
+      'HIVE_AGENT',
+      'HIVE_GRANTS',
+      'HIVE_HOOK_TOKEN',
+      'HIVE_RECEIVER_URL',
+      'HIVE_SESSION_ID',
+    ]);
+    expect(command.env['HIVE_RECEIVER_URL']).toBe('http://host.docker.internal:5051');
+    expect(command.env['ANTHROPIC_API_KEY']).toBeUndefined();
+    expect(command.env['PATH']).toBeUndefined();
+  });
+
+  it("prefers the agent's own alias over the global one", () => {
+    const command = build({
+      container: { ...container, config: { ...container.config, hostAlias: 'gateway.local' } },
+      paths: containerPaths,
+    });
+
+    expect(command.env['HIVE_RECEIVER_URL']).toBe('http://gateway.local:5051');
+  });
+
+  it('refuses a path under neither root rather than guessing one', () => {
+    expect(() =>
+      build({
+        container,
+        paths: { ...containerPaths, settings: '/elsewhere/claude-agent.settings.json' },
+      }),
+    ).toThrow(/\/elsewhere\/claude-agent\.settings\.json/);
+  });
+
+  it('is byte-identical for a host wake: no descriptor, no mapping', () => {
+    const command = build();
+
+    expect(command.container).toBeUndefined();
+    expect(command.args.join(' ')).toContain('--settings /u/hive/claude-hooks.settings.json');
+  });
+});
+
+/*
+  Retro B: a definition's `tools:` never reaches `project_auto_merge`, whether
+  it names the tool or a wider rule that would. The CLI grants what
+  `--allowedTools` names without asking the fence, so that list is narrowed
+  here. `HIVE_GRANTS` is the fence's own list and is not narrowed: `matches`
+  refuses a once-only tool to every rule but a one-shot literal, so what it
+  must never do is match the tool, and that is what these check.
+*/
+describe('wakeCommand never grants a once-only tool (retro B)', () => {
+  const tool = 'mcp__hive__project_auto_merge';
+  const call = { project: 'hive', on: true };
+  const granted = (tools: string[]) => {
+    const built = build({ def: def({ tools }) });
+    return {
+      allowed: built.args[built.args.indexOf('--allowedTools') + 1]!.split(','),
+      grants: JSON.parse(built.env['HIVE_GRANTS']!) as string[],
+    };
+  };
+  const fenceAllows = (grants: string[], name: string, input: Record<string, unknown>) =>
+    grants.some((rule) => matches(rule, name, input));
+
+  it('drops the tool when a definition names it', () => {
+    const { allowed, grants } = granted(['Read', tool]);
+
+    expect(allowed).not.toContain(tool);
+    expect(fenceAllows(grants, tool, call)).toBe(false);
+    expect(allowed).toContain('Read');
+    expect(grants).toContain('Read');
+  });
+
+  it.each(['mcp__hive__*', 'mcp__hive', 'mcp__hive__project_*'])(
+    'narrows %s to what it named, less the once-only tool',
+    (rule) => {
+      const { allowed, grants } = granted([rule]);
+
+      expect(allowed).not.toContain(rule);
+      expect(allowed).not.toContain(tool);
+      expect(fenceAllows(grants, tool, call)).toBe(false);
+    },
+  );
+
+  it('keeps the consent tools a wide rule named', () => {
+    const { allowed, grants } = granted(['mcp__hive__*']);
+
+    expect(allowed).toContain('mcp__hive__jira_transition');
+    expect(fenceAllows(grants, 'mcp__hive__jira_comment', {})).toBe(true);
+  });
+
+  /*
+    `[*]` is the app's documented "grant everything", and the CLI reads it as
+    exactly that. It must leave `--allowedTools`, where it would carry the
+    once-only tool past the fence, and stay in `HIVE_GRANTS`, where the fence
+    still grants every other call through it rather than asking about each.
+  */
+  it('keeps * out of --allowedTools, and the fence still grants the rest', () => {
+    const { allowed, grants } = granted(['*']);
+
+    expect(allowed).not.toContain('*');
+    expect(allowed).not.toContain(tool);
+    expect(allowed).toContain('mcp__hive__jira_transition');
+    expect(fenceAllows(grants, tool, call)).toBe(false);
+    expect(fenceAllows(grants, 'Bash', { command: 'git status' })).toBe(true);
+  });
+
+  it('leaves jira_transition grantable by name', () => {
+    expect(granted(['mcp__hive__jira_transition']).allowed).toContain('mcp__hive__jira_transition');
+  });
+});
+
+describe('the lane in the wake prompt (HIVE-188)', () => {
+  it('names a thread lane\'s ask, and says the other lanes are not this run\'s', () => {
+    const prompt = wakePrompt('ledger', 'ask A from overmind', { lane: 'thread:A', laneMode: 'thread', agent: 'builder' });
+    expect(prompt).toContain("You are builder's lane for ask A.");
+    expect(prompt).toContain('Entries on this lane wake you; entries for other lanes are not yours.');
+  });
+
+  it('names a repo lane\'s repository', () => {
+    expect(wakePrompt('ledger', undefined, { lane: 'repo:a/x', laneMode: 'repo', agent: 'shipper' })).toContain(
+      "You are shipper's lane for a/x.",
+    );
+  });
+
+  it('tells the standing lane of a laning agent how to hand work over', () => {
+    const repo = wakePrompt('ledger', undefined, { laneMode: 'repo', agent: 'shipper' });
+    expect(repo).toContain('shipper lanes by repository.');
+    expect(repo).toContain('a self-addressed ledger_ask with meta.repo set to owner/name');
+
+    const thread = wakePrompt('ledger', undefined, { laneMode: 'thread', agent: 'builder' });
+    expect(thread).toContain('builder lanes by thread.');
+    expect(thread).toContain('a self-addressed ledger_ask');
+  });
+
+  it('keeps the lane sentence on a last turn', () => {
+    expect(wakePrompt('ledger', undefined, { lastTurn: true, lane: 'thread:A', laneMode: 'thread', agent: 'builder' })).toContain(
+      "You are builder's lane for ask A.",
+    );
+  });
+
+  it('says nothing about lanes to an agent without lane:, or to a task run', () => {
+    expect(wakePrompt('ledger')).not.toContain('lane');
+    expect(wakePrompt('manual', 'x', { task: true, laneMode: 'thread', agent: 'b' })).not.toContain('lane');
+  });
+});
+
+/**
+ * HIVE-337's byte-identity pin. Recorded before the argv moved behind
+ * `claudeCodeAdapter.headless.launch`; the move must leave the snapshot file untouched.
+ */
+describe('the command line an agent wake runs (HIVE-337 pin)', () => {
+  const container = {
+    config: { runtime: 'docker', name: 'devbox', workspace: '/work', hiveDir: '/hive' },
+    userDataPath: '/u',
+    hostAlias: 'host.docker.internal',
+  };
+  const containerPaths = {
+    ...paths,
+    settings: '/u/hive/container/claude-agent.settings.json',
+    mcpConfig: '/u/hive/container/hive.mcp.json',
+  };
+
+  it.each([
+    ['first wake', {}],
+    ['resume', { sessionUuid: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' }],
+    ['task run', { kind: 'task' as const }],
+    ['handoff (last turn)', { sessionUuid: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', lastTurn: true as const }],
+    ['fresh session with a handoff', { handoff: 'Carry on with the review.' }],
+    ['thread lane', { lane: 'thread:A', def: def({ lane: 'thread' }) }],
+    ['container agent', { container, paths: containerPaths }],
+    [
+      'container agent, resumed, own command',
+      {
+        container: { ...container, config: { ...container.config, command: '/opt/claude' } },
+        paths: containerPaths,
+        sessionUuid: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      },
+    ],
+    ['subscriptionAuth on', {}],
+    ['subscriptionAuth off', { env: { ...env, subscriptionAuth: false } }],
+    ['a one-shot grant', { grants: ['Bash(git push:*)'] }],
+    [
+      'budgetUsd set',
+      { def: def({ limits: { turns: 40, budgetUsd: 2.5, rotateAfter: 50, parallel: 1 } }) },
+    ],
+    ['model and effort', { def: def({ model: 'opus', effort: 'high' }) }],
+    ['a wide grant narrowed', { def: def({ tools: ['*', 'mcp__hive__project_auto_merge'] }) }],
+  ] as const)('%s', (_name, over) => {
+    expect(build(over as Partial<Parameters<typeof wakeCommand>[0]>)).toMatchSnapshot();
+  });
+});
+
+describe('the adapter a wake runs on (HIVE-340)', () => {
+  const other = { ...claudeCodeAdapter, id: 'codex' as const };
+
+  it('lists exactly what HIVE_GRANTS carries', () => {
+    const command = build({ grants: ['literal:Bash:git push'] });
+
+    expect(fencedRules(def(), ['literal:Bash:git push'], claudeCodeAdapter.headless.fence.grants)).toEqual(JSON.parse(command.env[HOOK_ENV_GRANTS]!));
+  });
+
+  it("hands another CLI its own card's defaults (HIVE-342, replacing HIVE-341's drop)", () => {
+    const args = build({ adapter: other, def: def({}), defaults: { model: 'gpt-6-luna' } }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('gpt-6-luna');
+  });
+
+  it("drops Claude's model and effort on another CLI", () => {
+    const args = build({ adapter: other, def: def({ model: 'opus', effort: 'high' }) }).args;
+
+    expect(args).not.toContain('--model');
+    expect(args).not.toContain('--effort');
+  });
+
+  it("hands another CLI the agent's own block, ahead of the card (HIVE-396)", () => {
+    const args = build({
+      adapter: other,
+      def: def({ model: 'opus', codex: { model: 'gpt-6.1-sol', effort: 'high' } }),
+      defaults: { model: 'gpt-6-luna', effort: 'low' },
+    }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('gpt-6.1-sol');
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
+  });
+
+  it('falls back to the card per field when the block names only one (HIVE-396)', () => {
+    const args = build({ adapter: other, def: def({ codex: { effort: 'high' } }), defaults: { model: 'gpt-6-luna' } }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('gpt-6-luna');
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
+  });
+
+  it('drops an effort the resolved model takes none of, off Claude (HIVE-396)', () => {
+    const copilot = { ...claudeCodeAdapter, id: 'copilot' as const };
+    const args = build({ adapter: copilot, def: def({ copilot: { effort: 'high' } }), defaults: { model: 'kimi-k3' } }).args;
+
+    expect(args[args.indexOf('--model') + 1]).toBe('kimi-k3');
+    expect(args).not.toContain('--effort');
+  });
+
+  it('carries the model and effort it launched with on the command (HIVE-401)', () => {
+    const command = build({ adapter: other, def: def({ codex: { model: 'gpt-6.1-sol', effort: 'high' } }) });
+
+    expect(command).toMatchObject({ model: 'gpt-6.1-sol', effort: 'high' });
+  });
+
+  it('carries neither when no flag was passed (HIVE-401)', () => {
+    const command = build();
+
+    expect(command).not.toHaveProperty('model');
+    expect(command).not.toHaveProperty('effort');
+  });
+
+  it('carries an effort only when it reached the launch, off Claude (HIVE-401)', () => {
+    const copilot = { ...claudeCodeAdapter, id: 'copilot' as const };
+    const command = build({ adapter: copilot, def: def({ copilot: { effort: 'high' } }), defaults: { model: 'kimi-k3' } });
+
+    expect(command.model).toBe('kimi-k3');
+    expect(command).not.toHaveProperty('effort');
+  });
+
+  it("never reads another CLI's block on Claude (HIVE-396)", () => {
+    const args = build({ def: def({ codex: { model: 'gpt-6.1-sol' } }) }).args;
+
+    expect(args).not.toContain('gpt-6.1-sol');
+  });
+
+  it('hands the adapter the instructions and the hive server it carried (HIVE-342)', () => {
+    const seen: HeadlessSpec[] = [];
+    const recording = {
+      ...claudeCodeAdapter,
+      headless: {
+        ...claudeCodeAdapter.headless,
+        launch: (spec: HeadlessSpec) => {
+          seen.push(spec);
+          return claudeCodeAdapter.headless.launch(spec);
+        },
+      },
+    };
+
+    build({ adapter: recording, instructions: 'Be brief.' });
+
+    expect(seen[0]?.instructions).toBe('Be brief.');
+    expect(seen[0]?.hiveServer).toEqual(HIVE_SERVER);
+  });
+
+  describe('a codex run takes its card, never AGENT.md (HIVE-342)', () => {
+    const recordingCodex = () => {
+      const seen: HeadlessSpec[] = [];
+      const adapter = {
+        ...claudeCodeAdapter,
+        id: 'codex' as const,
+        headless: {
+          ...claudeCodeAdapter.headless,
+          launch: (spec: HeadlessSpec) => {
+            seen.push(spec);
+            return claudeCodeAdapter.headless.launch(spec);
+          },
+        },
+      };
+      return { seen, adapter };
+    };
+
+    it("launches with the card's model, effort and sandbox, and AGENT.md's model never reaches it", () => {
+      const { seen, adapter } = recordingCodex();
+
+      build({
+        adapter,
+        def: def({ model: 'opus' }),
+        defaults: { model: 'gpt-6-luna', effort: 'high', sandbox: 'read-only' },
+      });
+
+      expect(seen[0]).toMatchObject({ model: 'gpt-6-luna', effort: 'high', sandbox: 'read-only' });
+    });
+
+    it('launches with no model, no effort and workspace-write when the card is empty', () => {
+      const { seen, adapter } = recordingCodex();
+
+      build({ adapter, def: def({ model: 'opus', effort: 'high' }) });
+
+      expect(seen[0]?.model).toBeUndefined();
+      expect(seen[0]?.effort).toBeUndefined();
+      expect(seen[0]?.sandbox).toBe('workspace-write');
+    });
+
+    it("gives Claude no sandbox, and AGENT.md's model over the card's", () => {
+      const seen: HeadlessSpec[] = [];
+      const recording = {
+        ...claudeCodeAdapter,
+        headless: {
+          ...claudeCodeAdapter.headless,
+          launch: (spec: HeadlessSpec) => {
+            seen.push(spec);
+            return claudeCodeAdapter.headless.launch(spec);
+          },
+        },
+      };
+
+      build({ adapter: recording, def: def({ model: 'opus' }), defaults: { model: 'haiku' } });
+
+      expect(seen[0]?.model).toBe('opus');
+      expect(seen[0]?.sandbox).toBeUndefined();
+    });
+  });
+
+  it("carries the plan's namesConversation, so the tracker knows whether the argv id is a conversation (HIVE-342)", () => {
+    expect(build().namesConversation).toBe(true);
+    expect(build({ adapter: codexAdapter }).namesConversation).toBe(false);
+    expect(build({ adapter: codexAdapter, sessionUuid: 'thread-1' }).namesConversation).toBe(true);
+  });
+
+  it('opens a fresh conversation on a new CLI by saying so first', () => {
+    const prompt = build({ switchedFrom: 'codex' }).args.join('\n');
+
+    expect(prompt).toContain(
+      'This is a fresh conversation on claude-code: your last one ran on codex, which is not available for this wake.\n\nYou woke because: ledger.',
+    );
+  });
+});
+
+describe('the delivered entries (HIVE-412)', () => {
+  const BLOCK = 'HiveTTY delivered these ledger entries for this wake.\n\n--- ask a1 from sess-1 (thread a1) ---\nShip PR #1';
+
+  it('ends an ordinary wake with the block', () => {
+    expect(wakePrompt('ledger', 'ask a1 from sess-1', { delivered: BLOCK }).endsWith(`\n\n${BLOCK}`)).toBe(true);
+  });
+
+  it('carries it on a last turn, and after a handoff', () => {
+    expect(wakePrompt('ledger', undefined, { lastTurn: true, delivered: BLOCK }).endsWith(BLOCK)).toBe(true);
+    expect(wakePrompt('ledger', undefined, { handoff: 'I watch #ops.', delivered: BLOCK }).endsWith(BLOCK)).toBe(true);
+  });
+
+  it('reaches the argv through wakeCommand', () => {
+    expect(build({ delivered: BLOCK }).args.at(-1)).toContain('--- ask a1 from sess-1 (thread a1) ---');
+  });
+
+  it('adds nothing when there is no block', () => {
+    expect(wakePrompt('ledger')).toBe(wakePrompt('ledger', undefined, {}));
+    expect(wakePrompt('ledger')).not.toContain('HiveTTY delivered');
+  });
+});
+
+describe('a wake that needs no ledger_read (HIVE-412)', () => {
+  it('carries the answer and the intent behind it in the prompt, and mandates no read', () => {
+    const log: LedgerEntry[] = [
+      { id: 'k1', ts: 1, from: 'shipper', to: 'fixer', kind: 'ask', ref: 'a77', body: 'Fix #293', meta: { intent: 'mark #293 ready once clean' } },
+      { id: 'k2', ts: 2, from: 'fixer', to: 'shipper', kind: 'answer', thread: 'k1', body: 'clean, 1 round' },
+    ];
+    const block = wakeEntries(['k2'], log, 'shipper');
+    if (block === undefined) throw new Error('expected a block');
+
+    const prompt = wakePrompt('ledger', 'answer k2 from fixer', { delivered: block });
+    const system = systemPromptFor(AGENT_PREAMBLE, def());
+
+    expect(prompt).toContain('clean, 1 round');
+    expect(prompt).toContain('your ask a77 said: mark #293 ready once clean');
+    expect(`${system}\n${prompt}`).not.toContain('Call `ledger_read` first');
+    expect(prompt).not.toContain('Read your ledger inbox');
+  });
+
+  it('says the lane\'s work is standing work on a lane, and keeps the standing text elsewhere', () => {
+    expect(wakePrompt('ledger', undefined, { lane: 'repo:a/x', laneMode: 'repo', agent: 'shipper' })).toContain(
+      'the work on this lane is standing work',
+    );
+    expect(wakePrompt('ledger')).toContain('your instructions are standing work and this wake is one of the times to do them');
+  });
+
+  it('asks a last turn for the same state-only handoff (HIVE-412)', () => {
+    const prompt = wakePrompt('schedule', undefined, { lastTurn: true });
+
+    expect(prompt).toContain(HANDOFF_RULE);
+    expect(prompt).not.toContain('what you watch');
+  });
+});
+
+describe('skills on a fresh conversation (HIVE-412)', () => {
+  const SHIP = def({ skills: ['ship', 'merge-pr'] });
+
+  it('names the skills as Claude invokes them when the wake starts a conversation', () => {
+    expect(build({ def: SHIP }).args.at(-1)).toContain(
+      'This is a fresh conversation. Before anything else, invoke the skills your definition names: hive:ship, hive:merge-pr.',
+    );
+  });
+
+  it('says nothing about skills on a resumed wake, or when the definition names none', () => {
+    expect(build({ def: SHIP, sessionUuid: 'aaaa-bbbb' }).args.at(-1)).not.toContain('invoke the skills');
+    expect(build().args.at(-1)).not.toContain('invoke the skills');
+  });
+
+  it('spells them the way Codex and Copilot invoke a hive skill', () => {
+    expect(build({ def: SHIP, adapter: codexAdapter }).args.join('\n')).toContain(
+      'invoke the skills your definition names: $hive-ship, $hive-merge-pr.',
+    );
+    expect(build({ def: SHIP, adapter: copilotAdapter }).args.join('\n')).toContain(
+      'invoke the skills your definition names: /hive:hive-ship, /hive:hive-merge-pr.',
+    );
+  });
+
+  it('keeps a plugin skill as written', () => {
+    expect(build({ def: def({ skills: ['jira-writer:jira-writer'] }) }).args.at(-1)).toContain(
+      'invoke the skills your definition names: jira-writer:jira-writer.',
+    );
+  });
+
+  it('gives a task run the line too, since it is always fresh', () => {
+    expect(build({ def: SHIP, kind: 'task' }).args.at(-1)).toContain('hive:ship, hive:merge-pr');
+  });
+
+  it('puts the line above the delivered entries', () => {
+    const prompt = build({ def: SHIP, delivered: 'BLOCK' }).args.at(-1) ?? '';
+
+    expect(prompt.indexOf('invoke the skills')).toBeGreaterThan(-1);
+    expect(prompt.indexOf('invoke the skills')).toBeLessThan(prompt.indexOf('BLOCK'));
+  });
+});

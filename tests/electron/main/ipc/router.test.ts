@@ -33,7 +33,7 @@ vi.mock('electron', () => ({
   */
   powerMonitor: { on: vi.fn(), removeListener: vi.fn() },
 }));
-vi.mock('../../../../electron/main/ipc/index', () => ({ registerIpcHandlers }));
+vi.mock('../../../../core/ipc/index', () => ({ registerIpcHandlers }));
 vi.mock('../../../../electron/main/ipc/remote-proxy', () => ({ registerRemoteProxy }));
 
 const { registerIpc, switchIpcMode } = await import('../../../../electron/main/ipc/router');

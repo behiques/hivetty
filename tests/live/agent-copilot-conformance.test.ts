@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from 'vitest';
 
-import { createCliGate } from '../../electron/main/agents/cli-gate';
+import { createCliGate } from '../../core/agents/cli-gate';
 import {
   agentPromptFile,
   agentStateFile,
@@ -16,33 +16,33 @@ import {
   agentWorkdir,
   cliHome,
   laneWorkdir,
-} from '../../electron/main/agents/paths';
-import { createPermissions, type Permissions } from '../../electron/main/agents/permissions';
-import { createAgentRegistry, type AgentRegistry } from '../../electron/main/agents/registry';
-import type { HarnessGate } from '../../electron/main/agents/resolve-harness';
-import { createRunTracker, type ChildLike, type RunTracker } from '../../electron/main/agents/runs';
-import { createScheduler, type Scheduler } from '../../electron/main/agents/scheduler';
-import { createAgentState, type AgentState } from '../../electron/main/agents/state';
-import { createWakeCommand } from '../../electron/main/agents/wake-command';
-import { createHarnessRegistry, headlessAdapter } from '../../electron/main/harness/registry';
-import { getConfig, setCliAgents } from '../../electron/main/config';
-import { createReceiver, type Receiver } from '../../electron/main/hooks/receiver';
-import { writeAgentSettings } from '../../electron/main/harness/claude-code/settings';
-import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
-import { createLedger, type Ledger } from '../../electron/main/ledger';
-import { agentMcpConfigFile } from '../../electron/main/mcp';
-import { hiveServerSpec } from '../../electron/main/mcp/config';
-import { resolveClis } from '../../electron/shared/cli-contract';
-import type { AgentRunState, RunLine, WakeSpec } from '../../electron/shared/agent-contract';
-import { CONFIG_PATH_ENV } from '../../electron/shared/config-contract';
-import { isHarnessId } from '../../electron/shared/harness-contract';
+} from '../../core/agents/paths';
+import { createPermissions, type Permissions } from '../../core/agents/permissions';
+import { createAgentRegistry, type AgentRegistry } from '../../core/agents/registry';
+import type { HarnessGate } from '../../core/agents/resolve-harness';
+import { createRunTracker, type ChildLike, type RunTracker } from '../../core/agents/runs';
+import { createScheduler, type Scheduler } from '../../core/agents/scheduler';
+import { createAgentState, type AgentState } from '../../core/agents/state';
+import { createWakeCommand } from '../../core/agents/wake-command';
+import { createHarnessRegistry, headlessAdapter } from '../../core/harness/registry';
+import { getConfig, setCliAgents } from '../../core/config';
+import { createReceiver, type Receiver } from '../../core/hooks/receiver';
+import { writeAgentSettings } from '../../core/harness/claude-code/settings';
+import { mcpConfig } from '../../core/harness/claude-code/mcp-config';
+import { createLedger, type Ledger } from '../../core/ledger';
+import { agentMcpConfigFile } from '../../core/mcp';
+import { hiveServerSpec } from '../../core/mcp/config';
+import { resolveClis } from '../../shared/cli-contract';
+import type { AgentRunState, RunLine, WakeSpec } from '../../shared/agent-contract';
+import { CONFIG_PATH_ENV } from '../../shared/config-contract';
+import { isHarnessId } from '../../shared/harness-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
   type HookAgentEvent,
-} from '../../electron/shared/hook-contract';
-import { LEDGER_DIR, OVERMIND } from '../../electron/shared/ledger-contract';
+} from '../../shared/hook-contract';
+import { LEDGER_DIR, OVERMIND } from '../../shared/ledger-contract';
 
 /**
  * What only a real `copilot` can prove about a Copilot wake (HIVE-343).

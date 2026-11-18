@@ -9,7 +9,7 @@ import {
 /**
  * Where the explorer roots for a session that moved (HIVE-78).
  *
- * The refusal cases are the important ones. `electron/main/fs/paths.ts` is the
+ * The refusal cases are the important ones. `core/fs/paths.ts` is the
  * explorer's security boundary and this does not widen it — a cwd outside the
  * mapped project resolves to `''`, so the panel asks for something the guard
  * would allow rather than something it would refuse.

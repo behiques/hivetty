@@ -1,5 +1,5 @@
-import { planOpOf } from '../../electron/main/harness/claude-code/plan-ops';
-import type { PlanOp, PlanUpdate } from '../../electron/shared/plan-contract';
+import { planOpOf } from '../../core/harness/claude-code/plan-ops';
+import type { PlanOp, PlanUpdate } from '../../shared/plan-contract';
 
 /** A Claude-shaped plan tool call, the shape the plans tests were written in (HIVE-238). */
 export interface ClaudePlanCall {

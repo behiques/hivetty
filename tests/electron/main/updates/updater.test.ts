@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   UNATTENDED_INSTALL_RETRY_MS,
   type UpdateCapability,
-} from '../../../../electron/shared/update-contract';
+} from '../../../../shared/update-contract';
 
 import {
   createUpdater,

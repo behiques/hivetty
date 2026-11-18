@@ -18,7 +18,7 @@ import {
  * it has nothing to route.
  *
  * So every test here checks the argument, not the effect. What happens after
- * main receives the URL is `electron/main/external-links.ts`'s business and has
+ * main receives the URL is `core/external-links.ts`'s business and has
  * its own tests.
  */
 describe('openTerminalLink', () => {

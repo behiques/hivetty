@@ -7,7 +7,7 @@
  * only shape that works. It imports nothing itself, which is what keeps it one.
  *
  * The rule these encode is the same one main's `assertText` enforces at the IPC
- * boundary (`electron/shared/guards.ts`): C0, DEL and C1 have no business in
+ * boundary (`shared/guards.ts`): C0, DEL and C1 have no business in
  * text a person meant to type. A pasted `ESC` could address the cursor, set the
  * window title, or switch to the alternate screen.
  *

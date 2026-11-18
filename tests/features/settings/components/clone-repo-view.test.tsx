@@ -305,7 +305,7 @@ describe('CloneRepoView', () => {
   /**
    * While attached to someone else's Hive (HIVE-144): `config:choose-directory`
    * opens on the server, which has no window — see `WINDOW_BOUND`
-   * (`electron/shared/remote-contract.ts`). Disabled with that table's own
+   * (`shared/remote-contract.ts`). Disabled with that table's own
    * reason, and the click never reaches the bridge.
    */
   describe('attached to a remote server', () => {

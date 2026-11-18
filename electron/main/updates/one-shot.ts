@@ -1,7 +1,7 @@
 import { APP_NAME } from '@shared/app-name';
 import type { UpdateCapability } from '@shared/update-contract';
 
-import type { ServerLockClaim } from '../server/server-lock';
+import type { ServerLockClaim } from '../../../core/server/server-lock';
 
 import type { UpdateEngine } from './updater';
 

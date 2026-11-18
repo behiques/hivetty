@@ -9,8 +9,8 @@ import {
   HOOK_ENV_TOKEN,
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
-} from '../../../electron/shared/hook-contract';
-import { LEDGER_POST_PATH, type LedgerEntry } from '../../../electron/shared/ledger-contract';
+} from '../../../shared/hook-contract';
+import { LEDGER_POST_PATH, type LedgerEntry } from '../../../shared/ledger-contract';
 import { goToOvermind, overmindNewSession } from '../fixtures/places';
 
 import { launchHive } from './fixtures/hive-app';

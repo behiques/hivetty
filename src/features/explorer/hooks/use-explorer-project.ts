@@ -63,7 +63,7 @@ interface ExplorerTarget {
    *
    * It is an id, never a path. Main answers from the cwd it observed itself,
    * and admits the wider root only after proving the directory is a linked git
-   * worktree of this very project (`electron/main/fs/session-roots.ts`). The
+   * worktree of this very project (`core/fs/session-roots.ts`). The
    * renderer is asking a question here, not granting itself an answer.
    */
   sessionId?: string;

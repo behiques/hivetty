@@ -1,0 +1,966 @@
+// @vitest-environment node
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+
+import { claudeCodeAdapter } from '../../../core/harness/claude-code';
+import type { HarnessAdapter } from '../../../core/harness/port';
+import { createDeliver, TYPING_HOLD_MS, type Deliver } from '../../../core/ledger/deliver';
+import { createLedger, type Ledger } from '../../../core/ledger/index';
+import { OVERMIND } from '../../../shared/ledger-contract';
+
+/**
+ * Delivery: what happens to a ledger entry after it is written (HIVE-113).
+ *
+ * Collaborators are three closures and a recording `write`, so nothing here
+ * loads Electron, a pty or the session layer — the same shape
+ * `createLedger`'s own suite uses for `knowsParty`.
+ */
+
+const AT = new Date(2026, 7, 29, 14, 15, 30).getTime();
+
+describe('createDeliver', () => {
+  let dir: string;
+  let clock: number;
+  let ledger: Ledger;
+  let deliver: Deliver;
+  let write: Mock<(entityId: string, data: string) => boolean>;
+  let live: Set<string>;
+  let idle: Set<string>;
+  /** The session's harness, as `Sessions.adapterOf` answers it; `undefined` while the session layer is not up. */
+  let adapter: Pick<HarnessAdapter, 'capabilities' | 'promptMarker'> | undefined;
+
+  beforeEach(() => {
+    adapter = claudeCodeAdapter;
+    dir = mkdtempSync(join(tmpdir(), 'hive-deliver-'));
+    clock = AT;
+    live = new Set(['sess-a']);
+    idle = new Set(['sess-a']);
+    write = vi.fn((_entityId: string, _data: string) => true);
+
+    ledger = createLedger({ dir, now: () => clock, knowsParty: () => true });
+    deliver = createDeliver({
+      ledger,
+      isLive: (id) => live.has(id),
+      isIdle: (id) => idle.has(id),
+      write: (id, data) => write(id, data),
+      adapterOf: () => adapter,
+    });
+    ledger.onChange((entry) => deliver.onEntry(entry));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const ask = (to: string, body = 'which branch?') =>
+    ledger.append({ from: OVERMIND, to, kind: 'ask', body });
+
+  const receipts = () => ledger.read({}).entries.filter((e) => e.meta?.delivered !== undefined);
+
+  const lastWrite = () => write.mock.calls.at(-1)?.[1] as string;
+
+  it('writes one marker into a live idle session, and nothing of the entry', () => {
+    const result = ask('sess-a');
+    expect(result.ok).toBe(true);
+
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write.mock.calls[0][0]).toBe('sess-a');
+    /*
+      The marker names the ask by its ref and carries nothing else (HIVE-138):
+      the entry reaches the model as hook context from the receiver, not as
+      bytes on the pty. The trailing carriage return is what submits it.
+    */
+    expect(lastWrite()).toBe(`📒 ${result.ok ? result.ref : ''}\r`);
+    expect(lastWrite()).not.toContain('which branch?');
+  });
+
+  it('records a receipt naming the delivered entry', () => {
+    const result = ask('sess-a');
+
+    expect(receipts()).toHaveLength(1);
+    expect(receipts()[0]?.meta?.delivered).toBe(result.ok ? result.id : '');
+    expect(receipts()[0]?.from).toBe(OVERMIND);
+    expect(receipts()[0]?.to).toBe('sess-a');
+  });
+
+  it('never writes twice for the same entry', () => {
+    ask('sess-a');
+    deliver.onIdle('sess-a');
+    deliver.onIdle('sess-a');
+
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  /*
+    Retro C: an ask with `meta.after: "owner/repo#N"` waits for that PR's
+    `closed` entry, which is the shipper's, addressed to whoever it reports to.
+  */
+  describe('a held ask (meta.after)', () => {
+    const held = (to: string, after: string) =>
+      ledger.append({ from: OVERMIND, to, kind: 'ask', body: 'after the merge', meta: { after } });
+    const closed = (pr: number, repo: string, to = 'sess-z') =>
+      ledger.append({
+        from: 'shipper',
+        to,
+        kind: 'post',
+        body: `PR #${String(pr)} merged`,
+        meta: { pr, repo, stage: 'closed' },
+      });
+
+    it('is not written while its PR is open, on arrival or on idle', () => {
+      held('sess-a', 'a/b#3');
+      deliver.onIdle('sess-a');
+
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it("is written once when its PR's closed entry lands, and receipted once", () => {
+      const result = held('sess-a', 'a/b#3');
+      closed(3, 'a/b');
+
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(lastWrite()).toBe(`📒 ${result.ok ? result.ref : ''}\r`);
+
+      deliver.onIdle('sess-a');
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(receipts()).toHaveLength(1);
+    });
+
+    it('stays held on a closed entry for another PR or another repo', () => {
+      held('sess-a', 'a/b#3');
+      closed(4, 'a/b');
+      closed(3, 'a/c');
+      deliver.onIdle('sess-a');
+
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('is written at once when its PR had already closed', () => {
+      closed(3, 'a/b');
+      const result = held('sess-a', 'a/b#3');
+
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(lastWrite()).toBe(`📒 ${result.ok ? result.ref : ''}\r`);
+    });
+
+    it('writes one line when the closed entry and the held ask share a session', () => {
+      held('sess-a', 'a/b#3');
+      closed(3, 'a/b', 'sess-a');
+
+      // One line carries both, in ledger order (HIVE-408, Task 6); the next idle owes nothing.
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(lastWrite().split(' ')).toHaveLength(3);
+      deliver.onIdle('sess-a');
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('holds a nudge while the session is mid-turn, then flushes at idle', () => {
+    idle.delete('sess-a');
+    ask('sess-a');
+    expect(write).not.toHaveBeenCalled();
+
+    idle.add('sess-a');
+    deliver.onIdle('sess-a');
+
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds a nudge for an ended session, then flushes on resume', () => {
+    live.delete('sess-a');
+    idle.delete('sess-a');
+    ask('sess-a');
+    expect(write).not.toHaveBeenCalled();
+
+    live.add('sess-a');
+    idle.add('sess-a');
+    deliver.onReady('sess-a');
+
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not flush an ask that was answered while the session was away (HIVE-167)', () => {
+    live.delete('sess-a');
+    idle.delete('sess-a');
+    const result = ask('sess-a');
+    if (!result.ok) throw new Error(result.reason);
+    // The overmind answered it from the inbox, where a redirect put it.
+    const answered = ledger.answer({ thread: result.id, body: 'main' }, OVERMIND);
+    if (!answered.ok) throw new Error(answered.reason);
+    write.mockClear();
+
+    live.add('sess-a');
+    idle.add('sess-a');
+    deliver.onReady('sess-a');
+
+    // The answer to the overmind's own ask is addressed to the overmind, so
+    // nothing at all is owed to this terminal any more.
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing for an ask addressed to the overmind', () => {
+    // The overmind's copy is an inbox card (HIVE-118), not a terminal line.
+    ledger.append({ from: 'sess-a', to: OVERMIND, kind: 'ask', body: 'hi' });
+
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing for a broadcast', () => {
+    ledger.append({ from: OVERMIND, kind: 'ask', body: 'anyone?' });
+
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing for a party that is not a live session', () => {
+    // An agent is HIVE-120; an unknown party has nowhere to write to.
+    ask('pr-reviewer');
+
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('ignores kinds that are not ask, answer, post, failed or done', () => {
+    ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'event', body: 'something happened' });
+    ledger.append({ from: 'sess-b', to: 'sess-a', kind: 'handoff', body: 'notes' });
+
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('does not nudge for an accept (HIVE-410)', () => {
+    const asked = ledger.append({ from: 'sess-a', to: 'shipper', kind: 'ask', body: 'ship #226' });
+    write.mockClear();
+
+    ledger.append({ from: 'shipper', kind: 'post', thread: asked.ok ? asked.id : '', body: 'accepted', meta: { accepted: true } });
+    deliver.onIdle('sess-a');
+
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('nudges for an answer that only says accepted: the key decides, not the body (HIVE-410)', () => {
+    const asked = ledger.append({ from: 'sess-a', to: 'shipper', kind: 'ask', body: 'ship #226' });
+    write.mockClear();
+
+    ledger.append({ from: 'shipper', to: 'sess-a', kind: 'answer', thread: asked.ok ? asked.id : '', body: 'accepted' });
+
+    expect(write).toHaveBeenCalled();
+  });
+
+  it('delivers the backlog before a newer entry (HIVE-408)', () => {
+    idle.delete('sess-a');
+    const first = ask('sess-a', 'older');
+    idle.add('sess-a');
+    write.mockClear();
+
+    const second = ask('sess-a', 'newer');
+
+    const line = lastWrite();
+    const firstRef = first.ok ? (first.ref ?? '') : '';
+    const secondRef = second.ok ? (second.ref ?? '') : '';
+    expect(line.indexOf(firstRef)).toBeGreaterThanOrEqual(0);
+    expect(line.indexOf(firstRef)).toBeLessThan(line.indexOf(secondRef) === -1 ? Infinity : line.indexOf(secondRef));
+  });
+
+  it('delivers failed and done addressed to a session (HIVE-408)', () => {
+    const asked = ledger.append({ from: 'sess-a', to: 'builder', kind: 'ask', body: 'build it' });
+    const thread = asked.ok ? asked.id : '';
+    write.mockClear();
+
+    ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'failed', thread, body: 'builder run ended without answering' });
+    expect(write).toHaveBeenCalledTimes(1);
+
+    idle.add('sess-a');
+    ledger.append({ from: 'builder', to: 'sess-a', kind: 'done', thread, body: 'built' });
+    expect(write).toHaveBeenCalledTimes(2);
+  });
+
+  /*
+    Before HIVE-408 a failed or done was never nudged, so a session's log holds
+    them unreceipted behind things it *was* told. Those are not owed after the
+    upgrade: nudging them would put every stale one on a single line at the
+    first idle. Delivery keeps ledger order, so a failed or done older than
+    something this session has a receipt for can only be one of those.
+  */
+  it('does not backfill a failed or done that predates something the session was told (HIVE-408)', () => {
+    live.delete('sess-a');
+    const stale = Array.from({ length: 5 }, (_, i) =>
+      ledger.append({ from: 'builder', to: 'sess-a', kind: i % 2 === 0 ? 'done' : 'failed', body: `old ${String(i)}` }),
+    );
+    const told = ledger.append({ from: 'shipper', to: 'sess-a', kind: 'post', body: 'PR merged' });
+    // The receipt the pre-HIVE-408 build wrote for the post it did deliver.
+    ledger.append({
+      from: OVERMIND,
+      to: 'sess-a',
+      kind: 'event',
+      body: 'nudge written',
+      meta: { delivered: told.ok ? told.id : '' },
+    });
+    expect(stale.every((r) => r.ok)).toBe(true);
+
+    live.add('sess-a');
+    deliver.onReady('sess-a');
+    expect(write).not.toHaveBeenCalled();
+
+    // A failed arriving after the upgrade is still delivered.
+    const fresh = ledger.append({ from: 'builder', to: 'sess-a', kind: 'failed', body: 'run died' });
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(lastWrite()).toBe(`📒 ${fresh.ok ? fresh.id : ''}\r`);
+  });
+
+  /**
+   * A post addressed to a session is a one-way notice (the shipper's "PR
+   * merged"): it reaches the terminal the way an ask does, and is receipted
+   * once. A broadcast post still wakes nobody.
+   */
+  it('writes a marker for a post addressed to the session, and receipts it once', () => {
+    const result = ledger.append({ from: 'shipper', to: 'sess-a', kind: 'post', body: 'PR #9 merged' });
+
+    expect(result.ok).toBe(true);
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write.mock.calls[0]?.[0]).toBe('sess-a');
+    expect(receipts()).toHaveLength(1);
+    expect(receipts()[0]?.meta?.delivered).toBe(result.ok ? result.id : undefined);
+
+    deliver.onIdle('sess-a');
+
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  /** HIVE-409: a permission card's note to the job's asker is an overmind post with a `to`. */
+  it("writes a marker for the overmind's permission note addressed to the session", () => {
+    const job = ledger.append({ from: 'sess-a', to: 'builder', kind: 'ask', body: 'build it' });
+    write.mockClear();
+    const thread = job.ok ? job.id : 'j1';
+    const result = ledger.append({
+      from: 'overmind', to: 'sess-a', kind: 'post', thread,
+      body: 'shipper is waiting on permission card a12', meta: { permission: 'a12' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write.mock.calls[0]?.[0]).toBe('sess-a');
+  });
+
+  it('writes nothing for a broadcast post', () => {
+    ledger.append({ from: 'shipper', kind: 'post', body: 'PR #9 merged' });
+
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('never writes a post addressed to another session into this one', () => {
+    ledger.append({ from: 'shipper', to: 'sess-b', kind: 'post', body: 'PR #9 merged' });
+    deliver.onIdle('sess-a');
+
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('ignores its own receipts rather than feeding itself', () => {
+    /*
+      The loop guard. This module subscribes to `onChange` *and* appends a
+      receipt for every nudge; without the kind gate each receipt would
+      re-enter `onEntry` and it would write forever.
+    */
+    ask('sess-a');
+
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(receipts()).toHaveLength(1);
+  });
+
+  it('nudges the asker when an answer arrives', () => {
+    live.add('sess-b');
+    idle.add('sess-b');
+    const asked = ledger.append({ from: 'sess-b', to: OVERMIND, kind: 'ask', body: 'ok?' });
+    write.mockClear();
+
+    const answered = ledger.answer({ thread: asked.ok ? asked.id : '', body: 'yes' }, OVERMIND);
+
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write.mock.calls[0][0]).toBe('sess-b');
+    expect(lastWrite()).toBe(`📒 ${answered.ok ? answered.id : ''}\r`);
+    expect(lastWrite()).not.toContain('yes');
+  });
+
+  it('names an answer by its own id, never the ask ref', () => {
+    /*
+      An answer has no ref, and a thread can carry more than one entry, so the
+      ask's ref would not tell the receiver which entry to carry.
+    */
+    live.add('sess-b');
+    idle.add('sess-b');
+    const asked = ledger.append({ from: 'sess-b', to: OVERMIND, kind: 'ask', body: 'ok?' });
+    const ref = asked.ok ? asked.ref : undefined;
+    write.mockClear();
+
+    const answered = ledger.answer({ thread: asked.ok ? asked.id : '', body: 'yes' }, OVERMIND);
+
+    expect(ref).toBeDefined();
+    expect(answered.ok).toBe(true);
+    expect(lastWrite()).toContain(answered.ok ? answered.id : '');
+    expect(lastWrite()).not.toContain(`${ref}\r`);
+  });
+
+  it('does not record a receipt when the write did not land', () => {
+    /*
+      A receipt for a nudge that never reached a terminal would suppress the
+      retry forever — which is why `write` reports whether it landed.
+    */
+    write.mockReturnValue(false);
+    ask('sess-a');
+    expect(receipts()).toHaveLength(0);
+
+    write.mockReturnValue(true);
+    deliver.onIdle('sess-a');
+
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(receipts()).toHaveLength(1);
+  });
+
+  /**
+   * The security boundary this module used to hold. A body is authored by
+   * another party, and this was the one path that typed it into somebody's
+   * prompt terminated by `\r`. Since HIVE-138 no byte of it reaches the pty at
+   * all: the marker is a ref or an id main minted, and the body travels as
+   * JSON the model reads (`context.ts`).
+   */
+  it('carries nothing of the body onto the pty, whatever the body holds', () => {
+    const result = ask('sess-a', 'check this\r[2Jrm -rf ~/work\nsecond line');
+
+    const data = lastWrite();
+    expect(data).toBe(`📒 ${result.ok ? result.ref : ''}\r`);
+    // Exactly one submission: the one this module appended.
+    expect(data.split('\r')).toHaveLength(2);
+  });
+
+  /**
+   * One line per idle window. The line ends in `\r`, which starts a turn, so
+   * nothing may be written behind it; what was owed rides on that one line.
+   */
+  it('writes every owed entry on one line, with a receipt each (HIVE-408)', () => {
+    /*
+      Was "one nudge per idle window": each line ended in `\r`, so a second
+      line behind the first would land mid-turn. One line naming the whole
+      backlog ends in one `\r`, so one submit carries it all and the invariant
+      (nothing typed mid-turn) still holds (HIVE-408, Task 6).
+    */
+    idle.delete('sess-a');
+    const a = ask('sess-a', 'one');
+    const b = ask('sess-a', 'two');
+    idle.add('sess-a');
+    write.mockClear();
+
+    deliver.onIdle('sess-a');
+
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(lastWrite()).toBe(`📒 ${a.ok ? a.ref : ''} ${b.ok ? b.ref : ''}\r`);
+    expect(receipts().map((r) => r.meta?.delivered)).toEqual([a.ok ? a.id : '', b.ok ? b.id : '']);
+
+    // Nothing is left over for the next idle.
+    deliver.onIdle('sess-a');
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends an entry whose token cannot share a line on a line of its own (HIVE-408)', () => {
+    idle.delete('sess-a');
+    const a = ask('sess-a', 'one');
+    // What `markerListable` refuses, as a hand-edited ledger file would carry it.
+    const odd = { id: 'hand-edited', ts: AT, from: OVERMIND, to: 'sess-a', kind: 'post' as const, body: 'note' };
+    const b = ask('sess-a', 'two');
+    idle.add('sess-a');
+    const real = ledger.read;
+    ledger.read = (query) => {
+      const snapshot = real(query);
+      if (query.to !== 'sess-a') return snapshot;
+      const entries = [...snapshot.entries];
+      entries.splice(entries.findIndex((e) => a.ok && e.id === a.id) + 1, 0, odd);
+      return { ...snapshot, entries };
+    };
+    write.mockClear();
+
+    deliver.onIdle('sess-a');
+    expect(lastWrite()).toBe(`📒 ${a.ok ? a.ref : ''}\r`);
+    deliver.onIdle('sess-a');
+    expect(lastWrite()).toBe('📒 hand-edited\r');
+    deliver.onIdle('sess-a');
+    expect(lastWrite()).toBe(`📒 ${b.ok ? b.ref : ''}\r`);
+  });
+
+  /**
+   * The input box is a precondition beside idleness (HIVE-135). `isIdle` is
+   * about the agent; a user who typed half a sentence and stopped has an idle
+   * agent and a full box, and a nudge written then is submitted together with
+   * their draft. The visible surface reports what it sees; main refuses to
+   * write into a draft and picks the nudge up when the box clears.
+   */
+  /**
+   * Two surface ids, standing in for two devices attached to one server
+   * (HIVE-145). The registry's real ids are opaque strings; nothing here
+   * depends on their shape.
+   */
+  const A = 'surface-a';
+  const B = 'surface-b';
+
+  /**
+   * The incident behind HIVE-408's draft race ("your screen shot 📒 …"): the
+   * person's keystroke reached the pty, the renderer's `draft` report trails it
+   * by a frame, and an entry landed in between. `clear()` saw no draft yet.
+   */
+  describe('a person typing (HIVE-408)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(AT);
+      deliver = createDeliver({
+        ledger,
+        isLive: (id) => live.has(id),
+        isIdle: (id) => idle.has(id),
+        write: (id, data) => write(id, data),
+        adapterOf: () => adapter,
+        now: () => Date.now(),
+        setTimeoutFn: setTimeout,
+      });
+      // `ledger.onChange` reaches whichever `deliver` this suite holds: this one, from here on.
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('holds a nudge that arrives within two seconds of a keystroke, then delivers it', () => {
+      deliver.onInput('sess-a'); // the keystroke reached the pty; the draft report is a frame behind
+      const asked = ask('sess-a');
+
+      expect(write).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(TYPING_HOLD_MS);
+      expect(lastWrite()).toBe(`📒 ${asked.ok ? asked.ref : ''}\r`);
+    });
+
+    it('does not deliver at the retry if the box now holds a draft', () => {
+      deliver.onInput('sess-a');
+      ask('sess-a');
+      deliver.onPrompt('surface-a', 'sess-a', 'draft');
+
+      vi.advanceTimersByTime(TYPING_HOLD_MS);
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('restarts the hold on every keystroke', () => {
+      deliver.onInput('sess-a');
+      ask('sess-a');
+      vi.advanceTimersByTime(TYPING_HOLD_MS - 1);
+      deliver.onInput('sess-a');
+      vi.advanceTimersByTime(TYPING_HOLD_MS - 1);
+
+      expect(write).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-arms when the clock lags the timer, rather than dropping the retry', () => {
+      let skew = 0;
+      deliver = createDeliver({
+        ledger,
+        isLive: (id) => live.has(id),
+        isIdle: (id) => idle.has(id),
+        write: (id, data) => write(id, data),
+        adapterOf: () => adapter,
+        now: () => Date.now() - skew,
+        setTimeoutFn: setTimeout,
+      });
+      deliver.onInput('sess-a');
+      ask('sess-a');
+      // From here the wall clock reads a millisecond behind the timer that fires.
+      skew = 1;
+
+      vi.advanceTimersByTime(TYPING_HOLD_MS);
+      expect(write).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds only the session that was typed into', () => {
+      live.add('sess-b');
+      idle.add('sess-b');
+      deliver.onInput('sess-a');
+      ask('sess-b');
+
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(write.mock.calls[0][0]).toBe('sess-b');
+    });
+  });
+
+  describe('the focused session', () => {
+    it('holds a nudge while the focused session reports a draft', () => {
+      deliver.onPrompt(A, 'sess-a', 'draft');
+      ask('sess-a');
+
+      expect(write).not.toHaveBeenCalled();
+      expect(receipts()).toHaveLength(0);
+    });
+
+    it('delivers the held nudge the moment the box is reported empty', () => {
+      deliver.onPrompt(A, 'sess-a', 'draft');
+      ask('sess-a');
+      deliver.onPrompt(A, 'sess-a', 'empty');
+
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(receipts()).toHaveLength(1);
+    });
+
+    it('holds at idle too — idle is about the agent, not the box', () => {
+      idle.delete('sess-a');
+      ask('sess-a');
+      deliver.onPrompt(A, 'sess-a', 'draft');
+      idle.add('sess-a');
+      deliver.onIdle('sess-a');
+
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('delivers to a session that is not the focused one, as before', () => {
+      live.add('sess-b');
+      idle.add('sess-b');
+      deliver.onPrompt(A, 'sess-a', 'draft');
+      ask('sess-b');
+
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(write.mock.calls[0][0]).toBe('sess-b');
+    });
+
+    it('treats an unfocused report as "no session is focused"', () => {
+      deliver.onPrompt(A, 'sess-a', 'draft');
+      deliver.onPrompt(A, 'sess-a', 'unfocused');
+      ask('sess-a');
+
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores an unfocused report from a surface that already lost focus', () => {
+      // sess-a was focused with a draft; focus moved to sess-b, also a draft.
+      live.add('sess-b');
+      idle.add('sess-b');
+      deliver.onPrompt(A, 'sess-a', 'draft');
+      deliver.onPrompt(A, 'sess-b', 'draft');
+      // A late `unfocused` from sess-a must not clear sess-b's record.
+      deliver.onPrompt(A, 'sess-a', 'unfocused');
+      ask('sess-b');
+
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('does not flush on an empty report that is not a transition', () => {
+      /*
+        After a nudge is submitted the renderer's next screen read says
+        `empty` again, and main's idle answer can lag the busy-state hook.
+        A repeat report must not flush the backlog behind the turn the last
+        nudge started. Staged so the session *is* idle when the repeat
+        arrives: with the transition guard removed this writes twice.
+      */
+      deliver.onPrompt(A, 'sess-a', 'empty');
+      ask('sess-a', 'first');
+      expect(write).toHaveBeenCalledTimes(1);
+
+      idle.delete('sess-a');
+      ask('sess-a', 'second');
+      idle.add('sess-a');
+      deliver.onPrompt(A, 'sess-a', 'empty');
+
+      expect(write).toHaveBeenCalledTimes(1);
+      // The second is not lost: the next idle transition takes it.
+      deliver.onIdle('sess-a');
+      expect(write).toHaveBeenCalledTimes(2);
+    });
+
+    it('clears the record when the renderer goes away', () => {
+      deliver.onPrompt(A, 'sess-a', 'draft');
+      deliver.onSurfaceGone(A);
+      ask('sess-a');
+
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('flushes a held nudge on the first empty report after a renderer reset', () => {
+      deliver.onPrompt(A, 'sess-a', 'draft');
+      ask('sess-a');
+      deliver.onSurfaceGone(A);
+      expect(write).not.toHaveBeenCalled();
+
+      // The surface remounts and reads an empty box: this is the transition.
+      deliver.onPrompt(A, 'sess-a', 'empty');
+
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * Two surfaces, and the reason this record stopped being one value
+     * (HIVE-145).
+     *
+     * "The stage shows one terminal at a time" was a fact about a single
+     * renderer. Server mode makes every attached socket a surface, and all of
+     * them report down the same `pty:prompt` notify — so the old single record
+     * said whatever the last one to speak said, about whichever session *it*
+     * was watching.
+     */
+    describe('two surfaces', () => {
+      it('holds while any surface reports a draft for that session', () => {
+        deliver.onPrompt(A, 'sess-a', 'draft');
+        deliver.onPrompt(B, 'sess-a', 'empty');
+        ask('sess-a');
+
+        expect(write).not.toHaveBeenCalled();
+      });
+
+      it('does not release one surface\'s hold when another reports elsewhere', () => {
+        live.add('sess-b');
+        idle.add('sess-b');
+        deliver.onPrompt(A, 'sess-a', 'draft');
+        ask('sess-a');
+
+        // B is looking at a different session entirely. Under the old single
+        // record this `empty` overwrote A's draft and the nudge landed
+        // mid-typing.
+        deliver.onPrompt(B, 'sess-b', 'empty');
+
+        expect(write).not.toHaveBeenCalled();
+      });
+
+      it('delivers only once the last surface holding a draft clears it', () => {
+        deliver.onPrompt(A, 'sess-a', 'draft');
+        deliver.onPrompt(B, 'sess-a', 'draft');
+        ask('sess-a');
+
+        deliver.onPrompt(A, 'sess-a', 'empty');
+        expect(write).not.toHaveBeenCalled();
+
+        deliver.onPrompt(B, 'sess-a', 'empty');
+        expect(write).toHaveBeenCalledTimes(1);
+      });
+
+      it('keeps a live surface\'s hold when a different surface goes away', () => {
+        deliver.onPrompt(A, 'sess-a', 'draft');
+        ask('sess-a');
+
+        /*
+          The regression this story exists to stop. `onRendererReset` was wired
+          to every socket's `destroyed`, so *any* attached socket dropping wiped
+          the record — and the held nudge was then written into the half-typed
+          box belonging to a surface that never went anywhere. That is HIVE-135's
+          own failure, arriving through a second client rather than through a
+          change to the nudge logic.
+        */
+        deliver.onSurfaceGone(B);
+
+        expect(write).not.toHaveBeenCalled();
+      });
+
+      it('releases the hold when the surface holding it goes away', () => {
+        deliver.onPrompt(A, 'sess-a', 'draft');
+        deliver.onSurfaceGone(A);
+        ask('sess-a');
+
+        expect(write).toHaveBeenCalledTimes(1);
+      });
+
+      it('tracks the two surfaces separately when they watch different sessions', () => {
+        live.add('sess-b');
+        idle.add('sess-b');
+        deliver.onPrompt(A, 'sess-a', 'draft');
+        deliver.onPrompt(B, 'sess-b', 'draft');
+
+        ask('sess-a');
+        ask('sess-b');
+        expect(write).not.toHaveBeenCalled();
+
+        deliver.onPrompt(A, 'sess-a', 'empty');
+        expect(write).toHaveBeenCalledTimes(1);
+        expect(write.mock.calls[0][0]).toBe('sess-a');
+      });
+
+      it('ignores a late unfocused from one surface against another\'s record', () => {
+        deliver.onPrompt(A, 'sess-a', 'draft');
+        deliver.onPrompt(B, 'sess-a', 'draft');
+        // A late report from B about a session it has already left must not
+        // clear A's hold on the same session.
+        deliver.onPrompt(B, 'sess-a', 'unfocused');
+        ask('sess-a');
+
+        expect(write).not.toHaveBeenCalled();
+      });
+    });
+
+    it('flushes a held nudge after a draft, away, and back to an empty box', () => {
+      deliver.onPrompt(A, 'sess-a', 'draft');
+      ask('sess-a');
+      deliver.onPrompt(A, 'sess-a', 'unfocused');
+      // Delivered as an unfocused session? No entry arrived and no idle fired.
+      expect(write).not.toHaveBeenCalled();
+
+      deliver.onPrompt(A, 'sess-a', 'empty');
+
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /*
+    The two halves of the reason delivery is recorded in the log rather than
+    held in memory. A second `createLedger` over the same directory is what a
+    relaunch actually is.
+  */
+  const relaunch = () => {
+    const reopened = createLedger({ dir, now: () => clock, knowsParty: () => true });
+    const write2 = vi.fn((_entityId: string, _data: string) => true);
+    const deliver2 = createDeliver({
+      ledger: reopened,
+      isLive: (id) => live.has(id),
+      isIdle: (id) => idle.has(id),
+      write: (id, data) => write2(id, data),
+      adapterOf: () => adapter,
+    });
+    return { deliver2, write2 };
+  };
+
+  it('does not re-deliver a nudge that landed before a restart', () => {
+    ask('sess-a');
+    expect(write).toHaveBeenCalledTimes(1);
+
+    const { deliver2, write2 } = relaunch();
+    deliver2.onReady('sess-a');
+
+    expect(write2).not.toHaveBeenCalled();
+  });
+
+  it('delivers a nudge that was still pending when the app quit', () => {
+    idle.delete('sess-a');
+    ask('sess-a');
+    expect(write).not.toHaveBeenCalled();
+
+    const { deliver2, write2 } = relaunch();
+    idle.add('sess-a');
+    deliver2.onReady('sess-a');
+
+    expect(write2).toHaveBeenCalledTimes(1);
+  });
+
+  describe('a harness that does not take a prompt marker (HIVE-240)', () => {
+    const none = (): Pick<HarnessAdapter, 'capabilities' | 'promptMarker'> => ({
+      capabilities: {
+        resume: 'none',
+        meters: [],
+        contextDelivery: 'none',
+        reportsCostUsd: false,
+        reportsTokens: false,
+        enforcesTurns: false,
+        enforcesBudget: false,
+        reportsMcpStatus: false,
+        container: false,
+        agentMcp: [],
+        conversationId: 'argv',
+        skills: { toolPrefix: 'hive-', refPrefix: '/', typedPrefix: '/', namePrefix: '', pluginRoot: '$HIVE_PLUGIN_ROOT' },
+      },
+      promptMarker: vi.fn(() => 'never typed'),
+    });
+
+    it('types nothing and records nothing, on entry, idle and ready', () => {
+      const declining = none();
+      adapter = declining;
+      ask('sess-a');
+      deliver.onIdle('sess-a');
+      deliver.onReady('sess-a');
+      expect(write).not.toHaveBeenCalled();
+      expect(declining.promptMarker).not.toHaveBeenCalled();
+      expect(receipts()).toHaveLength(0);
+    });
+
+    it('types nothing while the session layer has no adapter to answer with', () => {
+      adapter = undefined;
+      ask('sess-a');
+      deliver.onIdle('sess-a');
+      expect(write).not.toHaveBeenCalled();
+      expect(receipts()).toHaveLength(0);
+    });
+
+    it('still delivers the held entry once a prompt-marker adapter answers', () => {
+      adapter = undefined;
+      const result = ask('sess-a');
+      adapter = claudeCodeAdapter;
+      deliver.onIdle('sess-a');
+      expect(lastWrite()).toBe(`📒 ${result.ok ? result.ref : ''}\r`);
+      expect(receipts()).toHaveLength(1);
+    });
+  });
+
+  /*
+    HIVE-411: the watchdog re-nudges a session that never picked an ask up by
+    writing an overmind marker naming it, then calling `flush`. Only main's
+    marker, newer than the newest receipt, makes the ask owed again.
+  */
+  describe('a renudge marker (HIVE-411)', () => {
+    const renudge = (askId: string, from: string = OVERMIND) =>
+      ledger.append({
+        from,
+        to: 'sess-a',
+        kind: 'event',
+        thread: askId,
+        body: 're-nudge',
+        meta: { watch: 'renudge', watched: askId },
+      });
+
+    it('makes a receipted ask owed again: flush writes its marker once more and receipts it', () => {
+      const result = ask('sess-a');
+      if (!result.ok) throw new Error('ask refused');
+      expect(write).toHaveBeenCalledTimes(1);
+
+      clock += 60_000;
+      renudge(result.id);
+      // The clock stays put: the receipt this flush writes shares the marker's ms, as the sweep's does.
+      deliver.flush('sess-a');
+
+      expect(write).toHaveBeenCalledTimes(2);
+      expect(lastWrite()).toBe(`📒 ${result.ref}\r`);
+      expect(receipts()).toHaveLength(2);
+
+      // The second receipt settles it: the next flush writes nothing.
+      deliver.flush('sess-a');
+      expect(write).toHaveBeenCalledTimes(2);
+    });
+
+    it('writes nothing when a receipt already follows the marker', () => {
+      idle.delete('sess-a');
+      const result = ask('sess-a');
+      if (!result.ok) throw new Error('ask refused');
+      clock += 60_000;
+      renudge(result.id);
+      clock += 1_000;
+      ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'event', body: 'nudge written', meta: { delivered: result.id } });
+      idle.add('sess-a');
+
+      deliver.flush('sess-a');
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('ignores a marker another party wrote', () => {
+      const result = ask('sess-a');
+      if (!result.ok) throw new Error('ask refused');
+      clock += 60_000;
+      renudge(result.id, 'sess-a');
+      deliver.flush('sess-a');
+
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not backfill an old failed entry the re-opened ask had been told after', () => {
+      idle.delete('sess-a');
+      // A pre-HIVE-408 `failed` that never got a receipt, then an ask told after it.
+      ledger.append({ from: 'builder', to: 'sess-a', kind: 'failed', body: 'old failure' });
+      const result = ask('sess-a');
+      if (!result.ok) throw new Error('ask refused');
+      ledger.append({ from: OVERMIND, to: 'sess-a', kind: 'event', body: 'nudge written', meta: { delivered: result.id } });
+      idle.add('sess-a');
+      clock += 60_000;
+      renudge(result.id);
+
+      deliver.flush('sess-a');
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(lastWrite()).toBe(`📒 ${result.ref}\r`);
+    });
+  });
+});

@@ -9,8 +9,8 @@ import {
   HOOK_ENV_TOKEN,
   HOOK_HEADER_SESSION,
   HOOK_HEADER_TOKEN,
-} from '../../../electron/shared/hook-contract';
-import { LEDGER_POST_PATH } from '../../../electron/shared/ledger-contract';
+} from '../../../shared/hook-contract';
+import { LEDGER_POST_PATH } from '../../../shared/ledger-contract';
 
 import { STUB_PR, STUB_REPO, writeGhStub } from './fixtures/gh-stub';
 import { launchHive, startSession, writeProjectConfig } from './fixtures/hive-app';

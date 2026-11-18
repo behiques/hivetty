@@ -2097,7 +2097,7 @@ export interface PrTimelineEntry {
   readAt?: number;
 }
 
-/** `20261003-090507`: a ledger id's leading two segments, local time, as `electron/main/ledger/store.ts` writes them (HIVE-208). */
+/** `20261003-090507`: a ledger id's leading two segments, local time, as `core/ledger/store.ts` writes them (HIVE-208). */
 export const ledgerIdAt = (ms: number): string => {
   const at = new Date(ms);
   const p = (v: number) => String(v).padStart(2, '0');

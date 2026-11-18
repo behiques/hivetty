@@ -51,7 +51,7 @@ const passed = (code: number): number =>
 
 /**
  * The cloud relay as the app dials it (HIVE-286), on the stub cloud's own server: the paths, control
- * frame, close codes and ping of `electron/shared/relay-contract.ts`.
+ * frame, close codes and ping of `shared/relay-contract.ts`.
  *
  * shortcut: no rate limit, accept timeout, entitlement check or size cap, and one device per stub;
  * upgrade when a spec needs a relay refusal the cloud e2e suite (HIVE-285) does not already prove.

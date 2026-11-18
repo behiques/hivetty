@@ -62,7 +62,7 @@ export type SessionStatus =
  * Two independent copies of that list is how a picker comes to offer a model
  * the guard rejects, which presents as a session that silently fails to start.
  *
- * So `electron/shared/session-contract.ts` owns them, because it is the one
+ * So `shared/session-contract.ts` owns them, because it is the one
  * module both processes read, and this file points at it. Type-only, as the
  * fence requires.
  */

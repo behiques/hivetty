@@ -6,11 +6,11 @@ import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createLedger } from '../../electron/main/ledger';
-import { createReceiver } from '../../electron/main/hooks/receiver';
-import { mcpConfig } from '../../electron/main/harness/claude-code/mcp-config';
-import { OVERMIND } from '../../electron/shared/ledger-contract';
-import { openAsks } from '../../electron/shared/ledger-derive';
+import { createLedger } from '../../core/ledger';
+import { createReceiver } from '../../core/hooks/receiver';
+import { mcpConfig } from '../../core/harness/claude-code/mcp-config';
+import { OVERMIND } from '../../shared/ledger-contract';
+import { openAsks } from '../../shared/ledger-derive';
 
 /**
  * What only a real `claude` can prove (HIVE-112).

@@ -838,7 +838,7 @@ describe('ServerModeGroup', () => {
      * someone is in this field fixing the address. The payload must still name
      * no mode: `applySetRemote` no longer merges one, so an omitted `mode` is
      * what makes this a write rather than a dial. See
-     * `tests/electron/main/ipc/set-remote.test.ts` for the other half.
+     * `tests/core/ipc/set-remote.test.ts` for the other half.
      */
     it('sends no mode from a blur even when the config already says remote', async () => {
       render(

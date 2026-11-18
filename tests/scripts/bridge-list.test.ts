@@ -8,7 +8,7 @@ import {
 } from '../../scripts/bridge-list.mjs';
 
 const KEYS = `
-import type { HiveBridge } from '../../electron/shared/ipc-contract';
+import type { HiveBridge } from '../../shared/ipc-contract';
 export const BRIDGE_KEYS = [
   'agents', 'pty',
 ] as const satisfies readonly (keyof HiveBridge)[];

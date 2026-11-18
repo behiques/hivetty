@@ -6,7 +6,7 @@ import {
   SPLASH_FADE_STEP_MS,
   SPLASH_MIN_MS,
   SPLASH_SIZE,
-} from '../../../electron/shared/splash';
+} from '../../../shared/splash';
 
 /**
  * The splash window, with `electron` mocked (stories 081, and this one).

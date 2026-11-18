@@ -6,8 +6,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { createReceiver } from '../../electron/main/hooks/receiver';
-import { hookSettings } from '../../electron/main/harness/claude-code/settings';
+import { createReceiver } from '../../core/hooks/receiver';
+import { hookSettings } from '../../core/harness/claude-code/settings';
 
 /** Not exercised by this suite — the ready signal, not the ledger. */
 const noLedger = {

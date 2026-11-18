@@ -113,7 +113,7 @@ test('the call xterm ships by default reaches nothing — the bug', async ({
  * `fs:resolve` is registered, classified, and answers through the real bridge.
  *
  * The unit suite proves the verb's containment
- * (`tests/electron/main/fs/resolve.test.ts`) and the renderer's wiring
+ * (`tests/core/fs/resolve.test.ts`) and the renderer's wiring
  * (`center-stage.test.tsx`) separately, and each of those is a claim about one
  * side of a channel. What only the built app can show is that the channel
  * exists at all: that `ipc/index.ts` really binds the handler and that the

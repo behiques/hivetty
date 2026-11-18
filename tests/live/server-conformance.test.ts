@@ -22,8 +22,8 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 
-import { parseConfig } from '../../electron/main/config/parse';
-import { mintDevice, type MintedDevice } from '../../electron/main/server/devices';
+import { parseConfig } from '../../core/config/parse';
+import { mintDevice, type MintedDevice } from '../../core/server/devices';
 import {
   CONFIG_PATH_ENV,
   CONFIG_VERSION,
@@ -31,8 +31,8 @@ import {
   type ConfigSnapshot,
   type RemoteConfig,
   type SetRemoteResult,
-} from '../../electron/shared/config-contract';
-import { HOOK_PATH } from '../../electron/shared/hook-contract';
+} from '../../shared/config-contract';
+import { HOOK_PATH } from '../../shared/hook-contract';
 import {
   CH,
   REPLAY_BYTES,
@@ -41,9 +41,9 @@ import {
   type DataEvent,
   type NotificationReadEvent,
   type RemoteLinkStatus,
-} from '../../electron/shared/ipc-contract';
-import { type HiveNotification } from '../../electron/shared/notification-contract';
-import { RELAY_CLOSE, RELAY_PATH, type RelayHostsResult } from '../../electron/shared/relay-contract';
+} from '../../shared/ipc-contract';
+import { type HiveNotification } from '../../shared/notification-contract';
+import { RELAY_CLOSE, RELAY_PATH, type RelayHostsResult } from '../../shared/relay-contract';
 import {
   CALL_DEADLINE_MS,
   CALL_TIMEOUT_CODE,
@@ -56,7 +56,7 @@ import {
   type ResultFrame,
   type ResumePoint,
   type ServerFrame,
-} from '../../electron/shared/remote-contract';
+} from '../../shared/remote-contract';
 import { startStubCloud, type StubCloud } from '../e2e/electron/fixtures/stub-cloud';
 import { SecureTestSocket } from '../support/secure-test-socket';
 
@@ -68,7 +68,7 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  *
  * ## Why this cannot be a unit test
  *
- * `tests/electron/remote-host/listener.test.ts` already proves the handshake
+ * `tests/remote-host/listener.test.ts` already proves the handshake
  * in-process, against `createRemoteListener` called directly. That is the
  * exact shape that cannot catch what this story's three review rounds were
  * actually about: whether `index.ts` wires the listener up at all in server
@@ -208,7 +208,7 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  *
  * `--user-data-dir` only relocates Electron's own profile (window state, the
  * single-instance lock) — the workspace config lives at `~/.hivetty/config.json`
- * (`electron/main/config/paths.ts`) unless `HIVE_CONFIG_PATH` says otherwise
+ * (`core/config/paths.ts`) unless `HIVE_CONFIG_PATH` says otherwise
  * (`config-contract.ts`'s `CONFIG_PATH_ENV`), and nothing here ever spawns a
  * process without it explicitly set. That one variable relocates the *whole*
  * `~/.hivetty` tree, not only the config file: `ledger-contract.ts` derives the
@@ -228,7 +228,7 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  * ## Every launch is licensed against a stub cloud (HIVE-428)
  *
  * Since HIVE-265 a served app binds nothing until it holds a licence
- * (`electron/main/licence/serve-gate.ts`), and a scrubbed environment gives it
+ * (`core/licence/serve-gate.ts`), and a scrubbed environment gives it
  * none. So the outermost `beforeAll` starts one e2e stub cloud
  * (`tests/e2e/electron/fixtures/stub-cloud.ts`) for the whole file, on the
  * `team` plan, and every process {@link spawnApp} and {@link runOneShot} start
@@ -245,7 +245,7 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  * ordinary attaching app, and the client is never told the server's port: the
  * only route between them is a stub relay on the same stub cloud
  * (`tests/e2e/electron/fixtures/stub-relay.ts`), which speaks the paths,
- * control frame, close codes and ping of `electron/shared/relay-contract.ts`
+ * control frame, close codes and ping of `shared/relay-contract.ts`
  * and records every message it passes. The block pairs, attaches through the
  * relay, types into the server's shell, cuts the relay and watches the link
  * come back by itself, then revokes the device and sees the refusal cross the
@@ -780,7 +780,7 @@ function runOneShot(
  * (HIVE-428), so a `--server` launch on it holds a licence and binds. Same
  * environment and arguments as {@link runOneShot}. When the one-shot prints
  * its device code the stub is told to approve it; resolves once it exits 0
- * having printed `Signed in as` (`electron/main/licence/account-command.ts`),
+ * having printed `Signed in as` (`core/licence/account-command.ts`),
  * and rejects with its stdout and stderr on anything else, or after 30s.
  */
 function signIn(configPath: string, userDataDir: string, timeoutMs = 30_000): Promise<void> {
@@ -853,7 +853,7 @@ const attachLog: AttachLogEntry[] = [];
  * Sends one frame over a fresh `ws` connection and resolves with whatever
  * comes back — a JSON frame, or (for an Origin refused at the upgrade itself)
  * the HTTP status the server answered with instead of `101`. Mirrors
- * `tests/electron/remote-host/listener.test.ts`'s own `attach`/`attachTolerant`
+ * `tests/remote-host/listener.test.ts`'s own `attach`/`attachTolerant`
  * helpers, merged into one shape because this file's callers need both.
  */
 function attach(
@@ -983,7 +983,7 @@ async function waitForAsync(
  * Not a sleep dressed up: it is the only way to say "nothing is armed" about a
  * debounced watcher from outside the process holding the timer. The agents
  * registry announces 120ms after the last filesystem event it saw
- * (`electron/main/agents/registry.ts`), so a counter that has not moved for
+ * (`core/agents/registry.ts`), so a counter that has not moved for
  * several times that has no announce pending behind it — which is exactly what
  * makes a baseline taken afterwards mean something.
  */
@@ -1089,7 +1089,7 @@ interface RendererDriver {
  * ## Why the app is safe to drive this way
  *
  * `--remote-debugging-port` is a Chromium switch; `parseInvocation`
- * (`electron/main/cli.ts`) walks argv looking for exactly four of its own
+ * (`core/cli.ts`) walks argv looking for exactly four of its own
  * flags and ignores everything else, which its own doc comment states as a
  * property rather than an accident. Nothing about the app's behaviour changes
  * — this opens a viewer onto the window it was already going to open.
@@ -1262,7 +1262,7 @@ async function openCdpTarget(
  *   nothing here depends on which of the two bounds would have won.
  * - Anything else exits **non-zero**, which is what lets the same script stand
  *   in as `claudeCommand` for a pty bootstrap. `sessionCommand` builds
- *   `<claudeCommand> && exit` (`electron/main/harness/claude-code/launch.ts`), so a
+ *   `<claudeCommand> && exit` (`core/harness/claude-code/launch.ts`), so a
  *   stub that ended cleanly would take the login shell with it — the identical
  *   reasoning behind `stubClaudeCommand`'s `; false` below.
  *
@@ -2232,7 +2232,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
      * A no-op bootstrap, and the `; false` is not decoration.
      *
      * `sessionCommand` bootstraps a session as `<claudeCommand> && exit`
-     * (`electron/main/harness/claude-code/launch.ts`), so a stub that ends cleanly takes
+     * (`core/harness/claude-code/launch.ts`), so a stub that ends cleanly takes
      * the login shell with it and leaves no shell for these cases to type into.
      * Ending badly short-circuits the `&&`. Copied from
      * `tests/e2e/electron/fixtures/hive-app.ts`'s `STUB_CLAUDE_COMMAND`, which
@@ -2277,7 +2277,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         refuses a `..` segment at the IPC guard, long before the fs layer — so
         the only way to actually resolve out of a project root is a symlink,
         which `resolveExisting` follows with `realpath` *before* it tests
-        containment (`electron/main/fs/paths.ts`). That is what case 12 sends.
+        containment (`core/fs/paths.ts`). That is what case 12 sends.
       */
       projectDir = mkdtempSync(join(tmpdir(), 'hive-live-server-project-'));
       outsideDir = mkdtempSync(join(tmpdir(), 'hive-live-server-outside-'));
@@ -2741,7 +2741,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         Read off the wire, never written as a literal (HIVE-144).
 
         `registry.open()`'s counter is **global**, not per entity
-        (`electron/main/sessions/registry.ts`): this app's second session gets
+        (`core/sessions/registry.ts`): this app's second session gets
         generation 2 whether or not anything was ever restarted. A literal
         `gen: 1` here is therefore only correct for whichever case happens to
         spawn first, and a case further down the file that wrote one would be
@@ -3804,7 +3804,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         membership test from "every field of its payload describes this
         process" to "reads or changes this process's own identity or
         attachment", because the old wording could not classify a *command*
-        at all. `applySetRemote` (`electron/main/ipc/set-remote.ts`) is the one
+        at all. `applySetRemote` (`core/ipc/set-remote.ts`) is the one
         body both surfaces call.
 
         ## What is asserted, and why the server's file is read

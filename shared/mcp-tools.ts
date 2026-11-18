@@ -1,0 +1,867 @@
+import type { ProjectsDirectory } from './config-contract';
+import type { PrMergeRequest, PrShipStatus } from './github-contract';
+import { parsePrMerge } from './guards';
+import type { AdfBlock, JiraError, JiraMention, JiraToolIssue } from './jira-contract';
+import type { LedgerKind, LedgerReadQuery } from './ledger-contract';
+import { asInbound } from './ledger-derive';
+import { HIVE_TOOLS } from './ledger-tools';
+import {
+  LEDGER_READ_DEFAULT_LIMIT,
+  ReceiverError,
+  type CallToolResult,
+  type McpToolDefinition,
+  type ReceiverClient,
+} from './mcp-contract';
+import type { RpcHandlers } from './mcp-protocol';
+import {
+  decide,
+  PERMISSION_DENY_MESSAGE,
+  type PermissionDecision,
+} from './permission-rules';
+
+/**
+ * The ten ledger tools, as behaviour (HIVE-112, `ledger_handoff` added by
+ * HIVE-122, `ledger_accept` by HIVE-410), plus the two served beside them: `agents` (HIVE-127) and
+ * `approve` (HIVE-119).
+ *
+ * Every one of them is the same three steps: read the arguments, make one
+ * receiver call, turn the outcome into a `CallToolResult`. The interesting part
+ * is what happens when that call is refused — see {@link failed}.
+ */
+
+const ok = (text: string, structuredContent?: Record<string, unknown>): CallToolResult => ({
+  content: [{ type: 'text', text }],
+  isError: false,
+  ...(structuredContent === undefined ? {} : { structuredContent }),
+});
+
+/**
+ * A failure the **model** reads, not one the protocol reports.
+ *
+ * The MCP spec draws this line and it matters here: a JSON-RPC error tells the
+ * client the call was malformed, and the model never sees the text. A result
+ * with `isError` is handed to the model, which is the whole point — "thread is
+ * not open: a12" is something it can act on, and a protocol error is not.
+ */
+const failed = (text: string): CallToolResult => ({
+  content: [{ type: 'text', text }],
+  isError: true,
+});
+
+const stringArg = (args: Record<string, unknown>, key: string): string | undefined => {
+  const value = args[key];
+  return typeof value === 'string' && value !== '' ? value : undefined;
+};
+
+/** The most projects one `project_auto_merge` call may switch (HIVE-409); the schema's `maxItems`. */
+const AUTO_MERGE_MAX_PROJECTS = 20;
+
+/** Said on every switch (HIVE-409), so nobody reads the card it raised as a bug. */
+const DONT_ASK_AGAIN = "A saved 'don't ask again' never covers this tool: every call asks, by design.";
+
+const metaArg = (args: Record<string, unknown>): Record<string, unknown> | undefined => {
+  const value = args['meta'];
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+};
+
+/**
+ * Where the read cursor lives, so its lifetime can outlive one handler set.
+ *
+ * Over stdio the two are the same thing — `claude` starts one host per session
+ * and keeps it — so the default store below is closure-local and nothing has to
+ * think about it. Over `POST /mcp` they are not: a request is not a process, so
+ * a handler set built per request would carry a cursor that is `undefined` on
+ * arrival and discarded on reply, turning every undirected drain into a re-read
+ * of the newest page (HIVE-130).
+ *
+ * The fix is to inject the *cursor* rather than to reuse the handlers, and that
+ * is deliberate. Memoising a whole handler set per session would capture the
+ * first request's headers in its client, and `handleMessage` awaits — so a
+ * second request from the same session could interleave and be answered against
+ * the first one's identity. A cursor is the only thing that should outlive the
+ * request; everything else is rebuilt from the headers actually presented.
+ */
+export interface CursorStore {
+  get(): string | undefined;
+  set(id: string): void;
+}
+
+/** A store with the stdio host's lifetime: this closure, and no longer. `initial` seeds it (HIVE-412); empty is none. */
+export const createCursorStore = (initial?: string): CursorStore => {
+  /**
+   * Deliberately **not** persisted: a cursor that survived a restart would mean
+   * a session that came back after a crash silently skipped whatever arrived
+   * while it was down. A seed is main's lane cursor, handed over at spawn.
+   */
+  let cursor: string | undefined = initial === '' ? undefined : initial;
+  return {
+    get: () => cursor,
+    set: (id: string) => {
+      cursor = id;
+    },
+  };
+};
+
+/** Who is calling (HIVE-368): a terminal session, or an agent run, which ends by exiting. */
+export type ToolLane = 'session' | 'agent';
+
+export function createToolHandlers(
+  client: ReceiverClient,
+  grants: readonly string[] = [],
+  /**
+   * The read cursor: the id of the last entry this caller was given.
+   *
+   * Defaulted, so the stdio host and every existing test get exactly the
+   * per-process cursor they had before. `POST /mcp` passes one keyed by session.
+   */
+  cursorStore: CursorStore = createCursorStore(),
+  /** Defaulted to `session`, the stdio host's lane for every pty; the run's id decides `agent`. */
+  lane: ToolLane = 'session',
+): RpcHandlers {
+
+  /** One write, with the refusal turned into text the model can read. */
+  const write = async (
+    kind: LedgerKind,
+    args: Record<string, unknown>,
+    extra: { body?: string; meta?: Record<string, unknown> } = {},
+  ): Promise<CallToolResult> => {
+    const body = extra.body ?? stringArg(args, 'body');
+    if (body === undefined) return failed(`${kind} needs a body`);
+
+    const to = stringArg(args, 'to');
+    const thread = stringArg(args, 'thread');
+    const meta = extra.meta ?? metaArg(args);
+
+    const { id, ref } = await client.post({
+      ...(to === undefined ? {} : { to }),
+      kind,
+      ...(thread === undefined ? {} : { thread }),
+      body,
+      ...(meta === undefined ? {} : { meta }),
+    });
+
+    return ok(ref === undefined ? `posted ${id}` : `posted ${id} (ref ${ref})`);
+  };
+
+  const read = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const query: LedgerReadQuery = {};
+
+    for (const key of ['to', 'from', 'thread'] as const) {
+      const value = stringArg(args, key);
+      if (value !== undefined) query[key] = value;
+    }
+
+    const kind = stringArg(args, 'kind');
+    if (kind !== undefined) query.kind = kind as LedgerKind;
+
+    const since = stringArg(args, 'since');
+    const limit = typeof args['limit'] === 'number' ? args['limit'] : undefined;
+
+    /*
+      Whether this call is the undirected inbox drain the preamble mandates
+      first on every wake, or a targeted lookup — and only the drain may move
+      the cursor. `snapshot.entries` below is the *filtered and trimmed* set,
+      not the whole log, so advancing the cursor to its last id after a
+      targeted read would move the high-water mark past entries the caller
+      was never shown: a `kind`-filtered read would permanently skip every
+      other kind older than its newest match, a `limit`-bounded read would
+      lose whatever it discarded past that limit, and a `since` older than the
+      cursor could walk the cursor *backwards*, re-delivering entries already
+      seen on the next default read. A call naming none of these is the plain
+      drain, and behaves exactly as before.
+    */
+    const isTargetedLookup =
+      query.to !== undefined ||
+      query.from !== undefined ||
+      query.kind !== undefined ||
+      query.thread !== undefined ||
+      since !== undefined ||
+      limit !== undefined;
+
+    /*
+      An explicit `since` wins over the cursor, and the cursor wins over the
+      default bound. The bound only exists for the very first read of a process:
+      without it, a session opened against a months-old ledger would be handed
+      all of it at once.
+
+      The cursor bounds only the undirected drain it belongs to. A targeted
+      lookup is asking for something specific — above all `ledger_read
+      { thread }`, which the wake block's cut pointer names — and a cursor
+      seeded at spawn (HIVE-412) would otherwise hide every entry of that
+      thread older than the wake, the very history it was called for.
+    */
+    const cursor = isTargetedLookup ? undefined : cursorStore.get();
+    if (since !== undefined) query.since = since;
+    else if (cursor !== undefined) query.since = cursor;
+    if (limit !== undefined) query.limit = limit;
+    else if (query.since === undefined) query.limit = LEDGER_READ_DEFAULT_LIMIT;
+
+    const snapshot = await client.read(query);
+
+    /*
+      Advanced only for the undirected drain, and only when something came
+      back. Entries are newest-last, so the last one is the high-water mark. A
+      read that returned nothing leaves the cursor where it was — moving it to
+      `undefined` would re-bound the next read as if the process had just
+      started.
+    */
+    if (!isTargetedLookup) {
+      const newest = snapshot.entries.at(-1);
+      if (newest !== undefined) cursorStore.set(newest.id);
+    }
+
+    /*
+      Compact JSON, not a rendered digest. `meta` is an arbitrary map that
+      HIVE-119 (permission asks) and HIVE-123 (Slack timestamps) both read keys
+      out of, so anything lossy here breaks a story that has not been written
+      yet — and a digest that kept `meta` would give back the tokens it saved.
+
+      The same snapshot also rides along as `structuredContent`: this call is
+      the one the preamble mandates first on every wake, so it is the one
+      place a model would otherwise have to parse a JSON string out of a text
+      field before it could do anything with it.
+    */
+    return ok(JSON.stringify(snapshot), { ...snapshot });
+  };
+
+  /**
+   * Who else is here (HIVE-127).
+   *
+   * The shortest handler in this file, and the only one that reads no
+   * arguments at all: the caller is the authenticated `x-hive-session` header,
+   * so there is nothing on `args` to look at.
+   *
+   * Prose *and* `structuredContent`, like `ledger_read` above. The text is
+   * what the model actually attends to, and it is the only place two things
+   * can be said that the raw fields cannot: whether an ask will reach this
+   * peer at all, and — for a broken definition — that it will not. Handing a
+   * model a name it cannot reach is worse than handing it nothing.
+   */
+  const agents = async (): Promise<CallToolResult> => {
+    const directory = await client.agents();
+
+    if (directory.agents.length === 0) {
+      return ok(
+        'There are no other agents on this machine — you are the only one. Do the work yourself, or report that there is nobody to delegate it to.',
+        { agents: [] },
+      );
+    }
+
+    const lines = directory.agents.map((agent) => {
+      /*
+        A broken definition is not a known party, so nothing can wake it and
+        nothing may write to the ledger as it. Saying only "invalid" would
+        leave a caller to discover that by being ignored.
+      */
+      if (agent.invalid !== undefined) {
+        return `- ${agent.name} — cannot be reached: its definition does not parse (${agent.invalid})`;
+      }
+
+      const reach = agent.accepts.includes('ledger')
+        ? 'reachable with ledger_ask'
+        : 'does not wake on the ledger, so an ask will not reach it';
+      const tools = agent.tools.length === 0 ? 'no tool grants' : agent.tools.join(', ');
+
+      return `- ${agent.name} (${agent.status}) — ${agent.description} [${reach}; ${tools}]`;
+    });
+
+    return ok(
+      `${directory.agents.length} other agent(s) on this machine:\n${lines.join('\n')}`,
+      /*
+        A fresh literal rather than `directory` itself: `ok` takes a
+        `Record<string, unknown>`, an interface has no implicit index
+        signature, and the cast that would paper over that also silences any
+        genuine shape error.
+      */
+      { agents: directory.agents },
+    );
+  };
+
+  /**
+   * A Jira refusal as a tool error: the kind, the sentence, and the app's own
+   * diagnosis when it has one (a missing field, an ADF rule). `details` is
+   * composed and bounded in `client.ts`, never a quoted server body.
+   */
+  const jiraFailed = (tool: string, error: JiraError): CallToolResult => {
+    const notes = [
+      ...(error.details ?? []),
+      ...(error.retryAfter === undefined ? [] : [`retry after ${error.retryAfter}s`]),
+    ];
+    return failed(
+      `${tool}: ${error.message} (${error.kind})${notes.length === 0 ? '' : `; ${notes.join('; ')}`}`,
+    );
+  };
+
+  /** The ticket, rendered for a model (HIVE-174): prose first, the record beside it. */
+  const jiraGet = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const key = stringArg(args, 'key');
+    if (key === undefined) return failed('jira_get needs key');
+
+    const result = await client.jiraGet({ key });
+    if (!result.ok) return jiraFailed('jira_get', result.error);
+
+    return ok(jiraIssueText(result.value), { ...result.value });
+  };
+
+  const jiraTransition = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const key = stringArg(args, 'key');
+    const status = stringArg(args, 'status');
+    const from = stringArg(args, 'from');
+    if (key === undefined || status === undefined) {
+      return failed('jira_transition needs key and status');
+    }
+
+    const result = await client.jiraTransition({
+      key,
+      status,
+      ...(from === undefined ? {} : { from }),
+      ...(args['assignToMe'] === true ? { assignToMe: true } : {}),
+    });
+    if (!result.ok) return jiraFailed('jira_transition', result.error);
+
+    const { issue, transition, skipped, assigned } = result.value;
+    const moved =
+      transition === null
+        ? `${issue.key}: ${skipped ?? 'nothing was changed'}.`
+        : `${issue.key} is now ${issue.status} (transition "${transition.name}").`;
+    return ok(
+      assigned === undefined ? moved : `${moved} ${assigned}`,
+      {
+        issue,
+        transition,
+        ...(skipped === undefined ? {} : { skipped }),
+        ...(assigned === undefined ? {} : { assigned }),
+      },
+    );
+  };
+
+  const jiraComment = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const key = stringArg(args, 'key');
+    const markdown = typeof args['markdown'] === 'string' ? args['markdown'] : undefined;
+    const mentions = Array.isArray(args['mentions']) ? (args['mentions'] as JiraMention[]) : undefined;
+    // A mention-only comment is allowed (HIVE-216); the receiver's guard checks each mention.
+    if (key === undefined || markdown === undefined || (markdown === '' && (mentions?.length ?? 0) === 0)) {
+      return failed('jira_comment needs key and markdown');
+    }
+
+    const result = await client.jiraComment({ key, markdown, ...(mentions === undefined ? {} : { mentions }) });
+    if (!result.ok) return jiraFailed('jira_comment', result.error);
+
+    const comment = result.value;
+    return ok(`Commented on ${key}: comment ${comment.id} by ${comment.author} at ${comment.created}.`, {
+      comment,
+    });
+  };
+
+  const jiraUsers = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const query = stringArg(args, 'query');
+    if (query === undefined) return failed('jira_users needs query');
+
+    const result = await client.jiraUsers({ query });
+    if (!result.ok) return jiraFailed('jira_users', result.error);
+
+    const users = result.value;
+    return ok(
+      users.length === 0
+        ? `Nobody on the Jira site matches "${query}".`
+        : users.map((user) => `${user.displayName} — ${user.accountId}`).join('\n'),
+      { users },
+    );
+  };
+
+  /** The directory as prose, one line a project: `projects` and `project_auto_merge` both answer it. */
+  const projectsText = (directory: ProjectsDirectory): string => {
+    const lines = directory.projects.map((project) => {
+      const where = project.path === null ? `not on this machine (${project.status})` : project.path;
+      const notes = [
+        `${project.status}, ${project.origin}`,
+        project.autoMerge ? 'auto-merge on' : 'auto-merge off',
+        ...(project.container === undefined
+          ? []
+          : [`in a container, checkout mounted at ${project.container.workspace}`]),
+      ];
+      return `- ${project.id} (key ${project.key}, "${project.name}") — ${where} [${notes.join('; ')}]`;
+    });
+    return `${directory.projects.length} project(s) configured:\n${lines.join('\n')}`;
+  };
+
+  /** The projects directory (HIVE-173), prose and structured, like `agents`. */
+  const projects = async (): Promise<CallToolResult> => {
+    const directory = await client.projects();
+
+    if (directory.projects.length === 0) {
+      return ok(
+        'No projects are configured in HiveTTY. Ask for an absolute checkout path instead of a project name.',
+        { projects: [] },
+      );
+    }
+
+    return ok(projectsText(directory), { projects: directory.projects });
+  };
+
+  /**
+   * The auto-merge switch (retro B): one project by id or key, or a list of
+   * them (HIVE-409), and one boolean. The receiver takes one project per call,
+   * so a list is applied in turn. The answer leads with one line per project,
+   * then why a saved yes never covers this tool, then the directory as
+   * `projects` reads it after the last write. A single project's refusal is the
+   * receiver's reason, named; in a list, it is that project's line.
+   */
+  const projectAutoMerge = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const one = args['project'];
+    const many = args['projects'];
+    const on = args['on'];
+    const list =
+      many === undefined
+        ? typeof one === 'string' && one !== ''
+          ? [one]
+          : undefined
+        : one === undefined &&
+            Array.isArray(many) &&
+            many.length > 0 &&
+            many.length <= AUTO_MERGE_MAX_PROJECTS &&
+            many.every((entry): entry is string => typeof entry === 'string' && entry !== '')
+          ? many
+          : undefined;
+    if (list === undefined || typeof on !== 'boolean') {
+      return failed(
+        `project_auto_merge needs on (true or false) and either project (one id or key) or projects (1 to ${String(AUTO_MERGE_MAX_PROJECTS)} of them)`,
+      );
+    }
+
+    let directory: ProjectsDirectory | undefined;
+    const leads: string[] = [];
+    for (const project of list) {
+      try {
+        directory = await client.projectAutoMerge({ project, on });
+      } catch (cause) {
+        if (!(cause instanceof ReceiverError)) throw cause;
+        if (list.length === 1) return failed(`project_auto_merge: ${cause.message}`);
+        leads.push(`project_auto_merge ${project}: ${cause.message}`);
+        continue;
+      }
+      const flipped =
+        directory.projects.find((entry) => entry.id === project) ??
+        directory.projects.find((entry) => entry.key === project);
+      const name = flipped?.id ?? project;
+      leads.push(
+        on
+          ? `Auto-merge is on for ${name}: the shipper merges its pull requests without a person's approval.`
+          : `Auto-merge is off for ${name}: its pull requests wait for a person's approval again.`,
+      );
+    }
+    if (directory === undefined) return failed(leads.join('\n'));
+
+    return ok(`${leads.join('\n')}\n${DONT_ASK_AGAIN}\n${projectsText(directory)}`, { projects: directory.projects });
+  };
+
+  /**
+   * One merge (HIVE-409). Parsed here with the receiver's own guard, so a malformed call fails with a
+   * sentence before anything leaves the host; `gh`'s refusal is a failed result carrying its reason.
+   */
+  const prMerge = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    let request: PrMergeRequest;
+    try {
+      request = parsePrMerge(args);
+    } catch (cause) {
+      return failed(`pr_merge: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+
+    const reply = await client.prMerge(request);
+    if (!reply.merged) return failed(`pr_merge: ${request.repo}#${String(request.number)} was not merged. ${reply.reason}`);
+    return ok(`Merged ${request.repo}#${String(request.number)}.\n${reply.output}`.trim(), { merged: true });
+  };
+
+  /** One line for a PR's ship block (HIVE-411), or `''`. */
+  const describeShip = (ship: PrShipStatus | null | undefined, now = Date.now()): string => {
+    if (ship === null || ship === undefined) return '';
+    const age = (ms: number): string => `${String(Math.max(0, Math.round(ms / 60_000)))}m`;
+    const stage =
+      ship.stage === null
+        ? 'not held by the shipper'
+        : `${ship.stage}${ship.since === null ? '' : ` for ${age(now - ship.since)}`}`;
+    const rounds = `${String(ship.rounds)} round${ship.rounds === 1 ? '' : 's'}`;
+    const waits = ship.waitingOn.map((w) => {
+      const extra = [w.refused === undefined ? '' : `refused: ${w.refused}`, ...w.cards.map((c) => `card ${c.id} ${age(c.ageMs)}`)]
+        .filter(Boolean)
+        .join(', ');
+      return `${w.to} (${w.ask}, ${w.state})${extra === '' ? '' : `: ${extra}`}`;
+    });
+    return `\nship: ${stage}, ${rounds}${waits.length === 0 ? '' : `; waiting on ${waits.join('; ')}`}`;
+  };
+
+  /** One PR record (HIVE-173). A missing record is an answer, not an error. */
+  const pr = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const repo = stringArg(args, 'repo');
+    const number = args['number'];
+    if (
+      repo === undefined ||
+      typeof number !== 'number' ||
+      !Number.isInteger(number) ||
+      number < 1
+    ) {
+      return failed('pr needs repo (owner/name) and number (a positive integer)');
+    }
+
+    const reply = await client.pr({ repo, number });
+    // HIVE-411: what it is waiting on, said whether or not the sweep lists the PR.
+    const shipLine = describeShip(reply.ship);
+    const ship = reply.ship ?? null;
+    if (reply.pr === null) {
+      const reason = reply.reason ?? 'not in the sweep';
+      return ok(
+        `No record of ${repo}#${number}: ${reason}. The sweep lists PRs you authored, open or merged in the last day, on configured projects only.${shipLine}`,
+        { pr: null, reason, ship },
+      );
+    }
+
+    const record = reply.pr;
+    return ok(
+      `${repo}#${number} "${record.title}" — ${record.state}; ${record.findings} unresolved review thread(s); checks ${record.checks}; branch ${record.branch}; updated ${record.updatedAt}; ${record.url}${shipLine}`,
+      { pr: record, ship },
+    );
+  };
+
+  const claim = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const task = stringArg(args, 'task');
+    if (task === undefined) return failed('ledger_claim needs a task');
+
+    /*
+      Read first, so the answer can name a holder. The store deliberately does
+      not guard `claim` — a second claim is a fact worth recording, and the
+      caller does hold the task afterwards — so this reports rather than
+      refuses, and says plainly what changed.
+
+      `limit: 0` asks for zero entries in the reply. The receiver strips
+      `limit` out of the query before it ever reaches `Ledger.read`
+      (`core/hooks/receiver.ts`'s `handleLedgerRead`), so `claims` —
+      always derived from the whole log inside `Ledger.read`, per
+      `core/ledger/index.ts` — is unaffected either way; what the
+      receiver does with the limit is trim the *visible* entries down to it
+      after filtering, right before shipping the reply back over the socket.
+      Asking for zero means the full claims map still comes back and no entry
+      does.
+
+      This read is purely informational — it names a *previous* holder in the
+      reply, it does not authorize the claim below. A transient failure here
+      must not sink a claim the `post` would otherwise have made, so it
+      degrades to an unnamed claim instead of failing the whole call; `post`
+      still surfaces its own failures normally.
+    */
+    let before: string | undefined;
+    try {
+      before = (await client.read({ limit: 0 })).claims[task];
+    } catch {
+      before = undefined;
+    }
+
+    await client.post({ kind: 'claim', body: `claimed ${task}`, meta: { task } });
+
+    /*
+      `claims[task]` also holds the caller's *own* earlier claim — a run that
+      crashed between claim and answer, a fixer re-asked after `blocked`. Run
+      contract 5 releases on a previous holder, so naming the caller there
+      made it abandon its own job (HIVE-413 self review). This handler is
+      never told the caller's party id (an agent's is stamped by the host),
+      so the store answers instead: once the claim is written, the holder it
+      records *is* the caller. Same degradation as above if that read fails.
+    */
+    let mine: string | undefined;
+    if (before !== undefined) {
+      try {
+        mine = (await client.read({ limit: 0 })).claims[task];
+      } catch {
+        mine = undefined;
+      }
+    }
+
+    if (before === undefined) return ok(`claimed ${task}`);
+    if (before === mine) return ok(`claimed ${task} (already yours)`);
+    return ok(
+      `claimed ${task}, which ${before} was holding. You hold it now — release it if that was not what you meant.`,
+    );
+  };
+
+  const release = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const task = stringArg(args, 'task');
+    if (task === undefined) return failed('ledger_release needs a task');
+
+    await client.post({ kind: 'release', body: `released ${task}`, meta: { task } });
+    return ok(`released ${task}`);
+  };
+
+  const ask = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const options = args['options'];
+    const quote = args['quote'];
+    /*
+      Validated as it is written, not merely as it is read, so a half-filled
+      message is dropped at the door rather than drawn with a blank where the
+      author goes.
+
+      `inbound` is taken out of the `meta` passthrough first, and that order
+      is the whole point. `metaArg` is spread ahead of the named arguments, so
+      a caller writing `meta: { inbound: <anything> }` slipped its own shape
+      past this line untouched — the conditional spread below only overwrites
+      when `args.inbound` was *also* present. The card revalidates and so the
+      damage was nil, but a guarantee that holds only because somebody
+      downstream repeats the work is not the guarantee this comment claimed.
+    */
+    const { inbound: _passthrough, ...rest } = metaArg(args) ?? {};
+    const inbound = asInbound(args['inbound']);
+    const meta = {
+      ...rest,
+      ...(Array.isArray(options) ? { options } : {}),
+      ...(typeof quote === 'string' ? { quote } : {}),
+      ...(inbound === undefined ? {} : { inbound }),
+    };
+
+    const body = stringArg(args, 'body');
+    if (body === undefined) return failed('ask needs a body');
+    const to = stringArg(args, 'to');
+    if (to === undefined) return failed('ask needs a party to ask');
+
+    const { id, ref, duplicate } = await client.post({
+      to,
+      kind: 'ask',
+      body,
+      ...(Object.keys(meta).length === 0 ? {} : { meta }),
+    });
+    const data = { id, ...(ref === undefined ? {} : { ref }) };
+
+    // Already open under the same key (HIVE-410): nothing was written.
+    if (duplicate !== undefined) {
+      return ok(
+        duplicate.mine
+          ? `You already asked ${to} this: ${ref ?? id} is still open. Nothing new was written. End your turn and wait for its answer.`
+          : `${to} already has this ask open as ${ref ?? id}, from ${duplicate.from}. Nothing new was written, and its answer goes to ${duplicate.from}, not to you. Do not wait for it.`,
+        { ...data, duplicate: true },
+      );
+    }
+
+    return ok(
+      `asked ${to}: ${ref ?? id}. Now end your turn and wait — you will be woken with the answer.`,
+      // The same id/ref, as data — HIVE-119 and HIVE-120 both need to answer
+      // this thread later, and today that means extracting the ref out of a
+      // sentence rather than reading a field.
+      data,
+    );
+  };
+
+  /**
+   * The permission fence (HIVE-119).
+   *
+   * Three rules this cannot break, all of them measured against the real CLI:
+   * the decision travels as JSON **text only** — a `structuredContent` twin
+   * makes the CLI reject the result; the answer is always a decision, never an
+   * `isError`, because the CLI cannot act on an error; and anything not
+   * matched is asked, so an empty grant list fences everything rather than
+   * nothing.
+   */
+  const decision = (result: PermissionDecision): CallToolResult => ({
+    content: [{ type: 'text', text: JSON.stringify(result) }],
+    // Never `true`: a `deny` here is a business decision the model reads out
+    // of the JSON text, not a protocol failure — see `CallToolResult`'s
+    // `isError` doc. `structuredContent` is never set either, deliberately
+    // absent rather than merely unset: the real CLI was observed rejecting a
+    // permission-prompt-tool result that carried one alongside the text.
+    isError: false,
+  });
+
+  const approve = async (args: Record<string, unknown>): Promise<CallToolResult> => {
+    const tool = stringArg(args, 'tool_name');
+    if (tool === undefined) {
+      return decision({ behavior: 'deny', message: 'approve needs a tool_name.' });
+    }
+
+    const raw = args['input'];
+    const input =
+      typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>)
+        : {};
+
+    const verdict = decide(tool, input, grants);
+
+    if (verdict.behavior === 'allow') return decision({ behavior: 'allow', updatedInput: input });
+    if (verdict.behavior === 'deny') return decision(verdict);
+
+    try {
+      await client.post({
+        to: 'overmind',
+        kind: 'ask',
+        /*
+          Empty on purpose. `Ledger.append` composes the body from `meta.tool`
+          and `meta.input` (HIVE-125), so composing one here would be a second
+          copy of the same computation — and the copy that does *not* govern,
+          since an agent posting through `ledger_ask` never reaches this code.
+          The ladder, the default and the options arrive the same way.
+        */
+        body: '',
+        meta: { kind: 'permission', tool, input },
+      });
+    } catch (cause) {
+      /*
+        The ask could not be written, so nobody will ever answer it. Deny
+        anyway and say why: allowing here would turn an unreachable app into
+        an open fence, which is the one failure this design does not accept.
+      */
+      return decision({
+        behavior: 'deny',
+        message: `Could not ask for permission: ${
+          cause instanceof ReceiverError ? cause.message : String(cause)
+        }. Nothing was written. End your turn.`,
+      });
+    }
+
+    return decision({ behavior: 'deny', message: PERMISSION_DENY_MESSAGE });
+  };
+
+  return {
+    // `approve` stays last: the tools a model is meant to call come first, and
+    // that one is only ever reached by the CLI on its behalf.
+    listTools: (): readonly McpToolDefinition[] =>
+      lane === 'agent' ? HIVE_TOOLS.filter((tool) => tool.name !== 'session_done') : [...HIVE_TOOLS],
+
+    async callTool(name, args): Promise<CallToolResult> {
+      // `approve` must never surface as `isError` or throw — the CLI can only
+      // act on a decision, so its own try/catch stays out of the shared one
+      // below, which produces `isError` results that are not decisions.
+      if (name === 'approve') {
+        try {
+          return await approve(args);
+        } catch (cause) {
+          return decision({
+            behavior: 'deny',
+            message: `approve failed: ${String(cause)}. Nothing was written. End your turn.`,
+          });
+        }
+      }
+
+      try {
+        switch (name) {
+          case 'agents':
+            return await agents();
+          case 'projects':
+            return await projects();
+          case 'pr':
+            return await pr(args);
+          case 'pr_merge':
+            return await prMerge(args);
+          case 'jira_get':
+            return await jiraGet(args);
+          case 'jira_transition':
+            return await jiraTransition(args);
+          case 'jira_comment':
+            return await jiraComment(args);
+          case 'jira_users':
+            return await jiraUsers(args);
+          case 'project_auto_merge':
+            return await projectAutoMerge(args);
+          case 'ledger_read':
+            return await read(args);
+          case 'ledger_post':
+            return await write('post', args);
+          case 'ledger_ask':
+            return await ask(args);
+          case 'ledger_answer':
+            return stringArg(args, 'thread') === undefined
+              ? failed('ledger_answer needs the thread it answers')
+              : await write('answer', args);
+          case 'ledger_accept':
+            return stringArg(args, 'thread') === undefined
+              ? failed('ledger_accept needs the thread it accepts')
+              : await write('post', args, {
+                  body: stringArg(args, 'body') ?? 'accepted',
+                  meta: { accepted: true },
+                });
+          case 'ledger_claim':
+            return await claim(args);
+          case 'ledger_release':
+            return await release(args);
+          case 'ledger_done':
+            return await write('done', args);
+          case 'ledger_failed':
+            return await write('failed', args);
+          case 'ledger_handoff':
+            return await write('handoff', args);
+          case 'session_done':
+            // Not listed for an agent, but a name can still be called.
+            if (lane === 'agent') return failed('session_done is for terminal sessions; an agent run ends by exiting.');
+            await client.done();
+            return ok('HiveTTY will close this session when this turn ends. Stop now: do not summarise or run anything else.');
+          default:
+            return failed(`no such tool: ${name}`);
+        }
+      } catch (cause) {
+        /*
+          Every receiver refusal lands here and becomes readable text. Anything
+          else that threw is a bug in this file, and the model still gets a
+          sentence rather than a dead turn.
+        */
+        return failed(
+          cause instanceof ReceiverError ? cause.message : `the tool failed: ${String(cause)}`,
+        );
+      }
+    },
+  };
+}
+
+/** The longest `jira_get` text a model is handed; the record beside it is whole. */
+export const JIRA_TEXT_MAX = 24_000;
+
+/**
+ * ADF blocks as the plain text a model reads (HIVE-174). Marks are dropped,
+ * structure is kept in the markdown-ish shape a model already knows.
+ */
+export function adfBlocksToText(blocks: readonly AdfBlock[]): string {
+  return blocks
+    .map((block) => {
+      const text = block.runs.map((run) => run.text).join('');
+      const indent = '  '.repeat(block.depth ?? 0);
+      switch (block.kind) {
+        case 'heading':
+          return `${'#'.repeat(Math.min(6, Math.max(1, block.level ?? 1)))} ${text}`;
+        case 'code':
+          return `\`\`\`${block.language ?? ''}\n${text}\n\`\`\``;
+        case 'quote':
+          return `> ${text}`;
+        case 'bullet':
+          return `${indent}- ${text}`;
+        case 'ordered':
+          return `${indent}1. ${text}`;
+        case 'rule':
+          return '---';
+        default:
+          return text;
+      }
+    })
+    .join('\n');
+}
+
+/** One ticket as prose (HIVE-174), bounded by {@link JIRA_TEXT_MAX}. */
+function jiraIssueText(value: JiraToolIssue): string {
+  const { issue, detail, comments, links, partial } = value;
+  const lines = [
+    `${issue.key} "${issue.summary}"`,
+    `status: ${issue.status} (${issue.statusCategory}); type: ${issue.issueType}; priority: ${issue.priority ?? 'none'}; assignee: ${issue.assignee ?? 'unassigned'}; updated: ${issue.updated}`,
+    issue.url,
+  ];
+  if (detail?.parent) lines.push(`parent: ${detail.parent.key} "${detail.parent.summary}"`);
+  lines.push('', '## Description', detail === null ? '(not read)' : adfBlocksToText(detail.description) || '(none)');
+  lines.push('', `## Comments (${comments.length})`);
+  for (const comment of comments) {
+    lines.push(`- ${comment.author}, ${comment.created}:`, adfBlocksToText(comment.body).replace(/^/gm, '  '));
+  }
+  lines.push('', `## Links (${links.length})`);
+  for (const link of links) {
+    const notes = [link.relationship, link.status].filter((note) => note !== undefined).join('; ');
+    lines.push(`- [${link.kind}] ${link.title}${notes === '' ? '' : ` (${notes})`} ${link.url}`);
+  }
+  if (partial.length > 0) lines.push('', `Could not be read: ${partial.join('; ')}.`);
+
+  const text = lines.join('\n');
+  return text.length <= JIRA_TEXT_MAX
+    ? text
+    : `${text.slice(0, JIRA_TEXT_MAX)}\n… (${text.length - JIRA_TEXT_MAX} more characters; the record beside this text is whole)`;
+}

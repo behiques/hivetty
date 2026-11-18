@@ -3,8 +3,8 @@ import { join } from 'node:path';
 
 import { test as base, expect } from '@playwright/test';
 
-import { SESSION_HISTORY_FILE } from '../../../electron/shared/session-history-contract';
-import { claudeProjectDir } from '../../../electron/main/harness/claude-code/title-origin';
+import { SESSION_HISTORY_FILE } from '../../../shared/session-history-contract';
+import { claudeProjectDir } from '../../../core/harness/claude-code/title-origin';
 import { goToOvermind } from '../fixtures/places';
 
 import {

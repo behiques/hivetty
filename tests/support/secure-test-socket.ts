@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 
 import { WebSocket } from 'ws';
 
-import { initiate, pskOfToken, type SecureSocket } from '../../electron/remote-channel/secure-socket';
+import { initiate, pskOfToken, type SecureSocket } from '../../remote-channel/secure-socket';
 
 /**
  * A test client that speaks the encrypted channel (HIVE-428) behind the slice of `ws`'s

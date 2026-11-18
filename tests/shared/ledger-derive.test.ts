@@ -1,0 +1,1614 @@
+// @vitest-environment node
+import { describe, expect, it } from 'vitest';
+
+import {
+  LEDGER_ASK_TTL_MS,
+  OVERMIND,
+  type LedgerEntry,
+} from '../../shared/ledger-contract';
+import {
+  agentSiteFor,
+  answeredDuring,
+  askerOf,
+  asksMeAbout,
+  INBOUND_NAME_MAX,
+  INBOUND_TEXT_MAX,
+  asInbound,
+  askStates,
+  buildProgressFor,
+  carriedOver,
+  claims,
+  closedAskThreads,
+  delegatesOf,
+  expiredAsks,
+  holderPost,
+  isShipping,
+  keepNewest,
+  laneOfRun,
+  leftOpen,
+  openAsksOnLane,
+  owedBy,
+  unfinishedRuns,
+  whyNotOpen,
+  matches,
+  mergeAsk,
+  mergeTarget,
+  mergeWaiting,
+  nextRef,
+  openAsks,
+  prEvents,
+  repoAskerOf,
+  prOpener,
+  resolveRef,
+  shipAsked,
+  staleClaims,
+  reviewUrls,
+  SHIP_STOPS,
+  shipStage,
+  shipTrack,
+  thread,
+  ttlOf,
+  waitingAsks,
+  STAGE_TEXT_MAX,
+} from '../../shared/ledger-derive';
+
+const NOW = 1_800_000_000_000;
+
+const entry = (over: Partial<LedgerEntry> & Pick<LedgerEntry, 'id'>): LedgerEntry => ({
+  ts: NOW,
+  from: 'sess-a',
+  kind: 'post',
+  body: '',
+  ...over,
+});
+
+describe('isShipping and buildProgressFor (HIVE-171)', () => {
+  const posts = [
+    entry({ id: 'p1', from: 'shipper', body: 'stage', meta: { pr: 214, repo: 'yunidbauza/the-hive', stage: 'intake' } }),
+    entry({ id: 'p2', from: 'shipper', body: 'stage', meta: { pr: 214, repo: 'Yunidbauza/The-Hive', stage: 'ci' } }),
+    entry({ id: 'p3', from: 'shipper', body: 'stage', meta: { pr: 9, repo: 'behiques/incorpx', stage: 'merge' } }),
+    entry({ id: 'p4', from: 'drone', body: 'stage', meta: { pr: 214, repo: 'yunidbauza/the-hive', stage: 'forged' } }),
+    entry({ id: 'b1', from: 'builder', body: 'task', meta: { ticket: 'HIVE-7', stage: 'build', task: 2 } }),
+    entry({ id: 'b2', from: 'builder', body: 'task', meta: { ticket: 'hive-7', stage: 'build', task: 3 } }),
+    entry({ id: 'b3', from: 'builder', body: 'task', meta: { ticket: 'HIVE-8', stage: 'verify' } }),
+  ];
+
+  it('reads a PR as shipping by number and whole slug, case-insensitively', () => {
+    expect(isShipping(posts, 'yunidbauza/the-hive', 214)).toBe(true);
+    expect(isShipping(posts, 'behiques/incorpx', 9)).toBe(true);
+  });
+
+  it('matches the whole slug, never a tail or a substring of it', () => {
+    expect(isShipping(posts, 'the-hive', 214)).toBe(false);
+    expect(isShipping(posts, 'someone-else/the-hive', 214)).toBe(false);
+    expect(isShipping(posts, 'hive', 214)).toBe(false);
+    expect(isShipping(posts, '', 214)).toBe(false);
+  });
+
+  it('answers false for a PR nobody shipped, and reads only the shipper\'s posts', () => {
+    expect(isShipping(posts, 'yunidbauza/the-hive', 1)).toBe(false);
+    expect(isShipping(posts.filter((e) => e.from !== 'shipper'), 'yunidbauza/the-hive', 214)).toBe(false);
+  });
+
+  /*
+    The shipper claims at intake and may post no stage until `ci`, so the
+    claim alone has to carry the pill through the self review.
+  */
+  it('reads the shipper\'s own claim as shipping before any stage post', () => {
+    const claimed = [
+      entry({ id: 'c1', from: 'shipper', kind: 'claim', body: 'claimed', meta: { task: 'Acme/Nova#5' } }),
+      entry({ id: 'c2', from: 'fixer', kind: 'claim', body: 'claimed', meta: { task: 'acme/nova#6' } }),
+    ];
+    expect(isShipping(claimed, 'acme/nova', 5)).toBe(true);
+    expect(isShipping(claimed, 'acme/nova', 6)).toBe(false);
+    expect(isShipping(claimed, 'acme/nova', 55)).toBe(false);
+    const released = [
+      ...claimed,
+      entry({ id: 'r1', from: 'shipper', kind: 'release', body: 'released', meta: { task: 'acme/nova#5' } }),
+    ];
+    expect(isShipping(released, 'acme/nova', 5)).toBe(false);
+  });
+
+  it('stops once the shipper released its claim on the PR', () => {
+    const released = [
+      ...posts,
+      entry({ id: 'r1', from: 'shipper', kind: 'release', body: 'released', meta: { task: 'Yunidbauza/the-hive#214' } }),
+    ];
+    expect(isShipping(released, 'yunidbauza/the-hive', 214)).toBe(false);
+    expect(isShipping(released, 'behiques/incorpx', 9)).toBe(true);
+  });
+
+  /*
+    The `closed` step releases the claim first and posts "PR #N merged" with
+    `stage: "closed"` after it, so the post is the newer entry. Read as a
+    stage, it left `ship: closed` on every merged card.
+  */
+  it('stops at the closing post the shipper writes after its release', () => {
+    const closed = [
+      ...posts,
+      entry({ id: 'r1', from: 'shipper', kind: 'release', body: 'released', meta: { task: 'yunidbauza/the-hive#214' } }),
+      entry({ id: 'p6', from: 'shipper', to: 'sess-a', body: 'PR #214 merged', meta: { pr: 214, repo: 'yunidbauza/the-hive', stage: 'closed' } }),
+    ];
+    expect(isShipping(closed, 'yunidbauza/the-hive', 214)).toBe(false);
+    expect(isShipping(closed, 'behiques/incorpx', 9)).toBe(true);
+  });
+
+  it('accepts a number written as digits, and nothing that is not whole', () => {
+    const loose = [
+      entry({ id: 'l1', from: 'shipper', body: 'stage', meta: { pr: '77', repo: 'acme/nova', stage: 'ci' } }),
+      entry({ id: 'l2', from: 'shipper', body: 'stage', meta: { pr: 7.5, repo: 'acme/nova', stage: 'ci' } }),
+      entry({ id: 'l3', from: 'builder', body: 'task', meta: { ticket: 'ACME-1', stage: 'x'.repeat(60), task: '4' } }),
+    ];
+    expect(isShipping(loose, 'acme/nova', 77)).toBe(true);
+    expect(isShipping(loose, 'acme/nova', 7)).toBe(false);
+    expect(buildProgressFor(loose, 'ACME-1')).toEqual({ from: 'builder', stage: 'x'.repeat(STAGE_TEXT_MAX), task: 4 });
+  });
+
+  it('reads the newest agent progress for a ticket, key case-insensitive, task optional; the builder still answers', () => {
+    expect(buildProgressFor(posts, 'HIVE-7')).toEqual({ from: 'builder', stage: 'build', task: 3 });
+    expect(buildProgressFor(posts, 'HIVE-8')).toEqual({ from: 'builder', stage: 'verify' });
+    expect(buildProgressFor(posts, 'HIVE-9')).toBeUndefined();
+    const claimed = [
+      entry({ id: 'c1', from: 'builder', kind: 'claim', body: 'claimed HIVE-9', meta: { ticket: 'HIVE-9', stage: 'build', task: 'HIVE-9' } }),
+    ];
+    expect(buildProgressFor(claimed, 'HIVE-9')).toBeUndefined();
+  });
+
+  it('reads any agent\'s post, newest wins across agents (HIVE-203)', () => {
+    const mixed = [
+      ...posts,
+      entry({ id: 's1', from: 'shipper', body: 'stage', meta: { ticket: 'HIVE-7', stage: 'ci' } }),
+    ];
+    expect(buildProgressFor(mixed, 'HIVE-7')).toEqual({ from: 'shipper', stage: 'ci' });
+    expect(buildProgressFor(posts, 'HIVE-7')).toEqual({ from: 'builder', stage: 'build', task: 3 });
+  });
+});
+
+describe('shipStage (HIVE-215)', () => {
+  const slug = 'yunidbauza/the-hive';
+  const claim = entry({ id: 'c1', from: 'shipper', kind: 'claim', body: 'claimed', meta: { task: 'yunidbauza/the-hive#214' } });
+  const stage = (id: string, s: string, over: Partial<LedgerEntry> = {}) =>
+    entry({ id, from: 'shipper', body: 'stage', meta: { pr: 214, repo: slug, stage: s }, ...over });
+
+  it('reads intake from the claim before any post', () => {
+    expect(shipStage([claim], slug, 214)).toBe('intake');
+  });
+
+  it('follows the stages forward, newest wins', () => {
+    expect(shipStage([claim, stage('p1', 'self-review'), stage('p2', 'ci'), stage('p3', 'findings')], slug, 214)).toBe('findings');
+  });
+
+  it('follows a step back from approval to findings', () => {
+    expect(shipStage([claim, stage('p1', 'approval'), stage('p2', 'findings')], slug, 214)).toBe('findings');
+  });
+
+  it('is null after the release of the claim', () => {
+    const release = entry({ id: 'r1', from: 'shipper', kind: 'release', body: 'released', meta: { task: 'Yunidbauza/The-Hive#214' } });
+    expect(shipStage([claim, stage('p1', 'merge'), release], slug, 214)).toBeNull();
+  });
+
+  it('is null at closed', () => {
+    expect(shipStage([claim, stage('p1', 'merge'), stage('p2', 'closed', { to: 'sess-a' })], slug, 214)).toBeNull();
+  });
+
+  it('ignores another owner\'s repo with the same name and number', () => {
+    const other = entry({ id: 'o1', from: 'shipper', body: 'stage', meta: { pr: 214, repo: 'acme/the-hive', stage: 'merge' } });
+    expect(shipStage([claim, stage('p1', 'ci'), other], slug, 214)).toBe('ci');
+    expect(shipStage([other], slug, 214)).toBeNull();
+  });
+
+  it('is null for a PR nobody holds, and for an empty slug', () => {
+    expect(shipStage([], slug, 214)).toBeNull();
+    expect(shipStage([claim], '', 214)).toBeNull();
+  });
+});
+
+describe('the two ask readings (HIVE-215)', () => {
+  const slug = 'owner/name';
+  const sessions = new Set(['sess-a']);
+  const toMe = (to: string) => to === OVERMIND || sessions.has(to);
+  const ask = (id: string, over: Partial<LedgerEntry>) =>
+    entry({ id, ts: NOW - 1_000, from: 'shipper', kind: 'ask', body: 'PR #214 waits on a review', ...over });
+  const open = (entries: LedgerEntry[]) => openAsks(entries, NOW);
+
+  describe('asksMeAbout', () => {
+    it('reads an ask to the overmind and to a session naming the PR', () => {
+      expect(asksMeAbout(open([ask('a1', { to: OVERMIND, meta: { pr: 214, repo: 'Owner/Name' } })]), slug, 214, toMe)).toBe(true);
+      expect(asksMeAbout(open([ask('a2', { to: 'sess-a', meta: { pr: '214', repo: slug } })]), slug, 214, toMe)).toBe(true);
+    });
+
+    it('ignores an ask naming another repo, another number, or sent to an agent', () => {
+      expect(asksMeAbout(open([ask('a1', { to: OVERMIND, meta: { pr: 214, repo: 'acme/name' } })]), slug, 214, toMe)).toBe(false);
+      expect(asksMeAbout(open([ask('a2', { to: OVERMIND, meta: { pr: 215, repo: slug } })]), slug, 214, toMe)).toBe(false);
+      expect(asksMeAbout(open([ask('a3', { to: 'fixer', meta: { pr: 214, repo: slug } })]), slug, 214, toMe)).toBe(false);
+    });
+
+    it('ignores an answered ask and one past its ttl', () => {
+      const answered = [
+        ask('a1', { to: OVERMIND, meta: { pr: 214, repo: slug } }),
+        entry({ id: 'x1', kind: 'answer', thread: 'a1', body: 'merge now' }),
+      ];
+      expect(asksMeAbout(open(answered), slug, 214, toMe)).toBe(false);
+      const stale = ask('a2', { ts: NOW - LEDGER_ASK_TTL_MS - 1, to: OVERMIND, meta: { pr: 214, repo: slug } });
+      expect(asksMeAbout(open([stale]), slug, 214, toMe)).toBe(false);
+    });
+  });
+
+  describe('mergeWaiting', () => {
+    const merge = (id: string, command: string, over: Partial<LedgerEntry> = {}) =>
+      ask(id, { to: OVERMIND, meta: { kind: 'permission', tool: 'Bash', input: { command } }, ...over });
+
+    it('reads the shipper\'s gh pr merge permission ask for this PR', () => {
+      const one = merge('m1', 'gh pr merge 214 --squash --match-head-commit 3f2a9c1 --repo owner/name');
+      expect(mergeWaiting(open([one]), slug, 214)).toBe(true);
+    });
+
+    it('ignores another number, a command without --repo, and another asker', () => {
+      expect(mergeWaiting(open([merge('m1', 'gh pr merge 215 --squash --repo owner/name')]), slug, 214)).toBe(false);
+      expect(mergeWaiting(open([merge('m2', 'gh pr merge 214 --squash')]), slug, 214)).toBe(false);
+      expect(mergeWaiting(open([merge('m3', 'gh pr merge 214 --repo owner/name', { from: 'builder' })]), slug, 214)).toBe(false);
+    });
+
+    it('reads --repo=owner/name and ignores another repo', () => {
+      expect(mergeWaiting(open([merge('m1', 'gh pr merge 214 --squash --repo=Owner/Name')]), slug, 214)).toBe(true);
+      expect(mergeWaiting(open([merge('m2', 'gh pr merge 214 --squash --repo acme/name')]), slug, 214)).toBe(false);
+    });
+  });
+
+  describe('mergeAsk (HIVE-205)', () => {
+    const merge = (id: string, command: string) =>
+      ask(id, { to: OVERMIND, meta: { kind: 'permission', tool: 'Bash', input: { command } } });
+
+    it('returns the waiting merge card itself, so Merge can answer it', () => {
+      const card = merge('m1', 'gh pr merge 214 --squash --match-head-commit abc --repo owner/name');
+      expect(mergeAsk(open([card]), 'owner/name', 214)?.id).toBe('m1');
+      expect(mergeAsk(open([card]), 'owner/name', 215)).toBeUndefined();
+      expect(mergeWaiting(open([card]), 'owner/name', 214)).toBe(true);
+    });
+  });
+});
+
+describe('matches: ticket (HIVE-203)', () => {
+  it('keeps entries whose meta.ticket names the key, case-insensitively', () => {
+    const a = entry({ id: 'a', meta: { ticket: 'hive-7' } });
+    const b = entry({ id: 'b', meta: { ticket: 'HIVE-8' } });
+    const c = entry({ id: 'c' });
+    const d = entry({ id: 'd', meta: { ticket: 7 } });
+    expect([a, b, c, d].filter((e) => matches(e, { ticket: 'HIVE-7' })).map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('ignores ticket when the query has none', () => {
+    expect(matches(entry({ id: 'x' }), {})).toBe(true);
+  });
+});
+
+describe('agentSiteFor (HIVE-172)', () => {
+  const HIVE_6 = '/home/x/.hive/work/builder/hive-6';
+  const HIVE_7 = '/home/x/.hive/work/builder/hive-7';
+  const posts = [
+    entry({ id: 'w0', from: 'builder', body: 'task', meta: { worktree: HIVE_6, checkout: '/repos/elsewhere' } }),
+    entry({ id: 'w1', from: 'builder', body: 'task', meta: { worktree: HIVE_7, checkout: '/repos/the-hive' } }),
+    entry({ id: 'w2', from: 'builder', body: 'task', meta: { worktree: 'relative/path', checkout: '/repos/the-hive' } }),
+    entry({ id: 'w3', from: 'fixer', body: 'round', meta: { worktree: '/home/x/.hive/work/fixer/nova-pr9' } }),
+    entry({ id: 'w4', from: 'shipper', body: 'stage', meta: { worktree: '/somewhere/else', stage: 'ci' } }),
+    entry({ id: 'w5', from: 'builder', kind: 'claim', body: 'claimed', meta: { task: 'HIVE-8', worktree: '/home/x/.hive/work/builder/claimed' } }),
+  ];
+
+  it('reads the newest absolute worktree the agent posted, with its checkout when named', () => {
+    expect(agentSiteFor(posts, 'builder')).toEqual({ worktree: HIVE_7, checkout: '/repos/the-hive' });
+    expect(agentSiteFor(posts, 'fixer')).toEqual({ worktree: '/home/x/.hive/work/fixer/nova-pr9' });
+  });
+
+  it('reads only posts: a claim naming a worktree is not a report of one', () => {
+    expect(agentSiteFor(posts, 'builder')?.worktree).not.toBe('/home/x/.hive/work/builder/claimed');
+  });
+
+  it('answers nothing for an agent that posted no worktree, and never reads another party', () => {
+    expect(agentSiteFor(posts, 'acr')).toBeUndefined();
+    expect(agentSiteFor(posts.filter((e) => e.from !== 'builder'), 'builder')).toBeUndefined();
+  });
+
+  it('stops at the agent\'s release: the job is over and the worktree is the shipper\'s to remove', () => {
+    const released = [...posts, entry({ id: 'r1', from: 'builder', kind: 'release', body: 'released', meta: { task: 'HIVE-7' } })];
+    expect(agentSiteFor(released, 'builder')).toBeUndefined();
+    expect(agentSiteFor(released, 'fixer')).toEqual({ worktree: '/home/x/.hive/work/fixer/nova-pr9' });
+    const next = [...released, entry({ id: 'w6', from: 'builder', body: 'task', meta: { worktree: HIVE_6, checkout: '/repos/next' } })];
+    expect(agentSiteFor(next, 'builder')).toEqual({ worktree: HIVE_6, checkout: '/repos/next' });
+  });
+
+  it('recovers the checkout from an earlier post of the same worktree, never from another one', () => {
+    const dropped = [...posts, entry({ id: 'w7', from: 'builder', body: 'task 2', meta: { worktree: HIVE_7 } })];
+    expect(agentSiteFor(dropped, 'builder')).toEqual({ worktree: HIVE_7, checkout: '/repos/the-hive' });
+    const moved = [...posts, entry({ id: 'w8', from: 'builder', body: 'task 1', meta: { worktree: '/home/x/.hive/work/builder/hive-8' } })];
+    expect(agentSiteFor(moved, 'builder')).toEqual({ worktree: '/home/x/.hive/work/builder/hive-8' });
+  });
+});
+
+describe('openAsks', () => {
+  it('reports an unanswered ask as open, with its age', () => {
+    const entries = [entry({ id: '20260828-100000-0001', kind: 'ask', ts: NOW - 60_000 })];
+
+    expect(openAsks(entries, NOW)).toEqual([
+      { ...entries[0], open: true, ageMs: 60_000, state: 'open' },
+    ]);
+  });
+
+  it('closes an ask once an answer names its thread', () => {
+    const entries = [
+      entry({ id: '20260828-100000-0001', kind: 'ask' }),
+      entry({ id: '20260828-100001-0001', kind: 'answer', thread: '20260828-100000-0001' }),
+    ];
+
+    expect(openAsks(entries, NOW)).toEqual([]);
+  });
+
+  /**
+   * HIVE-118 self-review, findings 2 and 6. `done` and `failed` both take a
+   * `thread` — `ledger-tools.ts` calls them "the ask this completes" and "the
+   * ask this abandons" — and neither closed the ask here.
+   *
+   * The `done` half was visible: `notify.ts` dismissed the card while this
+   * function kept the ask open, so the left rail's Agents badge — counted off
+   * the ledger, immune to notification state — stayed lit with nothing behind
+   * it. The `failed` half was the mirror image: the card stayed, offering
+   * buttons `Ledger.append` would refuse.
+   */
+  it.each(['done', 'failed'] as const)(
+    'closes an ask when a %s names its thread, exactly as an answer does',
+    (kind) => {
+      const entries = [
+        entry({ id: '20260828-100000-0001', kind: 'ask' }),
+        entry({ id: '20260828-100001-0001', kind, thread: '20260828-100000-0001' }),
+      ];
+
+      expect(openAsks(entries, NOW)).toEqual([]);
+    },
+  );
+
+  /**
+   * A `done` or `failed` with no thread is an agent reporting on its wake, not
+   * on a question. It must leave every open ask exactly where it was.
+   */
+  it.each(['done', 'failed'] as const)(
+    'leaves an unrelated ask open when a threadless %s lands',
+    (kind) => {
+      const ask = entry({ id: '20260828-100000-0001', kind: 'ask', ts: NOW - 60_000 });
+      const entries = [ask, entry({ id: '20260828-100001-0001', kind })];
+
+      expect(openAsks(entries, NOW)).toEqual([{ ...ask, open: true, ageMs: 60_000, state: 'open' }]);
+    },
+  );
+
+  it('expires an ask older than the TTL even with no answer', () => {
+    const entries = [
+      entry({ id: '20260827-100000-0001', kind: 'ask', ts: NOW - LEDGER_ASK_TTL_MS - 1 }),
+    ];
+
+    expect(openAsks(entries, NOW)).toEqual([]);
+  });
+
+  it('ignores non-ask kinds', () => {
+    const entries = [entry({ id: '20260828-100000-0001', kind: 'done' })];
+
+    expect(openAsks(entries, NOW)).toEqual([]);
+  });
+});
+
+describe('claims', () => {
+  it('gives a task to the latest claim without a later release', () => {
+    const entries = [
+      entry({ id: '1', kind: 'claim', from: 'sess-a', meta: { task: 'HIVE-9' } }),
+      entry({ id: '2', kind: 'claim', from: 'sess-b', meta: { task: 'HIVE-8' } }),
+    ];
+
+    expect(claims(entries)).toEqual({ 'HIVE-9': 'sess-a', 'HIVE-8': 'sess-b' });
+  });
+
+  it('drops a claim once released', () => {
+    const entries = [
+      entry({ id: '1', kind: 'claim', from: 'sess-a', meta: { task: 'HIVE-9' } }),
+      entry({ id: '2', kind: 'release', from: 'sess-a', meta: { task: 'HIVE-9' } }),
+    ];
+
+    expect(claims(entries)).toEqual({});
+  });
+
+  it('lets a later claim take a released task', () => {
+    const entries = [
+      entry({ id: '1', kind: 'claim', from: 'sess-a', meta: { task: 'HIVE-9' } }),
+      entry({ id: '2', kind: 'release', from: 'sess-a', meta: { task: 'HIVE-9' } }),
+      entry({ id: '3', kind: 'claim', from: 'sess-b', meta: { task: 'HIVE-9' } }),
+    ];
+
+    expect(claims(entries)).toEqual({ 'HIVE-9': 'sess-b' });
+  });
+
+  it('ignores a claim with no task in meta', () => {
+    expect(claims([entry({ id: '1', kind: 'claim' })])).toEqual({});
+  });
+});
+
+describe('thread', () => {
+  it('returns the ask and everything naming it, in order', () => {
+    const entries = [
+      entry({ id: 'a', kind: 'ask' }),
+      entry({ id: 'b', kind: 'post' }),
+      entry({ id: 'c', kind: 'answer', thread: 'a' }),
+    ];
+
+    expect(thread(entries, 'a').map((found) => found.id)).toEqual(['a', 'c']);
+  });
+});
+
+describe('matches', () => {
+  const subject = entry({
+    id: '20260828-100000-0001',
+    from: 'sess-a',
+    to: 'sess-b',
+    kind: 'ask',
+    thread: 't1',
+  });
+
+  it('matches an empty query', () => {
+    expect(matches(subject, {})).toBe(true);
+  });
+
+  it('filters on from, kind and thread', () => {
+    expect(matches(subject, { from: 'sess-a' })).toBe(true);
+    expect(matches(subject, { from: 'sess-z' })).toBe(false);
+    expect(matches(subject, { kind: 'ask' })).toBe(true);
+    expect(matches(subject, { kind: 'post' })).toBe(false);
+    expect(matches(subject, { thread: 't1' })).toBe(true);
+    expect(matches(subject, { thread: 't2' })).toBe(false);
+  });
+
+  /**
+   * "The conversation" has to mean the same thing here as it does in
+   * `thread()` above, which includes the ask. Matching only `entry.thread`
+   * gave one contract two definitions: a read for `thread: <askId>` came back
+   * with every reply and not the question they were replying to.
+   */
+  it('counts the ask itself as part of its own thread', () => {
+    expect(matches(subject, { thread: subject.id })).toBe(true);
+
+    const reply = entry({ id: 'reply', thread: subject.id });
+    expect(matches(reply, { thread: subject.id })).toBe(true);
+
+    const unrelated = entry({ id: 'other', thread: undefined });
+    expect(matches(unrelated, { thread: subject.id })).toBe(false);
+  });
+
+  it('treats `to` as "addressed to me, or broadcast"', () => {
+    expect(matches(subject, { to: 'sess-b' })).toBe(true);
+    expect(matches(subject, { to: 'sess-c' })).toBe(false);
+
+    const broadcast = entry({ id: '2', to: undefined });
+    expect(matches(broadcast, { to: 'sess-c' })).toBe(true);
+  });
+
+  it('treats `since` as an exclusive lower bound on the id', () => {
+    expect(matches(subject, { since: '20260828-095959-0001' })).toBe(true);
+    expect(matches(subject, { since: '20260828-100000-0001' })).toBe(false);
+    expect(matches(subject, { since: '20260828-100001-0001' })).toBe(false);
+  });
+});
+
+describe('resolveRef', () => {
+  const entries = [entry({ id: '20260828-100000-0001', kind: 'ask', ref: 'a7' })];
+
+  it('resolves a short ref to the canonical id', () => {
+    expect(resolveRef(entries, 'a7')).toEqual({ kind: 'found', id: '20260828-100000-0001' });
+  });
+
+  it('passes a canonical id straight through', () => {
+    expect(resolveRef(entries, '20260828-100000-0001')).toEqual({ kind: 'found', id: '20260828-100000-0001' });
+  });
+
+  it('says none for anything it does not know', () => {
+    expect(resolveRef(entries, 'a9')).toEqual({ kind: 'none' });
+  });
+
+  it('resolves a ref in any case, since A7 is the same handle to whoever types it', () => {
+    expect(resolveRef(entries, 'A7')).toEqual({ kind: 'found', id: '20260828-100000-0001' });
+    expect(resolveRef([entry({ id: '20260828-100000-0002', kind: 'ask', ref: 'A8' })], 'a8')).toEqual({ kind: 'found', id: '20260828-100000-0002' });
+  });
+
+  it('refuses a ref two writers both minted (HIVE-227)', () => {
+    const twice = [...entries, entry({ id: '20260828-100500-0001', kind: 'ask', ref: 'A7' })];
+    expect(resolveRef(twice, 'a7')).toEqual({ kind: 'ambiguous' });
+  });
+
+  it('refuses an id written twice (HIVE-227)', () => {
+    const twice = [...entries, entry({ id: '20260828-100000-0001', kind: 'post' })];
+    expect(resolveRef(twice, '20260828-100000-0001')).toEqual({ kind: 'ambiguous' });
+  });
+
+  it('lets an exact id win over a ref that happens to equal it', () => {
+    const odd = [...entries, entry({ id: 'x', kind: 'ask', ref: '20260828-100000-0001' })];
+    expect(resolveRef(odd, '20260828-100000-0001')).toEqual({ kind: 'found', id: '20260828-100000-0001' });
+  });
+});
+
+describe('keepNewest', () => {
+  const entries = [
+    entry({ id: '1', body: 'one' }),
+    entry({ id: '2', body: 'two' }),
+    entry({ id: '3', body: 'three' }),
+  ];
+
+  it('returns everything when no limit is given', () => {
+    expect(keepNewest(entries, undefined)).toEqual(entries);
+  });
+
+  it('keeps the newest `limit` entries', () => {
+    expect(keepNewest(entries, 2).map((e) => e.body)).toEqual(['two', 'three']);
+  });
+
+  /**
+   * `slice(-0)` is `slice(0)` — a whole copy — so the narrowest request a
+   * caller can make used to return the widest possible answer. `0` is not an
+   * exotic input: `parseLedgerReadQuery` explicitly admits it, so
+   * `{"limit": 0}` returned the entire log over both the HTTP and IPC paths.
+   */
+  it('returns nothing, not everything, for a limit of zero', () => {
+    expect(keepNewest(entries, 0)).toEqual([]);
+  });
+
+  it('returns everything when the limit is larger than the log', () => {
+    expect(keepNewest(entries, 10)).toEqual(entries);
+  });
+});
+
+describe('nextRef', () => {
+  it('starts at a1 on an empty log', () => {
+    expect(nextRef([])).toBe('a1');
+  });
+
+  it('takes the highest existing ref and adds one', () => {
+    const entries = [
+      entry({ id: '1', kind: 'ask', ref: 'a3' }),
+      entry({ id: '2', kind: 'ask', ref: 'a11' }),
+    ];
+
+    expect(nextRef(entries)).toBe('a12');
+  });
+
+  it('ignores entries with no ref', () => {
+    expect(nextRef([entry({ id: '1', kind: 'post' })])).toBe('a1');
+  });
+});
+
+describe('ttlOf', () => {
+  it('is the constant when no meta.ttlMs is given', () => {
+    expect(ttlOf({})).toBe(LEDGER_ASK_TTL_MS);
+    expect(ttlOf({ meta: {} })).toBe(LEDGER_ASK_TTL_MS);
+  });
+
+  it('honours a shorter meta.ttlMs', () => {
+    expect(ttlOf({ meta: { ttlMs: 60_000 } })).toBe(60_000);
+  });
+
+  it('clamps a longer one to the constant', () => {
+    // An agent may shorten its own ask; it may not outlive the log's own rule.
+    expect(ttlOf({ meta: { ttlMs: LEDGER_ASK_TTL_MS * 2 } })).toBe(LEDGER_ASK_TTL_MS);
+  });
+
+  it('ignores a ttlMs that is not a positive finite number', () => {
+    const bad: unknown[] = [0, -1, Number.NaN, Number.POSITIVE_INFINITY, '5m', null];
+
+    for (const ttlMs of bad) {
+      expect(ttlOf({ meta: { ttlMs } })).toBe(LEDGER_ASK_TTL_MS);
+    }
+  });
+});
+
+describe('expiredAsks', () => {
+  const ask = (over: Partial<LedgerEntry> = {}): LedgerEntry =>
+    entry({ id: 'a1', kind: 'ask', ts: 0, from: 'pr-reviewer', to: 'overmind', ...over });
+
+  it('is empty while the ask is inside its ttl', () => {
+    expect(expiredAsks([ask()], LEDGER_ASK_TTL_MS - 1)).toEqual([]);
+  });
+
+  it('names an ask that has crossed its ttl', () => {
+    expect(expiredAsks([ask()], LEDGER_ASK_TTL_MS).map((found) => found.id)).toEqual([
+      'a1',
+    ]);
+  });
+
+  it('uses the ask own meta.ttlMs', () => {
+    expect(expiredAsks([ask({ meta: { ttlMs: 1_000 } })], 1_000)).toHaveLength(1);
+  });
+
+  it('ignores an ask something already closed', () => {
+    const answer = entry({ id: 'x1', ts: 5, kind: 'answer', thread: 'a1' });
+
+    expect(expiredAsks([ask(), answer], LEDGER_ASK_TTL_MS)).toEqual([]);
+  });
+
+  it('ignores an ask that already has its expiry event — the sweep is idempotent', () => {
+    const expiry = entry({
+      id: 'e1',
+      ts: 5,
+      from: OVERMIND,
+      kind: 'event',
+      thread: 'a1',
+      meta: { expired: 'a1' },
+    });
+
+    expect(expiredAsks([ask(), expiry], LEDGER_ASK_TTL_MS)).toEqual([]);
+  });
+
+  it('ignores kinds that are not asks', () => {
+    expect(expiredAsks([ask({ kind: 'post' })], LEDGER_ASK_TTL_MS)).toEqual([]);
+  });
+
+  it('only lets the overmind retire an ask', () => {
+    /*
+      `meta` is a free-form rider any writer controls, so a forged marker would
+      otherwise put an id in the "already told" set permanently — retiring a
+      question nobody answered, with no expiry event ever written for it.
+    */
+    const forged = entry({
+      id: 'e2',
+      ts: 5,
+      from: 'sess-9',
+      kind: 'event',
+      thread: 'a1',
+      meta: { expired: 'a1' },
+    });
+
+    expect(expiredAsks([ask(), forged], LEDGER_ASK_TTL_MS)).toHaveLength(1);
+  });
+});
+
+describe('asInbound', () => {
+  it('keeps a well-formed message, with and without a time', () => {
+    expect(asInbound({ author: 'Marcos', text: 'puedes cubrir el demo?' })).toEqual({
+      author: 'Marcos',
+      text: 'puedes cubrir el demo?',
+    });
+    expect(asInbound({ author: 'Marcos', text: 'puedes cubrir?', at: '2:41pm' })).toEqual({
+      author: 'Marcos',
+      text: 'puedes cubrir?',
+      at: '2:41pm',
+    });
+  });
+
+  /*
+    `meta` is a free-form rider the model controls, so every shape below is
+    reachable from a hand-written `ledger_ask`. A partial one is dropped whole
+    rather than drawn with a blank author: a card that says who wrote to you is
+    only worth drawing when it actually knows.
+  */
+  it.each([
+    ['not an object', 'Marcos: hola'],
+    ['null', null],
+    ['an array', [{ author: 'Marcos', text: 'hola' }]],
+    ['no author', { text: 'hola' }],
+    ['no text', { author: 'Marcos' }],
+    ['a blank author', { author: '   ', text: 'hola' }],
+    ['a blank text', { author: 'Marcos', text: '' }],
+    ['a non-string author', { author: 42, text: 'hola' }],
+  ])('drops %s', (_label, value) => {
+    expect(asInbound(value)).toBeUndefined();
+  });
+
+  it('drops a time that is not a string, keeping the rest', () => {
+    expect(asInbound({ author: 'Marcos', text: 'hola', at: 42 })).toEqual({
+      author: 'Marcos',
+      text: 'hola',
+    });
+  });
+
+  /*
+    Measuring the trimmed value and returning the untrimmed one admitted
+    leading newlines, which under the card's `whitespace-pre-wrap` open the
+    box with blank lines above the message.
+  */
+  it('returns the trimmed value, not merely a value that trims to something', () => {
+    expect(asInbound({ author: '  Marcos  ', text: '\n\n\nhola\n' })).toEqual({
+      author: 'Marcos',
+      text: 'hola',
+    });
+  });
+
+  /*
+    Nothing else bounds a rider. `LEDGER_BODY_MAX` reads like it would and does
+    not — `Ledger.append` measures it against the body alone — so an unbounded
+    `text` reaches the JSONL, the renderer's capped mirror, and every IPC
+    payload after it.
+  */
+  it('truncates an over-long text, visibly', () => {
+    const kept = asInbound({ author: 'Marcos', text: 'x'.repeat(INBOUND_TEXT_MAX + 500) });
+
+    expect(kept?.text).toHaveLength(INBOUND_TEXT_MAX + 1);
+    expect(kept?.text.endsWith('…')).toBe(true);
+  });
+
+  it('cuts an over-long author and time to a name-sized bound', () => {
+    const kept = asInbound({
+      author: 'a'.repeat(INBOUND_NAME_MAX + 40),
+      text: 'hola',
+      at: 'b'.repeat(INBOUND_NAME_MAX + 40),
+    });
+
+    expect(kept?.author).toHaveLength(INBOUND_NAME_MAX + 1);
+    expect(kept?.at).toHaveLength(INBOUND_NAME_MAX + 1);
+  });
+
+  /*
+    Built from nothing, the way `honestPermissionAsk` builds its own meta: an
+    allowlist is what stops the next model-supplied key riding in on a shape
+    the card has certified.
+  */
+  it('carries no key the caller invented', () => {
+    expect(
+      asInbound({ author: 'Marcos', text: 'hola', permalink: 'https://example.invalid' }),
+    ).toEqual({ author: 'Marcos', text: 'hola' });
+  });
+});
+
+import { afterTarget, isHeld, releasesAfter } from '../../shared/ledger-derive';
+
+/*
+  Retro C: an ask can wait for a PR to merge. `meta.after: "owner/repo#N"`
+  holds it until the shipper's `closed` entry for that PR is in the log.
+*/
+describe('held asks: meta.after (retro C)', () => {
+  const ask = (after?: unknown, id = 'a1'): LedgerEntry =>
+    entry({ id, kind: 'ask', to: 'builder', ...(after === undefined ? {} : { meta: { after } }) });
+  const closed = (pr: unknown, repo: unknown, stage: unknown = 'closed'): LedgerEntry =>
+    entry({ id: `c-${String(pr)}-${String(repo)}`, from: 'shipper', meta: { stage, pr, repo } });
+
+  it('parses owner/repo#N and nothing else', () => {
+    expect(afterTarget(ask('a/b#3'))).toEqual({ repo: 'a/b', pr: 3 });
+    expect(afterTarget(ask('yunidbauza/the-hive#256'))).toEqual({ repo: 'yunidbauza/the-hive', pr: 256 });
+    for (const bad of ['a/b', '#3', 3, 'a/b#0', 'a/b#x', 'ab#3', 'a/b/c#3', '', null]) {
+      expect(afterTarget(ask(bad))).toBeUndefined();
+    }
+    expect(afterTarget(ask())).toBeUndefined();
+  });
+
+  it('holds an ask while its PR has no closed entry', () => {
+    const held = ask('a/b#3');
+    expect(isHeld(held, [held])).toBe(true);
+  });
+
+  it('releases it on the closed entry for that PR, by whole slug, case-insensitively', () => {
+    const held = ask('a/b#3');
+    expect(releasesAfter(closed(3, 'a/b'), { repo: 'a/b', pr: 3 })).toBe(true);
+    expect(isHeld(held, [held, closed(3, 'a/b')])).toBe(false);
+    expect(isHeld(held, [held, closed(3, 'A/B')])).toBe(false);
+  });
+
+  it('is not released by another PR, another repo, or another stage', () => {
+    const held = ask('a/b#3');
+    expect(isHeld(held, [held, closed(4, 'a/b'), closed(3, 'a/c'), closed(3, 'a/b', 'merge'), closed('4', 'a/b'), closed('3.0', 'a/b'), closed('#3', 'a/b')])).toBe(true);
+  });
+
+  /*
+    `meta` is model-written, and `"pr": "3"` is one token away from `"pr": 3`.
+    Read the way `shipStageFor` reads it, through `wholeNumberOf`, so the merge
+    that happened releases the ask instead of leaving it held for seven days.
+  */
+  it('is released by a closed entry that wrote the PR as its digits', () => {
+    const held = ask('a/b#3');
+    expect(releasesAfter(closed('3', 'a/b'), { repo: 'a/b', pr: 3 })).toBe(true);
+    expect(isHeld(held, [held, closed('3', 'a/b')])).toBe(false);
+  });
+
+  it('never holds an ask without after, or an entry that is not an ask', () => {
+    expect(isHeld(ask(), [ask()])).toBe(false);
+    const post = entry({ id: 'p1', meta: { after: 'a/b#3' } });
+    expect(isHeld(post, [post])).toBe(false);
+  });
+});
+
+/*
+  Retro C, from the Task 2 review: a held ask must not expire while it waits.
+  A chain whose earlier PR sits a day in review would otherwise lose the next
+  job without a word. Held, it does not age; released, it ages from then.
+*/
+describe('a held ask does not age until its PR merges (retro C)', () => {
+  const held = entry({
+    id: 'h1',
+    kind: 'ask',
+    to: 'builder',
+    ts: NOW - 2 * LEDGER_ASK_TTL_MS,
+    meta: { after: 'a/b#3' },
+  });
+  const closedAt = (ts: number): LedgerEntry =>
+    entry({ id: 'c1', from: 'shipper', ts, meta: { stage: 'closed', pr: 3, repo: 'a/b' } });
+
+  it('stays open and unexpired while its PR is open, for days', () => {
+    expect(openAsks([held], NOW).map((ask) => ask.id)).toEqual(['h1']);
+    expect(expiredAsks([held], NOW)).toEqual([]);
+  });
+
+  /*
+    From the Task 3 review: a PR abandoned, handed back or mistyped writes no
+    `closed` entry, and a held ask that never aged would stay open forever,
+    its asker never told. Seven days held, and it expires like any other.
+  */
+  it('expires once it has waited seven days for a PR that never closed', () => {
+    const stale = entry({
+      id: 'h2',
+      kind: 'ask',
+      to: 'builder',
+      ts: NOW - 7 * LEDGER_ASK_TTL_MS,
+      meta: { after: 'a/b#9' },
+    });
+
+    expect(openAsks([stale], NOW)).toEqual([]);
+    expect(expiredAsks([stale], NOW).map((ask) => ask.id)).toEqual(['h2']);
+  });
+
+  it('ages from its release, not from when it was posted', () => {
+    const released = NOW - 1000;
+    const log = [held, closedAt(released)];
+
+    expect(openAsks(log, NOW).map((ask) => ask.id)).toEqual(['h1']);
+    expect(expiredAsks(log, NOW)).toEqual([]);
+
+    const later = released + LEDGER_ASK_TTL_MS;
+    expect(openAsks(log, later)).toEqual([]);
+    expect(expiredAsks(log, later).map((ask) => ask.id)).toEqual(['h1']);
+  });
+
+  it('ages from a release that wrote the PR as its digits', () => {
+    const released = NOW - 1000;
+    const digits = entry({
+      id: 'c2',
+      from: 'shipper',
+      ts: released,
+      meta: { stage: 'closed', pr: '3', repo: 'a/b' },
+    });
+    const later = released + LEDGER_ASK_TTL_MS;
+
+    expect(openAsks([held, digits], later)).toEqual([]);
+    expect(expiredAsks([held, digits], later).map((ask) => ask.id)).toEqual(['h1']);
+  });
+
+  it('leaves an ask without after aging from its post', () => {
+    const plain = entry({ id: 'p1', kind: 'ask', to: 'builder', ts: NOW - LEDGER_ASK_TTL_MS });
+    expect(openAsks([plain], NOW)).toEqual([]);
+    expect(expiredAsks([plain], NOW).map((ask) => ask.id)).toEqual(['p1']);
+  });
+});
+
+describe('laneOfRun (HIVE-186; shared since HIVE-188)', () => {
+  const started = (run: string, lane?: string): LedgerEntry => ({
+    id: `s-${run}`, ts: 0, from: 'builder', kind: 'event', body: 'run.started — ledger',
+    meta: { run, trigger: 'ledger', kind: 'standing', ...(lane === undefined ? {} : { lane }) },
+  });
+
+  it('reads a run with no run.started, or no meta.lane, as standing', () => {
+    expect(laneOfRun('builder', 'r9', [])).toBe('standing');
+    expect(laneOfRun('builder', 'r1', [started('r1')])).toBe('standing');
+    expect(laneOfRun('builder', undefined, [])).toBe('standing');
+  });
+
+  it('only trusts the agent\'s own run.started — first one wins', () => {
+    const forged = { ...started('r1', 'thread:Z'), id: 'f', from: 'other' };
+    expect(laneOfRun('builder', 'r1', [forged, started('r1', 'thread:A')])).toBe('thread:A');
+  });
+});
+
+describe('leftOpen (HIVE-354)', () => {
+  const ask = entry({ id: 'k1', from: 'sess-a', to: 'builder', kind: 'ask', ref: 'a148', body: 'Build it' });
+  const claim = (id: string, run: string, task = 'HIVE-9'): LedgerEntry =>
+    entry({ id, from: 'builder', kind: 'claim', body: `claimed ${task}`, meta: { task, run } });
+
+  it('names the lane ask while it is open, and the claims this run made', () => {
+    const left = leftOpen([ask, claim('c1', 'r1'), claim('c2', 'r2', 'HIVE-8')], 'builder', 'r1', 'thread:k1', NOW);
+
+    expect(left.ask?.id).toBe('k1');
+    expect(left.claims).toEqual(['HIVE-9']);
+  });
+
+  it('names nothing once the ask is answered', () => {
+    const answered = entry({ id: 'x', from: 'builder', kind: 'answer', thread: 'k1', body: 'done' });
+
+    expect(leftOpen([ask, answered], 'builder', 'r1', 'thread:k1', NOW).ask).toBeUndefined();
+  });
+
+  it('names no ask on a standing or repo lane', () => {
+    expect(leftOpen([ask], 'builder', 'r1', 'standing', NOW).ask).toBeUndefined();
+    expect(leftOpen([ask], 'builder', 'r1', 'repo:o/r', NOW).ask).toBeUndefined();
+  });
+
+  it('skips a claim released since, re-claimed by another run, or held by someone else', () => {
+    const entries = [
+      ask,
+      claim('c1', 'r1'),
+      entry({ id: 'rel', from: 'builder', kind: 'release', meta: { task: 'HIVE-9', run: 'r1' } }),
+      claim('c2', 'r1', 'HIVE-8'),
+      claim('c3', 'r2', 'HIVE-8'),
+      entry({ id: 'c4', from: 'sess-b', kind: 'claim', meta: { task: 'HIVE-7', run: 'r1' } }),
+    ];
+
+    expect(leftOpen(entries, 'builder', 'r1', 'thread:k1', NOW).claims).toEqual([]);
+  });
+});
+
+describe('closedAskThreads (HIVE-214)', () => {
+  it('closes a thread on an answer, a done and a failed', () => {
+    const closed = closedAskThreads([
+      entry({ id: 'x1', kind: 'answer', thread: 'a1' }),
+      entry({ id: 'x2', kind: 'done', thread: 'a2' }),
+      entry({ id: 'x3', kind: 'failed', thread: 'a3' }),
+      entry({ id: 'x4', kind: 'post', thread: 'a4' }),
+    ]);
+
+    expect([...closed].sort()).toEqual(['a1', 'a2', 'a3']);
+  });
+
+  it('closes a thread the overmind expired', () => {
+    const expiry = entry({ id: 'e1', from: OVERMIND, kind: 'event', thread: 'a1', meta: { expired: 'a1' } });
+
+    expect(closedAskThreads([expiry]).has('a1')).toBe(true);
+  });
+
+  it('ignores an expiry marker anyone else wrote', () => {
+    const forged = entry({ id: 'e2', from: 'sess-9', kind: 'event', meta: { expired: 'a1' } });
+
+    expect(closedAskThreads([forged]).has('a1')).toBe(false);
+  });
+});
+
+describe('shipTrack (HIVE-205)', () => {
+  const slug = 'acme/server';
+  const MIN = 60_000;
+  const at = (minutes: number) => NOW - 200 * MIN + minutes * MIN;
+  const claim = entry({ id: 'c1', ts: at(0), from: 'shipper', kind: 'claim', meta: { task: 'Acme/Server#1182' } });
+  const stage = (id: string, minutes: number, name: string) =>
+    entry({ id, ts: at(minutes), from: 'shipper', body: name, meta: { pr: 1182, repo: slug, stage: name } });
+  const askTo = (id: string, minutes: number, to: string, body: string, meta?: Record<string, unknown>) =>
+    entry({ id, ts: at(minutes), from: 'shipper', kind: 'ask', to, body, ...(meta ? { meta } : {}) });
+  const stop = (track: ReturnType<typeof shipTrack>, name: string) => track.stops.find((s) => s.stage === name)!;
+
+  it('has all eight stops, in order, and nothing held with no entries', () => {
+    const track = shipTrack([], slug, 1182, NOW);
+    expect(track.stops.map((s) => s.stage)).toEqual([...SHIP_STOPS]);
+    expect(track).toMatchObject({ held: false, current: null });
+    expect(track.stops.every((s) => s.firstAt === null && s.spentMs === 0 && s.holder === null)).toBe(true);
+  });
+
+  it('walks forward: the claim opens intake, each post the next stop, the last runs to now', () => {
+    const track = shipTrack([claim, stage('p1', 2, 'self-review'), stage('p2', 30, 'fix-self'), stage('p3', 56, 'ready'), stage('p4', 57, 'ci')], slug, 1182, at(100));
+    expect(stop(track, 'intake')).toEqual({ stage: 'intake', firstAt: at(0), spentMs: 2 * MIN, holder: 'shipper' });
+    expect(stop(track, 'self-review')).toMatchObject({ firstAt: at(2), spentMs: 28 * MIN });
+    expect(stop(track, 'ci')).toMatchObject({ firstAt: at(57), spentMs: 43 * MIN });
+    expect(track).toMatchObject({ held: true, current: { stage: 'ci' } });
+    expect(stop(track, 'merge')).toEqual({ stage: 'merge', firstAt: null, spentMs: 0, holder: null });
+  });
+
+  it('steps back from approval to findings, summing the time at findings over both visits', () => {
+    const track = shipTrack([claim, stage('p1', 10, 'findings'), stage('p2', 30, 'approval'), stage('p3', 40, 'findings')], slug, 1182, at(55));
+    expect(stop(track, 'findings')).toMatchObject({ firstAt: at(10), spentMs: (20 + 15) * MIN });
+    expect(stop(track, 'approval')).toMatchObject({ spentMs: 10 * MIN });
+    expect(track.current?.stage).toBe('findings');
+  });
+
+  it('takes the holder from an ask to acr or fixer naming the PR in meta or in its words', () => {
+    const track = shipTrack([
+      claim,
+      stage('p1', 2, 'self-review'),
+      askTo('a1', 2, 'acr', 'Review https://github.com/acme/server/pull/1182 --self'),
+      stage('p2', 30, 'fix-self'),
+      askTo('a2', 30, 'fixer', 'Fix these', { pr: 1182, repo: slug }),
+      stage('p3', 56, 'ready'),
+    ], slug, 1182, at(60));
+    expect(stop(track, 'self-review').holder).toBe('acr');
+    expect(stop(track, 'fix-self').holder).toBe('fixer');
+    expect(stop(track, 'ready').holder).toBe('shipper');
+  });
+
+  it('ignores an ask for another PR in the same window, and a number that only starts the same', () => {
+    const track = shipTrack([
+      claim,
+      stage('p1', 10, 'findings'),
+      askTo('a1', 11, 'fixer', 'acme/server#11820 has findings'),
+      askTo('a2', 12, 'fixer', 'acme/other#1182 has findings'),
+      askTo('a3', 13, 'fixer', 'xacme/server#1182 is not this one'),
+    ], slug, 1182, at(20));
+    expect(stop(track, 'findings').holder).toBe('shipper');
+  });
+
+  it('ends on a release or a closed post, keeping the times', () => {
+    const release = entry({ id: 'r1', ts: at(20), from: 'shipper', kind: 'release', meta: { task: 'acme/server#1182' } });
+    const released = shipTrack([claim, stage('p1', 10, 'ci'), release], slug, 1182, at(90));
+    expect(released).toMatchObject({ held: false, current: null });
+    expect(stop(released, 'ci').spentMs).toBe(10 * MIN);
+
+    const closed = shipTrack([claim, stage('p1', 10, 'merge'), stage('p2', 12, 'closed')], slug, 1182, at(90));
+    expect(closed).toMatchObject({ held: false, current: null });
+    expect(stop(closed, 'merge')).toMatchObject({ firstAt: at(10), spentMs: 2 * MIN });
+  });
+
+  it('reads only the shipper, only this repo, and holds an unknown stage word without a stop', () => {
+    const track = shipTrack([
+      entry({ id: 'x1', ts: at(1), from: 'drone', meta: { pr: 1182, repo: slug, stage: 'ci' } }),
+      entry({ id: 'x2', ts: at(1), from: 'shipper', meta: { pr: 1182, repo: 'other/server', stage: 'ci' } }),
+      stage('p1', 3, 'sync'),
+    ], slug, 1182, at(10));
+    expect(track).toMatchObject({ held: true, current: null });
+    expect(track.stops.every((s) => s.firstAt === null)).toBe(true);
+    expect(shipTrack([claim], '', 1182, at(10)).held).toBe(false);
+  });
+
+  it('returns its visits oldest first, the open one with no end (HIVE-208)', () => {
+    const track = shipTrack([claim, stage('p1', 2, 'self-review'), askTo('a1', 3, 'acr', 'https://github.com/acme/server/pull/1182 --self'), stage('p2', 30, 'fix-self')], slug, 1182, at(40));
+    expect(track.visits).toEqual([
+      { stage: 'intake', from: at(0), to: at(2), holder: null },
+      { stage: 'self-review', from: at(2), to: at(30), holder: 'acr' },
+      { stage: 'fix-self', from: at(30), to: null, holder: null },
+    ]);
+    expect(shipTrack([], slug, 1182, NOW).visits).toEqual([]);
+  });
+});
+
+describe('the PR page readings (HIVE-205)', () => {
+  const slug = 'acme/server';
+  const log = [
+    entry({ id: 'i1', ts: 1, from: 'builder', kind: 'ask', to: 'shipper', body: 'Ship it', meta: { pr: 1182, repo: slug, ticket: 'INCORP-598', stage: 'intake' } }),
+    entry({ id: 'i2', ts: 2, from: 'sess-b', kind: 'ask', to: 'shipper', body: 'Ship mine', meta: { pr: 7, repo: slug, stage: 'intake' } }),
+    entry({ id: 'f1', ts: 3, from: 'fixer', kind: 'claim', meta: { task: 'acme/server#1182 findings' } }),
+    entry({ id: 'f2', ts: 4, from: 'fixer', body: 'On it: acme/server#1182 finding 1, the registered agent' }),
+    entry({ id: 'f3', ts: 5, from: 'fixer', body: 'acme/server#7 is clean' }),
+    entry({ id: 'r1', ts: 6, from: 'acr', kind: 'answer', body: 'changes requested', meta: { review_url: 'https://github.com/acme/server/pull/1182#pullrequestreview-7' } }),
+    entry({ id: 'r2', ts: 7, from: 'sess-a', body: 'x', meta: { review_url: 'https://github.com/acme/server/pull/1182#pullrequestreview-9' } }),
+    entry({ id: 'f4', ts: 8, from: 'fixer', body: 'Pushed the fix for acme/server#1182' }),
+  ];
+
+  it('prEvents: every entry naming the PR, oldest first', () => {
+    expect(prEvents(log, slug, 1182).map((e) => e.id)).toEqual(['i1', 'f1', 'f2', 'f4']);
+    expect(prEvents(log, '', 1182)).toEqual([]);
+  });
+
+  it('reviewUrls: acr’s review URLs only', () => {
+    expect([...reviewUrls(log)]).toEqual(['https://github.com/acme/server/pull/1182#pullrequestreview-7']);
+  });
+
+  it('prOpener: who handed the PR to the shipper, or null', () => {
+    expect(prOpener(log, slug, 1182)).toBe('builder');
+    expect(prOpener(log, 'ACME/Server', 7)).toBe('sess-b');
+    expect(prOpener(log, slug, 99)).toBeNull();
+  });
+
+  it('holderPost: the holder’s newest entry naming the PR', () => {
+    expect(holderPost(log, slug, 1182, 'fixer')?.id).toBe('f4');
+    expect(holderPost(log, slug, 1182, 'acr')).toBeNull();
+    expect(holderPost(log, '', 1182, 'fixer')).toBeNull();
+  });
+});
+
+describe('delegatesOf (idle with agents)', () => {
+  const AGENTS = new Set(['shipper', 'fixer', 'acr', 'builder', 'pr-patrol-nightly']);
+  const isAgent = (id: string) => AGENTS.has(id);
+  const ask = (id: string, from: string, to: string, meta?: Record<string, unknown>) =>
+    entry({ id, from, to, kind: 'ask', body: 'job', ...(meta === undefined ? {} : { meta }) });
+  const of = (log: LedgerEntry[], party = 'sess-a') => delegatesOf(openAsks(log, NOW), log, party, isAgent);
+
+  it('names the agents the session asked, once each, in the order it asked', () => {
+    const log = [
+      ask('a1', 'sess-a', 'shipper', { pr: 106, repo: 'behiques/hivetty' }),
+      ask('a2', 'sess-a', 'builder', { ticket: 'HIVE-9' }),
+      ask('a3', 'sess-a', 'shipper', { pr: 107, repo: 'behiques/hivetty' }),
+    ];
+    expect(of(log).map((d) => d.agent)).toEqual(['shipper', 'builder']);
+  });
+
+  it('drops a closed ask, an ask to a session or the overmind, and another party\'s ask', () => {
+    const log = [
+      ask('a1', 'sess-a', 'shipper'),
+      entry({ id: 'd1', from: 'shipper', kind: 'done', body: 'merged', thread: 'a1' }),
+      ask('a2', 'sess-a', 'sess-b'),
+      ask('a3', 'sess-a', OVERMIND),
+      ask('a4', 'sess-b', 'fixer'),
+    ];
+    expect(of(log)).toEqual([]);
+  });
+
+  it('counts a held ask only once its PR has closed', () => {
+    const held = ask('a1', 'sess-a', 'builder', { after: 'behiques/hivetty#108' });
+    expect(of([held])).toEqual([]);
+    const closed = entry({ id: 'c1', from: 'shipper', body: 'closed', meta: { pr: 108, repo: 'behiques/hivetty', stage: 'closed' } });
+    expect(of([held, closed]).map((d) => d.agent)).toEqual(['builder']);
+  });
+
+  it('lists the helpers an agent brought in for the same PR or ticket, and no other job\'s', () => {
+    const log = [
+      ask('a1', 'sess-a', 'shipper', { pr: 106, repo: 'behiques/hivetty' }),
+      ask('s1', 'shipper', 'acr', { pr: 106, repo: 'Behiques/Hivetty' }),
+      ask('s2', 'shipper', 'fixer', { pr: 106, repo: 'behiques/hivetty' }),
+      ask('s3', 'shipper', 'acr', { pr: 99, repo: 'behiques/hivetty' }),
+      ask('s4', 'shipper', 'sess-a', { pr: 106, repo: 'behiques/hivetty' }),
+    ];
+    expect(of(log)).toEqual([{ agent: 'shipper', helpers: ['acr', 'fixer'] }]);
+  });
+});
+
+describe('openAsksOnLane (HIVE-408)', () => {
+  const started = (run: string, lane: string) =>
+    entry({ id: `s-${run}`, from: 'builder', kind: 'event', body: 'run.started — ledger', meta: { run, lane } });
+
+  it('sees an open ask any run of the lane wrote', () => {
+    const log = [
+      started('r1', 'thread:k1'),
+      entry({ id: 'q1', from: 'builder', to: 'sess-a', kind: 'ask', body: 'which?', meta: { run: 'r1' } }),
+      started('r2', 'thread:k1'),
+    ];
+    expect(openAsksOnLane(log, 'builder', 'thread:k1', NOW)).toBe(true);
+    expect(openAsksOnLane(log, 'builder', 'thread:k2', NOW)).toBe(false);
+  });
+
+  it('ignores an answered ask and another agent\'s', () => {
+    const log = [
+      started('r1', 'thread:k1'),
+      entry({ id: 'q1', from: 'builder', to: 'sess-a', kind: 'ask', body: 'which?', meta: { run: 'r1' } }),
+      entry({ id: 'a1', from: 'sess-a', to: 'builder', kind: 'answer', thread: 'q1', body: 'main' }),
+      entry({ id: 'q2', from: 'fixer', to: 'sess-a', kind: 'ask', body: 'x', meta: { run: 'r1' } }),
+    ];
+    expect(openAsksOnLane(log, 'builder', 'thread:k1', NOW)).toBe(false);
+  });
+});
+
+describe('answeredDuring (HIVE-406 follow-ups; lane-wide since the answer race)', () => {
+  const LANE = 'thread:k1';
+  const started = (run: string, ts: number, lane: string = LANE, from = 'builder', wakes?: string[]) =>
+    entry({
+      id: `s-${run}`, ts, from, kind: 'event', body: 'run.started — ledger',
+      meta: { run, lane, ...(wakes === undefined ? {} : { wakes }) },
+    });
+  const marker = (askId: string, ts: number) =>
+    entry({ id: `x-${askId}`, ts, from: OVERMIND, to: 'builder', kind: 'event', thread: askId, body: 'expired', meta: { expired: askId } });
+  const ask = (id: string, run: string, over: Partial<LedgerEntry> = {}) =>
+    entry({ id, ts: NOW - 4_000, from: 'builder', to: 'sess-a', kind: 'ask', body: 'which?', meta: { run }, ...over });
+  const answer = (id: string, thread: string, ts = NOW - 2_000) =>
+    entry({ id, ts, from: 'sess-a', to: 'builder', kind: 'answer', thread, body: 'main' });
+  // The 2026-11-16 evidence: r1 asked q1 and ended; r2, queued by a note, was live when q1's answer landed.
+  const evidence = [started('r1', NOW - 5_000), ask('q1', 'r1'), started('r2', NOW - 3_000)];
+
+  it("is true for a sibling run's ask on the same lane closed after the ending run started", () => {
+    expect(answeredDuring([...evidence, answer('a1', 'q1')], 'builder', 'r2', LANE, NOW)).toBe(true);
+  });
+
+  it("is true for the run's own ask closed during the run (#305's case)", () => {
+    const log = [started('r1', NOW - 5_000), ask('q1', 'r1'), answer('a1', 'q1')];
+    expect(answeredDuring(log, 'builder', 'r1', LANE, NOW)).toBe(true);
+  });
+
+  it("is true for a sibling's ask that expired after the ending run started", () => {
+    const old = ask('q1', 'r1', { ts: NOW - LEDGER_ASK_TTL_MS - 1 });
+    const log = [started('r1', old.ts - 1_000), old, started('r2', old.ts + 1_000)];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(true);
+  });
+
+  it("is true for a sibling's ask the overmind closed as moot after the ending run started", () => {
+    const moot = entry({
+      id: 'm1', ts: NOW - 2_000, from: OVERMIND, kind: 'answer', thread: 'q1', body: 'moot', meta: { moot: 'x' },
+    });
+    expect(answeredDuring([...evidence, moot], 'builder', 'r2', LANE, NOW)).toBe(true);
+  });
+
+  it('is true when the asked party closed it with failed during the run', () => {
+    const failed = entry({ id: 'f1', ts: NOW - 2_000, from: 'sess-a', kind: 'failed', thread: 'q1', body: 'no' });
+    expect(answeredDuring([...evidence, failed], 'builder', 'r2', LANE, NOW)).toBe(true);
+  });
+
+  it('is false for the answer that woke the ending run, stamped in the same millisecond as its run.started', () => {
+    const log = [started('r1', NOW - 5_000), ask('q1', 'r1'), answer('a1', 'q1', NOW - 3_000), started('r2', NOW - 3_000, LANE, 'builder', ['a1'])];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it('is true for a close appended after run.started in the same millisecond', () => {
+    const log = [...evidence.slice(0, 2), started('r2', NOW - 2_000), answer('a1', 'q1', NOW - 2_000)];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(true);
+  });
+
+  it('is false for the expiry that woke the ending run (the sweep wakes by the ask id)', () => {
+    const old = ask('q1', 'r1', { ts: NOW - LEDGER_ASK_TTL_MS - 5_000 });
+    const log = [started('r1', old.ts - 1_000), old, marker('q1', NOW - 1_000), started('r2', NOW - 1_000, LANE, 'builder', ['q1'])];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it("is false for an expiry the sweep marked before the ending run started", () => {
+    const old = ask('q1', 'r1', { ts: NOW - LEDGER_ASK_TTL_MS - 5_000 });
+    const log = [started('r1', old.ts - 1_000), old, marker('q1', NOW - 2_000), started('r2', NOW - 1_000)];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it('is true for an expiry the sweep marked after the ending run started', () => {
+    const old = ask('q1', 'r1', { ts: NOW - LEDGER_ASK_TTL_MS - 5_000 });
+    const log = [started('r1', old.ts - 1_000), old, started('r2', NOW - 2_000), marker('q1', NOW - 1_000)];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(true);
+  });
+
+  it("is false for a sibling's ask on the same lane closed before the ending run started", () => {
+    const log = [started('r1', NOW - 5_000), ask('q1', 'r1'), answer('a1', 'q1', NOW - 3_500), started('r2', NOW - 3_000)];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it('is false for an ask from another lane closed during the run', () => {
+    const log = [started('r1', NOW - 5_000, 'thread:k2'), ask('q1', 'r1'), started('r2', NOW - 3_000), answer('a1', 'q1')];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it('is false for an ask another agent posted on a lane of the same name', () => {
+    const log = [
+      started('r1', NOW - 5_000, LANE, 'fixer'),
+      ask('q1', 'r1', { from: 'fixer' }),
+      started('r2', NOW - 3_000),
+      answer('a1', 'q1'),
+    ];
+    expect(answeredDuring(log, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it("is false while the ask is still open: that case is openAsksOnLane's", () => {
+    expect(answeredDuring(evidence, 'builder', 'r2', LANE, NOW)).toBe(false);
+  });
+
+  it('is false when the lane asked nothing', () => {
+    const log = [started('r1', NOW - 5_000), entry({ id: 'p1', from: 'builder', meta: { run: 'r1' } })];
+    expect(answeredDuring(log, 'builder', 'r1', LANE, NOW)).toBe(false);
+  });
+
+  it('is false, and does not throw, when the ending run has no run.started in the log', () => {
+    const log = [started('r1', NOW - 5_000), ask('q1', 'r1'), answer('a1', 'q1')];
+    expect(answeredDuring(log, 'builder', 'r9', LANE, NOW)).toBe(false);
+  });
+});
+
+describe('askerOf (HIVE-409)', () => {
+  it('names the party whose ask opened the job', () => {
+    const log = [entry({ id: 'j1', kind: 'ask', from: 'sess-1', to: 'builder', body: 'build' })];
+    expect(askerOf(log, 'j1')).toBe('sess-1');
+  });
+  it('is undefined for an id that is not an ask', () => {
+    expect(askerOf([entry({ id: 'p1', kind: 'post', from: 'x', body: 'b' })], 'p1')).toBeUndefined();
+  });
+});
+
+describe('repoAskerOf (HIVE-409)', () => {
+  const ship = (id: string, from: string, ts: number, repo = 'behiques/hivetty') =>
+    entry({ id, ts, kind: 'ask', from, to: 'shipper', body: 'ship', meta: { pr: 7, repo } });
+  it('picks the newest ask to the agent naming a PR in the slug', () => {
+    const log = [ship('a1', 'sess-1', 1), ship('a2', 'sess-2', 2), ship('a3', 'sess-3', 3, 'other/repo')];
+    expect(repoAskerOf(log, 'shipper', 'Behiques/HiveTTY')?.id).toBe('a2');
+  });
+  it('ignores an ask with no whole-number pr, or one to another agent', () => {
+    const log = [
+      entry({ id: 'a1', kind: 'ask', from: 's', to: 'shipper', body: 'b', meta: { repo: 'behiques/hivetty' } }),
+      entry({ id: 'a2', kind: 'ask', from: 's', to: 'fixer', body: 'b', meta: { pr: 7, repo: 'behiques/hivetty' } }),
+    ];
+    expect(repoAskerOf(log, 'shipper', 'behiques/hivetty')).toBeUndefined();
+  });
+});
+
+describe('mergeTarget (HIVE-409)', () => {
+  it('reads the PR from a Bash merge command', () => {
+    expect(mergeTarget({ tool: 'Bash', input: { command: 'gh pr merge 229 --squash --repo behiques/hivetty' } })).toEqual({
+      repo: 'behiques/hivetty',
+      number: 229,
+    });
+  });
+  it('is undefined without --repo, without a command, or for another tool', () => {
+    expect(mergeTarget({ tool: 'Bash', input: { command: 'gh pr merge 229' } })).toBeUndefined();
+    expect(mergeTarget({ tool: 'Bash', input: {} })).toBeUndefined();
+    expect(mergeTarget({ tool: 'Bash' })).toBeUndefined();
+    expect(mergeTarget({ tool: 'Read', input: { command: 'gh pr merge 1 --repo a/b' } })).toBeUndefined();
+    expect(mergeTarget(undefined)).toBeUndefined();
+  });
+});
+
+describe('askStates (HIVE-410)', () => {
+  const ask = (over: Partial<LedgerEntry> = {}): LedgerEntry =>
+    entry({ id: 'k1', kind: 'ask', from: 'sess-a', to: 'shipper', ts: NOW - 60_000, body: 'Ship PR #1', ...over });
+  const stateOf = (log: LedgerEntry[], now = NOW) => askStates(log, now).find((s) => s.ask.id === 'k1');
+
+  it('keeps when an ask was accepted, through to its answer (HIVE-411)', () => {
+    const a: LedgerEntry = { id: '20261113-100000-0001', ts: 100, from: 'sess-a', to: 'builder', kind: 'ask', ref: 'a1', body: 'build' };
+    const accept: LedgerEntry = { id: '20261113-100001-0001', ts: 160, from: 'builder', to: 'sess-a', kind: 'post', thread: a.id, body: 'on it', meta: { accepted: true } };
+    const answer: LedgerEntry = { id: '20261113-100002-0001', ts: 900, from: 'builder', to: 'sess-a', kind: 'answer', thread: a.id, body: 'done' };
+    expect(askStates([a, accept], 200)[0]).toMatchObject({ state: 'accepted', since: 160, acceptedAt: 160 });
+    expect(askStates([a, accept, answer], 1000)[0]).toMatchObject({ state: 'answered', since: 900, acceptedAt: 160 });
+    expect(askStates([a], 200)[0]?.acceptedAt).toBeUndefined();
+  });
+
+  it('is open from its post, owed by the party asked', () => {
+    expect(stateOf([ask()])).toEqual({ ask: ask(), state: 'open', since: NOW - 60_000, owes: 'shipper', lane: undefined });
+  });
+
+  it('is answered by an answer or a done, and failed by a failed, since that entry', () => {
+    for (const [kind, state] of [['answer', 'answered'], ['done', 'answered'], ['failed', 'failed']] as const) {
+      const log = [ask(), entry({ id: 'c1', kind, from: 'shipper', thread: 'k1', ts: NOW - 5 })];
+      expect(stateOf(log)).toMatchObject({ state, since: NOW - 5, owes: undefined });
+    }
+  });
+
+  it('is moot when the overmind answers with meta.moot, and answered without it', () => {
+    const card = ask({ from: 'shipper', to: OVERMIND, meta: { kind: 'permission' } });
+    const moot = entry({ id: 'm1', kind: 'answer', from: OVERMIND, thread: 'k1', body: 'moot', meta: { moot: 'a/x#1 merged' } });
+    expect(stateOf([card, moot])?.state).toBe('moot');
+    expect(stateOf([card, { ...moot, from: 'sess-b' }])?.state).toBe('answered');
+    expect(stateOf([card, { ...moot, meta: {} }])?.state).toBe('answered');
+  });
+
+  it('expires at its ttl, since the deadline, or since the overmind said so', () => {
+    const old = ask({ ts: 0 });
+    expect(stateOf([old], LEDGER_ASK_TTL_MS - 1)?.state).toBe('open');
+    expect(stateOf([old], LEDGER_ASK_TTL_MS)).toMatchObject({ state: 'expired', since: LEDGER_ASK_TTL_MS, owes: undefined });
+    const told = entry({ id: 'e1', kind: 'event', from: OVERMIND, ts: LEDGER_ASK_TTL_MS + 30_000, meta: { expired: 'k1' } });
+    expect(stateOf([old, told], LEDGER_ASK_TTL_MS + 60_000)).toMatchObject({ state: 'expired', since: LEDGER_ASK_TTL_MS + 30_000 });
+  });
+
+  it('is held until its PR closes, then open since the release', () => {
+    const held = ask({ ts: 0, meta: { after: 'a/x#3' } });
+    expect(stateOf([held], 3 * LEDGER_ASK_TTL_MS)).toMatchObject({ state: 'held', since: 0, owes: undefined });
+    const closed = entry({ id: 'c1', from: 'shipper', ts: 3 * LEDGER_ASK_TTL_MS, meta: { stage: 'closed', pr: 3, repo: 'a/x' } });
+    expect(stateOf([held, closed], 3 * LEDGER_ASK_TTL_MS + 1)).toMatchObject({ state: 'open', since: 3 * LEDGER_ASK_TTL_MS, owes: 'shipper' });
+    expect(stateOf([held], 7 * LEDGER_ASK_TTL_MS)?.state).toBe('expired');
+  });
+
+  const started = (meta: Record<string, unknown>, ts = NOW - 50_000): LedgerEntry =>
+    entry({ id: `s-${String(meta['run'])}`, kind: 'event', from: 'shipper', ts, body: 'run.started — ledger', meta });
+  const accept = (over: Partial<LedgerEntry> = {}): LedgerEntry =>
+    entry({
+      id: 'p1', kind: 'post', from: 'shipper', to: 'sess-a', thread: 'k1', ts: NOW - 30_000,
+      body: 'accepted', meta: { accepted: true, run: 'r1' }, ...over,
+    });
+
+  it("is delivered once a run.started of the party asked lists it in wakes, on that run's lane", () => {
+    const log = [ask(), started({ run: 'r1', lane: 'repo:a/x', wakes: ['k1'] })];
+    expect(stateOf(log)).toMatchObject({ state: 'delivered', since: NOW - 50_000, owes: 'shipper', lane: 'repo:a/x' });
+  });
+
+  it("ignores a wakes list on another party's run, and reads no lane as standing", () => {
+    expect(stateOf([ask(), { ...started({ run: 'r1', wakes: ['k1'] }), from: 'builder' }])?.state).toBe('open');
+    expect(stateOf([ask(), started({ run: 'r1', wakes: ['k1'] })])?.lane).toBe('standing');
+  });
+
+  it('is delivered to a session once the overmind confirms its marker was served', () => {
+    const toSession = ask({ from: OVERMIND, to: 'sess-b' });
+    const served = entry({
+      id: 'v1', kind: 'event', from: OVERMIND, to: 'sess-b', ts: NOW - 40_000,
+      body: 'nudge served (k1)', meta: { served: 'k1' },
+    });
+    expect(stateOf([toSession, served])).toMatchObject({ state: 'delivered', since: NOW - 40_000, lane: undefined });
+    expect(stateOf([toSession, { ...served, from: 'sess-b' }])?.state).toBe('open');
+  });
+
+  it("is accepted, still owed, on the accepting run's lane, until it is answered", () => {
+    const log = [ask(), started({ run: 'r1', lane: 'repo:a/x', wakes: ['k1'] }), accept()];
+    expect(stateOf(log)).toMatchObject({ state: 'accepted', since: NOW - 30_000, owes: 'shipper', lane: 'repo:a/x' });
+    const answered = entry({ id: 'c1', kind: 'answer', from: 'shipper', thread: 'k1', ts: NOW - 5, body: 'PR #1 merged' });
+    expect(stateOf([...log, answered])).toMatchObject({ state: 'answered', since: NOW - 5 });
+  });
+
+  it('ignores an accept from anyone but the party asked', () => {
+    expect(stateOf([ask(), accept({ from: 'builder' })])?.state).toBe('open');
+  });
+
+  it('stops aging once accepted, and expires seven days after the accept', () => {
+    const log = [ask({ ts: 0 }), accept({ ts: 1_000, meta: { accepted: true } })];
+    expect(stateOf(log, 6 * LEDGER_ASK_TTL_MS)).toMatchObject({ state: 'accepted', lane: undefined });
+    expect(stateOf(log, 1_000 + 7 * LEDGER_ASK_TTL_MS)).toMatchObject({
+      state: 'expired',
+      since: 1_000 + 7 * LEDGER_ASK_TTL_MS,
+    });
+  });
+});
+
+describe('the views over askStates (HIVE-410)', () => {
+  const ask = entry({ id: 'k1', kind: 'ask', from: 'sess-a', to: 'shipper', ts: NOW - 60_000, body: 'Ship PR #1' });
+  const accept = entry({ id: 'p1', kind: 'post', from: 'shipper', to: 'sess-a', thread: 'k1', body: 'accepted', meta: { accepted: true } });
+
+  it('openAsks carries the state, and keeps an accepted ask open', () => {
+    expect(openAsks([ask], NOW)).toEqual([{ ...ask, open: true, ageMs: 60_000, state: 'open' }]);
+    expect(openAsks([ask, accept], NOW).map((open) => open.state)).toEqual(['accepted']);
+  });
+
+  it('waitingAsks drops the accepted: its asker is free', () => {
+    const other = entry({ id: 'k2', kind: 'ask', from: 'sess-a', to: 'fixer', body: 'fix it' });
+    expect(waitingAsks(openAsks([ask, accept, other], NOW)).map((open) => open.id)).toEqual(['k2']);
+  });
+
+  it('expiredAsks leaves an accepted ask alone at its ttl, and takes it seven days after the accept', () => {
+    const old = { ...ask, ts: 0 };
+    const taken = { ...accept, ts: 1_000 };
+    expect(expiredAsks([old, taken], 2 * LEDGER_ASK_TTL_MS)).toEqual([]);
+    expect(expiredAsks([old, taken], 1_000 + 7 * LEDGER_ASK_TTL_MS)).toEqual([old]);
+  });
+
+  it('a merge answered with stage closed ends the ship stage and track, by the release before it', () => {
+    const log = [
+      entry({ id: 'c1', from: 'shipper', kind: 'claim', body: 'claimed', meta: { task: 'a/x#1' } }),
+      entry({ id: 'r1', from: 'shipper', kind: 'release', body: 'released', meta: { task: 'a/x#1' } }),
+      { ...ask, meta: { pr: 1, repo: 'a/x' } },
+      entry({ id: 'n1', from: 'shipper', kind: 'answer', thread: 'k1', body: 'PR #1 merged', meta: { pr: 1, repo: 'a/x', stage: 'closed' } }),
+    ];
+    expect(shipStage(log, 'a/x', 1)).toBeNull();
+    expect(shipTrack(log, 'a/x', 1, NOW).held).toBe(false);
+  });
+});
+
+describe('owedBy and unfinishedRuns (HIVE-410)', () => {
+  const ask = entry({ id: 'k1', kind: 'ask', from: 'sess-a', to: 'shipper', ref: 'a7', ts: NOW - 60_000, body: 'Ship PR #1' });
+  const started = (run: string, wakes: string[], from = 'shipper'): LedgerEntry =>
+    entry({ id: `s-${run}`, kind: 'event', from, ts: NOW - 50_000, body: 'run.started — ledger', meta: { run, lane: 'repo:a/x', wakes } });
+  const rewake = entry({
+    id: 'w1', kind: 'post', from: OVERMIND, to: 'shipper', thread: 'k1', ts: NOW - 40_000,
+    body: 'You owe an answer to a7', meta: { rewoke: 'k1', run: 'r1' },
+  });
+  const of = (log: LedgerEntry[], run: string) => owedBy(log, 'shipper', run, NOW).map((owed) => [owed.ask.id, owed.rewoken]);
+
+  it('names an ask the run was woken for and neither accepted nor answered', () => {
+    expect(of([ask, started('r1', ['k1'])], 'r1')).toEqual([['k1', false]]);
+  });
+
+  it('says so once the overmind re-woke the lane, for the run that re-wake started', () => {
+    expect(of([ask, started('r1', ['k1']), rewake, started('r2', ['w1'])], 'r2')).toEqual([['k1', true]]);
+  });
+
+  it('ignores a re-wake marker the overmind did not write', () => {
+    const forged = { ...rewake, from: 'shipper' };
+    expect(of([ask, started('r1', ['k1']), forged, started('r2', ['w1'])], 'r2')).toEqual([]);
+  });
+
+  it('owes nothing for an accepted or answered ask, an ask of another party, or a run that woke for nothing', () => {
+    const accept = entry({ id: 'p1', from: 'shipper', to: 'sess-a', thread: 'k1', body: 'accepted', meta: { accepted: true } });
+    const answer = entry({ id: 'n1', kind: 'answer', from: 'shipper', thread: 'k1', body: 'merged' });
+    expect(of([ask, started('r1', ['k1']), accept], 'r1')).toEqual([]);
+    expect(of([ask, started('r1', ['k1']), answer], 'r1')).toEqual([]);
+    expect(of([{ ...ask, to: 'builder' }, started('r1', ['k1'])], 'r1')).toEqual([]);
+    expect(of([ask, started('r1', [])], 'r1')).toEqual([]);
+    expect(of([ask], 'r9')).toEqual([]);
+  });
+
+  it('lists the runs that started and never ended, each with its lane', () => {
+    const log = [
+      started('r1', []),
+      entry({ id: 'e1', kind: 'event', from: 'shipper', body: 'run.ended — done', meta: { run: 'r1', outcome: 'done' } }),
+      started('r2', []),
+      entry({ id: 's3', kind: 'event', from: 'builder', body: 'run.started — ledger', meta: { run: 'r3' } }),
+    ];
+    expect(unfinishedRuns(log)).toEqual([
+      { agent: 'shipper', run: 'r2', lane: 'repo:a/x' },
+      { agent: 'builder', run: 'r3', lane: 'standing' },
+    ]);
+  });
+});
+
+describe('carriedOver (HIVE-410)', () => {
+  const old = (over: Partial<LedgerEntry> & Pick<LedgerEntry, 'id'>): LedgerEntry =>
+    entry({ ts: NOW - 3 * LEDGER_ASK_TTL_MS, ...over });
+
+  it('keeps a held ask, an accepted ask with its thread and run marks, and an unreleased claim', () => {
+    const older = [
+      old({ id: 'h1', kind: 'ask', to: 'builder', body: 'Build B', meta: { after: 'a/x#3' } }),
+      old({ id: 'k1', kind: 'ask', to: 'shipper', body: 'Ship PR #1' }),
+      old({ id: 's1', kind: 'event', from: 'shipper', body: 'run.started — ledger', meta: { run: 'r1', lane: 'repo:a/x', wakes: ['k1'] } }),
+      old({ id: 'p1', from: 'shipper', to: 'sess-a', thread: 'k1', body: 'accepted', meta: { accepted: true, run: 'r1' } }),
+      old({ id: 'c1', from: 'shipper', kind: 'claim', body: 'claimed a/x#1', meta: { task: 'a/x#1', run: 'r1' } }),
+      old({ id: 'e1', kind: 'event', from: 'shipper', body: 'run.ended — done', meta: { run: 'r1', outcome: 'done' } }),
+      old({ id: 'k2', kind: 'ask', to: 'fixer', body: 'fix it' }),
+      old({ id: 'n2', kind: 'answer', from: 'fixer', thread: 'k2', body: 'clean' }),
+      old({ id: 's9', kind: 'event', from: 'fixer', body: 'run.started — ledger', meta: { run: 'r9' } }),
+      old({ id: 'c2', from: 'builder', kind: 'claim', body: 'claimed HIVE-1', meta: { task: 'HIVE-1' } }),
+      old({ id: 'r2', from: 'builder', kind: 'release', body: 'released HIVE-1', meta: { task: 'HIVE-1' } }),
+      old({ id: 'x1', body: 'a note' }),
+    ];
+
+    expect(carriedOver(older, older, NOW).map((item) => item.id)).toEqual(['h1', 'k1', 's1', 'p1', 'c1', 'e1']);
+  });
+
+  it('drops an old claim a recent entry released, and an old ask a recent entry answered', () => {
+    const older = [
+      old({ id: 'c1', from: 'shipper', kind: 'claim', body: 'claimed', meta: { task: 'a/x#1' } }),
+      old({ id: 'h1', kind: 'ask', to: 'builder', body: 'Build B', meta: { after: 'a/x#3' } }),
+    ];
+    const recent = [
+      entry({ id: 'r1', from: 'shipper', kind: 'release', body: 'released', meta: { task: 'a/x#1' } }),
+      entry({ id: 'n1', from: 'builder', kind: 'answer', thread: 'h1', body: 'built' }),
+    ];
+
+    expect(carriedOver(older, [...older, ...recent], NOW)).toEqual([]);
+  });
+
+  it("keeps the overmind's markers for an ask it keeps", () => {
+    const older = [
+      old({ id: 'h1', kind: 'ask', to: 'sess-b', body: 'Build B', meta: { after: 'a/x#3' } }),
+      old({ id: 'd1', kind: 'event', from: OVERMIND, to: 'sess-b', body: 'nudged', meta: { delivered: 'h1' } }),
+      old({ id: 'd2', kind: 'event', from: OVERMIND, to: 'sess-b', body: 'nudged', meta: { delivered: 'gone' } }),
+    ];
+
+    expect(carriedOver(older, older, NOW).map((item) => item.id)).toEqual(['h1', 'd1']);
+  });
+
+  it('carries a watchdog marker with the ask it watches (HIVE-411)', () => {
+    const older = [
+      old({ id: 'k1', kind: 'ask', from: 'sess-a', to: 'builder', ref: 'a1', body: 'build it' }),
+      old({ id: 'p1', from: 'builder', to: 'sess-a', thread: 'k1', body: 'on it', meta: { accepted: true } }),
+      // A card is an ask of its own: it names the watched ask only through meta.
+      old({ id: 'w1', kind: 'ask', from: OVERMIND, to: OVERMIND, ref: 'a2', body: 'not picked up', meta: { watch: 'card', watched: 'k1' } }),
+    ];
+
+    expect(carriedOver(older, older, NOW).map((item) => item.id)).toContain('w1');
+  });
+});
+
+describe('staleClaims (HIVE-411)', () => {
+  const DAY = 24 * 60 * 60_000;
+  const claim = (id: string, ts: number, from: string, task: string): LedgerEntry => ({ id, ts, from, kind: 'claim', body: '', meta: { task } });
+
+  it('lists a claim a day old whose holder has been silent a day and owes nothing', () => {
+    const log = [claim('20261110-000000-0001', 0, 'sess-1c', 'HIVE-393')];
+    expect(staleClaims(log, DAY)).toEqual([{ task: 'HIVE-393', holder: 'sess-1c', since: 0 }]);
+    expect(staleClaims(log, DAY - 1)).toEqual([]);
+  });
+
+  it('skips a released claim, a holder heard from today, and a holder that owes an ask', () => {
+    const released: LedgerEntry = { id: '20261110-000001-0001', ts: 1, from: 'sess-1c', kind: 'release', body: '', meta: { task: 'HIVE-393' } };
+    expect(staleClaims([claim('20261110-000000-0001', 0, 'sess-1c', 'HIVE-393'), released], 2 * DAY)).toEqual([]);
+
+    const heard: LedgerEntry = { id: '20261111-000000-0001', ts: DAY + 5, from: 'sess-7b', kind: 'post', body: 'hi' };
+    expect(staleClaims([claim('20261110-000000-0002', 0, 'sess-7b', 'HIVE-404'), heard], DAY + 10)).toEqual([]);
+
+    const owed: LedgerEntry = { id: '20261110-000002-0001', ts: 2, from: 'sess-0a', to: 'builder', kind: 'ask', ref: 'a1', body: 'build' };
+    const accept: LedgerEntry = { id: '20261110-000003-0001', ts: 3, from: 'builder', to: 'sess-0a', kind: 'post', thread: owed.id, body: 'ok', meta: { accepted: true } };
+    expect(staleClaims([claim('20261110-000000-0003', 0, 'builder', 'HIVE-1'), owed, accept], 2 * DAY)).toEqual([]);
+  });
+
+  it('skips a holder waiting on an ask it made: accepted by another party, or held behind a PR', () => {
+    // The shipper handed the PR on and is waiting; the party asked accepted it, so the ask lives past a day.
+    const handed: LedgerEntry = { id: '20261110-000002-0002', ts: 2, from: 'shipper', to: 'fixer', kind: 'ask', ref: 'a2', body: 'fix #9' };
+    const taken: LedgerEntry = { id: '20261110-000003-0002', ts: 3, from: 'fixer', to: 'shipper', kind: 'post', thread: handed.id, body: 'ok', meta: { accepted: true } };
+    expect(staleClaims([claim('20261110-000000-0004', 0, 'shipper', 'acme/app#9'), handed, taken], 2 * DAY)).toEqual([]);
+
+    // Held behind another PR's merge: nobody is told until then.
+    const held: LedgerEntry = { id: '20261110-000002-0003', ts: 2, from: 'shipper', to: 'builder', kind: 'ask', ref: 'a3', body: 'next', meta: { after: 'acme/app#8' } };
+    expect(staleClaims([claim('20261110-000000-0005', 0, 'shipper', 'acme/app#10'), held], 2 * DAY)).toEqual([]);
+  });
+});
+
+describe('shipAsked (HIVE-411)', () => {
+  const ask: LedgerEntry = { id: '20261113-100000-0009', ts: 100, from: 'sess-a', to: 'shipper', kind: 'ask', ref: 'a9', body: 'Ship', meta: { pr: 313, repo: 'Acme/Server' } };
+
+  it('is true while the shipper owes an ask naming the PR, and false once it is answered or names another', () => {
+    expect(shipAsked([ask], 'acme/server', 313, 200)).toBe(true);
+    expect(shipAsked([ask], 'acme/server', 314, 200)).toBe(false);
+    expect(shipAsked([ask], '', 313, 200)).toBe(false);
+    const answered: LedgerEntry = { id: '20261113-100001-0009', ts: 150, from: 'shipper', to: 'sess-a', kind: 'answer', thread: ask.id, body: 'merged' };
+    expect(shipAsked([ask, answered], 'acme/server', 313, 200)).toBe(false);
+    expect(shipAsked([{ ...ask, to: 'fixer' }], 'acme/server', 313, 200)).toBe(false);
+  });
+});
+
+describe('whyNotOpen', () => {
+  const at = (h: number, m: number) => new Date(2026, 10, 13, h, m).getTime();
+  const ask = { id: 'A1', ts: at(9, 0), from: 'builder', to: 'shipper', kind: 'ask', ref: 'a1', body: 'ship' } as const;
+
+  it('names the closer, the time and the asker', () => {
+    const answer = { id: 'B1', ts: at(9, 30), from: 'overmind', kind: 'answer', thread: 'A1', body: 'no' } as const;
+    expect(whyNotOpen([ask, answer], 'A1', 'a1', at(10, 0))).toBe(
+      'thread is not open: a1, closed by overmind at 09:30: post to builder on this thread instead',
+    );
+  });
+
+  it('says when an ask expired', () => {
+    const late = ask.ts + LEDGER_ASK_TTL_MS + 1;
+    expect(whyNotOpen([ask], 'A1', 'a1', late)).toMatch(
+      /^thread is not open: a1, expired at \d\d:\d\d: post to builder on this thread instead$/,
+    );
+  });
+
+  it('keeps the bare reason for an ask that is still open', () => {
+    expect(whyNotOpen([ask], 'A1', 'a1', at(10, 0))).toBe('thread is not open: a1');
+  });
+
+  it('keeps the bare reason for a thread that names no ask', () => {
+    expect(whyNotOpen([], 'X9', 'x9', at(10, 0))).toBe('thread is not open: x9');
+  });
+});

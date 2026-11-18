@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { SPLASH_MIN_MS, SPLASH_SIZE } from '../../../electron/shared/splash';
+import { SPLASH_MIN_MS, SPLASH_SIZE } from '../../../shared/splash';
 
 import { launchHive, mainWindow, splashWindow, writeProjectConfig } from './fixtures/hive-app';
 

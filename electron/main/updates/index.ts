@@ -9,7 +9,7 @@ import {
 } from '@shared/update-contract';
 
 import { primaryWindow } from '../aux-windows';
-import { claimServerLock, serverLockPath } from '../server/server-lock';
+import { claimServerLock, serverLockPath } from '../../../core/server/server-lock';
 
 import { probeUpdateCapability } from './capability';
 import { createElectronUpdaterEngine } from './engine';

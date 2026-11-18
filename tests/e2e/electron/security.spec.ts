@@ -270,7 +270,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * process** from a namespace whose other members only move files around, so
    * they are exactly what this assertion exists to force an argument for. The
    * argument is recorded in full on `BRIDGE_AGENTS_KEYS` in
-   * `electron/shared/ipc-contract.ts`; in short:
+   * `shared/ipc-contract.ts`; in short:
    *
    * - **`run` widens timing, not reach.** Its payload is one agent name through
    *   the same `assertAgentName` that `read` and `remove` pass — no path, no
@@ -398,7 +398,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
       status, sign-in, sign-out, and the one-turn test call. None of the four
       takes an argument and none returns a credential — Claude Code holds the
       OAuth token; this app only asks what state it is in
-      (`electron/shared/ipc-contract.ts`, the comment above `BRIDGE_KEYS`).
+      (`shared/ipc-contract.ts`, the comment above `BRIDGE_KEYS`).
     */
     'slack',
     // HIVE-284 adds `sync`: settings sync, this machine's own; every verb is process-local, asserted below.
@@ -543,7 +543,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * HIVE-205 added the two verbs that do take a repository name, `prDetail`
    * and `prComment`, and adds them here rather than quietly: main refuses any
    * owner/repo no configured project maps, before `gh` runs, and hands `gh`
-   * the resolver's spelling (`tests/electron/main/integrations/github/index.test.ts`).
+   * the resolver's spelling (`tests/core/integrations/github/index.test.ts`).
    * The widest reach is still the user's own mapped projects.
    *
    * HIVE-206 added `prRuns`, `runJobs`, `jobLog` and `rerunFailed`, and HIVE-207
@@ -607,7 +607,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    *   serve. The string guard is deliberately *narrower* than `assertRelPath`
    *   (it admits absolute paths and `..`) because refusing those would refuse
    *   the output every compiler prints while granting nothing containment does
-   *   not refuse a moment later. See `electron/main/fs/resolve.ts`.
+   *   not refuse a moment later. See `core/fs/resolve.ts`.
    * - **It does not walk.** At most `MAX_RESOLVE_CANDIDATES` (32) named
    *   candidates per call, each one `stat`'d once — no recursion, so the
    *   bounds `search` needed do not arise.
@@ -903,7 +903,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
      *
      * What it does take is a path to *read*, which the fs verbs deliberately
      * never do — they name a `projectId`. The exception is argued where it is
-     * enforced, in `electron/main/fs/home-browse.ts`: a folder that is not a
+     * enforced, in `core/fs/home-browse.ts`: a folder that is not a
      * project yet has no id, and main contains every path against the home
      * directory after `realpath`, on the request and on every entry returned.
      * Directories only; a file's contents never cross this verb.

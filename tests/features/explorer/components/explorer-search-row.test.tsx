@@ -9,7 +9,7 @@ import { useUiStore } from '@stores/ui-store';
  * The Explorer's search box.
  *
  * Mirrors `pr-search-row.test.tsx`: the box and its store, never the walk. What
- * main does with the query is `tests/electron/main/fs/search.test.ts`.
+ * main does with the query is `tests/core/fs/search.test.ts`.
  */
 
 const box = () => screen.getByLabelText('Search files');

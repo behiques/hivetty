@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { renderSkills } from '../../electron/main/skills/render';
-import { readUserSkills } from '../../electron/main/skills/read';
+import { renderSkills } from '../../core/skills/render';
+import { readUserSkills } from '../../core/skills/read';
 
 /**
  * The goal-on Stop hook, against a real `claude` (HIVE-165).

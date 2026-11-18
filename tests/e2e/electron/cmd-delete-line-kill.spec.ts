@@ -136,7 +136,7 @@ const BEL = 0x07;
  * A scanner rather than a regex, and deliberately so: expressing these patterns
  * as regexes means literal control characters in them, which trips
  * `no-control-regex`, and the house rule is that no lint rule may be disabled
- * inline to make code pass. `electron/main/clone/parse-url.ts` reaches for the
+ * inline to make code pass. `core/clone/parse-url.ts` reaches for the
  * code points for the same reason. Reading them directly says the same thing
  * and needs no exemption.
  *

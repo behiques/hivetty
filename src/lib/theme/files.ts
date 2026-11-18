@@ -128,7 +128,7 @@ function pickThemeFileFromBrowser(): Promise<PickedThemeFile | null> {
           return;
         }
         /**
-         * Sized before it is read, which is the order the deleted `electron/main/theme/`
+         * Sized before it is read, which is the order the deleted `core/theme/`
          * used to check in and the reason its check is not simply gone.
          * `importTheme` (`validate.ts`) caps the contents too, but only once
          * the whole file is in memory; refusing here costs one property read
@@ -188,7 +188,7 @@ const FALLBACK_STEM = 'theme';
 /**
  * Turn any theme name into a sane download filename.
  *
- * The pattern was once main's, enforced by `electron/main/theme/index.ts`,
+ * The pattern was once main's, enforced by `core/theme/index.ts`,
  * which refused a `suggestedName` outside `/^[\w.-]{1,64}\.json$/` and made
  * Export throw for anyone whose theme was called "Café". HIVE-146 deleted that
  * module, and `<a download>` accepts anything — so nothing rejects a name any

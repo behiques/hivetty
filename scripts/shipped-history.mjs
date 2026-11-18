@@ -21,7 +21,7 @@ import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { baseOf } from '../electron/main/seed/merge.ts';
+import { baseOf } from '../core/seed/merge.ts';
 
 const root = join(import.meta.dirname, '..');
 const git = (...args) =>

@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * user clicked (HIVE-151).
  *
  * These three branches lived inside `activateNotification` in
- * `electron/main/ipc/index.ts`, where no test ever reached them — the existing
+ * `core/ipc/index.ts`, where no test ever reached them — the existing
  * coverage exercised `ask` and `session` and asserted only that neither opened
  * anything external. They are also the three the remote proxy now answers
  * locally rather than forwarding, so what they do is worth pinning on its own.

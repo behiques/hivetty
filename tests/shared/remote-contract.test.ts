@@ -644,7 +644,7 @@ describe('remote contract: the version handshake', () => {
 
 describe('remote contract: the call deadline (HIVE-144)', () => {
   /**
-   * `electron/remote-host/listener.ts`'s `dispatch.call` site names the
+   * `remote-host/listener.ts`'s `dispatch.call` site names the
    * reason directly: the two numbers have to agree or the client gives up on
    * a call the server is still going to answer. A client whose own timeout
    * fires at or before the server's would abandon a call mid-flight instead
@@ -659,8 +659,8 @@ describe('remote contract: the call deadline (HIVE-144)', () => {
 
 /**
  * `SNAPSHOT_CHANNELS` named literally, not read back off itself (HIVE-144
- * review). Every assertion in `tests/electron/remote-host/listener.test.ts`
- * and `tests/electron/main/ipc/remote-composition.test.ts` iterates this
+ * review). Every assertion in `tests/remote-host/listener.test.ts`
+ * and `tests/core/ipc/remote-composition.test.ts` iterates this
  * array to build its own expectations, which makes membership self-certifying
  * there: commenting out `CH.githubPrs` at the source left `pnpm exec vitest
  * run tests/electron` fully green, because every one of those tests would

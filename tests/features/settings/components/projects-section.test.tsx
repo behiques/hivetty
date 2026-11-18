@@ -164,7 +164,7 @@ describe('ProjectsSection', () => {
     /**
      * While attached to someone else's Hive, `config:choose-directory` opens on
      * the server, which has no window — see `WINDOW_BOUND`
-     * (`electron/shared/remote-contract.ts`). HIVE-144 disabled the button for
+     * (`shared/remote-contract.ts`). HIVE-144 disabled the button for
      * that; HIVE-146 gave it the server-side picker instead, so the control
      * stays live and the click still never reaches the bridge.
      */

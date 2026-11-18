@@ -121,9 +121,9 @@ describe('protocolLockProblems', () => {
 describe('the committed lock', () => {
   it('matches the contract on this tree', () => {
     const state = readProtocolState({
-      ipcContract: readFileSync(join(appRoot, 'electron/shared/ipc-contract.ts'), 'utf8'),
+      ipcContract: readFileSync(join(appRoot, 'shared/ipc-contract.ts'), 'utf8'),
       remoteContract: readFileSync(
-        join(appRoot, 'electron/shared/remote-contract.ts'),
+        join(appRoot, 'shared/remote-contract.ts'),
         'utf8',
       ),
     });
