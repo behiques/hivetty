@@ -15,7 +15,7 @@ const getAllWindows = vi.fn();
 vi.mock('electron', () => ({ BrowserWindow: { getAllWindows } }));
 
 const { createWindowBroadcaster } = await import(
-  '../../../core/ipc/broadcaster'
+  '../../../../electron/main/ipc/window-broadcaster'
 );
 
 const fakeWindow = (destroyed = false) => ({

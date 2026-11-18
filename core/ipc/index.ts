@@ -190,6 +190,7 @@ import type { SetSyncGroupRequest, SyncedAppearance } from '@shared/sync-contrac
 import type { UpdateStatus } from '@shared/update-contract';
 
 import { onDisplayWake } from '../../electron/main/display-wake';
+import { createWindowBroadcaster } from '../../electron/main/ipc/window-broadcaster';
 import { keepAwake } from '../../electron/main/keep-awake';
 import {
   activateOnThisMachine,
@@ -369,7 +370,7 @@ import { PLUGIN_DIR } from '../skills/paths';
 import { onSyncAppearance, onSyncStatus, setSyncHooks, syncCalls } from '../sync';
 
 import { createBindings } from './bindings';
-import { createWindowBroadcaster, type Broadcaster } from './broadcaster';
+import type { Broadcaster } from './broadcaster';
 import { readLocalRemote } from './get-remote';
 import { createIpcRegistry, type CallHandler, type RemoteReporter } from './registry';
 import { createRemoteDispatch } from './remote-dispatch';

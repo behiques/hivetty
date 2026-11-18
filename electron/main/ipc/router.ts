@@ -5,7 +5,7 @@ import { CH, type AppInfo, type RemoteLinkStatus } from '@shared/ipc-contract';
 import { RELAY_CLOSE } from '@shared/relay-contract';
 
 import { getConfig } from '../../../core/config';
-import { createWindowBroadcaster, type Broadcaster } from '../../../core/ipc/broadcaster';
+import type { Broadcaster } from '../../../core/ipc/broadcaster';
 import {
   ipcBindingsSize,
   readRemoteCredential,
@@ -32,6 +32,7 @@ import {
 import type { StoredDeviceCredential } from '../../remote-client/token-store';
 
 import { registerRemoteProxy, remoteProxyBindingsSize, resetRemoteProxy } from './remote-proxy';
+import { createWindowBroadcaster } from './window-broadcaster';
 
 
 /**
