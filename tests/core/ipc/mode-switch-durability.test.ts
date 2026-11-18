@@ -163,6 +163,7 @@ vi.mock('../../../core/agents/runs', () => ({
 }));
 
 const { resetIpcHandlers } = await import('../../../core/ipc');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const { registerIpc, switchIpcMode } = await import('../../../electron/main/ipc/router');
 
 /** A `RemoteClient` fake — nothing here sends a frame. */
@@ -200,6 +201,7 @@ const storedUuid = (): string | undefined => {
 };
 
 beforeEach(() => {
+  installDesktopPlatform();
   dir = mkdtempSync(join(tmpdir(), 'hive-mode-switch-'));
   process.env[CONFIG_PATH_ENV] = join(dir, 'config.json');
   writeFileSync(join(dir, 'config.json'), '{\n  "version": 2,\n  "projects": []\n}\n');

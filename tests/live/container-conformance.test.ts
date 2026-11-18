@@ -403,8 +403,7 @@ describe.skipIf(!RUN || CLAUDE_IMAGE === undefined)('container conformance — c
     writeFileSync(
       hostMcpConfig,
       mcpConfig({
-        execPath: process.execPath,
-        scriptPath: join(process.cwd(), 'out', 'main', 'mcp-host.js'),
+        launch: { command: process.execPath, args: [join(process.cwd(), 'out', 'main', 'mcp-host.js')], env: { ELECTRON_RUN_AS_NODE: '1' } },
       }),
       'utf8',
     );

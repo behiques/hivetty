@@ -526,3 +526,30 @@ describe('suspendAll / resumeAll (HIVE-267)', () => {
     expect(hosts).toHaveLength(0);
   });
 });
+
+/**
+ * HIVE-422: the fork is now the platform's `processHost()`, which a server can
+ * answer with a throw (no binary, no permission). The throw belongs to the
+ * spawn that asked, and it must not count as a crash: the next spawn forks
+ * again, as if the first had never been tried.
+ */
+describe('a fork that throws (HIVE-422)', () => {
+  it('rejects that spawn with the same message, and a later spawn forks again', () => {
+    let calls = 0;
+    const fork = vi.fn((): HostChild => {
+      calls += 1;
+      if (calls === 1) throw new Error('no pty-host binary');
+      const created = new FakeHost();
+      hosts.push(created);
+      return created;
+    });
+    supervisor = build({ fork });
+
+    expect(() => supervisor.spawn(SPAWN)).toThrow('no pty-host binary');
+
+    supervisor.spawn(SPAWN);
+    expect(fork).toHaveBeenCalledTimes(2);
+    host().ready();
+    expect(host().commandsOfType('spawn')).toHaveLength(1);
+  });
+});

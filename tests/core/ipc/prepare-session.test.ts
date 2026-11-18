@@ -163,6 +163,7 @@ vi.mock('../../../core/sessions/index', async (importOriginal) => {
 });
 
 const { CH } = await import('../../../shared/ipc-contract');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const { registerIpcHandlers, resetIpcHandlers } = await import('../../../core/ipc');
 
 const mainFrame = { url: 'file:///out/renderer/index.html' };
@@ -174,6 +175,7 @@ const invoke = (channel: string, payload: unknown) =>
 const REQUEST = { sessionId: 'sess-07', projectId: 'hero', cols: 80, rows: 24 };
 
 beforeEach(() => {
+  installDesktopPlatform();
   handlers.clear();
   calls.length = 0;
   spawnWindow.length = 0;

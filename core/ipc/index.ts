@@ -6,7 +6,6 @@ import { dirname, join } from 'node:path';
 
 import {
   BrowserWindow,
-  Notification,
   app,
   dialog,
   ipcMain,
@@ -196,10 +195,7 @@ import {
   activateOnThisMachine,
   focusThisMachine,
 } from '../../electron/main/notifications/activate-here';
-import {
-  notificationDelivery,
-  recordNotificationRefusal,
-} from '../../electron/main/notifications/delivery';
+import { notificationDelivery } from '../../electron/main/notifications/delivery';
 import { badgeDock, clearDockBadge } from '../../electron/main/notifications/dock-badge';
 import { splashEnabled } from '../../electron/main/splash';
 import {
@@ -339,6 +335,7 @@ import {
   createToastRoute,
 } from '../notifications';
 import { createBuilderProgress, type BuilderProgress } from '../plans';
+import { platform } from '../platform';
 import { registerPtyHost } from '../pty-host';
 import { onRelayStatus, relayStatus } from '../relay';
 import { relayHostsFor } from '../relay/hosts';
@@ -398,7 +395,8 @@ import { createSurfaceRegistry, deviceNameOf, type SurfaceId } from './surfaces'
  * HIVE-265 ruling 4: the Playwright suite runs unpackaged with HIVE_E2E and no cloud, so the licence gate stays off;
  * HIVE-270's licence specs set HIVE_E2E_GATE to keep it on. HIVE-332's plan lock follows the same switch.
  */
-const licenceGateOff = (): boolean => !app.isPackaged && Boolean(process.env.HIVE_E2E) && !process.env.HIVE_E2E_GATE;
+const licenceGateOff = (): boolean =>
+  !platform().lifecycle.isPackaged && Boolean(process.env.HIVE_E2E) && !process.env.HIVE_E2E_GATE;
 const entitledCli = (id: HarnessId): string | null => (licenceGateOff() ? null : cliEntitled(id));
 
 /**
@@ -1638,73 +1636,8 @@ export function registerIpcHandlers(
    * calls this only for a local window — an attached client raises its own,
    * because a served Mac's desktop is not where the user is.
    */
-  const presentLocally = ({
-    title,
-    body,
-    onClick,
-  }: {
-    title: string;
-    body: string;
-    onClick: () => void;
-  }): void => {
-      // False on a Linux box with no notification daemon. Checked per send
-      // rather than once at boot: the daemon can arrive or go away while the
-      // app is running, and constructing one when unsupported throws.
-      if (!Notification.isSupported()) return;
-
-      const notification = new Notification({ title, body });
-      notification.on('click', onClick);
-      /**
-       * The failure that was being thrown away.
-       *
-       * `show()` is fire-and-forget and its refusal arrives here, on an event
-       * nothing was listening to. Measured on macOS 15 / Electron 43.2.0:
-       * `isSupported()` returns `true`, this event fires with `UNErrorDomain
-       * error 1` — not authorized — and the app carried on reporting desktop
-       * delivery as available. Every "System" notification since has been
-       * dropped in silence.
-       *
-       * Recorded rather than merely logged, because the honest place for it is
-       * the settings pane that offers the switch. Logged once per distinct
-       * reason so a fleet of blocked sessions cannot fill a terminal with the
-       * same line.
-       */
-      notification.on('failed', (_event, error) => {
-        const reason = String(error);
-        if (!recordNotificationRefusal(reason)) return;
-        console.error(
-          `[hive] the OS refused a desktop notification — the inbox still has it (${reason})`,
-        );
-      });
-      notification.show();
-
-      /**
-       * The dock is what still works when the OS says no.
-       *
-       * Measured on the same machine that refuses notifications outright:
-       * `app.dock.bounce('critical')` and `setBadge` both succeed, because
-       * neither needs notification authorization. So the app is not out of ways
-       * to reach someone in another window — it was only using the one that was
-       * being rejected.
-       *
-       * Unconditional rather than only on a recorded refusal. A bounce is what
-       * `both` already means — *interrupt me* — and gating it on a failure
-       * would make the first interruption of every launch the one that gets
-       * lost, since the refusal is not known until a send has already failed.
-       * `dock` is undefined off macOS, where the badge and bounce have no
-       * equivalent and the toast is expected to work.
-       *
-       * **`informational`, not `critical`.** `critical` maps to
-       * `NSCriticalRequest`, which bounces *until the app is activated* — and
-       * nothing here ever calls `cancelBounce`. A fleet left overnight would
-       * start bouncing at the first session to go quiet and not stop until
-       * somebody came back to it, which is not an interruption, it is a fault
-       * light. `informational` bounces once, which is the whole of what a
-       * notification is entitled to; the **badge** is the part that persists,
-       * and it persists honestly because it is a count rather than an alarm.
-       */
-    app.dock?.bounce('informational');
-  };
+  const presentLocally = (toast: { title: string; body: string; onClick: () => void }): void =>
+    platform().notify(toast);
 
   /**
    * Open whatever a notification is about.
@@ -2093,7 +2026,7 @@ export function registerIpcHandlers(
     syncCalls()[CH.syncReportAppearance](fields as SyncedAppearance),
   );
   // HIVE-265: the gate's Quit. window.close() would leave the app running in the dock.
-  handle(CH.appQuit, () => app.quit());
+  handle(CH.appQuit, () => platform().lifecycle.quit());
 
   /**
    * The hook pipeline is constructed here and started by `createSessions`
@@ -2116,7 +2049,7 @@ export function registerIpcHandlers(
    * knows about its own rows, not anything Claude wrote.
    */
   history = createSessionHistory(
-    join(app.getPath('userData'), SESSION_HISTORY_FILE),
+    join(platform().paths.stateDir, SESSION_HISTORY_FILE),
   );
 
   /**
@@ -2499,7 +2432,7 @@ export function registerIpcHandlers(
 
   /*
     Constructed before the session layer, which takes it as an option and syncs
-    it on every spawn (HIVE-96). `app.getVersion()` is read here rather than
+    it on every spawn (HIVE-96). `platform().lifecycle.version` is read here rather than
     inside the runtime so that module's tests can run under plain Node — the
     same reason `userDataPath` is passed in rather than resolved there.
   */
@@ -2510,7 +2443,7 @@ export function registerIpcHandlers(
     and this is the only line where they meet.
   */
   const hooks = createHookRuntime({
-    userDataPath: app.getPath('userData'),
+    userDataPath: platform().paths.stateDir,
     // Read per call, so a config reload is picked up (HIVE-79).
     sessionMetrics: () => getConfig().sessionMetrics,
     // HIVE-176. Resolved against the plugin registry at every write, and the
@@ -2783,8 +2716,8 @@ export function registerIpcHandlers(
   });
 
   skills = createSkillsRuntime({
-    userDataPath: app.getPath('userData'),
-    version: app.getVersion(),
+    userDataPath: platform().paths.stateDir,
+    version: platform().lifecycle.version,
     /*
       Read at every regeneration rather than captured here: this runs before the
       receiver has bound, so a value read now would be `null` for the life of the
@@ -2840,8 +2773,8 @@ export function registerIpcHandlers(
     on where the app is installed and where its own bundle sits, and neither
     moves while the app runs.
 
-    `import.meta.dirname` is `out/main/` in both dev and a packaged build, which
-    is where `mcp-host.js` is emitted — the same resolution `pty-host` uses.
+    How `mcp-host.js` is launched is the shell's answer, `platform().mcpLaunch`
+    (HIVE-422): the desktop runs its own binary as Node from `out/main/`.
 
     Fired here, unawaited, so a slow write cannot delay the first window — the
     same reasoning `startLoginEnvImport` gives in `main/index.ts`. That leaves
@@ -2851,9 +2784,8 @@ export function registerIpcHandlers(
     session can be spawned, exactly as they already `await loginEnvStatus()`.
   */
   const mcp = createMcpRuntime({
-    userDataPath: app.getPath('userData'),
-    execPath: process.execPath,
-    scriptPath: join(import.meta.dirname, 'mcp-host.js'),
+    userDataPath: platform().paths.stateDir,
+    launch: platform().mcpLaunch,
   });
   void mcp.start();
 
@@ -2905,8 +2837,8 @@ export function registerIpcHandlers(
 
   // HIVE-343. Copilot's agent token, stored as Slack's are. `read()` reaches the wake, never a channel.
   const cliTokens = createCliTokens({
-    store: safeStorage,
-    file: credentialFile(join(app.getPath('userData'), CLI_TOKENS_FILE)),
+    store: platform().secrets,
+    file: credentialFile(join(platform().paths.stateDir, CLI_TOKENS_FILE)),
   });
 
   // HIVE-396. One deps object, so the form's harness check resolves exactly what a wake would.
@@ -2917,17 +2849,17 @@ export function registerIpcHandlers(
     cliHome,
     // HIVE-343. The only reader of a stored CLI token: it reaches the child's env, never a channel.
     cliToken: (id) => (id === 'copilot' ? cliTokens.read('copilot') : null),
-    promptFile: (name) => agentPromptFile(app.getPath('userData'), name),
+    promptFile: (name) => agentPromptFile(platform().paths.stateDir, name),
     // HIVE-360: the run's own CLI's folder. The fallback is Claude's, which has no catalog.md, so a
     // CLI whose folder is missing gets no catalog block, and Claude's argv is today's.
-    pluginDir: (cli) => skills?.pluginDirPath(cli) ?? join(app.getPath('userData'), PLUGIN_DIR),
+    pluginDir: (cli) => skills?.pluginDirPath(cli) ?? join(platform().paths.stateDir, PLUGIN_DIR),
     // The agent-space file, never `hooks.settingsPathFor()`: that one carries
     // no `permissions.ask` rule, and a wake started against it would run with
     // no fence at all (HIVE-119).
     agentSettingsPath: () => hooks.agentSettingsPathFor(),
     mcpConfig: () => mcp.configPathFor(),
     hiveServer: () => mcp.hiveServerSpec(),
-    agentMcpFile: (name) => agentMcpConfigFile(app.getPath('userData'), name),
+    agentMcpFile: (name) => agentMcpConfigFile(platform().paths.stateDir, name),
     hookEnv: (name) => hooks.envFor(name),
     claudeCommand,
     subscriptionAuth: () => getConfig().subscriptionAuth,
@@ -2947,7 +2879,7 @@ export function registerIpcHandlers(
     // HIVE-137. The container agent's settings file lives in the container
     // set `hooks` writes at start, and the alias is the receiver's global one,
     // read live so a config reload is honoured on the next wake.
-    userDataPath: () => app.getPath('userData'),
+    userDataPath: () => platform().paths.stateDir,
     hostAlias: () => getConfig().receiver.hostAlias,
     agentContainerSettingsPath: (config) => hooks.agentContainerSettingsPathFor(config),
     laneHolds: (name, lane) => laneClaims(name, ledger.read({}).entries).has(lane),
@@ -3321,8 +3253,8 @@ export function registerIpcHandlers(
    * IPC verb returns a token.
    */
   const slackTokens = createSlackTokens({
-    store: safeStorage,
-    file: credentialFile(join(app.getPath('userData'), SLACK_TOKENS_FILE)),
+    store: platform().secrets,
+    file: credentialFile(join(platform().paths.stateDir, SLACK_TOKENS_FILE)),
   });
 
   /**
@@ -3438,7 +3370,7 @@ export function registerIpcHandlers(
     // `skills` and `mcp` are each built with, so a container project's
     // per-session directory and its host counterpart resolve against the
     // same root.
-    userDataPath: app.getPath('userData'),
+    userDataPath: platform().paths.stateDir,
     skills,
     hooks,
     history,
@@ -3908,13 +3840,13 @@ export function registerIpcHandlers(
     const { electron, chrome, node } = process.versions;
     const diagnostics = sessions?.diagnostics() ?? [];
     return {
-      version: app.getVersion(),
+      version: platform().lifecycle.version,
       electron: electron ?? 'unknown',
       chrome: chrome ?? 'unknown',
       node: node ?? 'unknown',
       platform: process.platform,
       // Reported, never written to — this app logs to stdout. See `AppInfo`.
-      logPath: app.getPath('logs'),
+      logPath: platform().paths.logsDir,
       // `hooks?.` rather than `hooks.`, matching every other read through this
       // runtime on this file: `null` is the correct answer for a receiver that
       // never bound, exactly as `boundHost()` itself already returns for that
@@ -4377,8 +4309,8 @@ export function registerIpcHandlers(
    */
   const jira = announceIssueWrites(
     createJira({
-      store: safeStorage,
-      file: credentialFile(join(app.getPath('userData'), 'jira-credential.bin')),
+      store: platform().secrets,
+      file: credentialFile(join(platform().paths.stateDir, 'jira-credential.bin')),
       env: process.env,
       config: getConfig,
       fetch: (url, init) => globalThis.fetch(url, init),

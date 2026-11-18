@@ -450,6 +450,7 @@ vi.mock('../../../core/sessions', () => ({
 }));
 
 const { CH } = await import('../../../shared/ipc-contract');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const {
   acceptRelaySocket,
   ipcBindingsSize,
@@ -489,6 +490,7 @@ const emitLedgerChanged = (entry: unknown): void => {
 };
 
 beforeEach(() => {
+  installDesktopPlatform();
   windowSends.length = 0;
   windows.length = 0;
   onChangeListener = undefined;

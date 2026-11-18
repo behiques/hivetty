@@ -88,8 +88,7 @@ describe.skipIf(!RUN)('the hive MCP server, against a real claude', () => {
     await writeFile(
       configFile,
       mcpConfig({
-        execPath: process.execPath,
-        scriptPath: join(process.cwd(), 'out', 'main', 'mcp-host.js'),
+        launch: { command: process.execPath, args: [join(process.cwd(), 'out', 'main', 'mcp-host.js')], env: { ELECTRON_RUN_AS_NODE: '1' } },
       }),
       'utf8',
     );

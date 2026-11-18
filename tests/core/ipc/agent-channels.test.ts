@@ -334,6 +334,7 @@ vi.mock('../../../core/ledger', () => ({
 }));
 
 const { CH } = await import('../../../shared/ipc-contract');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const { registerIpcHandlers, resetIpcHandlers } = await import(
   '../../../core/ipc'
 );
@@ -364,6 +365,7 @@ const definition = (
 });
 
 beforeEach(async () => {
+  installDesktopPlatform();
   handlers.clear();
   windows.length = 0;
   shutdownHooks = [];

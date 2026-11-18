@@ -373,7 +373,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
     if (!existsSync(HOST)) {
       throw new Error(`${HOST} is missing. Run \`pnpm desktop:build\` before \`pnpm test:session:copilot\`.`);
     }
-    return hiveServerSpec({ execPath: process.execPath, scriptPath: HOST });
+    return hiveServerSpec({ command: process.execPath, args: [HOST], env: { ELECTRON_RUN_AS_NODE: '1' } });
   };
 
   /** A stdio server for `--additional-mcp-config` or the user's `mcp-config.json`. */
@@ -870,7 +870,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
       );
       // The real host when the desktop build exists, else a stand-in under the same name.
       const hiveServer = existsSync(HOST)
-        ? hiveServerSpec({ execPath: process.execPath, scriptPath: HOST })
+        ? hiveServerSpec({ command: process.execPath, args: [HOST], env: { ELECTRON_RUN_AS_NODE: '1' } })
         : stub('hive');
       if (!existsSync(HOST)) console.info('NOTE     ', `${HOST} is absent: the hive server is a stand-in`);
       const { log } = await run('config', UUID, { spec: { hiveServer }, prompts: ['Reply ok'], after: ['/mcp list'] });

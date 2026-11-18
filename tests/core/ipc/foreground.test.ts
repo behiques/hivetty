@@ -176,6 +176,7 @@ vi.mock('../../../core/config/index', () => ({
 }));
 
 const { CH } = await import('../../../shared/ipc-contract');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const {
   registerIpcHandlers,
   resetIpcHandlers,
@@ -229,6 +230,7 @@ const reportName = (payload: unknown) => {
 };
 
 beforeEach(() => {
+  installDesktopPlatform();
   onHandlers.clear();
   shutdownHooks.length = 0;
   appListeners.clear();

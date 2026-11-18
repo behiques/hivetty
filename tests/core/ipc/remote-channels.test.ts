@@ -167,6 +167,7 @@ vi.mock('../../../core/agents', () => ({
 }));
 
 const { CH } = await import('../../../shared/ipc-contract');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const { reloadConfig } = await import('../../../core/config');
 const { registerIpcHandlers, resetIpcHandlers } = await import(
   '../../../core/ipc'
@@ -214,6 +215,7 @@ const seed = (text: string): void => {
 };
 
 beforeEach(() => {
+  installDesktopPlatform();
   dir = mkdtempSync(join(tmpdir(), 'hive-remote-channels-'));
   path = join(dir, 'config.json');
   process.env[CONFIG_PATH_ENV] = path;

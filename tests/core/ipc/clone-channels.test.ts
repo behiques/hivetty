@@ -82,6 +82,7 @@ vi.mock('../../../core/shutdown', () => ({
 }));
 
 const { CH } = await import('../../../shared/ipc-contract');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const { registerIpcHandlers, resetIpcHandlers } = await import(
   '../../../core/ipc'
 );
@@ -112,6 +113,7 @@ const invoke = (channel: string, event: unknown, payload: unknown) =>
   Promise.resolve().then(() => handlers.get(channel)!(event, payload));
 
 beforeEach(() => {
+  installDesktopPlatform();
   handlers.clear();
   shutdownHooks.length = 0;
   registerIpcHandlers();

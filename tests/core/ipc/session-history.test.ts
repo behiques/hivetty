@@ -129,6 +129,7 @@ vi.mock('../../../core/sessions/index', async (importOriginal) => {
 });
 
 const { CH } = await import('../../../shared/ipc-contract');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const { registerIpcHandlers, resetIpcHandlers } = await import(
   '../../../core/ipc'
 );
@@ -146,6 +147,7 @@ const history = () =>
   );
 
 beforeEach(() => {
+  installDesktopPlatform();
   handlers.clear();
   liveIds = [];
   vi.clearAllMocks();

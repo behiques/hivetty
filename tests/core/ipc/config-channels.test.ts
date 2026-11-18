@@ -177,6 +177,9 @@ vi.mock('../../../core/harness/codex/models', () => ({
 }));
 
 const { CH } = await import('../../../shared/ipc-contract');
+const { setPlatform } = await import('../../../core/platform');
+const { createDesktopPlatform } = await import('../../../electron/main/platform');
+const { installDesktopPlatform } = await import('../../support/desktop-platform');
 const config = await import('../../../core/config/index');
 const signIn = await import('../../../core/harness/sign-in');
 const detect = await import('../../../core/harness/detect');
@@ -202,6 +205,7 @@ beforeEach(() => {
   handlers.clear();
   shutdownHooks.length = 0;
   vi.clearAllMocks();
+  installDesktopPlatform();
   registerIpcHandlers();
 });
 
@@ -510,5 +514,36 @@ describe('app:info gateOff (HIVE-265)', () => {
     vi.stubEnv('HIVE_E2E', '1');
     vi.stubEnv('HIVE_E2E_GATE', '1');
     await expect(invoke(CH.appInfo, trustedEvent, undefined)).resolves.not.toHaveProperty('gateOff');
+  });
+});
+
+/**
+ * HIVE-422: the escape hatch reads `platform().lifecycle.isPackaged`, not
+ * Electron's `app`. The CLI plan lock (`entitledCli`) and `app:info`'s
+ * `gateOff` read the one predicate, `licenceGateOff`; asserted here through
+ * `app:info`, the channel that answers it.
+ */
+describe('the licence escape hatch reads the platform (HIVE-422)', () => {
+  const withPackaged = (isPackaged: boolean): void => {
+    const desktop = createDesktopPlatform();
+    setPlatform({ ...desktop, lifecycle: { ...desktop.lifecycle, isPackaged } });
+  };
+
+  afterEach(() => {
+    electronApp.isPackaged = false;
+    vi.unstubAllEnvs();
+  });
+
+  it('keeps the gate on when the platform is packaged, even with HIVE_E2E set', async () => {
+    withPackaged(true);
+    vi.stubEnv('HIVE_E2E', '1');
+    await expect(invoke(CH.appInfo, trustedEvent, undefined)).resolves.not.toHaveProperty('gateOff');
+  });
+
+  it('turns it off when the platform is unpackaged and HIVE_E2E is set', async () => {
+    electronApp.isPackaged = true;
+    withPackaged(false);
+    vi.stubEnv('HIVE_E2E', '1');
+    await expect(invoke(CH.appInfo, trustedEvent, undefined)).resolves.toMatchObject({ gateOff: true });
   });
 });

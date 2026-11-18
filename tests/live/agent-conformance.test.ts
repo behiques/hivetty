@@ -1293,7 +1293,7 @@ describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
     await mkdir(dirname(mcpConfigPath), { recursive: true });
     await writeFile(
       mcpConfigPath,
-      mcpConfig({ execPath: process.execPath, scriptPath: host }),
+      mcpConfig({ launch: { command: process.execPath, args: [host], env: { ELECTRON_RUN_AS_NODE: '1' } }, }),
       'utf8',
     );
 
@@ -1328,7 +1328,7 @@ describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
       agentSettingsPath: () => settingsPath,
       mcpConfig: () => mcpConfigPath,
       hiveServer: () =>
-        hiveServerSpec({ execPath: process.execPath, scriptPath: host }),
+        hiveServerSpec({ command: process.execPath, args: [host], env: { ELECTRON_RUN_AS_NODE: '1' } }),
       agentMcpFile: (name) => agentMcpConfigFile(userDataPath, name),
       hookEnv: (name) => ({
         [HOOK_ENV_SESSION]: name,
