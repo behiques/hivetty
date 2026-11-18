@@ -255,6 +255,47 @@ describe('the gate', () => {
     expect(h.engines).toHaveLength(2);
   });
 
+  it('a sign-in started and cancelled while signed in keeps the key', () => {
+    const h = harness();
+    startSync(h.deps);
+    writeFileSync(keyFile(), 'k');
+    h.setAccount({ kind: 'signing-in' } as AccountState);
+    h.setAccount(SIGNED_IN());
+    expect(existsSync(keyFile())).toBe(true);
+    expect(h.engines[0]?.stop).not.toHaveBeenCalledWith({ wipe: true });
+  });
+
+  it('wipes a key left on disk when the app starts signed out', () => {
+    writeFileSync(keyFile(), 'k');
+    writeFileSync(stateFile(), '{}');
+    startSync(harness({ account: { kind: 'signed-out' } }).deps);
+    expect(existsSync(keyFile())).toBe(false);
+    expect(existsSync(stateFile())).toBe(false);
+  });
+
+  it('ignores the status of an engine that is no longer the running one', () => {
+    const heard: SyncStatus[] = [];
+    const off = onSyncStatus((status) => heard.push(status));
+    const h = harness();
+    startSync(h.deps);
+    const old = h.engines[0];
+    h.setAccount({ kind: 'signed-out' });
+    old?.deps?.onStatus({ kind: 'off', cloud: 'none', resetElsewhere: false });
+    expect(heard.at(-1)).toEqual({ kind: 'unavailable', reason: 'signed-out' });
+    off();
+  });
+
+  it('a set-up that finishes after the gate closed answers the refusal', async () => {
+    const h = harness();
+    startSync(h.deps);
+    let finish: (value: { ok: true }) => void = () => undefined;
+    vi.mocked(h.engines[0]!.setup).mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    const pending = syncCalls()[CH.syncSetup]('correct horse battery');
+    h.setAccount({ kind: 'signed-out' });
+    finish({ ok: true });
+    await expect(pending).resolves.toEqual({ ok: false, error: 'Sign in to use Sync' });
+  });
+
   it('a repeated signed-in notice for the same person changes nothing', () => {
     const h = harness();
     startSync(h.deps);

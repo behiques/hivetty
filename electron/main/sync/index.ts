@@ -143,8 +143,14 @@ export function startSync(deps: SyncDeps): { stop(): void } {
     const account = deps.session()?.account();
     return account?.kind === 'signed-in' ? account.email : null;
   };
-  // A restart as the same person keeps the key; anyone else signing in later wipes it.
-  let owner: string | null = keys.read() !== null || state.read() !== null ? emailOf() : null;
+  const signingIn = (): boolean => deps.session()?.account().kind === 'signing-in';
+  // A restart as the same person keeps the key; anyone else signing in later wipes it. A key found while
+  // nobody is signed in belongs to a sign-out that happened while the app was closed.
+  let owner: string | null = emailOf();
+  if (owner === null && !signingIn()) {
+    keys.clear();
+    state.clear();
+  }
 
   const gate = (): Closed | null => {
     if (emailOf() === null) return { kind: 'unavailable', reason: 'signed-out' };
@@ -153,8 +159,9 @@ export function startSync(deps: SyncDeps): { stop(): void } {
     return null;
   };
 
-  const build = (): SyncEngine =>
-    (deps.createEngine ?? createSyncEngine)({
+  const build = (): SyncEngine => {
+    // Only the running engine speaks: one stopped mid-call must not paint its status over the gate's.
+    const built: SyncEngine = (deps.createEngine ?? createSyncEngine)({
       fetch: (path, init) => {
         const session = deps.session();
         return session === null ? Promise.reject(new Error('no cloud session')) : session.authedFetch(path, init);
@@ -188,10 +195,16 @@ export function startSync(deps: SyncDeps): { stop(): void } {
       conflicts: () => conflictsSummary(deps.hiveDir),
       deriveKey: (passphrase, salt) => deriveKey(passphrase, salt),
       now: Date.now,
-      onStatus: publish,
+      onStatus: (status) => {
+        if (engine === built) publish(status);
+      },
     });
+    return built;
+  };
 
   function evaluate(): void {
+    // A sign-in started while signed in: the account comes back on cancel, so nothing is decided yet.
+    if (signingIn()) return;
     const email = emailOf();
     // Another person on this Mac must never inherit the last one's key or merge base.
     if (email !== owner) {
@@ -284,7 +297,10 @@ export function syncCalls(): SyncCalls {
     [CH.syncSetup]: async (passphrase) => {
       const engine = open();
       if (engine === null) return { ok: false, error: running?.refusal() ?? SIGN_IN };
-      return engine.setup(checkPassphrase(passphrase));
+      const result = await engine.setup(checkPassphrase(passphrase));
+      // The gate closed while the key was being derived: the engine stored nothing, and this says why.
+      if (open() !== engine) return { ok: false, error: running?.refusal() ?? SIGN_IN };
+      return result;
     },
     [CH.syncSetGroup]: async (request) => {
       const engine = open();

@@ -364,27 +364,31 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     return status();
   }
 
-  async function create(passphrase: string, user: string): Promise<SyncSetupResult> {
+  async function create(passphrase: string, user: string, mine: number): Promise<SyncSetupResult> {
     if (passphrase.length < MIN_PASSPHRASE) return { ok: false, error: TOO_SHORT };
     const salt = randomBytes(SALT_BYTES);
     const key = await deps.deriveKey(passphrase, salt);
-    return store({ key: key.toString('base64'), salt: salt.toString('base64'), userId: user }, freshState(true), {
-      revision: 0,
-      view: {},
-    });
+    return store(
+      { key: key.toString('base64'), salt: salt.toString('base64'), userId: user },
+      freshState(true),
+      { revision: 0, view: {} },
+      mine,
+    );
   }
 
-  async function join(passphrase: string, user: string, blob: CloudBlob): Promise<SyncSetupResult> {
+  async function join(passphrase: string, user: string, blob: CloudBlob, mine: number): Promise<SyncSetupResult> {
     const key = await deps.deriveKey(passphrase, Buffer.from(blob.salt, 'base64'));
     const plain = open(key, user, Buffer.from(blob.ciphertext, 'base64'));
     const view = plain === null ? null : await decodeBundle(plain);
     if (view === null) return { ok: false, error: WRONG_PASSPHRASE };
     const state = freshState(false);
     state.revision = blob.revision;
-    return store({ key: key.toString('base64'), salt: blob.salt, userId: user }, state, { revision: blob.revision, view });
+    return store({ key: key.toString('base64'), salt: blob.salt, userId: user }, state, { revision: blob.revision, view }, mine);
   }
 
-  function store(key: StoredKey, state: SyncState, view: { revision: number; view: View }): SyncSetupResult {
+  function store(key: StoredKey, state: SyncState, view: { revision: number; view: View }, mine: number): SyncSetupResult {
+    // A stop (sign-out, another account, a lost entitlement) or a reset during the set-up: store nothing.
+    if (mine !== generation || stopped) return { ok: false, error: CANT_STORE };
     deps.state.write(state);
     if (!deps.keys.write(key)) {
       deps.state.clear();
@@ -405,6 +409,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
     const user = deps.userId();
     if (user === null) return { ok: false, error: SIGN_IN };
     await (running ?? Promise.resolve());
+    const mine = generation;
     // The probe is reused only while the cloud still holds that revision: a 304 costs no download, and the kept
     // counter means any reset since answers 200 or 404.
     let response: Response;
@@ -417,7 +422,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
       if (response.status === 404) {
         probe = null;
         cloud = 'none';
-        return await create(passphrase, user);
+        return await create(passphrase, user, mine);
       }
       let blob = response.status === 304 ? probe : null;
       if (blob === null) {
@@ -427,7 +432,7 @@ export function createSyncEngine(deps: EngineDeps): SyncEngine {
         probe = blob;
         cloud = 'present';
       }
-      return await join(passphrase, user, blob);
+      return await join(passphrase, user, blob, mine);
     } catch {
       deps.state.clear();
       return { ok: false, error: CANT_STORE };

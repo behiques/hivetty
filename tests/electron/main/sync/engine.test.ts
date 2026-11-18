@@ -744,6 +744,39 @@ describe('review round (task 8)', () => {
     expect(a.calls().length).toBe(before);
   });
 
+  it('a set-up still deriving its key when the engine stops stores nothing', async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const a = makeMac('A', cloud);
+    // Re-create A's engine with a deriveKey that waits for the test.
+    const keys = a.keys;
+    const engine = createSyncEngine({
+      fetch: cloud.fetchFor('A2'),
+      userId: () => 'usr_1',
+      keys,
+      state: a.state,
+      readDocument: () => ({}),
+      collectFiles: () => Promise.resolve({}),
+      apply: () => Promise.resolve({ configOk: true, kept: {} }),
+      conflicts: () => Promise.resolve({ count: 0, latest: null }),
+      deriveKey: async (passphrase, salt) => {
+        await gate;
+        return cheap(passphrase, salt);
+      },
+      now: () => Date.now(),
+      onStatus: () => undefined,
+    });
+    engines.push(engine);
+    engine.start();
+    const pending = engine.setup(PASS);
+    await vi.waitFor(() => expect(cloud.calls.some((call) => call.mac === 'A2')).toBe(true), { interval: 1 });
+    engine.stop({ wipe: true });
+    release();
+    expect((await pending).ok).toBe(false);
+    expect(keys.read()).toBeNull();
+    expect(a.state.read()).toBeNull();
+  });
+
   it('a set-up that cannot save answers instead of throwing', async () => {
     const a = makeMac('A', cloud, {
       state: (real) => ({
