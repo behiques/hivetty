@@ -94,6 +94,13 @@ installs it with `setPlatform` before anything registers. `handle()`/`on()` fill
 the remote registry first and bind `ipcMain` only when the platform has a
 desktop.
 
+A new screen-only dependency is a new `Desktop` member, never an import in
+core; a function core needs that touches no Electron moves into core instead
+(`splashEnabled` did). Suites that mock `electron` and reach a platform read call
+`installDesktopPlatform()` (`tests/support/desktop-platform.ts`) in their
+`beforeEach`, and `tests/core/ipc/headless.test.ts` proves core registers every
+handler with `electron` throwing on import and no desktop installed.
+
 `shared/**` has **no runtime imports, no Node APIs, no DOM APIs**. It is
 the one module both sides may import, which makes the IPC contract a compile-time
 artifact instead of a convention. All three zones are ESLint-enforced and proved
