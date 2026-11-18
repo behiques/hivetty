@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -58,6 +58,11 @@ describe('the state store', () => {
     ['a non-integer revision', JSON.stringify({ ...freshState(true), revision: 1.5 })],
     ['a string lastSyncedAt', JSON.stringify({ ...freshState(true), lastSyncedAt: 'now' })],
     ['an array base', JSON.stringify({ ...freshState(true), base: [] })],
+    ['a negative revision', JSON.stringify({ ...freshState(true), revision: -1 })],
+    ['a non-string base hash', JSON.stringify({ ...freshState(true), base: { x: 1 } })],
+    ['a non-string kept hash', JSON.stringify({ ...freshState(true), kept: { x: null } })],
+    ['a null seen entry', JSON.stringify({ ...freshState(true), seen: { k: null } })],
+    ['a seen entry without a time', JSON.stringify({ ...freshState(true), seen: { k: { hash: 'h' } } })],
   ])('reads null for %s', (_, content) => {
     const file = join(dir, 'sync-state.json');
     if (content !== null) writeFileSync(file, content);
@@ -70,6 +75,14 @@ describe('the state store', () => {
     store.clear();
     expect(() => store.clear()).not.toThrow();
     expect(store.read()).toBeNull();
+  });
+
+  it('throws when the file cannot be written, and leaves no temp file', () => {
+    expect(() => createStateStore(join(dir, 'missing', 'sync-state.json')).write(freshState(true))).toThrow();
+    const file = join(dir, 'sync-state.json');
+    mkdirSync(file); // the rename onto a folder fails after the temp file was written
+    expect(() => createStateStore(file).write(freshState(true))).toThrow();
+    expect(readdirSync(dir)).toEqual(['sync-state.json']);
   });
 
   it('overwrites a temp file a crash left behind', () => {
@@ -94,6 +107,29 @@ describe('the key store', () => {
     expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(readFileSync(file).toString()).not.toContain(stored.key);
     expect(readdirSync(dir)).toEqual(['sync-key.bin']);
+  });
+
+  it('answers false when the file cannot be written, and leaves no temp file', () => {
+    expect(createKeyStore({ file: join(dir, 'missing', 'sync-key.bin'), safeStorage: fakeSafeStorage() }).write(stored)).toBe(
+      false,
+    );
+    const file = join(dir, 'sync-key.bin');
+    mkdirSync(file);
+    expect(createKeyStore({ file, safeStorage: fakeSafeStorage() }).write(stored)).toBe(false);
+    expect(readdirSync(dir)).toEqual(['sync-key.bin']);
+  });
+
+  it('tightens a leftover temp file to 0600', () => {
+    const file = join(dir, 'sync-key.bin');
+    writeFileSync(`${file}.${String(process.pid)}.tmp`, 'old', { mode: 0o644 });
+    createKeyStore({ file, safeStorage: fakeSafeStorage() }).write(stored);
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+  });
+
+  it('seals only the key, the salt and the user id, whatever the caller passes', () => {
+    const file = join(dir, 'sync-key.bin');
+    createKeyStore({ file, safeStorage: fakeSafeStorage() }).write({ ...stored, passphrase: 'hunter2hunter2' } as typeof stored);
+    expect(fakeSafeStorage().decryptString(readFileSync(file))).not.toContain('hunter2');
   });
 
   it('writes nothing and reads nothing without keychain encryption', () => {

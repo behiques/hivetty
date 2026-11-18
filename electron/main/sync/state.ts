@@ -47,19 +47,27 @@ function writeAtomic(file: string, data: string | Buffer, mode?: number): void {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const allStrings = (value: unknown): boolean =>
+  isRecord(value) && Object.values(value).every((entry) => typeof entry === 'string');
+
+const allSeen = (value: unknown): boolean =>
+  isRecord(value) &&
+  Object.values(value).every((entry) => isRecord(entry) && typeof entry.hash === 'string' && typeof entry.at === 'number');
+
 function isState(value: unknown): value is SyncState {
   if (!isRecord(value)) return false;
   const groups = value.groups;
   return (
     value.v === 1 &&
     Number.isInteger(value.revision) &&
+    (value.revision as number) >= 0 &&
     typeof value.joined === 'boolean' &&
     (value.lastSyncedAt === null || typeof value.lastSyncedAt === 'number') &&
     isRecord(groups) &&
     SYNC_GROUPS.every((group) => typeof groups[group] === 'boolean') &&
-    isRecord(value.base) &&
-    isRecord(value.seen) &&
-    isRecord(value.kept)
+    allStrings(value.base) &&
+    allSeen(value.seen) &&
+    allStrings(value.kept)
   );
 }
 
@@ -135,7 +143,8 @@ export function createKeyStore({ file, safeStorage }: KeyStoreDeps): KeyStore {
     write(key) {
       if (!available()) return false;
       try {
-        writeAtomic(file, safeStorage.encryptString(JSON.stringify(key)), 0o600);
+        const sealed = { key: key.key, salt: key.salt, userId: key.userId }; // nothing else, whatever is passed
+        writeAtomic(file, safeStorage.encryptString(JSON.stringify(sealed)), 0o600);
         return true;
       } catch {
         return false;
