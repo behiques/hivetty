@@ -82,6 +82,10 @@ describe('budgetFrom (HIVE-422)', () => {
     ['abc', SHUTDOWN_BUDGET_MS],
     ['-1', SHUTDOWN_BUDGET_MS],
     ['1.5', SHUTDOWN_BUDGET_MS],
+    // setTimeout clamps a delay above 2^31-1 to 1 ms, which would exit before the hooks run.
+    ['2147483647', 2_147_483_647],
+    ['2147483648', SHUTDOWN_BUDGET_MS],
+    ['99999999999999999999', SHUTDOWN_BUDGET_MS],
   ])('HIVETTY_SHUTDOWN_BUDGET_MS=%s gives %d', (value, expected) => {
     expect(SHUTDOWN_BUDGET_MS).toBe(20_000);
     expect(budgetFrom({ HIVETTY_SHUTDOWN_BUDGET_MS: value })).toBe(expected);

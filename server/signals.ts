@@ -4,12 +4,15 @@ import { runShutdown } from '../core/shutdown';
 /** HIVE-422: how long a SIGTERM waits for the shutdown hooks before the process exits anyway. */
 export const SHUTDOWN_BUDGET_MS = 20_000;
 
-/** `HIVETTY_SHUTDOWN_BUDGET_MS` when it is a positive integer, else 20 s. */
+/** The longest delay `setTimeout` honours; above it the timer fires after 1 ms. */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/** `HIVETTY_SHUTDOWN_BUDGET_MS` when it is a positive integer a timer can hold, else 20 s. */
 export function budgetFrom(env: NodeJS.ProcessEnv): number {
   const raw = env.HIVETTY_SHUTDOWN_BUDGET_MS?.trim() ?? '';
   if (!/^\d+$/.test(raw)) return SHUTDOWN_BUDGET_MS;
   const value = Number(raw);
-  return value > 0 ? value : SHUTDOWN_BUDGET_MS;
+  return value > 0 && value <= MAX_TIMER_MS ? value : SHUTDOWN_BUDGET_MS;
 }
 
 const message = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));

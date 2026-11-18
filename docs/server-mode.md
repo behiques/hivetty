@@ -636,8 +636,9 @@ blank:
 | `goals/` | Goal briefs. `HIVE_GOALS_DIR` overrides it. |
 | `data/` | What the desktop keeps in its `userData`: the lease, session history, the heartbeat. Created private to its owner. |
 
-One process per folder: a second server on the same `HIVETTY_HOME` exits 1 and
-names the pid that holds it.
+One process per folder and config: a second server on the same `HIVETTY_HOME`
+exits 1 and names the pid that holds it. With `HIVE_CONFIG_PATH` pointing two
+folders at one config, the second exits 1 without a pid.
 
 ### Flags
 
@@ -655,8 +656,8 @@ names the pid that holds it.
 | --- | --- |
 | 0 | A clean stop, or a one-shot that succeeded. |
 | 1 | The folder or the config is already served, a second SIGTERM or SIGINT forced the stop, or a one-shot failed or was used wrongly. |
-| 2 | `--update`, or a `--login` or `--logout` that could not run. |
-| 3 | This edition is not part of the plan. `--login` also exits 3 today, refusing for want of a keychain. |
+| 2 | `--update`, or a `--login` or `--logout` that failed with an error (the network, say). |
+| 3 | This edition is not part of the plan. `--login` and `--logout` also exit 3 today, refusing for want of a keychain. |
 
 ### Stopping
 
