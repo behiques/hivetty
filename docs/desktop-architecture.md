@@ -1244,3 +1244,23 @@ is not showing.
   `AppInfo.gateOff` turns it off, and only an unpackaged build with `HIVE_E2E` set gets it, so the Playwright
   suite reaches the workspace with no cloud. `HIVE_E2E_GATE=1` keeps it on, for the licence specs that sign in
   against a stub cloud (HIVE-270).
+
+## Settings sync (HIVE-284)
+
+- `electron/main/sync/` is a paid feature in its own directory, started from `electron/main/index.ts` beside
+  `startRelay` and gated the same way: `startSync` runs the engine only while the account is signed in,
+  `entitled('sync')` is `null` and `safeStorage` can seal the key, re-evaluated on every account and licence
+  change. A sign-out, another account signing in, or a key found at launch with nobody signed in deletes
+  `<userData>/sync-key.bin` and `sync-state.json`; losing the entitlement only stops the engine.
+- Seven small modules: `allow-lists.ts` (the only paths read from or written to `config.json`), `crypto.ts`
+  (scrypt N=2^17 key, AES-256-GCM with the lease subject in the AAD), `merge.ts` (three-way per key and per file),
+  `state.ts`, `bundle.ts` (this Mac's view; untouched shipped skills and agents left out), `apply.ts` (losing
+  copies first, then files under `skills/` and `agents/` only, never through a link, then one validated config
+  write) and `engine.ts` (one cycle for every trigger: pull, merge, apply, push with an `If-Match` revision).
+- Every `sync:*` channel is this machine's own: the seven calls are in `PROCESS_LOCAL_REFUSALS` with a case in
+  `remote-proxy.ts`, and `sync:status-changed` and `sync:apply-appearance` are `LOCAL_ONLY_EVENTS`. A server never
+  answers a peer's sync verb, and an attached window still reaches its own Mac's sync. Remote protocol 48.
+- Triggers: `onConfigChange` and a recursive `fs.watch` on `skills/` and `agents/` (5 s debounce), a 5 minute
+  poll, `browser-window-focus`, and Sync now. After writing synced files or keys it runs what Reload runs, through
+  hooks `ipc/index.ts` registers (`setSyncHooks`): `skills.sync()`, `refreshKnownAgents()`, the `config:changed`
+  broadcast.
