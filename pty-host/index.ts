@@ -1,4 +1,5 @@
-import { createPtyHost, type HostPort } from './host';
+import { createPtyHost } from './host';
+import { hostPort } from './port';
 import { createSessionManager } from './session-manager';
 
 /**
@@ -14,21 +15,21 @@ import { createSessionManager } from './session-manager';
  */
 
 /**
- * `process.parentPort` exists only inside a `utilityProcess` child.
+ * The port is `utilityProcess`'s `parentPort` on the desktop, or one built over
+ * the `child_process.fork` channel under `hivetty-server` (HIVE-423).
  *
  * Reached through a narrow local type rather than by importing `electron`: the
  * host is a plain Node process that must not depend on Electron's module
- * graph, and the lint zone for this directory is what keeps that true. If the
- * global is absent, this file is being run somewhere it was never meant to be,
- * and saying so beats a `TypeError` on an undefined property.
+ * graph, and the lint zone for this directory is what keeps that true. If
+ * neither is present, this file is being run somewhere it was never meant to
+ * be, and saying so beats a `TypeError` on an undefined property.
  */
-const parentPort = (process as NodeJS.Process & { parentPort?: HostPort })
-  .parentPort;
+const port = hostPort(process);
 
-if (!parentPort) {
+if (!port) {
   throw new Error(
-    'pty-host must be started with utilityProcess.fork — no parentPort found',
+    'pty-host must be started with utilityProcess.fork or child_process.fork: no parent port and no IPC channel',
   );
 }
 
-createPtyHost({ port: parentPort, sessions: createSessionManager() });
+createPtyHost({ port, sessions: createSessionManager() });
