@@ -33,7 +33,7 @@ describe('hostPort (HIVE-423)', () => {
     const proc = forked();
     const port = hostPort(proc as unknown as HostProcess)!;
     port.postMessage({ type: 'pong', seq: 1 });
-    expect(proc.send).toHaveBeenCalledWith({ type: 'pong', seq: 1 });
+    expect(proc.send).toHaveBeenCalledWith({ type: 'pong', seq: 1 }, expect.any(Function));
     proc.connected = false;
     port.postMessage({ type: 'pong', seq: 2 });
     expect(proc.send).toHaveBeenCalledTimes(1);
@@ -54,5 +54,29 @@ describe('hostPort (HIVE-423)', () => {
     proc.emit('message', { type: 'shutdown' });
     proc.emit('disconnect');
     expect(seen).toEqual([{ data: { type: 'shutdown' } }]);
+  });
+
+  it('turns a failed send into one shutdown, never an error on the process', () => {
+    const proc = forked();
+    proc.send.mockImplementation((_message: unknown, done: (error: Error | null) => void) =>
+      done(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' })),
+    );
+    const seen: unknown[] = [];
+    const port = hostPort(proc as unknown as HostProcess)!;
+    port.on('message', (event) => seen.push(event));
+    expect(() => port.postMessage({ type: 'pong', seq: 1 })).not.toThrow();
+    port.postMessage({ type: 'pong', seq: 2 });
+    proc.emit('disconnect');
+    expect(seen).toEqual([{ data: { type: 'shutdown' } }]);
+  });
+
+  it('a successful send delivers nothing to the listener', () => {
+    const proc = forked();
+    proc.send.mockImplementation((_message: unknown, done: (error: Error | null) => void) => done(null));
+    const seen: unknown[] = [];
+    const port = hostPort(proc as unknown as HostProcess)!;
+    port.on('message', (event) => seen.push(event));
+    port.postMessage({ type: 'pong', seq: 1 });
+    expect(seen).toEqual([]);
   });
 });
