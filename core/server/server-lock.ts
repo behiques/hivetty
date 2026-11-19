@@ -71,7 +71,9 @@ export function processIdentity(pid: number, system: ProcessIdentitySystem = rea
       if (code === 'ENOENT' || code === 'ESRCH') return null;
       throw cause;
     }
-    const started = stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/)[19];
+    const close = stat.lastIndexOf(')');
+    if (close === -1) return null;
+    const started = stat.slice(close + 1).trim().split(/\s+/)[19];
     return started === undefined || started === '' ? null : `${String(pid)}:${started}`;
   }
   try {

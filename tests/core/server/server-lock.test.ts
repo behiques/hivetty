@@ -215,6 +215,11 @@ describe('processIdentity (HIVE-426)', () => {
     ).toBeNull();
   });
 
+  it('on Linux, a stat line with no command name or too few fields has no identity', () => {
+    expect(processIdentity(77, system({ readStat: () => '77 S 1 77 77 0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 98765 1000' }))).toBeNull();
+    expect(processIdentity(77, system({ readStat: () => '77 (sh) S 1 77' }))).toBeNull();
+  });
+
   it('on Linux, any other read error still throws', () => {
     const denied = Object.assign(new Error('EACCES'), { code: 'EACCES' });
     expect(() => processIdentity(77, system({ readStat: () => { throw denied; } }))).toThrow(denied);
