@@ -243,7 +243,7 @@ test('creates a skill from Settings, beside the config', async ({}, testInfo) =>
     // line already report the emptiness, so the label was the one of the four
     // that said nothing the others did not.
     await expect(
-      page.getByText(/write one and every session you start will have it/i),
+      page.getByText(/skills come in swarms/i),
     ).toBeVisible();
 
     await page.getByRole('button', { name: '+ New skill' }).click();
