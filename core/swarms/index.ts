@@ -225,7 +225,6 @@ export const swarmManifestFiles = (): Promise<string[]> => swarms().manifestFile
 export const swarmSeedSetFor = (kind: 'skills' | 'agents', name: string): Promise<SeedOptions> =>
   swarms().seedSetFor(shippedOptions(), `${kind}/${name}`);
 
-/** For tests. */
 /** An install link named this swarm (HIVE-442). Held until the renderer takes it: the window may not have loaded. */
 export function requestSwarmInstall(swarmId: string): void {
   if (!isSwarmId(swarmId)) return;
@@ -240,6 +239,7 @@ export function takeSwarmInstallRequest(): string | null {
   return taken;
 }
 
+/** For tests. */
 export function resetSwarms(): void {
   installRequest = null;
   updates?.stop();
