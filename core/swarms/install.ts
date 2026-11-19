@@ -10,7 +10,7 @@
  * entries over (scope from HIVE-447), so an untouched built-in upgrades and an
  * edited one stays edited. From then on that folder is the swarm's.
  */
-import { lstat, mkdir, readFile, rename, rm, rmdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import { dirname, join, sep } from 'node:path';
 
 import {
@@ -64,6 +64,11 @@ export interface Swarms {
   seedSets(shipped: SeedOptions): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }>;
   /** The set that owns `<kind>/<name>`: a swarm's, else the shipped one. */
   seedSetFor(shipped: SeedOptions, folder: string): Promise<SeedOptions>;
+  /**
+   * Every swarm's seed manifest and pending first install on disk, whatever installed.json says: a file any of them
+   * names was written by a swarm, so settings sync and the shipped seed leave it alone.
+   */
+  manifestFiles(): Promise<string[]>;
 }
 
 const folderOf = (rel: string): string => rel.split('/').slice(0, 2).join('/');
@@ -120,9 +125,12 @@ async function writeInstalled(file: string, entries: unknown[]): Promise<void> {
 /** A first install's file hashes, written before it seeds: what a retry adopts, or takes back out, if the app died. */
 async function readPending(file: string): Promise<Record<string, string>> {
   try {
-    const raw: unknown = JSON.parse(await readFile(file, 'utf8'));
+    let raw: unknown = JSON.parse(await readFile(file, 'utf8'));
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
-    return Object.fromEntries(Object.entries(raw).filter((pair): pair is [string, string] => typeof pair[1] === 'string'));
+    // Written as a seed manifest's `{ files }`, so sync reads it as one; an older build wrote the bare map.
+    const files: unknown = (raw as { files?: unknown }).files;
+    if (typeof files === 'object' && files !== null && !Array.isArray(files)) raw = files;
+    return Object.fromEntries(Object.entries(raw as object).filter((pair): pair is [string, string] => typeof pair[1] === 'string'));
   } catch {
     return {};
   }
@@ -382,7 +390,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
       if (previous === null) {
         const hashes = { ...leftover, ...(await hashFolders(source, folders)) };
         await mkdir(paths.dir(entry.id), { recursive: true });
-        await writeFile(paths.pending(entry.id), `${JSON.stringify(hashes)}\n`);
+        await writeFile(paths.pending(entry.id), `${JSON.stringify({ files: hashes, parts: {} })}\n`);
         undo = () => deleteMatching(deps.hiveDir, hashes);
       }
       await seed({ source, target: deps.hiveDir, manifestFile: paths.seed(entry.id) });
@@ -433,14 +441,27 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     }
   };
 
+  // Read from the folders, not installed.json: a first install seeds before its entry is written, and an unreadable
+  // installed.json must not turn a swarm's files into the person's own.
+  const manifestFiles = async (): Promise<string[]> => {
+    const listed = await readdir(paths.root, { withFileTypes: true }).catch(() => []);
+    return listed
+      .filter((dirent) => dirent.isDirectory() && isSwarmId(dirent.name))
+      .map((dirent) => dirent.name)
+      .sort()
+      .flatMap((id) => [paths.seed(id), paths.pending(id)]);
+  };
+
   const seedSets = async (shipped: SeedOptions): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }> => {
-    const swarms: SeedOptions[] = [];
     const exclude = new Set<string>();
-    for (const held of await readInstalled(paths.installed)) {
-      const manifestFile = paths.seed(held.swarmId);
-      for (const folder of ownedFolders(await readManifest(manifestFile))) exclude.add(folder);
-      swarms.push({ source: join(paths.repo(held.swarmId), held.folder), target: deps.hiveDir, manifestFile });
+    for (const file of await manifestFiles()) {
+      for (const folder of ownedFolders(await readManifest(file))) exclude.add(folder);
     }
+    const swarms = (await readInstalled(paths.installed)).map((held) => ({
+      source: join(paths.repo(held.swarmId), held.folder),
+      target: deps.hiveDir,
+      manifestFile: paths.seed(held.swarmId),
+    }));
     return { shipped: { ...shipped, exclude }, swarms };
   };
 
@@ -458,6 +479,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
         return removeNow(swarmId);
       }),
     seedSets,
+    manifestFiles,
     seedSetFor: async (shipped, folder) => {
       const sets = await seedSets(shipped);
       for (const set of sets.swarms) {

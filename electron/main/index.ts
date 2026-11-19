@@ -46,7 +46,7 @@ import { runOneShot } from '../../core/server/one-shot';
 import { claimServerLock, hiveLockPath } from '../../core/server/server-lock';
 import { isServerMode, setServerMode } from '../../core/server-mode';
 import { onShutdown } from '../../core/shutdown';
-import { swarmSeedSetFor, swarmSeedSets } from '../../core/swarms';
+import { swarmManifestFiles, swarmSeedSetFor, swarmSeedSets } from '../../core/swarms';
 import { startSync } from '../../core/sync';
 
 import { applyDevDockIcon } from './app-icon';
@@ -248,10 +248,10 @@ if (!app.requestSingleInstanceLock()) {
       safeStorage,
       userData: app.getPath('userData'),
       hiveDir: dirname(configPath()),
-      // HIVE-441: every seed set's manifest, the shipped one and each installed swarm's.
+      // HIVE-441: the shipped manifest and every swarm's on disk, a first install still seeding included.
       manifestFiles: async () => {
         const sets = await swarmSeedSets();
-        return [sets.shipped, ...sets.swarms].map((set) => set.manifestFile);
+        return [sets.shipped.manifestFile, ...(await swarmManifestFiles())];
       },
       readDocument: readConfigDocument,
       writeConfig: (mutate) => writeSyncedKeys(mutate) !== null,

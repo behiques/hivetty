@@ -106,6 +106,9 @@ export function swarmCalls(): SwarmCalls {
 export const swarmSeedSets = (): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }> =>
   swarms().seedSets(shippedOptions());
 
+/** Every swarm's seed manifest on disk, installed.json or not (HIVE-441): what settings sync reads beside the shipped one. */
+export const swarmManifestFiles = (): Promise<string[]> => swarms().manifestFiles();
+
 /** The set that owns one agent or skill: a swarm's, else the shipped one. */
 export const swarmSeedSetFor = (kind: 'skills' | 'agents', name: string): Promise<SeedOptions> =>
   swarms().seedSetFor(shippedOptions(), `${kind}/${name}`);

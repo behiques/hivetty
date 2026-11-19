@@ -13,6 +13,7 @@ const engine = vi.hoisted(() => ({
   remove: vi.fn(),
   seedSets: vi.fn(),
   seedSetFor: vi.fn(),
+  manifestFiles: vi.fn(),
 }));
 const createSwarms = vi.hoisted(() => vi.fn((_deps: unknown) => engine));
 const registry = vi.hoisted(() => ({ readRegistry: vi.fn(), cloneToken: vi.fn() }));
@@ -30,7 +31,7 @@ vi.mock('../../../core/seed', () => ({
 }));
 vi.mock('../../../core/platform', () => ({ platform: () => ({ lifecycle: { version: '1.0.0' } }) }));
 
-const { resetSwarms, setSwarmHooks, swarmCalls, swarmSeedSetFor, swarmSeedSets } = await import(
+const { resetSwarms, setSwarmHooks, swarmCalls, swarmManifestFiles, swarmSeedSetFor, swarmSeedSets } = await import(
   '../../../core/swarms'
 );
 
@@ -255,6 +256,12 @@ describe('the seed sets', () => {
 
     await expect(swarmSeedSets()).resolves.toBe(sets);
     expect(engine.seedSets).toHaveBeenCalledWith(shipped);
+  });
+
+  it('asks the engine for every swarm manifest on disk', async () => {
+    engine.manifestFiles.mockResolvedValue(['/h/swarms/a1/seed.json', '/h/swarms/a1/pending.json']);
+
+    await expect(swarmManifestFiles()).resolves.toEqual(['/h/swarms/a1/seed.json', '/h/swarms/a1/pending.json']);
   });
 
   it('asks for the set that owns one skill by its folder', async () => {
