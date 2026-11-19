@@ -17,6 +17,7 @@ describe('feature-plans (generated from @hivetty/plans)', () => {
       sync: 'solo',
       'cli.copilot': 'team',
       'team.ledger': 'team',
+      'swarms.org': 'team',
     });
   });
 

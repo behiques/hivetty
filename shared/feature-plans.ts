@@ -19,6 +19,7 @@ export const FEATURE_PLANS: Readonly<Record<string, PlanKey>> = {
   sync: 'solo',
   'cli.copilot': 'team',
   'team.ledger': 'team',
+  'swarms.org': 'team',
 };
 
 export const TRIAL_PLAN: PlanKey = 'team';
