@@ -81,7 +81,7 @@ const MAIN_ONLY: ReadonlyMap<string, FrameKind> = new Map([
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(219);
+    expect(entries).toHaveLength(221);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -175,11 +175,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 175 call, 6 notify and 38 event', () => {
+  it('splits 176 call, 6 notify and 39 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 175, notify: 6, event: 38 });
+    expect(tally).toEqual({ call: 176, notify: 6, event: 39 });
   });
 
   /**
@@ -193,7 +193,7 @@ describe('remote contract: frame kinds match the preload bridge', () => {
    * that forwarded only `EVENT_CHANNELS` would show an empty inbox on a busy
    * server, so the asymmetry is asserted rather than left to be rediscovered.
    */
-  it('covers EVENT_CHANNELS and the thirteen pushes it omits', () => {
+  it('covers EVENT_CHANNELS and the fourteen pushes it omits', () => {
     for (const channel of EVENT_CHANNELS) expect(frameKindOf(channel)).toBe('event');
 
     const listed: ReadonlySet<string> = new Set(EVENT_CHANNELS);
@@ -226,6 +226,8 @@ describe('remote contract: frame kinds match the preload bridge', () => {
       'slack:socket-status',
       // HIVE-442: local-only; this machine's own installed swarms.
       'swarms:changed',
+      // HIVE-442: local-only; an install link opened on this machine.
+      'swarms:install-requested',
       // HIVE-284: local-only; this machine's own settings sync.
       'sync:apply-appearance',
       'sync:status-changed',
@@ -257,6 +259,7 @@ describe('remote contract: frame kinds match the preload bridge', () => {
       CH.syncStatusChanged,
       CH.syncApplyAppearance,
       CH.swarmsChanged,
+      CH.swarmsInstallRequested,
     ]);
     // The channels a server may genuinely push are not caught by it.
     expect(isLocalOnlyEvent(CH.ptyData)).toBe(false);
@@ -276,11 +279,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 219 as 92 read, 52 mutate and 75 execute', () => {
+  it('grades the 221 as 93 read, 52 mutate and 76 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 92, mutate: 52, execute: 75 });
+    expect(tally).toEqual({ read: 93, mutate: 52, execute: 76 });
   });
 
   /**
@@ -641,7 +644,7 @@ describe('remote contract: the version handshake', () => {
   });
 
   it('is protocol 3: 2 carried a generation (HIVE-144), 3 caught up on unbumped channels (HIVE-140 audit)', () => {
-    expect(REMOTE_PROTOCOL_VERSION).toBe(50);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
   });
 });
 
@@ -692,7 +695,7 @@ describe('remote contract: the attach snapshot (HIVE-144)', () => {
     expect(EVENT_CHANNELS).toContain(CH.changedFilesChanged);
     expect(frameKindOf(CH.changedFilesChanged)).toBe('event');
     expect(frameKindOf(CH.changedFilesList)).toBe('call');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(50);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
   });
 
   it('snapshots the plans so a reattaching client sees the current plan (HIVE-179)', () => {
@@ -803,7 +806,7 @@ describe('WINDOW_BOUND', () => {
  * admitted and nobody had applied it to.
  */
 describe('PROCESS_LOCAL', () => {
-  it('names exactly forty-four channels', () => {
+  it('names exactly forty-five channels', () => {
     expect([...PROCESS_LOCAL].sort()).toEqual(
       [
         CH.appInfo,
@@ -850,6 +853,7 @@ describe('PROCESS_LOCAL', () => {
         CH.swarmsRemove,
         CH.swarmsSetAutoUpdate,
         CH.swarmsCheck,
+        CH.swarmsTakeInstallRequest,
       ].sort(),
     );
   });
@@ -921,7 +925,7 @@ describe('PROCESS_LOCAL', () => {
     for (const channel of [CH.syncSetup, CH.syncSetGroup, CH.syncNow, CH.syncReset, CH.syncOpenConflicts, CH.syncReportAppearance]) {
       expect(CHANNEL_AUTHORIZATION[channel]).toBe('execute');
     }
-    expect(REMOTE_PROTOCOL_VERSION).toBe(50);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
   });
 
   it('answers every swarm call locally: installs run on the machine you sit at (HIVE-441)', () => {
@@ -934,7 +938,7 @@ describe('PROCESS_LOCAL', () => {
     expect(CHANNEL_AUTHORIZATION[CH.swarmsList]).toBe('read');
     expect(CHANNEL_AUTHORIZATION[CH.swarmsInstall]).toBe('execute');
     expect(CHANNEL_AUTHORIZATION[CH.swarmsRemove]).toBe('execute');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(50);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
   });
 
   it('answers the update calls locally and never relays swarms:changed (HIVE-442)', () => {
@@ -948,7 +952,19 @@ describe('PROCESS_LOCAL', () => {
     expect(frameKindOf(CH.swarmsChanged)).toBe('event');
     expect(isLocalOnlyEvent(CH.swarmsChanged)).toBe(true);
     expect(CHANNEL_AUTHORIZATION[CH.swarmsChanged]).toBe('read');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(50);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
+  });
+
+  it('answers the install link request locally and never relays its push (HIVE-442)', () => {
+    expect(isProcessLocal(CH.swarmsTakeInstallRequest)).toBe(true);
+    expect(frameKindOf(CH.swarmsTakeInstallRequest)).toBe('call');
+    expect(isClientFrameAllowed('call', CH.swarmsTakeInstallRequest, 'execute')).toBe(false);
+    expect(remoteRefusedReason(CH.swarmsTakeInstallRequest, undefined)).toMatch(/^swarms:take-install-request /);
+    expect(CHANNEL_AUTHORIZATION[CH.swarmsTakeInstallRequest]).toBe('execute');
+    expect(frameKindOf(CH.swarmsInstallRequested)).toBe('event');
+    expect(isLocalOnlyEvent(CH.swarmsInstallRequested)).toBe(true);
+    expect(CHANNEL_AUTHORIZATION[CH.swarmsInstallRequested]).toBe('read');
+    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
   });
 
   it('answers relay:status locally and grades both relay channels as reads (HIVE-429)', () => {

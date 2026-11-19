@@ -343,6 +343,7 @@ import {
   swarmSeedSetFor,
   swarmSeedSets,
   swarmSessionChanged,
+  takeSwarmInstallRequest,
 } from '../swarms';
 import { onSyncAppearance, onSyncStatus, setSyncHooks, syncCalls } from '../sync';
 
@@ -1992,6 +1993,8 @@ export function registerIpcHandlers(
   handle(CH.swarmsRemove, (_event, payload: unknown) => swarmCalls().remove(payload));
   handle(CH.swarmsSetAutoUpdate, (_event, payload: unknown) => swarmCalls().setAutoUpdate(payload));
   handle(CH.swarmsCheck, () => swarmCalls().check());
+  // HIVE-442: the swarm an install link named, once. It opens the consent dialog; it never installs.
+  handle(CH.swarmsTakeInstallRequest, () => takeSwarmInstallRequest());
   // HIVE-265: the gate's Quit. window.close() would leave the app running in the dock.
   handle(CH.appQuit, () => platform().lifecycle.quit());
 
@@ -3584,6 +3587,8 @@ export function registerIpcHandlers(
     runsLive: () => (runs?.live().length ?? 0) > 0,
     // Through `send`; the socket broadcaster holds it back, as a local-only event.
     changed: (event) => send(CH.swarmsChanged, event),
+    // Local only, like swarms:changed: the socket broadcaster holds it back.
+    installRequested: () => send(CH.swarmsInstallRequested, undefined),
     notify: (updated) => {
       hub.raise({
         kind: 'swarm.updated',

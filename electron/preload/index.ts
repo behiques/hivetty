@@ -483,6 +483,9 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.swarmsSetAutoUpdate, request) as Promise<InstalledSwarm | null>,
     check: (): Promise<SwarmListing> => ipcRenderer.invoke(CH.swarmsCheck) as Promise<SwarmListing>,
     onChanged: (callback: (event: SwarmsChanged) => void) => subscribe<SwarmsChanged>(CH.swarmsChanged, callback),
+    takeInstallRequest: (): Promise<string | null> =>
+      ipcRenderer.invoke(CH.swarmsTakeInstallRequest) as Promise<string | null>,
+    onInstallRequested: (callback: () => void) => subscribe<undefined>(CH.swarmsInstallRequested, () => callback()),
   },
   // HIVE-144. Storing and forgetting the credential this machine was handed
   // to attach outward, as a client, to someone else's server. Its own

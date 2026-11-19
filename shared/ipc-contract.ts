@@ -973,6 +973,10 @@ export const CH = {
   swarmsCheck: 'swarms:check',
   /** HIVE-442, push: swarms changed on this machine; read the list again. Local only. */
   swarmsChanged: 'swarms:changed',
+  /** HIVE-442, push: an install link arrived; take the request. Local only. */
+  swarmsInstallRequested: 'swarms:install-requested',
+  /** HIVE-442: the swarm an install link named, once. Process-local. */
+  swarmsTakeInstallRequest: 'swarms:take-install-request',
   /** HIVE-291: this account's orgs, from the cloud; `[]` when it cannot say. Process-local. */
   accountOrgs: 'account:orgs',
   /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. Process-local. */
@@ -2523,6 +2527,9 @@ export interface HiveBridge {
     /** Looks for newer versions now and answers the list afterwards. */
     check(): Promise<SwarmListing>;
     onChanged(callback: (event: SwarmsChanged) => void): () => void;
+    /** HIVE-442: the swarm an install link named, once; null when there is none. */
+    takeInstallRequest(): Promise<string | null>;
+    onInstallRequested(callback: () => void): () => void;
   };
   remote: {
     /**

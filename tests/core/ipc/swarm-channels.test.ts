@@ -94,6 +94,7 @@ const stopSwarmTimer = vi.hoisted(() => vi.fn());
 const startSwarmUpdates = vi.hoisted(() => vi.fn(() => stopSwarmTimer));
 const swarmRunsIdle = vi.hoisted(() => vi.fn());
 const swarmSessionChanged = vi.hoisted(() => vi.fn());
+const takeSwarmInstallRequest = vi.hoisted(() => vi.fn<() => string | null>(() => 'a1'));
 
 /** Two seed sets: the shipped one, `S`, and one installed swarm's, `W`, which owns `skills/tdd`. */
 const sets = vi.hoisted(() => {
@@ -111,6 +112,7 @@ vi.mock('../../../core/swarms', () => ({
   startSwarmUpdates,
   swarmRunsIdle,
   swarmSessionChanged,
+  takeSwarmInstallRequest,
 }));
 
 /** `core/seed`'s actions, so the spec proves which set each one was handed. */
@@ -175,7 +177,7 @@ describe('the swarm channels', () => {
     expect(swarmSpies[verb]).toHaveBeenCalledWith({ swarmId: 'a1' });
   });
 
-  it('feeds the engine its eight hooks once', () => {
+  it('feeds the engine its nine hooks once', () => {
     expect(setSwarmHooks).toHaveBeenCalledTimes(1);
     const hooks = setSwarmHooks.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(Object.keys(hooks).sort()).toEqual([
@@ -184,6 +186,7 @@ describe('the swarm channels', () => {
       'authedFetch',
       'changed',
       'env',
+      'installRequested',
       'notify',
       'ready',
       'runsLive',
@@ -245,6 +248,23 @@ describe('the swarm update channels (HIVE-442)', () => {
     const swarm = listed.filter((row) => row.kind === 'swarm.updated');
     expect(swarm).toHaveLength(1);
     expect(swarm[0]?.title).toBe('Standard updated to v1.4.0');
+  });
+});
+
+describe('the install link channels (HIVE-442)', () => {
+  it('swarms:take-install-request answers what core holds', async () => {
+    await expect(invoke(CH.swarmsTakeInstallRequest, undefined)).resolves.toBe('a1');
+    expect(takeSwarmInstallRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('pushes swarms:install-requested with no payload', () => {
+    resetIpcHandlers();
+    const emit = vi.fn();
+    registerIpcHandlers({ emit });
+
+    (setSwarmHooks.mock.calls.at(-1)?.[0] as { installRequested: () => void }).installRequested();
+
+    expect(emit).toHaveBeenCalledWith(CH.swarmsInstallRequested, undefined);
   });
 });
 
