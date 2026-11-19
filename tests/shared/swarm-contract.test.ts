@@ -101,7 +101,21 @@ describe('parseSwarmTag and swarmTag', () => {
     expect(swarmTag(parsed)).toBe(tag);
   });
 
-  it.each(['1.2.0', 'standard/1.2.0', 'v1.2', '/v1.2.0', 'standard/v1.2.0-rc.1', ''])(
+  it.each([
+    '1.2.0',
+    'standard/1.2.0',
+    'v1.2',
+    '/v1.2.0',
+    'standard/v1.2.0-rc.1',
+    '',
+    // The folder becomes a path in swarm:pull, so it is slug segments only.
+    '../v1.0.0',
+    '../../x/v1.0.0',
+    'a//v1.0.0',
+    '/a/v1.0.0',
+    'a b/v1.0.0',
+    'Standard/v1.0.0',
+  ])(
     'refuses %j',
     (tag) => {
       expect(parseSwarmTag(tag)).toBeNull();

@@ -21,7 +21,7 @@ import {
 } from '@shared/swarm-contract';
 
 import { parseAgent } from '../agents/definition';
-import { readUserSkills } from '../skills/read';
+import { readSkillFolder } from '../skills/read';
 
 export interface SwarmRead {
   manifest: SwarmManifest | null;
@@ -41,42 +41,39 @@ async function isLink(path: string): Promise<boolean> {
 }
 
 /**
- * The folders under `<dir>/<kind>`, and the names that are symlinks.
+ * The real folders under `<dir>/<kind>`, sorted.
  *
- * `Dirent` answers with `lstat`, so a link is never a directory here: it lands
- * in `links`, gets a problem, and is never opened by this module.
+ * `Dirent` answers with `lstat`, so a link is never a directory here: it gets a
+ * problem, is left out, and is never opened by this module.
  */
 async function entriesOf(
   dir: string,
   kind: 'agents' | 'skills',
   problems: SwarmProblem[],
-): Promise<{ folders: string[]; links: Set<string>; usable: boolean }> {
+): Promise<{ folders: string[] }> {
   const root = join(dir, kind);
-  const none = { folders: [], links: new Set<string>(), usable: false };
 
   if (await isLink(root)) {
     problems.push({ field: kind, reason: `${kind} ${NOT_FOLLOWED}` });
-    return none;
+    return { folders: [] };
   }
 
   let listing;
   try {
     listing = await readdir(root, { withFileTypes: true });
   } catch {
-    return none; // The swarm has no folder of this kind.
+    return { folders: [] }; // The swarm has no folder of this kind.
   }
 
   const folders: string[] = [];
-  const links = new Set<string>();
 
   for (const entry of [...listing].sort((a, b) => a.name.localeCompare(b.name))) {
     if (entry.isSymbolicLink()) {
-      links.add(entry.name);
       problems.push({ field: `${kind}/${entry.name}`, reason: `${entry.name} ${NOT_FOLLOWED}` });
     } else if (entry.isDirectory()) folders.push(entry.name);
   }
 
-  return { folders, links, usable: true };
+  return { folders };
 }
 
 async function readManifest(dir: string, problems: SwarmProblem[]): Promise<SwarmManifest | null> {
@@ -107,23 +104,29 @@ async function readManifest(dir: string, problems: SwarmProblem[]): Promise<Swar
 }
 
 async function readSkills(dir: string, problems: SwarmProblem[]): Promise<SwarmContents['skills']> {
-  const { links, usable } = await entriesOf(dir, 'skills', problems);
-  if (!usable) return [];
-
-  // The app's own rules for a skill folder. It follows a linked folder for a
-  // user's own skills, so every linked name is dropped here: its problem is
-  // already recorded and nothing read through the link is kept.
-  const read = await readUserSkills(join(dir, 'skills'));
+  // Only real folders reach the app's own skill rules. `readUserSkills` follows
+  // a linked folder for a user's own skills, so a swarm's skills are read one
+  // folder at a time and a linked entry is never opened.
+  const { folders } = await entriesOf(dir, 'skills', problems);
+  const root = join(dir, 'skills');
   const skills: SwarmContents['skills'] = [];
 
-  for (const invalid of read.invalid) {
-    if (!links.has(invalid.name)) problems.push({ field: `skills/${invalid.name}`, reason: invalid.reason });
-  }
+  for (const name of folders) {
+    const field = `skills/${name}`;
 
-  for (const skill of read.skills) {
-    if (links.has(skill.name)) continue;
+    // `readSkillFolder` reads SKILL.md with `readFile`, which follows a link.
+    if (await isLink(join(root, name, 'SKILL.md'))) {
+      problems.push({ field, reason: `SKILL.md ${NOT_FOLLOWED}` });
+      continue;
+    }
 
-    const field = `skills/${skill.name}`;
+    const read = await readSkillFolder(root, name);
+    if ('invalid' in read) {
+      problems.push({ field, reason: read.invalid.reason });
+      continue;
+    }
+
+    const { skill } = read;
     // `skipped` is a name the app never sends (`.DS_Store`); it is not a fault.
     const refused = skill.manifest.entries.find(
       (entry) => entry.excluded !== null && entry.excluded.code !== 'skipped',

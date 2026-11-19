@@ -17,7 +17,8 @@ export const SWARM_TAG_MAX = 24;
 
 const SLUG = /^[a-z0-9-]+$/;
 const VERSION = /^\d+\.\d+\.\d+$/;
-const TAG = /^(?:(.+)\/)?v(\d+\.\d+\.\d+)$/;
+/** The folder is slug segments: `swarm:pull` (HIVE-439 PR 2) joins it onto a path, so no `..`, no `//`, no leading `/`. */
+const TAG = /^(?:([a-z0-9-]+(?:\/[a-z0-9-]+)*)\/)?v(\d+\.\d+\.\d+)$/;
 
 export interface SwarmManifest {
   /** The swarm's slug. */

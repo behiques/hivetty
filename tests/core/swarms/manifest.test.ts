@@ -3,11 +3,22 @@ import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SwarmProblem } from '@shared/swarm-contract';
 
+import { readBundle } from '../../../core/skills/bundle';
 import { readSwarm } from '../../../core/swarms/manifest';
+
+/*
+  The real `readBundle`, wrapped so one test can see which folders were walked:
+  a linked entry dropped after the walk and one never walked look the same in
+  `contents`. `restoreMocks` reverts it to the real call before every test.
+*/
+vi.mock('../../../core/skills/bundle', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../core/skills/bundle')>();
+  return { ...actual, readBundle: vi.fn(actual.readBundle) };
+});
 
 const MANIFEST = {
   name: 'standard',
@@ -167,6 +178,34 @@ describe('readSwarm', () => {
 
     expect(fields(read.problems)).toEqual(['skills/linked']);
     expect(read.contents.skills.map((skill) => skill.name)).toEqual(['tdd']);
+    expect(vi.mocked(readBundle).mock.calls.map(([walked]) => walked)).toEqual([join(dir, 'skills', 'tdd')]);
+  });
+
+  it('reports a linked skill entry once even when its target is invalid', async () => {
+    await swarm(dir);
+    const outside = join(tmp, 'outside-skill', 'linked');
+    await mkdir(outside, { recursive: true });
+    await symlink(outside, join(dir, 'skills', 'linked'));
+
+    const read = await readSwarm(dir);
+
+    expect(fields(read.problems)).toEqual(['skills/linked']);
+  });
+
+  it('never reads a SKILL.md that is a symlink', async () => {
+    await swarm(dir);
+    const elsewhere = join(tmp, 'SKILL.md');
+    await writeFile(elsewhere, '---\nname: secret-text\n---\n', 'utf8');
+    await rm(join(dir, 'skills', 'tdd', 'SKILL.md'));
+    await symlink(elsewhere, join(dir, 'skills', 'tdd', 'SKILL.md'));
+
+    const read = await readSwarm(dir);
+
+    // Its agent names the refused skill, which leaves the swarm empty.
+    expect(fields(read.problems)).toEqual(['skills/tdd', 'agents/helper', '']);
+    expect(read.problems[0]?.reason).toContain('symlink');
+    expect(JSON.stringify(read.problems)).not.toContain('secret-text');
+    expect(read.contents.skills).toEqual([]);
   });
 
   it('never follows a skills folder that is a symlink', async () => {
