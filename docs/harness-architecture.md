@@ -63,6 +63,15 @@ adapter.
 - **`LaunchPlan` is what it gets back:** `command` for `bootstrap.arm` to type into the
   login shell, `stripEnv` for the spawn to remove from the pty environment, and
   `submitDelayMs` for the bootstrap's text-then-`\r` split (HIVE-63).
+- **A `command` over `MAX_TYPED_LINE_BYTES` (900) is sourced, not typed.** Until the shell's line
+  editor is up the tty is canonical, and the kernel keeps at most `MAX_CANON` bytes of a line
+  (1,024 on macOS) and drops the rest: on a machine whose profile is still running when the
+  bootstrap types, a longer line arrives cut, with an open quote, and the session hangs. So
+  `sessions/index.ts` writes a long line to `<harnessStateDir>/launch/<entity>.sh` (mode 0600, it
+  holds the task) and types `. '<file>'`; the same login shell reads it, so `unset` and `&& exit`
+  mean what they meant typed. The file goes when the session's process exits and at shutdown. A
+  file that cannot be written is logged and the line is typed whole. Codex's line carries the
+  skills catalog, so it always takes this path; Claude's takes it only with a long task.
 
 Claude Code's `launch` (`harness/claude-code/launch.ts`) wraps `sessionCommand`, which
 moved there verbatim, and owns `SUBMIT_DELAY_MS`. `sessions/index.ts` makes the plan
@@ -552,6 +561,8 @@ login shell is typed, as Claude's is (`&& exit`, the task after `--`), flag by f
   over Claude's own settings.
 - Under subscription auth the line starts `unset OPENAI_API_KEY CODEX_API_KEY;` as Claude's does
   (HIVE-79), and `stripEnv` is headless's.
+- The line is longer than a tty keeps before the shell reads, so it reaches the shell as
+  `. '<file>'` (`LaunchPlan`, above).
 
 `capabilities.conversationId: 'first-hook'`: codex picks the conversation id, so the core mints
 none and records the first hook's `session_id` into the history and `transcripts`; a later

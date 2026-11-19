@@ -917,6 +917,17 @@ export const ACTIVITY_IDLE_MS = 2_000;
 export const BOOTSTRAP_DEBOUNCE_MS = 150;
 
 /**
+ * The longest launch line typed into a shell as it is; a longer one is sourced from a file.
+ *
+ * Until the shell's line editor is up the tty is in canonical mode, where the kernel keeps one
+ * line of at most `MAX_CANON` bytes (1,024 on macOS) and drops the rest: the shell is left on a
+ * half-typed command with an open quote. The debounce above cannot promise the editor is up, on
+ * a machine whose profile is still running. Under 1,024 with room for what a terminal answers
+ * into the same line.
+ */
+export const MAX_TYPED_LINE_BYTES = 900;
+
+/**
  * How long to wait for *any* output before writing the bootstrap regardless.
  *
  * A genuinely silent startup is unusual but real — a bare `sh` with no profile
