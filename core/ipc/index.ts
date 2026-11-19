@@ -214,6 +214,7 @@ import { sessionMergeConsent } from '../agents/session-merge';
 import { createAgentState, type AgentState } from '../agents/state';
 import { mergeRunState, refusalsOf } from '../agents/summary';
 import { createHarnessCheck, createWakeCommand, type WakeCommandDeps } from '../agents/wake-command';
+import { audit } from '../audit/audit';
 import { createCloneFlow, type CloneFlow } from '../clone';
 import {
   addProject,
@@ -2486,6 +2487,8 @@ export function registerIpcHandlers(
     // What `AttachAccepted.snapshot` carries (HIVE-144) — built fresh per
     // attach, over the same `remoteRegistry` `dispatch` reads.
     buildSnapshot: buildAttachSnapshot,
+    // The audit trail (HIVE-427): written by the listener, where the device is known.
+    audit,
     onAttach: (socket, resumeFrom) => {
       /*
         Added to the set **before** anything is replayed. A `pty:data` landing

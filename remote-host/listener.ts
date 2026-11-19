@@ -10,6 +10,7 @@ import {
   CALL_TIMEOUT_CODE,
   POST_ATTACH_FRAME_MAX_BYTES,
   REMOTE_PROTOCOL_VERSION,
+  authorizationOf,
   type AttachRefused,
   type AttachRequest,
   type CallFrame,
@@ -18,6 +19,7 @@ import {
   type ServerFrame,
 } from '@shared/remote-contract';
 
+import type { AuditInput, AuditOutcome } from '../core/audit/audit';
 import { describe } from '../core/config/paths';
 import { createOriginGuard } from '../core/hooks/http-guard';
 import type { RemoteDispatch } from '../core/ipc/remote-dispatch';
@@ -323,8 +325,14 @@ export function createRemoteListener(options: {
   onAttach: (socket: AttachedSurface, resumeFrom: Readonly<Record<string, ResumePoint>> | undefined) => void;
   /** Told when an attached socket is gone — closed, errored, or terminated. */
   onDetach: (socket: AttachedSurface) => void;
+  /**
+   * The audit trail (HIVE-427). Every line is written from here, where the device is known;
+   * the dispatch and the handlers know only a frame. Absent in tests that do not care.
+   */
+  audit?: (entry: AuditInput) => void;
 }): RemoteListener {
   const { bind, devices, serverName, dispatch, buildSnapshot, onAttach, onDetach } = options;
+  const audit = options.audit ?? ((): void => undefined);
 
   /*
     No host-alias concept here, unlike the hook receiver. `ServerBindConfig`
@@ -592,7 +600,7 @@ export function createRemoteListener(options: {
           // Anything before the attach is answered is dropped; a successful attach replaces this listener.
           if (!first) return;
           first = false;
-          void attach(socket, channel, text, outcome.deviceId, clearHandshakeTimer);
+          void attach(socket, channel, text, outcome.deviceId, clearHandshakeTimer, via);
         });
       })
       .catch(() => socket.terminate());
@@ -609,6 +617,7 @@ export function createRemoteListener(options: {
     text: string,
     keyedDeviceId: string,
     clearHandshakeTimer: () => void,
+    via: 'direct' | 'relay',
   ): Promise<void> {
 
     /**
@@ -663,12 +672,18 @@ export function createRemoteListener(options: {
 
       const request = frame;
 
+      // `devices()` again for the two refusals that come before `known` is read: a refusal is rare.
+      const refused = (deviceId: string, outcome: AuditOutcome, list = devices()): void => {
+        audit({ event: 'refused', deviceId, deviceName: list.find((device) => device.id === deviceId)?.name, via, outcome });
+      };
+
       /*
         The channel was keyed for one device (HIVE-428). An attach naming another would be a holder
         of one pairing secret asking to be treated as a different device; refused exactly like a
         bad credential, before the protocol check, because it is one.
       */
       if (request.deviceId !== keyedDeviceId) {
+        refused(keyedDeviceId, 'device-mismatch');
         refuse(channel, unauthorized('Unknown device, or the token did not match.'));
         return;
       }
@@ -680,6 +695,7 @@ export function createRemoteListener(options: {
         credential is wrong when the real problem is a stale build.
       */
       if (request.protocol !== REMOTE_PROTOCOL_VERSION) {
+        refused(request.deviceId, 'protocol-mismatch');
         refuse(channel, refuseProtocol(request.protocol));
         return;
       }
@@ -689,10 +705,12 @@ export function createRemoteListener(options: {
       const known = devices();
       const result = verifyDevice(known, request.deviceId, request.token);
       if (result === 'unknown') {
+        refused(request.deviceId, 'unauthorized', known);
         refuse(channel, unauthorized('Unknown device, or the token did not match.'));
         return;
       }
       if (result === 'revoked') {
+        refused(request.deviceId, 'revoked', known);
         refuse(channel, {
           kind: 'attach-refused',
           code: 'revoked',
@@ -738,6 +756,8 @@ export function createRemoteListener(options: {
       /** Set by the close listener below — the only writer. */
       let gone = false;
 
+      const who = { deviceId: request.deviceId, deviceName: socketHandle.deviceName, via } as const;
+
       /*
         The close listener is registered **before the snapshot await**,
         not merely before `onAttach` (HIVE-144 review, I4).
@@ -771,6 +791,7 @@ export function createRemoteListener(options: {
         gone = true;
         for (const listener of closeListeners) listener();
         onDetach(socketHandle);
+        if (accepted) audit({ event: 'detach', ...who });
       });
 
       /*
@@ -813,7 +834,24 @@ export function createRemoteListener(options: {
       clearHandshakeTimer();
       unattached.delete(socket);
 
+      audit({ event: 'attach', ...who });
       onAttach(socketHandle, request.resumeFrom);
+
+      // One `input` line per session for the life of this socket: never a line per keystroke.
+      const inputSeen = new Set<string>();
+      const auditFrame = (event: 'call' | 'input', frame: object): void => {
+        const { channel: name, payload } = frame as { channel?: unknown; payload?: unknown };
+        if (typeof name !== 'string' || authorizationOf(name) !== 'execute') return;
+        // The one payload field ever read. Everything else can hold secrets and keystrokes.
+        const raw = payload !== null && typeof payload === 'object' ? (payload as { sessionId?: unknown }).sessionId : undefined;
+        const sessionId = typeof raw === 'string' && raw.length <= 128 ? raw : undefined;
+        if (event === 'input') {
+          const key = sessionId ?? '';
+          if (inputSeen.has(key)) return;
+          inputSeen.add(key);
+        }
+        audit({ event, ...who, channel: name, sessionId });
+      };
 
       /*
         Everything past the handshake arrives here, the channel's one
@@ -836,6 +874,7 @@ export function createRemoteListener(options: {
         const kind = (postAttachFrame as Record<string, unknown>).kind;
 
         if (kind === 'call') {
+          auditFrame('call', postAttachFrame);
           /*
             Answered without awaiting the socket's readiness and
             without ordering against other calls: `id` is what
@@ -949,6 +988,7 @@ export function createRemoteListener(options: {
           return;
         }
         if (kind === 'notify') {
+          auditFrame('input', postAttachFrame);
           dispatch.notify(postAttachFrame as NotifyFrame, socketHandle);
           return;
         }
