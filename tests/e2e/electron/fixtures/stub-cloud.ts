@@ -46,12 +46,22 @@ export interface StubControls {
   setPayments(payments: Record<string, unknown> | null): void;
   /** Another device on the account, listed after this one; POST /api/account/devices/:id/revoke removes it. */
   addDevice(device: { id: string; name: string }): void;
+  /** HIVE-442: GET /api/swarms answers `{ swarms: rows }`; empty until set. */
+  setSwarms(rows: Record<string, unknown>[]): void;
+}
+
+/** HIVE-442: one `POST /api/swarms/:id/installs` the stub took, in order. */
+export interface StubInstallReport {
+  id: string;
+  body: Record<string, unknown>;
 }
 
 export interface StubCloud {
   url: string;
   env: { HIVETTY_CLOUD_URL: string; HIVETTY_LEASE_KEYS: string };
   calls: StubCall[];
+  /** HIVE-442: the install reports the app sent, oldest first. */
+  installs: StubInstallReport[];
   controls: StubControls;
   /** HIVE-286: the stub relay on this server. Idle unless an app dials `/relay/*`. */
   relay: StubRelay;
@@ -143,10 +153,12 @@ export async function startStubCloud(): Promise<StubCloud> {
     billing: null as Record<string, unknown> | null,
     payments: null as Record<string, unknown> | null,
     otherDevices: [] as { id: string; name: string }[],
+    swarms: [] as Record<string, unknown>[],
     /** HIVE-284: `/api/sync`'s one row per user, and the counter a DELETE keeps. */
     sync: { blob: null as { revision: number; salt: string; ciphertext: string } | null, counter: 0 },
   };
   const calls: StubCall[] = [];
+  const installs: StubInstallReport[] = [];
   let url = '';
   let deviceCodeDeviceId: string | undefined;
 
@@ -331,6 +343,18 @@ export async function startStubCloud(): Promise<StubCloud> {
       if (unauthorised(req, res)) return;
       return state.billing ? send(res, 200, state.billing) : send(res, 404, { error: 'not_found' });
     }
+    // HIVE-442: the registry and the install reports (HIVE-440, HIVE-443), as the app's `core/swarms` calls them.
+    if (req.method === 'GET' && path === '/api/swarms') {
+      if (unauthorised(req, res)) return;
+      return send(res, 200, { swarms: state.swarms });
+    }
+    const installReport = /^\/api\/swarms\/([^/]+)\/installs$/.exec(path);
+    if (req.method === 'POST' && installReport) {
+      if (unauthorised(req, res)) return;
+      installs.push({ id: decodeURIComponent(installReport[1] ?? ''), body });
+      res.writeHead(204).end();
+      return;
+    }
     if (req.method === 'GET' && path === RELAY_PATH.hosts) {
       if (unauthorised(req, res)) return;
       return send(res, 200, relay.hosts());
@@ -377,12 +401,14 @@ export async function startStubCloud(): Promise<StubCloud> {
     setBilling: (summary) => (state.billing = summary),
     setPayments: (payments) => (state.payments = payments),
     addDevice: (device) => state.otherDevices.push(device),
+    setSwarms: (rows) => (state.swarms = rows),
   };
 
   return {
     url,
     env: { HIVETTY_CLOUD_URL: url, HIVETTY_LEASE_KEYS: JSON.stringify([jwk]) },
     calls,
+    installs,
     controls,
     relay,
     close: () => {
