@@ -166,6 +166,7 @@ import {
   SESSION_HISTORY_FILE,
   type SessionHistoryEntry,
 } from '@shared/session-history-contract';
+import type { ShippedRequest, ShippedStatus } from '@shared/shipped-contract';
 import {
   SLACK_TOKENS_FILE,
   type SlackSocketState,
@@ -313,10 +314,10 @@ import {
   keepMine,
   resetShipped,
   seedShippedIntoHive,
-  shippedOptions,
   shippedStatus,
   takeShippedPrompt,
 } from '../seed';
+import type { SeedOptions } from '../seed/seed';
 import {
   pairDevice,
   pairOutcomeMessage,
@@ -334,7 +335,7 @@ import { onShutdown } from '../shutdown';
 import { createSkillsRuntime, type SkillsRuntime } from '../skills';
 import { readCliSkills } from '../skills/cli-skills';
 import { PLUGIN_DIR } from '../skills/paths';
-import { setSwarmHooks, swarmCalls } from '../swarms';
+import { setSwarmHooks, swarmCalls, swarmSeedSetFor, swarmSeedSets } from '../swarms';
 import { onSyncAppearance, onSyncStatus, setSyncHooks, syncCalls } from '../sync';
 
 import { createBindings } from './bindings';
@@ -2655,7 +2656,13 @@ export function registerIpcHandlers(
     after `refreshKnownAgents()` ran reaches the party set through the same
     `onChange` a hand-written one does.
   */
-  const seeded = seedShippedIntoHive();
+  // HIVE-441: folders an installed swarm owns are the swarm's to write. A failed read of them never stops the seed.
+  const seeded = swarmSeedSets()
+    .then(
+      (sets) => sets.shipped.exclude,
+      () => undefined,
+    )
+    .then((exclude) => seedShippedIntoHive(undefined, exclude));
 
   /*
     HIVE-372. The opt-in `codex plugin add hive@hivetty`. Codex runs in the env its sessions get (the top-level
@@ -5047,26 +5054,27 @@ export function registerIpcHandlers(
     What the user changed in the shipped agents and skills. Each waits for the
     boot seed first: the seed and these all write `.seed.json`, and a reset
     racing the seed would leave the manifest describing whichever wrote last.
+    A swarm's files answer through the same four channels (HIVE-441): each acts on the set that owns the name.
   */
+  const allShipped = async (): Promise<ShippedStatus[]> => {
+    const sets = await swarmSeedSets();
+    return (await Promise.all([sets.shipped, ...sets.swarms].map((set) => shippedStatus(set)))).flat();
+  };
+  const onOwner =
+    (act: (options: SeedOptions, request: ShippedRequest) => Promise<unknown>) =>
+    async (_event: IpcEvent, payload: unknown): Promise<ShippedStatus[]> => {
+      const request = parseShippedRequest(payload);
+      await seeded;
+      await act(await swarmSeedSetFor(request.kind, request.name), request);
+      return allShipped();
+    };
   handle(CH.shippedStatus, async () => {
     await seeded;
-    return shippedStatus(shippedOptions());
+    return allShipped();
   });
-  handle(CH.shippedReset, async (_event, payload) => {
-    const request = parseShippedRequest(payload);
-    await seeded;
-    return resetShipped(shippedOptions(), request);
-  });
-  handle(CH.shippedTakePrompt, async (_event, payload) => {
-    const request = parseShippedRequest(payload);
-    await seeded;
-    return takeShippedPrompt(shippedOptions(), request);
-  });
-  handle(CH.shippedKeepMine, async (_event, payload) => {
-    const request = parseShippedRequest(payload);
-    await seeded;
-    return keepMine(shippedOptions(), request);
-  });
+  handle(CH.shippedReset, onOwner(resetShipped));
+  handle(CH.shippedTakePrompt, onOwner(takeShippedPrompt));
+  handle(CH.shippedKeepMine, onOwner(keepMine));
 
   handle(CH.skillsRead, (_event, payload) =>
     skills?.readOne(parseSkillNameRequest(payload).name),

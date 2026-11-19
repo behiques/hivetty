@@ -88,7 +88,39 @@ const swarmSpies = vi.hoisted(() => ({
   remove: vi.fn((_payload: unknown) => Promise.resolve('REMOVE')),
 }));
 const setSwarmHooks = vi.hoisted(() => vi.fn());
-vi.mock('../../../core/swarms', () => ({ swarmCalls: () => swarmSpies, setSwarmHooks }));
+
+/** Two seed sets: the shipped one, `S`, and one installed swarm's, `W`, which owns `skills/tdd`. */
+const sets = vi.hoisted(() => {
+  const S = { source: '/r', target: '/h', manifestFile: '/h/.seed.json', exclude: new Set(['skills/tdd']) };
+  const W = { source: '/h/swarms/a1/repo/standard', target: '/h', manifestFile: '/h/swarms/a1/seed.json' };
+  return { S, W };
+});
+const swarmSeedSets = vi.hoisted(() => vi.fn());
+const swarmSeedSetFor = vi.hoisted(() => vi.fn());
+vi.mock('../../../core/swarms', () => ({
+  swarmCalls: () => swarmSpies,
+  setSwarmHooks,
+  swarmSeedSets,
+  swarmSeedSetFor,
+}));
+
+/** `core/seed`'s actions, so the spec proves which set each one was handed. */
+const seed = vi.hoisted(() => ({
+  seedShippedIntoHive: vi.fn((_source?: string, _exclude?: ReadonlySet<string>) => Promise.resolve(null)),
+  shippedStatus: vi.fn((options: { manifestFile: string }) =>
+    Promise.resolve(options.manifestFile === '/h/.seed.json' ? [{ name: 'from-S' }] : [{ name: 'from-W' }]),
+  ),
+  resetShipped: vi.fn((_options: unknown, _request: unknown) => Promise.resolve([])),
+  takeShippedPrompt: vi.fn((_options: unknown, _request: unknown) => Promise.resolve([])),
+  keepMine: vi.fn((_options: unknown, _request: unknown) => Promise.resolve([])),
+}));
+vi.mock('../../../core/seed', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../core/seed')>()),
+  ...seed,
+}));
+
+const ownerOf = (kind: string, name: string) =>
+  Promise.resolve(kind === 'skills' && name === 'tdd' ? sets.W : sets.S);
 
 const { CH } = await import('../../../shared/ipc-contract');
 const { installDesktopPlatform } = await import('../../support/desktop-platform');
@@ -102,6 +134,8 @@ const invoke = (channel: string, payload: unknown) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  swarmSeedSets.mockResolvedValue({ shipped: sets.S, swarms: [sets.W] });
+  swarmSeedSetFor.mockImplementation(ownerOf);
   installDesktopPlatform();
   handlers.clear();
   shutdownHooks.length = 0;
@@ -137,5 +171,51 @@ describe('the swarm channels', () => {
     const hooks = setSwarmHooks.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(Object.keys(hooks).sort()).toEqual(['afterAgents', 'afterSkills', 'authedFetch', 'env', 'ready']);
     for (const member of Object.values(hooks)) expect(typeof member).toBe('function');
+  });
+});
+
+describe('the shipped handlers over every seed set (HIVE-441)', () => {
+  const both = [{ name: 'from-S' }, { name: 'from-W' }];
+
+  it("shipped:status answers the shipped set's statuses, then each swarm's", async () => {
+    await expect(invoke(CH.shippedStatus, undefined)).resolves.toEqual(both);
+    expect(seed.shippedStatus).toHaveBeenCalledWith(sets.S);
+    expect(seed.shippedStatus).toHaveBeenCalledWith(sets.W);
+  });
+
+  it.each([
+    [CH.shippedReset, 'resetShipped'],
+    [CH.shippedTakePrompt, 'takeShippedPrompt'],
+    [CH.shippedKeepMine, 'keepMine'],
+  ] as const)('%s acts on the set that owns the skill, then answers every set', async (channel, act) => {
+    const swarmOwned = { kind: 'skills', name: 'tdd' };
+    await expect(invoke(channel, swarmOwned)).resolves.toEqual(both);
+    expect(seed[act]).toHaveBeenLastCalledWith(sets.W, swarmOwned);
+
+    const shippedOwned = { kind: 'skills', name: 'other' };
+    await expect(invoke(channel, shippedOwned)).resolves.toEqual(both);
+    expect(seed[act]).toHaveBeenLastCalledWith(sets.S, shippedOwned);
+  });
+
+  it('refuses a malformed request before it acts', async () => {
+    await expect(invoke(CH.shippedReset, { kind: 'nope', name: 'tdd' })).rejects.toThrow();
+    expect(seed.resetShipped).not.toHaveBeenCalled();
+  });
+});
+
+describe('the boot seed (HIVE-441)', () => {
+  it('passes over every folder an installed swarm owns', async () => {
+    await vi.waitFor(() => expect(seed.seedShippedIntoHive).toHaveBeenCalledTimes(1));
+    expect(seed.seedShippedIntoHive).toHaveBeenCalledWith(undefined, sets.S.exclude);
+  });
+
+  it('still seeds, passing over nothing, when the seed sets cannot be read', async () => {
+    resetIpcHandlers();
+    vi.clearAllMocks();
+    swarmSeedSets.mockRejectedValue(new Error('installed.json unreadable'));
+    registerIpcHandlers();
+
+    await vi.waitFor(() => expect(seed.seedShippedIntoHive).toHaveBeenCalledTimes(1));
+    expect(seed.seedShippedIntoHive).toHaveBeenCalledWith(undefined, undefined);
   });
 });
