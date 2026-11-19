@@ -1402,8 +1402,8 @@ describe('the licence suspender (HIVE-267)', () => {
 
     registerIpcHandlers();
     await settle();
-    // The suspender's, and HIVE-265's server:licence-changed relay.
-    expect(licenceSeam.listeners.size).toBe(2);
+    // The suspender's, HIVE-265's server:licence-changed relay, and HIVE-442's swarm check on a new cloud session.
+    expect(licenceSeam.listeners.size).toBe(3);
   });
 
   it('relays every licence change as server:licence-changed, and answers server:licence (HIVE-265)', async () => {
