@@ -11,7 +11,7 @@
  * edited one stays edited. From then on that folder is the swarm's.
  */
 import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from 'node:fs/promises';
-import { dirname, join, sep } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 
 import {
   isSwarmFolder,
@@ -111,9 +111,9 @@ export async function readInstalledRaw(file: string): Promise<unknown[]> {
   return raw;
 }
 
-const unreadable = (cause: unknown): SwarmFailure => ({
+const unreadable = (hiveDir: string, cause: unknown): SwarmFailure => ({
   code: 'failed',
-  message: `~/.hivetty/swarms/installed.json can't be read (${messageOf(cause)}), so HiveTTY Pro changed nothing.`,
+  message: `~/${basename(hiveDir)}/swarms/installed.json can't be read (${messageOf(cause)}), so HiveTTY Pro changed nothing.`,
 });
 
 export async function readInstalled(file: string): Promise<InstalledSwarm[]> {
@@ -285,7 +285,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     try {
       raw = await readInstalledRaw(paths.installed);
     } catch (cause) {
-      return { ok: false, failure: unreadable(cause) };
+      return { ok: false, failure: unreadable(deps.hiveDir, cause) };
     }
     const before = raw.filter(isInstalled);
     const previous = before.find((held) => held.swarmId === entry.id) ?? null;
@@ -387,6 +387,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
           })),
       );
       const clashes: string[] = [];
+      const claimed = new Set<string>();
       for (const folder of folders) {
         const [kind = '', name = ''] = folder.split('/');
         const noun = kind === 'agents' ? 'agent' : 'skill';
@@ -401,7 +402,8 @@ export function createSwarms(deps: SwarmDeps): Swarms {
           () => true,
           () => false,
         );
-        if (exists) clashes.push(`The ${noun} ${name} already exists in ~/.hivetty/${kind} as your own.`);
+        // The person's own: kept, and recorded as an edited file of this swarm when the seed runs (HIVE-447).
+        if (exists) claimed.add(folder);
       }
       if (clashes.length > 0) return await fail({ code: 'collision', message: clashes.join(' ') });
 
@@ -420,7 +422,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
         await writeFile(paths.pending(entry.id), `${JSON.stringify({ files: hashes, parts: {} })}\n`);
         undo = () => deleteMatching(deps.hiveDir, hashes);
       }
-      await seed({ source, target: deps.hiveDir, manifestFile: paths.seed(entry.id) });
+      await seed({ source, target: deps.hiveDir, manifestFile: paths.seed(entry.id), claim: claimed });
 
       // 7. The clone, then the entry.
       await rm(paths.repo(entry.id), { recursive: true, force: true });
@@ -455,7 +457,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     try {
       raw = await readInstalledRaw(paths.installed);
     } catch (cause) {
-      return { ok: false, failure: unreadable(cause) };
+      return { ok: false, failure: unreadable(deps.hiveDir, cause) };
     }
     try {
       const manifest = await readManifest(paths.seed(swarmId));
