@@ -188,57 +188,68 @@ export async function readUserSkills(root: string): Promise<SkillsRead> {
     */
     if (!(await isSkillFolder(root, entry))) continue;
 
-    const name = entry.name;
-    const path = join(root, name, 'SKILL.md');
-    const reject = (reason: string): void => {
-      invalid.push({ name, path, reason });
-    };
+    const read = await readSkillFolder(root, entry.name);
+    if ('skill' in read) skills.push(read.skill);
+    else invalid.push(read.invalid);
+  }
 
-    if (name === RESERVED_SKILL_NAME) {
-      reject('"done" is reserved by HiveTTY — rename the folder.');
-      continue;
-    }
-    if (!SKILL_NAME_PATTERN.test(name)) {
-      reject('Folder name must be lowercase letters, digits and dashes.');
-      continue;
-    }
+  return { skills, invalid };
+}
 
-    let body: string;
-    try {
-      body = await readFile(path, 'utf8');
-    } catch {
-      reject('No SKILL.md in this folder.');
-      continue;
-    }
+/**
+ * Read one skill folder, `<root>/<name>`, by the rules above.
+ *
+ * Split out for the swarm reader (HIVE-439), which must decide which folders
+ * to open before any is opened: a swarm is somebody else's repository, and a
+ * symlinked entry there is refused rather than followed.
+ */
+export async function readSkillFolder(
+  root: string,
+  name: string,
+): Promise<{ skill: UserSkill } | { invalid: InvalidSkill }> {
+  const path = join(root, name, 'SKILL.md');
+  const reject = (reason: string): { invalid: InvalidSkill } => ({
+    invalid: { name, path, reason },
+  });
 
-    const keys = frontmatter(body);
-    if (keys === null) {
-      reject('No frontmatter — the file must open and close with a --- fence.');
-      continue;
-    }
+  if (name === RESERVED_SKILL_NAME) {
+    return reject('"done" is reserved by HiveTTY — rename the folder.');
+  }
+  if (!SKILL_NAME_PATTERN.test(name)) {
+    return reject('Folder name must be lowercase letters, digits and dashes.');
+  }
 
-    const declared = keys.name;
-    if (declared === undefined || declared === '') {
-      reject('The frontmatter declares no name.');
-      continue;
-    }
-    if (declared !== name) {
-      reject(
-        `Frontmatter name "${declared}" does not match the folder "${name}".`,
-      );
-      continue;
-    }
+  let body: string;
+  try {
+    body = await readFile(path, 'utf8');
+  } catch {
+    return reject('No SKILL.md in this folder.');
+  }
 
-    const dir = join(root, name);
-    skills.push({
+  const keys = frontmatter(body);
+  if (keys === null) {
+    return reject('No frontmatter — the file must open and close with a --- fence.');
+  }
+
+  const declared = keys.name;
+  if (declared === undefined || declared === '') {
+    return reject('The frontmatter declares no name.');
+  }
+  if (declared !== name) {
+    return reject(
+      `Frontmatter name "${declared}" does not match the folder "${name}".`,
+    );
+  }
+
+  const dir = join(root, name);
+  return {
+    skill: {
       name,
       description: keys.description ?? '',
       body,
       path,
       dir,
       manifest: await readBundle(dir),
-    });
-  }
-
-  return { skills, invalid };
+    },
+  };
 }
