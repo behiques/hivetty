@@ -615,7 +615,8 @@ bytes at normal flush sizes.
 
 `hivetty-server` is the same feature code (`core/`) booted by plain Node, with no
 Electron and no window (HIVE-422). It is not public yet: it ships as a Linux
-tarball built by CI, with no image so far. The desktop app's `--server` mode
+tarball built by CI and as the private base image
+`ghcr.io/behiques/hivetty-server`, built from that tarball (HIVE-426). The desktop app's `--server` mode
 described above is unchanged and works on any plan.
 
 Build it and start it from a checkout:
@@ -657,6 +658,24 @@ bin/hivetty-server               # serve
 
 The tarballs are workflow artifacts, `hivetty-server-linux-<arch>`, each with a
 `SHA256SUMS`, kept for seven days. No release carries them.
+
+### The image
+
+`packaging/server/Dockerfile` builds the private base image from those tarballs
+(HIVE-426): `debian:bookworm-slim` pinned by digest, `tini` as PID 1, the
+tarball unpacked read-only under `/opt/hivetty-server`. The runner image
+(HIVE-303) builds from it. How to build, run, publish and pull it:
+`packaging/server/README.md`.
+
+| | |
+| --- | --- |
+| `HIVETTY_HOME` | `/var/lib/hivetty`, the image's one `VOLUME` |
+| `TMPDIR` | `/var/lib/hivetty/tmp`; the server creates a non-blank `TMPDIR` at boot, since a fresh volume has none |
+| User | `hivetty`, uid and gid 10001; any `--user` works with a volume that uid owns |
+| Health | `HEALTHCHECK` runs `hivetty-server --health` |
+
+No port is exposed and nothing in it writes outside the volume, so it runs with
+`--read-only`.
 
 ### Its folder
 
