@@ -128,6 +128,33 @@ async function hashFolders(source: string, folders: string[]): Promise<Record<st
   return hashes;
 }
 
+/**
+ * A first install that failed after its takeover deletes `<id>/`, and the moved entries with it. They go back to
+ * `.seed.json`, except for a file the undo deleted: with no entry the boot seed creates it again from `resources/`,
+ * where an entry would read as the person having deleted it.
+ */
+async function giveBackTaken(
+  hiveDir: string,
+  shippedManifest: string,
+  original: Manifest,
+  taken: ReadonlySet<string>,
+): Promise<void> {
+  const current = await readManifest(shippedManifest);
+  const kept = async <T>(from: Record<string, T>, into: Record<string, T>): Promise<void> => {
+    for (const [rel, value] of Object.entries(from)) {
+      if (!taken.has(folderOf(rel))) continue;
+      const present = await lstat(join(hiveDir, rel)).then(
+        () => true,
+        () => false,
+      );
+      if (present) into[rel] = value;
+    }
+  };
+  await kept(original.files, current.files);
+  await kept(original.parts, current.parts);
+  await writeManifest(shippedManifest, current);
+}
+
 function gitFailure(error: GitError, entry: SwarmEntry): SwarmFailure {
   if (error.kind === 'no_access') {
     return {
@@ -152,15 +179,20 @@ export function createSwarms(deps: SwarmDeps): Swarms {
   const now = deps.now ?? (() => new Date());
 
   const installNow = async (entry: SwarmEntry): Promise<SwarmInstallResult> => {
+    // The id becomes a path, and `swarmPaths` throws on a bad one: refused here, so install never rejects.
+    if (!isSwarmId(entry.id)) return { ok: false, failure: { code: 'failed', message: 'Not a swarm id.' } };
     const staging = paths.staging(entry.id);
     const before = await readInstalled(paths.installed);
     const previous = before.find((held) => held.swarmId === entry.id) ?? null;
     // Set once files may have been written for a swarm that was not installed: what takes them back out.
     let undo: (() => Promise<void>) | null = null;
+    // Set once a first install has moved built-ins' entries out of `.seed.json`: what puts them back.
+    let giveBack: (() => Promise<void>) | null = null;
 
     // Every step here is best effort: the failure being reported is the one that matters.
     const fail = async (failure: SwarmFailure): Promise<SwarmInstallResult> => {
       if (undo !== null) await undo().catch(() => undefined);
+      if (giveBack !== null) await giveBack().catch(() => undefined);
       await rm(staging, { recursive: true, force: true }).catch(() => undefined);
       if (previous === null) {
         await rm(paths.dir(entry.id), { recursive: true, force: true }).catch(() => undefined);
@@ -276,6 +308,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
         // The swarm's first. If only it lands, both manifests name the path: sync reads either, the boot seed
         // passes over the folder, and the next install moves nothing twice.
         await writeManifest(paths.seed(entry.id), mine);
+        if (previous === null) giveBack = () => giveBackTaken(deps.hiveDir, deps.shippedManifest, shipped, taken);
         await writeManifest(deps.shippedManifest, left);
       }
 

@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InstalledSwarm, SwarmEntry } from '@shared/swarm-contract';
 
 import { baseOf } from '../../../core/seed/merge';
+import { seedShipped } from '../../../core/seed/seed';
 import { createSwarmGit } from '../../../core/swarms/git';
 import { createSwarms, readInstalled, type SwarmDeps } from '../../../core/swarms/install';
 
@@ -285,6 +286,12 @@ describe('install', () => {
     });
   });
 
+  it('answers a bad id with a failure, never a rejection, and touches nothing', async () => {
+    const result = await createSwarms(makeDeps()).install(entryFor({ id: '../x' }));
+    expect(result).toMatchObject({ ok: false, failure: { code: 'failed' } });
+    expect(readdirSync(hiveDir)).toEqual([]);
+  });
+
   it('refuses a native or community row with no version as unavailable', async () => {
     const result = await createSwarms(makeDeps()).install(entryFor({ version: null }));
     expect(result).toMatchObject({ ok: false, failure: { code: 'unavailable' } });
@@ -388,6 +395,44 @@ describe('install', () => {
       expect((await createSwarms(makeDeps()).install(entry)).ok).toBe(true);
       expect(readHive('skills/tdd/SKILL.md')).toContain('Mine.');
       expectMoved();
+    });
+
+    describe('when the seed throws on a first install', () => {
+      const throwingSeed = vi.fn<NonNullable<SwarmDeps['seed']>>(async (options) => {
+        await seedShipped(options);
+        throw new Error('ENOSPC');
+      });
+
+      it('gives the built-ins back their entries for the files that stay, and the retry installs', async () => {
+        write(hive('skills/tdd/SKILL.md'), skillText('tdd', 'Mine.'));
+        const { entry } = released('1.0.0', { skills: ['tdd'], agents: [], body: 'New body.' });
+
+        expect(await createSwarms(makeDeps({ seed: throwingSeed })).install(entry)).toMatchObject({ ok: false });
+        const shipped = readJson<{ files: object; parts: object }>('.seed.json');
+        expect(Object.keys(shipped.files).sort()).toEqual([
+          'skills/other/SKILL.md',
+          'skills/tdd/SKILL.md',
+          'skills/tdd/notes.md',
+        ]);
+        expect(Object.keys(shipped.parts).sort()).toEqual(['skills/other/SKILL.md', 'skills/tdd/SKILL.md']);
+        expect(existsSync(hive('swarms/sw1'))).toBe(false);
+
+        expect((await createSwarms(makeDeps()).install(entry)).ok).toBe(true);
+      });
+
+      it('drops the entry of a built-in the undo deleted, so the boot seed brings it back', async () => {
+        write(hive('skills/tdd/SKILL.md'), OLD);
+        const { entry } = released('1.0.0', { skills: ['tdd'], agents: [], body: 'New body.' });
+
+        expect(await createSwarms(makeDeps({ seed: throwingSeed })).install(entry)).toMatchObject({ ok: false });
+        expect(existsSync(hive('skills/tdd/SKILL.md'))).toBe(false);
+        expect(Object.keys(readJson<{ files: object }>('.seed.json').files)).not.toContain('skills/tdd/SKILL.md');
+
+        const resources = join(root, 'resources');
+        write(join(resources, 'skills/tdd/SKILL.md'), OLD);
+        await seedShipped({ source: resources, target: hiveDir, manifestFile: hive('.seed.json') });
+        expect(readHive('skills/tdd/SKILL.md')).toBe(OLD);
+      });
     });
   });
 
