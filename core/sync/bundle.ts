@@ -74,12 +74,13 @@ export function collectKeys(
 }
 
 /**
- * The person's own skill and agent files. A file that is still exactly what this Mac's seed wrote is left out:
+ * The person's own skill and agent files. A file that is still exactly what one of this Mac's seeds wrote is left out:
  * each Mac keeps the shipped files of its own build, so an older build can never overwrite a newer one's.
  * `walk` lists only real files and folders, so a linked folder inside a root is never entered.
  */
-export async function collectFiles(hiveDir: string, manifestFile: string): Promise<View> {
-  const shipped = (await readManifest(manifestFile)).files;
+export async function collectFiles(hiveDir: string, manifestFiles: readonly string[]): Promise<View> {
+  // The built-ins' manifest and each installed swarm's (HIVE-441): a file any of them wrote is not the person's.
+  const shipped = await Promise.all(manifestFiles.map(async (file) => (await readManifest(file)).files));
   const view: View = {};
   for (const root of ROOTS) {
     const top = await lstat(join(hiveDir, root)).catch(() => null);
@@ -93,7 +94,7 @@ export async function collectFiles(hiveDir: string, manifestFile: string): Promi
       const bytes = await readFile(full).catch(() => null);
       if (bytes === null) continue; // vanished between listing and reading
       const hash = sha256(bytes);
-      if (shipped[rel] === hash) continue;
+      if (shipped.some((files) => files[rel] === hash)) continue;
       view[`automation:f:${rel}`] = { hash, at: Math.floor(info.mtimeMs), data: bytes.toString('base64') };
     }
   }

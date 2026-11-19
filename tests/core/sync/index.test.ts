@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -107,7 +108,7 @@ function harness(options: { account?: AccountState; entitled?: string | null; en
     },
     userData: dir,
     hiveDir: dir,
-    manifestFile: join(dir, '.seed.json'),
+    manifestFiles: () => Promise.resolve([join(dir, '.seed.json')]),
     readDocument: () => ({}),
     writeConfig: () => true,
     resetShipped: () => Promise.resolve(),
@@ -429,6 +430,24 @@ describe('the engine’s wiring', () => {
     await expect(deps?.collectFiles()).resolves.toEqual({ 'automation:f:skills/a/SKILL.md': expect.anything() as unknown });
     await expect(deps?.conflicts()).resolves.toEqual({ count: 0, latest: null });
     off();
+  });
+
+  it('asks for the manifest list on every collectFiles, because installs change it (HIVE-441)', async () => {
+    const h = harness();
+    mkdirSync(join(dir, 'skills/s'), { recursive: true });
+    writeFileSync(join(dir, 'skills/s/SKILL.md'), 'swarm');
+    writeFileSync(
+      join(dir, 'swarm-seed.json'),
+      JSON.stringify({ files: { 'skills/s/SKILL.md': createHash('sha256').update('swarm').digest('hex') }, parts: {} }),
+    );
+    const lists = [[join(dir, '.seed.json')], [join(dir, '.seed.json'), join(dir, 'swarm-seed.json')]];
+    let call = 0;
+    const manifestFiles = vi.fn(() => Promise.resolve(lists[Math.min(call++, 1)] ?? []));
+    startSync({ ...h.deps, manifestFiles });
+    const deps = h.engines[0]?.deps;
+    await expect(deps?.collectFiles()).resolves.toHaveProperty(['automation:f:skills/s/SKILL.md']);
+    await expect(deps?.collectFiles()).resolves.toEqual({});
+    expect(manifestFiles).toHaveBeenCalledTimes(2);
   });
 
   it('builds the real engine by default', async () => {

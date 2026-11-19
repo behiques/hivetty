@@ -19,7 +19,8 @@ const APPEARANCE = /^workspace:k:appearance\.(.+)$/s;
 
 export interface ApplyDeps {
   hiveDir: string;
-  manifestFile: string;
+  /** The built-ins' seed manifest and each installed swarm's (HIVE-441). */
+  manifestFiles: readonly string[];
   /** `writeSyncedKeys`: false when the config refused the write. */
   writeConfig(mutate: (draft: Record<string, unknown>) => Record<string, unknown>): boolean;
   /** Puts `<kind>/<name>` back to what this build ships; rejects when this build does not ship it. */
@@ -113,7 +114,8 @@ export async function applyMerge(
 ): Promise<{ configOk: boolean; kept: Record<string, string>; skipped: string[] }> {
   const nextKept = await keepConflicts(deps, result.conflicts, kept);
 
-  const shipped = (await readManifest(deps.manifestFile)).files;
+  const manifests = await Promise.all(deps.manifestFiles.map(async (file) => (await readManifest(file)).files));
+  const isShipped = (rel: string): boolean => manifests.some((files) => files[rel] !== undefined);
   const touched = new Set<string>();
   const reset = new Set<string>();
   const skipped: string[] = [];
@@ -128,8 +130,8 @@ export async function applyMerge(
     const [root, name] = rel.split('/') as ['skills' | 'agents', string];
     touched.add(root);
     const folder = `${root}/${name}`;
-    if (shipped[rel] !== undefined && reset.has(folder)) continue; // the reset already put it back
-    if (shipped[rel] !== undefined) {
+    if (isShipped(rel) && reset.has(folder)) continue; // the reset already put it back
+    if (isShipped(rel)) {
       // Another Mac went back to the shipped copy: this one restores its own build's, not nothing.
       const restored = await deps.resetShipped(root, name).then(
         () => true,

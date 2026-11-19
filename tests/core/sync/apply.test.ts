@@ -40,7 +40,7 @@ function makeDeps(overrides: Partial<ApplyDeps> = {}): ApplyDeps & { calls: stri
   return {
     calls,
     hiveDir: dir,
-    manifestFile: manifest,
+    manifestFiles: [manifest],
     writeConfig: vi.fn(() => true),
     resetShipped: vi.fn((kind: string, name: string) => {
       calls.push(`reset:${kind}/${name}`);
@@ -148,6 +148,17 @@ describe('applyMerge: files', () => {
     expect(read('skills/work-on/SKILL.md')).toBe('shipped');
     expect(read('skills/work-on/extra.md')).toBe('extra');
     expect(deps.afterSkills).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets a folder listed only in a second manifest, as one listed in the first (HIVE-441)', async () => {
+    const swarm = join(dir, 'swarm-seed.json');
+    writeFileSync(manifest, JSON.stringify({ files: {}, parts: {} }));
+    writeFileSync(swarm, JSON.stringify({ files: { 'skills/s/SKILL.md': sha256('shipped') }, parts: {} }));
+    write('skills/s/SKILL.md', 'edited');
+    const deps = makeDeps({ manifestFiles: [manifest, swarm] });
+    await applyMerge(deps, result({ remove: ['automation:f:skills/s/SKILL.md'] }), {});
+    expect(deps.resetShipped).toHaveBeenCalledWith('skills', 's');
+    expect(deps.calls).toEqual(['reset:skills/s']);
   });
 
   it('still deletes an unlisted file in a folder that was reset', async () => {

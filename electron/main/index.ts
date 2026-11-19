@@ -247,7 +247,7 @@ if (!app.requestSingleInstanceLock()) {
       safeStorage,
       userData: app.getPath('userData'),
       hiveDir: dirname(configPath()),
-      manifestFile: shippedOptions().manifestFile,
+      manifestFiles: () => Promise.resolve([shippedOptions().manifestFile]),
       readDocument: readConfigDocument,
       writeConfig: (mutate) => writeSyncedKeys(mutate) !== null,
       resetShipped: async (kind, name) => {

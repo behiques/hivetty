@@ -150,7 +150,7 @@ function makeMac(name: string, cloud: Cloud, options: MacOptions = {}) {
     applyMerge(
       {
         hiveDir: dir,
-        manifestFile: manifest,
+        manifestFiles: [manifest],
         writeConfig: (mutate) => {
           if (refuseConfig) return false;
           doc = mutate(structuredClone(doc));
@@ -171,7 +171,7 @@ function makeMac(name: string, cloud: Cloud, options: MacOptions = {}) {
     keys,
     state,
     readDocument: () => structuredClone(doc),
-    collectFiles: () => collectFiles(dir, manifest),
+    collectFiles: () => collectFiles(dir, [manifest]),
     apply: options.apply?.(realApply) ?? realApply,
     conflicts: () => conflictsSummary(dir),
     deriveKey: cheap,

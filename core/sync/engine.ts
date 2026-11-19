@@ -40,7 +40,7 @@ export interface EngineDeps {
   state: StateStore;
   /** `readConfigDocument` */
   readDocument(): Record<string, unknown> | null;
-  /** `collectFiles(hiveDir, manifestFile)` */
+  /** `collectFiles(hiveDir, manifestFiles)` */
   collectFiles(): Promise<View>;
   apply(
     result: MergeResult,

@@ -47,7 +47,8 @@ export interface SyncDeps {
   userData: string;
   /** The folder holding config.json, skills/ and agents/. */
   hiveDir: string;
-  manifestFile: string;
+  /** Every seed manifest: asked on each cycle, because installing a swarm adds one while the app runs (HIVE-441). */
+  manifestFiles: () => Promise<readonly string[]>;
   readDocument: () => Record<string, unknown> | null;
   /** `writeSyncedKeys`: false when the config refused the write. */
   writeConfig: (mutate: (draft: Record<string, unknown>) => Record<string, unknown>) => boolean;
@@ -172,12 +173,12 @@ export function startSync(deps: SyncDeps): { stop(): void } {
       keys,
       state,
       readDocument: deps.readDocument,
-      collectFiles: () => collectFiles(deps.hiveDir, deps.manifestFile),
-      apply: (result, kept) =>
+      collectFiles: async () => collectFiles(deps.hiveDir, await deps.manifestFiles()),
+      apply: async (result, kept) =>
         applyMerge(
           {
             hiveDir: deps.hiveDir,
-            manifestFile: deps.manifestFile,
+            manifestFiles: await deps.manifestFiles(),
             writeConfig: (mutate) => {
               const ok = deps.writeConfig(mutate);
               if (ok) hooks.afterConfig();
