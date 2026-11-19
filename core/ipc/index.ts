@@ -3564,6 +3564,10 @@ export function registerIpcHandlers(
     afterAgents,
     env: codexEnv,
     authedFetch: () => cloudSession()?.authedFetch ?? null,
+    // HIVE-442: an automatic swarm update waits for every agent run to end. The push and the notification follow.
+    runsLive: () => (runs?.live().length ?? 0) > 0,
+    changed: () => undefined,
+    notify: () => undefined,
   });
 
   /*
