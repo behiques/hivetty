@@ -203,7 +203,7 @@ describe('SwarmsSection', () => {
     expect(swarms.installSwarm).toHaveBeenCalledWith('acme');
   });
 
-  it('Try again on a failed first install asks again when this pane holds no consent for it; Dismiss forgets it', () => {
+  it('Try again on a failed first install opens the dialog; Dismiss forgets it', () => {
     serve({ failures: new Map([['standard', FAILED]]) });
     render(<SwarmsSection />);
     const row = rowOf('Standard');
