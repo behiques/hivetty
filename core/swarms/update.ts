@@ -36,15 +36,22 @@ export interface SwarmUpdater {
 interface Pending {
   entry: SwarmEntry;
   target: string;
-  automatic: boolean;
   updating: boolean;
   /** The automatic apply failed: left for the next check, not for the next idle. */
   failed: boolean;
 }
 
+/** Not community, and the switch is on or the organization pinned it: the pin wins over the switch. */
+const isAutomatic = (entry: SwarmEntry, installed: InstalledSwarm): boolean =>
+  entry.kind !== 'community' &&
+  (installed.autoUpdate || (entry.kind === 'organization' && entry.policy === 'pinned'));
+
 export function createSwarmUpdater(deps: SwarmUpdaterDeps): SwarmUpdater {
   const held = new Map<string, Pending>();
   let running: Promise<void> | null = null;
+  /** The running job is a check that has not read the installed list yet: a check asked now sees what it will. */
+  let joinable = false;
+  let queuedCheck: { promise: Promise<void>; resolve: () => void } | null = null;
   let idleQueued = false;
   let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -53,6 +60,8 @@ export function createSwarmUpdater(deps: SwarmUpdaterDeps): SwarmUpdater {
     if (entry.policy === 'pinned') return Promise.resolve(entry.pinnedVersion);
     return deps.newestVersion(entry.repoUrl, entry.folder);
   };
+
+  const drop = (swarmId: string): boolean => held.delete(swarmId);
 
   const applyOne = async (swarmId: string, pending: Pending): Promise<void> => {
     held.set(swarmId, { ...pending, updating: true });
@@ -67,14 +76,22 @@ export function createSwarmUpdater(deps: SwarmUpdaterDeps): SwarmUpdater {
   };
 
   const applyPending = async (retryFailed: boolean): Promise<void> => {
+    if (held.size === 0) return;
+    // Read again, from disk only: a switch turned off, a removal or a clicked install since the check wins.
+    const now = new Map((await deps.installed()).map((installed) => [installed.swarmId, installed]));
+    let moved = false;
     for (const [swarmId, pending] of [...held]) {
-      if (!pending.automatic || (pending.failed && !retryFailed)) continue;
-      if (deps.runsLive()) return; // asked per swarm: a run may start between two installs
+      const installed = now.get(swarmId);
+      if (installed === undefined || installed.version === pending.target) {
+        moved = drop(swarmId) || moved;
+        continue;
+      }
+      if (!isAutomatic(pending.entry, installed) || (pending.failed && !retryFailed)) continue;
+      if (deps.runsLive()) break; // asked per swarm: a run may start between two installs
       await applyOne(swarmId, pending);
     }
+    if (moved) deps.changed();
   };
-
-  const drop = (swarmId: string): boolean => held.delete(swarmId);
 
   const checkNow = async (): Promise<void> => {
     const registry = await deps.registry();
@@ -83,7 +100,14 @@ export function createSwarmUpdater(deps: SwarmUpdaterDeps): SwarmUpdater {
     const rows = new Map(registry.swarms.map((row) => [row.id, row]));
     let moved = false;
 
-    for (const installed of await deps.installed()) {
+    joinable = false; // from here a switch turned on is not seen: a later check runs after this one
+    const installedNow = await deps.installed();
+    const present = new Set(installedNow.map((installed) => installed.swarmId));
+    for (const swarmId of [...held.keys()]) {
+      if (!present.has(swarmId)) moved = drop(swarmId) || moved;
+    }
+
+    for (const installed of installedNow) {
       const entry = rows.get(installed.swarmId);
       if (entry === undefined) {
         moved = drop(installed.swarmId) || moved;
@@ -99,11 +123,9 @@ export function createSwarmUpdater(deps: SwarmUpdaterDeps): SwarmUpdater {
         moved = drop(installed.swarmId) || moved;
         continue;
       }
-      // Not community, and the switch is on or the organization pinned it: the pin wins over the switch.
-      const automatic = entry.kind !== 'community' && (installed.autoUpdate || entry.policy === 'pinned');
       const before = held.get(installed.swarmId);
-      if (before?.target !== target || before.automatic !== automatic) moved = true;
-      held.set(installed.swarmId, { entry, target, automatic, updating: false, failed: false });
+      if (before?.target !== target || before.updating) moved = true;
+      held.set(installed.swarmId, { entry, target, updating: false, failed: false });
     }
 
     if (moved) deps.changed();
@@ -111,27 +133,47 @@ export function createSwarmUpdater(deps: SwarmUpdaterDeps): SwarmUpdater {
   };
 
   /** One job at a time. A rejection ends the job and is not the caller's: the next trigger tries again. */
-  const exclusive = (job: () => Promise<void>): Promise<void> => {
-    running ??= job()
+  const exclusive = (job: () => Promise<void>, isCheck: boolean): Promise<void> => {
+    joinable = isCheck;
+    const current = job()
       .catch(() => undefined)
       .finally(() => {
         running = null;
-        if (idleQueued) {
+        joinable = false;
+        if (queuedCheck !== null) {
+          const { resolve } = queuedCheck;
+          queuedCheck = null;
+          void exclusive(checkNow, true).then(resolve);
+        } else if (idleQueued) {
           idleQueued = false;
-          void exclusive(() => applyPending(false));
+          void exclusive(() => applyPending(false), false);
         }
       });
-    return running;
+    running = current;
+    return current;
+  };
+
+  const check = (): Promise<void> => {
+    if (running === null) return exclusive(checkNow, true);
+    if (joinable) return running;
+    if (queuedCheck === null) {
+      let resolve: () => void = () => undefined;
+      const promise = new Promise<void>((done) => {
+        resolve = done;
+      });
+      queuedCheck = { promise, resolve };
+    }
+    return queuedCheck.promise;
   };
 
   return {
-    check: () => exclusive(checkNow),
+    check,
     idle: () => {
       if (running !== null) {
         idleQueued = true;
         return running;
       }
-      return exclusive(() => applyPending(false));
+      return exclusive(() => applyPending(false), false);
     },
     pending: (swarmId) => {
       const pending = held.get(swarmId);
@@ -142,7 +184,7 @@ export function createSwarmUpdater(deps: SwarmUpdaterDeps): SwarmUpdater {
     },
     start: () => {
       if (timer !== null) return;
-      timer = setInterval(() => void exclusive(checkNow), CHECK_EVERY_MS);
+      timer = setInterval(() => void check(), CHECK_EVERY_MS);
       timer.unref(); // never the reason the process stays up
     },
     stop: () => {

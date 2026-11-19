@@ -342,10 +342,12 @@ describe('check', () => {
 
     await expect(updater.check()).resolves.toBeUndefined();
     expect(updater.pending('a1')).toEqual({ target: '1.4.0', updating: true });
+    deps.changed.mockClear();
 
     deps.runsLive.mockReturnValue(true);
     await updater.check();
     expect(updater.pending('a1')).toEqual({ target: '1.4.0', updating: false });
+    expect(deps.changed).toHaveBeenCalledTimes(1); // the renderer stops showing it as updating
   });
 
   it('stops applying when a run starts between two installs', async () => {
@@ -356,6 +358,107 @@ describe('check', () => {
     await updater.check();
     expect(deps.apply).toHaveBeenCalledTimes(1);
     expect(updater.pending('b1')).toEqual({ target: '1.4.0', updating: false });
+  });
+});
+
+describe('what changed since the check', () => {
+  it('runs a check that arrives during an idle job once that job ends', async () => {
+    const deps = harness([rowFor()], [heldFor()]);
+    deps.runsLive.mockReturnValue(true);
+    const updater = createSwarmUpdater(deps);
+    await updater.check();
+    const gate = deferred<InstalledSwarm[]>();
+    deps.installed.mockReturnValueOnce(gate.promise);
+
+    const idling = updater.idle();
+    const checking = updater.check();
+    gate.resolve([heldFor()]);
+    await Promise.all([idling, checking]);
+    expect(deps.registry).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs a check again when the running one already read the installed list', async () => {
+    const deps = harness([rowFor()], [heldFor({ autoUpdate: false })]);
+    deps.runsLive.mockReturnValue(false);
+    const gate = deferred<InstalledSwarm[]>();
+    deps.installed.mockReturnValueOnce(gate.promise);
+    const updater = createSwarmUpdater(deps);
+
+    const first = updater.check();
+    await flush(); // the first check is waiting on the installed list it already asked for
+    deps.installed.mockResolvedValue([heldFor({ autoUpdate: true })]); // the switch was turned on meanwhile
+    const second = updater.check();
+    gate.resolve([heldFor({ autoUpdate: false })]);
+    await Promise.all([first, second]);
+
+    expect(deps.registry).toHaveBeenCalledTimes(2);
+    expect(deps.apply).toHaveBeenCalled();
+  });
+
+  it('does not apply an update whose switch was turned off since the check, even when the next check is offline', async () => {
+    const deps = harness([rowFor()], [heldFor({ autoUpdate: true })]);
+    deps.runsLive.mockReturnValue(true);
+    const updater = createSwarmUpdater(deps);
+    await updater.check();
+
+    deps.installed.mockResolvedValue([heldFor({ autoUpdate: false })]);
+    deps.registry.mockResolvedValue({ source: 'cache', swarms: [rowFor()] });
+    await updater.check();
+    deps.runsLive.mockReturnValue(false);
+    await updater.idle();
+
+    expect(deps.apply).not.toHaveBeenCalled();
+    expect(updater.pending('a1')).toEqual({ target: '1.4.0', updating: false });
+  });
+
+  it('forgets a pending update whose swarm is no longer installed, at the next check', async () => {
+    const deps = harness([rowFor()], [heldFor({ autoUpdate: false })]);
+    const updater = createSwarmUpdater(deps);
+    await updater.check();
+    deps.changed.mockClear();
+
+    deps.installed.mockResolvedValue([]);
+    await updater.check();
+    expect(updater.pending('a1')).toBeNull();
+    expect(deps.changed).toHaveBeenCalled();
+  });
+
+  it('never reinstalls a swarm removed after the check found its update', async () => {
+    const deps = harness([rowFor()], [heldFor()]);
+    deps.runsLive.mockReturnValue(true);
+    const updater = createSwarmUpdater(deps);
+    await updater.check();
+    deps.changed.mockClear();
+
+    deps.installed.mockResolvedValue([]);
+    deps.runsLive.mockReturnValue(false);
+    await updater.idle();
+
+    expect(deps.apply).not.toHaveBeenCalled();
+    expect(updater.pending('a1')).toBeNull();
+    expect(deps.changed).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops a pending update a clicked install already reached', async () => {
+    const deps = harness([rowFor()], [heldFor()]);
+    deps.runsLive.mockReturnValue(true);
+    const updater = createSwarmUpdater(deps);
+    await updater.check();
+
+    deps.installed.mockResolvedValue([heldFor({ version: '1.4.0' })]);
+    deps.runsLive.mockReturnValue(false);
+    await updater.idle();
+
+    expect(deps.apply).not.toHaveBeenCalled();
+    expect(updater.pending('a1')).toBeNull();
+  });
+
+  it('treats a pinned policy on a native row as the switch, not as a pin', async () => {
+    const deps = harness([rowFor({ policy: 'pinned' })], [heldFor({ autoUpdate: false })]);
+    const updater = createSwarmUpdater(deps);
+
+    await updater.check();
+    expect(deps.apply).not.toHaveBeenCalled();
   });
 });
 
