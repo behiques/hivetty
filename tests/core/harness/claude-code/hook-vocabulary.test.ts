@@ -105,7 +105,7 @@ describe('Claude through the signal to today’s status and card (HIVE-237)', ()
     [toSignal('PermissionRequest', 'Bash'), 'session.blocked', 'needs approval'],
     [toSignal('PermissionRequest', 'AskUserQuestion'), 'session.blocked', 'asked a question'],
     [toSignal('Elicitation'), 'session.blocked', 'needs an answer'],
-    [noticeSignal('idle_prompt'), 'session.input_needed', 'is waiting on you'],
+    [noticeSignal('idle_prompt'), 'session.input_needed', 'summoning you'],
   ])('%j raises %s with “%s”', (signal, kind, title) => {
     n.observe(CH.sessionStatus, { entityId: 'e', status: signal!.kind === 'notice' ? 'idle' : 'waiting', signal });
     expect(raise).toHaveBeenCalledWith(expect.objectContaining({ kind, title }));
