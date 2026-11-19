@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { PROD_CLOUD_URL, resolveCloudUrl } from '../../core/licence/cloud';
 import { leaseKeys } from '../../core/licence/keys';
-import { createServerPlatform, NO_SECRET_STORE } from '../../server/platform';
+import { createServerPlatform } from '../../server/platform';
 import { makeSigner } from '../support/lease';
 
 vi.mock('node:child_process', async (original) => ({
@@ -15,14 +15,34 @@ vi.mock('node:child_process', async (original) => ({
 }));
 
 const make = (release = false, quit = vi.fn()) =>
-  createServerPlatform({ dataDir: '/srv/h/data', release, version: '1.2.3', quit, fromDir: '/app/server' });
+  createServerPlatform({
+    dataDir: '/srv/h/data',
+    release,
+    version: '1.2.3',
+    quit,
+    fromDir: '/app/server',
+    key: Buffer.alloc(32, 7),
+  });
 
 describe('the server platform (HIVE-422)', () => {
-  it('has no secret store: encryption is unavailable and every use throws', () => {
+  it('seals with the key it was given (HIVE-424)', () => {
     const { secrets } = make();
-    expect(secrets.isEncryptionAvailable()).toBe(false);
-    expect(() => secrets.encryptString('token')).toThrow(NO_SECRET_STORE);
-    expect(() => secrets.decryptString(Buffer.from('x'))).toThrow(NO_SECRET_STORE);
+    expect(secrets.isEncryptionAvailable()).toBe(true);
+    const sealed = secrets.encryptString('token');
+    expect(sealed[0]).toBe(0x01);
+    expect(sealed.includes('token')).toBe(false);
+    expect(secrets.decryptString(sealed)).toBe('token');
+    const other = createServerPlatform({
+      dataDir: '/srv/h/data',
+      release: false,
+      version: '1.2.3',
+      quit: vi.fn(),
+      fromDir: '/app/server',
+      key: Buffer.alloc(32, 9),
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(() => other.secrets.decryptString(sealed)).toThrow(/another key/);
+    error.mockRestore();
   });
 
   it('keeps state and logs in the data folder', () => {
@@ -32,7 +52,7 @@ describe('the server platform (HIVE-422)', () => {
   it('finds resources two folders up from the bundle', () => {
     expect(make().resources).toBe('/resources');
     expect(
-      createServerPlatform({ dataDir: '/d', release: false, version: '1', quit: vi.fn(), fromDir: '/repo/out/server' })
+      createServerPlatform({ dataDir: '/d', release: false, version: '1', quit: vi.fn(), fromDir: '/repo/out/server', key: Buffer.alloc(32) })
         .resources,
     ).toBe('/repo/resources');
   });
@@ -64,6 +84,7 @@ describe('the server platform (HIVE-422)', () => {
       version: '1',
       quit: vi.fn(),
       fromDir: '/app/server',
+      key: Buffer.alloc(32, 7),
       hostUser: { uid: 1001, gid: 1002 },
     }).processHost();
     expect(vi.mocked(fork).mock.calls[0]?.[2]).toMatchObject({ uid: 1001, gid: 1002 });
@@ -84,7 +105,7 @@ describe('the server platform (HIVE-422)', () => {
   });
 
   it('defaults the bundle folder to its own', () => {
-    const platform = createServerPlatform({ dataDir: '/d', release: false, version: '1', quit: vi.fn() });
+    const platform = createServerPlatform({ dataDir: '/d', release: false, version: '1', quit: vi.fn(), key: Buffer.alloc(32) });
     expect(platform.mcpLaunch.args[0]).toMatch(/\/server\/mcp-host\.js$/);
   });
 

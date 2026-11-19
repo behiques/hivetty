@@ -1,6 +1,16 @@
 // @vitest-environment node
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { connect as netConnect, createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,6 +21,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { LICENCE_LAPSED } from '../../core/agents/runs';
 import { CH, type Channel } from '../../shared/ipc-contract';
 import { REMOTE_PROTOCOL_VERSION, type ServerFrame } from '../../shared/remote-contract';
+import { STUB_USER, startStubCloud, USER_CODE, type StubCloud } from '../e2e/electron/fixtures/stub-cloud';
 import { claimsFor, makeSigner } from '../support/lease';
 import { SecureTestSocket } from '../support/secure-test-socket';
 
@@ -20,8 +31,9 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  * to over the encrypted channel from outside the process. `server/index.ts` and `server/boot.ts` are composition,
  * excluded from coverage; this suite is their proof.
  *
- * Nobody can sign in yet (HIVE-424), so case 1 plants a signed lease the server reads as lapsed, signed out: the
- * edition gate then decides from the lease on disk.
+ * Case 1 plants a signed lease the server reads as lapsed, signed out: the edition gate then decides from the
+ * lease on disk. Every home carries a secret key, since a server without one refuses to start (HIVE-424); cases 7
+ * to 11 sign in against the stub cloud and prove the key's rules on a real process.
  *
  * Gated behind `HIVE_LIVE_SERVER_EDITION_PROOF=1`. CI runs none of the live suites.
  */
@@ -78,6 +90,16 @@ interface Home {
 
 const homes: string[] = [];
 const children: ChildProcess[] = [];
+const clouds: StubCloud[] = [];
+
+/** The stub cloud on a `solo` plan, whose lease carries `runners.byo`, and the home pointed at it. */
+async function useStubCloud(home: Home): Promise<StubCloud> {
+  const cloud = await startStubCloud();
+  clouds.push(cloud);
+  cloud.controls.setPlan('solo');
+  Object.assign(home.env, cloud.env);
+  return cloud;
+}
 
 /** A scratch HIVETTY_HOME with a loopback bind on a free port and one project, and its own HOME. */
 async function makeHome(): Promise<Home> {
@@ -107,8 +129,35 @@ async function makeHome(): Promise<Home> {
     TMPDIR: process.env['TMPDIR'],
     HIVETTY_HOME: root,
     HIVETTY_CLOUD_URL: CLOUD,
+    HIVETTY_SECRET_KEY: randomBytes(32).toString('hex'),
   };
   return { root, port, env };
+}
+
+/** A key file in its own folder, outside the home, named by HIVETTY_SECRET_KEY_FILE; the environment key goes. */
+function useKeyFile(home: Home, key = randomBytes(32).toString('base64')): string {
+  const dir = mkdtempSync(join(tmpdir(), 'hive-server-key-'));
+  homes.push(dir);
+  const file = join(dir, 'key');
+  writeFileSync(file, `${key}\n`, { mode: 0o600 });
+  home.env['HIVETTY_SECRET_KEY_FILE'] = file;
+  delete home.env['HIVETTY_SECRET_KEY'];
+  return file;
+}
+
+/** `--login` against the stub cloud: answered mid-run, when the user code is printed. */
+async function signIn(home: Home, cloud: StubCloud): Promise<void> {
+  const child = spawn(NODE, [ENTRY, '--login'], { env: home.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  children.push(child);
+  let out = '';
+  child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString()));
+  child.stderr.on('data', (chunk: Buffer) => (out += chunk.toString()));
+  const exited = new Promise<number | null>((resolve) => child.on('exit', (code) => resolve(code)));
+  await waitFor(() => out.includes(USER_CODE) || child.exitCode !== null, 'the device code on stdout');
+  expect(out).toContain(USER_CODE);
+  cloud.controls.approveDeviceCode();
+  const code = await Promise.race([exited, delay(30_000).then(() => 'timeout' as const)]);
+  expect(code, out).toBe(0);
 }
 
 /** A lease signed by a fresh key, planted where the server reads it; the env then trusts that key. */
@@ -250,9 +299,10 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
     });
   }, 120_000);
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const child of children.splice(0)) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     for (const root of homes.splice(0)) rmSync(root, { recursive: true, force: true });
+    for (const cloud of clouds.splice(0)) await cloud.close();
   });
 
   it('1 and 6: serves a lease with runners.byo, attaches encrypted, refuses a spawn in words and keeps answering, stops on SIGTERM', async () => {
@@ -341,10 +391,10 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
   }, 60_000);
 
   /*
-    A spawn through the server needs a licensed server, which needs sign-in (HIVE-424); a lapsed one refuses the
-    spawn before the PTY host is tried (case 6 above). `pnpm test:pty-host` drives the fork host itself.
+    A spawn through the server needs a licensed server; a lapsed one refuses the spawn before the PTY host is tried
+    (case 6 above). Sign-in (case 9) makes a licensed one possible. `pnpm test:pty-host` drives the fork host itself.
   */
-  it.todo('a licensed server spawns a session through the fork host (needs HIVE-424)');
+  it.todo('a licensed server spawns a session through the fork host');
 
   it('5: nothing under out/server imports electron', () => {
     expect(existsSync(join(ROOT, 'out/server/pty-host.js'))).toBe(true);
@@ -354,4 +404,98 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
     });
     expect(offenders).toEqual([]);
   });
+
+  it('7: with no key, serving and --login exit 4 naming both variables and never listen; --pair and --gen-key need none (HIVE-424)', async () => {
+    const home = await makeHome();
+    delete home.env['HIVETTY_SECRET_KEY'];
+    let listened = false;
+    const watching = (async () => {
+      for (let i = 0; i < 20; i += 1) {
+        if (await accepts(home.port)) listened = true;
+        await delay(100);
+      }
+    })();
+    for (const args of [[], ['--login']]) {
+      const { code, stdout, stderr } = await runOnce(home, args);
+      expect(code, stdout + stderr).toBe(4);
+      expect(stdout + stderr).toContain('HIVETTY_SECRET_KEY_FILE');
+      expect(stdout + stderr).toContain('HIVETTY_SECRET_KEY ');
+    }
+    await watching;
+    expect(listened).toBe(false);
+    expect((await runOnce(home, ['--pair', 'smoke'])).code).toBe(0);
+    const generated = await runOnce(home, ['--gen-key']);
+    expect(generated.code).toBe(0);
+    expect(generated.stdout.trim()).toMatch(/^[A-Za-z0-9+/]{43}=$/);
+  }, 60_000);
+
+  it('8: refuses a key file inside the home folder, beside the data (HIVE-424)', async () => {
+    const home = await makeHome();
+    const inside = join(home.root, 'key');
+    writeFileSync(inside, randomBytes(32).toString('hex'), { mode: 0o600 });
+    home.env['HIVETTY_SECRET_KEY_FILE'] = inside;
+    const { code, stdout, stderr } = await runOnce(home, []);
+    expect(code, stdout + stderr).toBe(4);
+    expect(stdout + stderr).toContain('beside the data');
+  }, 30_000);
+
+  it('9 and 10: signs in with --login, seals account.bin, serves across a restart, and a wrong key reads as signed out, loudly (HIVE-424)', async () => {
+    const home = await makeHome();
+    const cloud = await useStubCloud(home);
+    const keyFile = useKeyFile(home);
+    await signIn(home, cloud);
+
+    const sealed = readFileSync(join(home.root, 'data', 'account.bin'));
+    expect(sealed[0]).toBe(0x01);
+    expect(sealed.includes('rt-')).toBe(false);
+    expect(sealed.includes(STUB_USER.email)).toBe(false);
+
+    const device = await pair(home);
+    for (const round of ['first boot', 'restart']) {
+      const served = serve(home);
+      await waitFor(() => served.exit !== null || accepts(home.port), `the listener on ${String(home.port)} (${round})`);
+      expect(served.exit, served.stderr()).toBeNull();
+      const client = await attach(home.port, device);
+      client.close();
+      expect(await stopWithin(served, 20_000), served.stderr()).toEqual({ code: 0, signal: null });
+    }
+
+    // Case 10: another key. The account reads as signed out with one warning line, and the server stays up.
+    writeFileSync(keyFile, `${randomBytes(32).toString('base64')}\n`);
+    const wrong = serve(home);
+    await waitFor(() => wrong.exit !== null || wrong.stderr().includes('sealed with another key'), 'the wrong-key warning');
+    expect(wrong.stderr()).toContain('sealed with another key');
+    await delay(500);
+    expect(wrong.exit, wrong.stderr()).toBeNull();
+    await stopWithin(wrong, 20_000);
+  }, 120_000);
+
+  it('11: a child the server spawns never sees HIVETTY_SECRET_KEY (HIVE-424)', async () => {
+    const home = await makeHome();
+    const device = await pair(home);
+    plantLease(home, ['runners.byo']);
+    const bin = join(home.root, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'gh'), '#!/bin/sh\nenv > "$HIVE_ENV_DUMP"\nexit 1\n', { mode: 0o755 });
+    const dump = join(home.root, 'gh-env.txt');
+    home.env['HIVE_ENV_DUMP'] = dump;
+    home.env['PATH'] = `${bin}:${home.env['PATH'] ?? ''}`;
+    expect(home.env['HIVETTY_SECRET_KEY']).toMatch(/^[0-9a-f]{64}$/);
+
+    const served = serve(home);
+    await waitFor(() => served.exit !== null || accepts(home.port), `the listener on ${String(home.port)}`);
+    expect(served.exit, served.stderr()).toBeNull();
+    const client = await attach(home.port, device);
+    try {
+      const status = await client.call(CH.integrationsStatus, undefined);
+      expect(status.kind, JSON.stringify(status)).toBe('result');
+    } finally {
+      client.close();
+    }
+    await waitFor(() => existsSync(dump), 'the fake gh to dump its environment', 10_000);
+    const lines = readFileSync(dump, 'utf8').split('\n');
+    expect(lines.some((line) => line.startsWith('HIVETTY_HOME='))).toBe(true);
+    expect(lines.filter((line) => line.startsWith('HIVETTY_SECRET_KEY'))).toEqual([]);
+    await stopWithin(served, 20_000);
+  }, 60_000);
 });

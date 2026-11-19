@@ -1,9 +1,9 @@
 // @vitest-environment node
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createJiraAuth,
@@ -11,6 +11,20 @@ import {
   type SecretFile,
   type SecretStore,
 } from '../../../../core/integrations/jira/auth';
+
+// HIVE-424: a rename that can be made to fail, so a crash between the write and the rename can be staged against the
+// real credentialFile. Every other fs function stays real.
+const fsControl = vi.hoisted(() => ({ failRename: false }));
+vi.mock('node:fs', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...real,
+    renameSync: (from: string, to: string) => {
+      if (fsControl.failRename) throw Object.assign(new Error('EIO: crash before rename'), { code: 'EIO' });
+      real.renameSync(from, to);
+    },
+  };
+});
 
 /**
  * The credential (HIVE-67).
@@ -223,7 +237,26 @@ describe('credentialFile', () => {
   });
 
   afterEach(() => {
+    fsControl.failRename = false;
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('a crash between the write and the rename leaves the old credential whole (HIVE-424)', () => {
+    const seam = credentialFile(path);
+    seam.write(Buffer.from([1, 2, 3]));
+    fsControl.failRename = true;
+    expect(() => seam.write(Buffer.from([9, 9, 9, 9]))).toThrow(/EIO/);
+    expect(seam.read()).toEqual(Buffer.from([1, 2, 3]));
+    expect(readdirSync(dir)).toEqual(['jira-credential.bin']);
+  });
+
+  it('leaves no temp file behind a write, and replaces the old bytes', () => {
+    const seam = credentialFile(path);
+    seam.write(Buffer.from([1, 2, 3]));
+    seam.write(Buffer.from([4]));
+    expect(seam.read()).toEqual(Buffer.from([4]));
+    expect(readdirSync(dir)).toEqual(['jira-credential.bin']);
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 
   it('reads null rather than throwing when there is no file', () => {
