@@ -29,6 +29,7 @@ import {
 import { mintDevice } from '../../core/server/devices';
 import { CHANNEL_CLOSE_CODE } from '../../remote-channel/secure-socket';
 import { SecureTestSocket, secureOn } from '../support/secure-test-socket';
+import type { AuditInput } from '../../core/audit/audit';
 import type { RemoteDispatch } from '../../core/ipc/remote-dispatch';
 import type { AttachedSocket } from '../../core/ipc/socket-broadcaster';
 
@@ -51,15 +52,20 @@ const noopOnDetach = vi.fn();
 const noopBuildSnapshot = (): Promise<Partial<Record<Channel, unknown>>> =>
   Promise.resolve({});
 
-const start = async (devices: readonly ServerDevice[], allowedOrigins: string[] = []) => {
+const start = async (
+  devices: readonly ServerDevice[] | (() => readonly ServerDevice[]),
+  allowedOrigins: string[] = [],
+  audit?: (entry: AuditInput) => void,
+) => {
   listener = createRemoteListener({
     bind: { host: '127.0.0.1', port: 0, allowedOrigins },
-    devices: () => devices,
+    devices: typeof devices === 'function' ? devices : () => devices,
     serverName: 'test-mini',
     dispatch: noopDispatch,
     buildSnapshot: noopBuildSnapshot,
     onAttach: noopOnAttach,
     onDetach: noopOnDetach,
+    audit,
   });
   const address = await listener.start();
   expect(address).not.toBeNull();
@@ -155,7 +161,8 @@ describe('the attach handshake', () => {
 
   it('closes a wrong token with 1008 and no frame at all, inside the handshake (HIVE-428)', async () => {
     const { device } = mintDevice('MacBook');
-    const url = await start([device]);
+    const audit = vi.fn();
+    const url = await start([device], [], audit);
     const { code, message } = await attachTolerant(url, {
       kind: 'attach',
       protocol: REMOTE_PROTOCOL_VERSION,
@@ -164,6 +171,21 @@ describe('the attach handshake', () => {
     });
     expect(message).toBeNull();
     expect(code).toBe(CHANNEL_CLOSE_CODE);
+    // The channel never keys, so no attach frame names a device: nothing for the trail (HIVE-427).
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it('writes refused/unauthorized for a device unpaired after its channel keyed (HIVE-427)', async () => {
+    const { device, token } = mintDevice('MacBook');
+    const audit = vi.fn();
+    let reads = 0;
+    // The first read keys the channel; the attach's own read finds the device gone.
+    const url = await start(() => (reads++ === 0 ? [device] : []), [], audit);
+    const reply = await attach(url, { kind: 'attach', protocol: REMOTE_PROTOCOL_VERSION, deviceId: device.id, token });
+    expect(reply.kind).toBe('attach-refused');
+    expect(audit.mock.calls.map(([entry]) => entry)).toEqual([
+      { event: 'refused', deviceId: device.id, via: 'direct', outcome: 'unauthorized' },
+    ]);
   });
 
   it('closes an unknown device id exactly as it closes a wrong token (HIVE-428)', async () => {
@@ -1100,6 +1122,7 @@ const attachedSocket = async (
     onAttach?: (socket: AttachedSocket, resumeFrom: Readonly<Record<string, ResumePoint>> | undefined) => void;
     onDetach?: (socket: AttachedSocket) => void;
     attach?: Partial<AttachRequest>;
+    audit?: (entry: AuditInput) => void;
   } = {},
 ): Promise<{ socket: { emit(event: string, ...args: unknown[]): boolean }; sent: unknown[] }> => {
   const dispatch: RemoteDispatch = overrides.dispatch ?? { call: vi.fn(), notify: vi.fn() };
@@ -1117,6 +1140,7 @@ const attachedSocket = async (
     buildSnapshot: noopBuildSnapshot,
     onAttach,
     onDetach,
+    audit: overrides.audit,
   });
   const url = await listener.start();
   expect(url).not.toBeNull();
@@ -1395,6 +1419,102 @@ describe('post-attach frames', () => {
  * already completed, so the production `setTimeout` under test is the only
  * timer these cases control.
  */
+describe('the audit trail (HIVE-427)', () => {
+  const attachFrame = (deviceId: string, token: string, protocol = REMOTE_PROTOCOL_VERSION) => ({
+    kind: 'attach', protocol, deviceId, token,
+  });
+
+  it('writes attach on accept and detach on close, with the device and via', async () => {
+    const audit = vi.fn();
+    const { socket } = await attachedSocket({ audit });
+    expect(audit).toHaveBeenCalledWith({ event: 'attach', deviceId: expect.any(String), deviceName: 'MacBook', via: 'direct' });
+    socket.emit('close');
+    await flushMicrotasks();
+    expect(audit.mock.calls.map(([entry]) => (entry as AuditInput).event)).toEqual(['attach', 'detach']);
+  });
+
+  it('writes each device-naming refusal with its reason', async () => {
+    const audit = vi.fn();
+    const good = mintDevice('MacBook');
+    const other = mintDevice('iPad');
+    const gone = mintDevice('Old');
+    const url = await start([good.device, other.device, { ...gone.device, revoked: true }], [], audit);
+
+    await attach(url, attachFrame(good.device.id, good.token, REMOTE_PROTOCOL_VERSION - 1));
+    await attach(url, attachFrame(gone.device.id, gone.token));
+    await attachTolerant(url, attachFrame(other.device.id, other.token), { deviceId: good.device.id, token: good.token });
+
+    expect(audit.mock.calls.map(([entry]) => entry)).toEqual([
+      { event: 'refused', deviceId: good.device.id, deviceName: 'MacBook', via: 'direct', outcome: 'protocol-mismatch' },
+      { event: 'refused', deviceId: gone.device.id, deviceName: 'Old', via: 'direct', outcome: 'revoked' },
+      { event: 'refused', deviceId: good.device.id, deviceName: 'MacBook', via: 'direct', outcome: 'device-mismatch' },
+    ]);
+  });
+
+  it('writes nothing for a refusal that names no device', async () => {
+    const audit = vi.fn();
+    const { device, token } = mintDevice('MacBook');
+    const url = await start([device], [], audit);
+    await attachTolerant(url, { kind: 'not-an-attach' }, { deviceId: device.id, token });
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it('writes an execute call and not a read call', async () => {
+    const audit = vi.fn();
+    const dispatch: RemoteDispatch = { call: vi.fn(async () => ({ kind: 'result' as const, id: 'c', payload: null })), notify: vi.fn() };
+    const { socket } = await attachedSocket({ audit, dispatch });
+    audit.mockClear();
+
+    socket.emit('message', JSON.stringify({ kind: 'call', id: 'c1', channel: CH.configGet, payload: null }));
+    socket.emit('message', JSON.stringify({ kind: 'call', id: 'c2', channel: CH.ptySpawnTerminal, payload: { sessionId: 's1', cwd: '/secret/path' } }));
+    socket.emit('message', JSON.stringify({ kind: 'call', id: 'c3', channel: 'constructor', payload: null }));
+    await flushMicrotasks();
+
+    expect(audit.mock.calls.map(([entry]) => entry)).toEqual([
+      { event: 'call', deviceId: expect.any(String), deviceName: 'MacBook', via: 'direct', channel: CH.ptySpawnTerminal, sessionId: 's1' },
+    ]);
+    // The read call still reached the dispatch: auditing filters what is written, never what runs.
+    expect(dispatch.call).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }), expect.anything());
+  });
+
+  it('writes one input per session per attach, and never the keystrokes', async () => {
+    const audit = vi.fn();
+    const { socket } = await attachedSocket({ audit });
+    audit.mockClear();
+
+    for (let index = 0; index < 10; index += 1) {
+      socket.emit('message', JSON.stringify({ kind: 'notify', channel: CH.ptyWrite, payload: { sessionId: 's1', data: 'hunter2' } }));
+    }
+    socket.emit('message', JSON.stringify({ kind: 'notify', channel: CH.ptyPrompt, payload: { sessionId: 's1', data: 'hunter2' } }));
+    socket.emit('message', JSON.stringify({ kind: 'notify', channel: CH.ptyWrite, payload: { sessionId: 's2', data: 'hunter2' } }));
+    socket.emit('message', JSON.stringify({ kind: 'notify', channel: CH.ptyWrite, payload: { sessionId: 'x'.repeat(129), data: 'hunter2' } }));
+    socket.emit('message', JSON.stringify({ kind: 'notify', channel: CH.ptyAck, payload: { seq: 1 } }));
+    await flushMicrotasks();
+
+    const written = audit.mock.calls.map(([entry]) => entry as AuditInput);
+    expect(written.map((entry) => [entry.event, entry.channel, entry.sessionId])).toEqual([
+      ['input', CH.ptyWrite, 's1'],
+      ['input', CH.ptyWrite, 's2'],
+      ['input', CH.ptyWrite, undefined],
+    ]);
+    expect(JSON.stringify(written)).not.toContain('hunter2');
+  });
+
+  it('writes input again on a new attach', async () => {
+    const audit = vi.fn();
+    const write = JSON.stringify({ kind: 'notify', channel: CH.ptyWrite, payload: { sessionId: 's1', data: 'a' } });
+    const first = await attachedSocket({ audit });
+    first.socket.emit('message', write);
+    first.socket.emit('close');
+    await flushMicrotasks();
+    await listener?.stop();
+    const second = await attachedSocket({ audit });
+    second.socket.emit('message', write);
+    await flushMicrotasks();
+    expect(audit.mock.calls.filter(([entry]) => (entry as AuditInput).event === 'input')).toHaveLength(2);
+  });
+});
+
 describe('the call deadline (HIVE-144)', () => {
   afterEach(() => {
     vi.useRealTimers();
