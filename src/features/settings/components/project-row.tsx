@@ -23,6 +23,8 @@ interface ProjectRowProps {
   keyEditor: ReactNode;
   /** The row's overflow menu. */
   menu: ReactNode;
+  /** A line under the path, such as the missing-swarm notice (HIVE-447). */
+  notice?: ReactNode;
 }
 
 /**
@@ -49,6 +51,7 @@ export function ProjectRow({
   editor,
   keyEditor,
   menu,
+  notice = null,
 }: ProjectRowProps) {
   const detail = project.path ?? 'unresolved';
 
@@ -118,6 +121,7 @@ export function ProjectRow({
           <span className="truncate text-ui text-ink">{project.name}</span>
         )}
         <span className="truncate text-ui-sm text-subtle">{detail}</span>
+        {notice === null ? null : <div className="pt-1.5">{notice}</div>}
       </div>
 
       {/* HIVE-378: the CLI this project's sessions start with, when it names one. */}

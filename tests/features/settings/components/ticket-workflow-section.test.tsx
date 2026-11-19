@@ -9,6 +9,7 @@ import { useUiStore } from '@stores/ui-store';
 
 vi.mock('@hooks/use-skills', () => ({
   useSkills: () => ({ skills: [{ name: 'work-on' }], invalid: [], skillsRoot: '' }),
+  useFreshSkills: () => ({ skills: [{ name: 'work-on' }], invalid: [], skillsRoot: '' }),
   useCliSkills: () => null,
 }));
 vi.mock('@hooks/use-agents', () => ({ useAgents: () => ({ agents: [], agentsRoot: '' }) }));

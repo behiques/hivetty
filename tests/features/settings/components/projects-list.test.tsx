@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,6 +10,8 @@ import {
   setAttachedServerForTest,
   setProjectConfigForTest,
 } from '@lib/project-config';
+import { resetAgents, setAgentsForTest } from '@lib/agents';
+import type { AgentSummary } from '@shared/agent-contract';
 import { useHiveStore } from '@stores/hive-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
 
@@ -41,6 +43,11 @@ vi.mock('@/lib/project-config', async (importOriginal) => {
     setProjectHarnessInConfig: (request: unknown) => setProjectHarnessInConfig(request),
   };
 });
+
+// The notice reads the registry; the listing is not this file's subject (HIVE-447).
+vi.mock('@hooks/use-swarms', () => ({
+  useSwarms: () => ({ listing: null, busy: new Set(), removing: new Set(), failures: new Map(), lastUpdate: null }),
+}));
 
 /** A resolved v2 entry, with only the interesting fields varying. */
 const entry = (over: Partial<ProjectConfig> & { id: string }): ProjectConfig => ({
@@ -542,5 +549,37 @@ describe('ProjectsList · changing a key', () => {
     expect(
       screen.queryByRole('textbox', { name: 'Project key' }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('ProjectsList · merging unattended with no shipper (HIVE-447)', () => {
+  const agents = (...names: string[]) =>
+    setAgentsForTest({ agents: names.map((name) => ({ name }) as AgentSummary), agentsRoot: '' });
+  const two = [entry({ id: 'a', autoMerge: true }), entry({ id: 'b' })];
+  const rowOf = (name: string) =>
+    screen.getAllByRole('listitem').find((item) => within(item).queryByText(name, { exact: true }) !== null)!;
+
+  afterEach(() => {
+    resetAgents();
+  });
+
+  it('names the swarm under the project set to merge unattended, and only there', () => {
+    agents('builder');
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={two} />);
+
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(within(rowOf('a')).getByRole('status')).toHaveTextContent("shipper isn't installed.");
+    expect(within(rowOf('b')).queryByRole('status')).toBeNull();
+  });
+
+  it('says nothing with a shipper installed', () => {
+    agents('shipper');
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={two} />);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('says nothing before the agents arrive', () => {
+    render(<ProjectsList onRuntimeOverrides={vi.fn()} entries={two} />);
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });

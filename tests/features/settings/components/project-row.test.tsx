@@ -95,6 +95,11 @@ describe('ProjectRow', () => {
     expect(screen.queryByText('no git')).not.toBeInTheDocument();
   });
 
+  it('renders the notice it is given inside the row, under the path (HIVE-447)', () => {
+    setup({ notice: <p>no shipper</p> });
+    expect(screen.getByRole('listitem')).toHaveTextContent('no shipper');
+  });
+
   it('renders the menu it is given', () => {
     setup();
 

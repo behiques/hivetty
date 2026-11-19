@@ -171,6 +171,8 @@ interface UiState {
    * dialog or a sentence. Never an install. Not persisted.
    */
   swarmInstallRequest: string | null;
+  /** Open Settings › Swarms on its Browse view (HIVE-447); the pane clears it. Never an install. Not persisted. */
+  swarmsBrowseRequest: boolean;
   /**
    * The CLI picked this run, and what was last picked on each (HIVE-279). Not persisted. `newCli` is `null`
    * until one is picked, so the configured default leads (HIVE-375 D1); `useNewSessionPick` resolves it.
@@ -410,6 +412,7 @@ interface UiState {
   awaySince: number;
   markAway: (at: number) => void;
   setSwarmInstallRequest: (swarmId: string | null) => void;
+  setSwarmsBrowseRequest: (open: boolean) => void;
   reset: () => void;
 }
 
@@ -443,6 +446,7 @@ const initialUiState = {
   settingsLast: 'projects' as SettingsSection,
   settingsAnchor: null as string | null,
   swarmInstallRequest: null as string | null,
+  swarmsBrowseRequest: false,
   newCli: null as HarnessId | null,
   newPicks: {} as Picks,
   place: 'home' as Place,
@@ -695,6 +699,7 @@ export const useUiStore = create<UiState>()((set) => ({
   clearSettingsSection: () => set({ settingsSection: null, settingsAnchor: null }),
   rememberSettingsSection: (section) => set({ settingsLast: section }),
   setSwarmInstallRequest: (swarmId) => set({ swarmInstallRequest: swarmId }),
+  setSwarmsBrowseRequest: (open) => set({ swarmsBrowseRequest: open }),
   setPickerQuery: (query) => set({ pickerQuery: query }),
 
   setNewCli: (cli) => set({ newCli: cli }),
@@ -1061,6 +1066,8 @@ export const useInboxActions = () => useUiStore(useShallow(inboxActionsSelector)
 /** HIVE-442: the swarm an install link named, until Settings › Swarms resolves it. */
 export const useSwarmInstallRequest = () => useUiStore((state) => state.swarmInstallRequest);
 export const useSetSwarmInstallRequest = () => useUiStore((state) => state.setSwarmInstallRequest);
+export const useSwarmsBrowseRequest = () => useUiStore((state) => state.swarmsBrowseRequest);
+export const useSetSwarmsBrowseRequest = () => useUiStore((state) => state.setSwarmsBrowseRequest);
 
 /** Settings actions, referentially stable across unrelated state changes. */
 export const useSettingsActions = () =>

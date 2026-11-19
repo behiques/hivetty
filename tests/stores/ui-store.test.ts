@@ -341,6 +341,30 @@ describe('the swarm install link request (HIVE-442)', () => {
   });
 });
 
+describe('the swarms browse request (HIVE-447)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+  });
+
+  it('starts false', () => {
+    expect(useUiStore.getState().swarmsBrowseRequest).toBe(false);
+  });
+
+  it('sets and clears the request', () => {
+    useUiStore.getState().setSwarmsBrowseRequest(true);
+    expect(useUiStore.getState().swarmsBrowseRequest).toBe(true);
+
+    useUiStore.getState().setSwarmsBrowseRequest(false);
+    expect(useUiStore.getState().swarmsBrowseRequest).toBe(false);
+  });
+
+  it('forgets the request on reset', () => {
+    useUiStore.getState().setSwarmsBrowseRequest(true);
+    useUiStore.getState().reset();
+    expect(useUiStore.getState().swarmsBrowseRequest).toBe(false);
+  });
+});
+
 /**
  * Which pane settings opens on (HIVE-116).
  *

@@ -17,6 +17,10 @@ import {
   resetProjectConfig,
   setProjectConfigForTest,
 } from '@lib/project-config';
+import { resetAgents, setAgentsForTest } from '@lib/agents';
+import { resetSkills } from '@lib/skills';
+import type { AgentSummary } from '@shared/agent-contract';
+import type { SkillSummary } from '@shared/skills-contract';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
@@ -34,6 +38,11 @@ vi.mock('@lib/cli-detection', () => ({
   rescanClis: () => Promise.resolve(detection),
   lastCliDetection: () => detection,
   subscribeCliDetection: () => () => {},
+}));
+
+// The notice reads the registry; the listing is not this file's subject (HIVE-447).
+vi.mock('@hooks/use-swarms', () => ({
+  useSwarms: () => ({ listing: null, busy: new Set(), removing: new Set(), failures: new Map(), lastUpdate: null }),
 }));
 
 const search = () => screen.getByRole('textbox', { name: 'Search all projects' });
@@ -1094,6 +1103,126 @@ describe('NewSessionPicker — the ticket workflow', () => {
     withWorkflow({ kind: 'agent', agent: 'builder', via: 'session' });
     render(<NewSessionPicker />);
     expect((firstMessage() as HTMLInputElement).value).toMatch(/^Hand HIVE-226 to the builder agent: call ledger_ask/);
+  });
+
+  /** HIVE-447: a workflow that needs a shipped skill or agent this machine does not have. */
+  describe('a missing skill or agent', () => {
+    /** What main answers for the skills: the picker reads them itself when it opens; nothing plants a snapshot. */
+    const skills = (...names: string[]) => {
+      const list = () => Promise.resolve({ skills: names.map((name) => ({ name }) as SkillSummary), invalid: [], skillsRoot: '' });
+      (window.hive as unknown as { skills: unknown }).skills = { list };
+    };
+    const agents = (...names: string[]) =>
+      setAgentsForTest({ agents: names.map((name) => ({ name }) as AgentSummary), agentsRoot: '' });
+    const notice = () => screen.queryByRole('status');
+    /** Let the picker's own read of the skills land. */
+    const settle = () => act(async () => {});
+
+    afterEach(() => {
+      resetSkills();
+      resetAgents();
+    });
+
+    it('shows the notice, and neither a row nor Enter starts a session', async () => {
+      withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
+      skills('debug');
+      render(<NewSessionPicker />);
+
+      expect(await screen.findByRole('status')).toHaveTextContent("work-on isn't installed.");
+      await userEvent.click(rowsFor(/^nova-web/)[0]);
+      await userEvent.type(search(), '{Enter}');
+      await userEvent.type(firstMessage(), '{Enter}');
+      expect(spawnSession).not.toHaveBeenCalled();
+    });
+
+    it('Start without it clears the first message, and a row then starts with none', async () => {
+      withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
+      skills();
+      render(<NewSessionPicker />);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Start without it' }));
+
+      expect(notice()).toBeNull();
+      expect(firstMessage()).toHaveValue('');
+      await userEvent.click(rowsFor(/^nova-web/)[0]);
+      expect(taskOf()).toBe('');
+    });
+
+    it('treats nothing as missing while the skills have not arrived', async () => {
+      withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
+      (window.hive as unknown as { skills: unknown }).skills = { list: () => new Promise(() => {}) };
+      render(<NewSessionPicker />);
+
+      expect(notice()).toBeNull();
+      await userEvent.click(rowsFor(/^nova-web/)[0]);
+      expect(taskOf()).toBe('/hive:work-on HIVE-226');
+    });
+
+    it('shows nothing when the skill is installed', async () => {
+      withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
+      skills('work-on');
+      render(<NewSessionPicker />);
+      await settle();
+
+      expect(notice()).toBeNull();
+      await userEvent.click(rowsFor(/^nova-web/)[0]);
+      expect(taskOf()).toBe('/hive:work-on HIVE-226');
+    });
+
+    it('checks only hive: skills', async () => {
+      withWorkflow({ kind: 'skill', skill: 'workstream:work-on' });
+      skills();
+      render(<NewSessionPicker />);
+      await settle();
+
+      expect(notice()).toBeNull();
+      await userEvent.click(rowsFor(/^nova-web/)[0]);
+      expect(taskOf()).toBe('/workstream:work-on HIVE-226');
+    });
+
+    it('sends an edited message as written, missing skill or not', async () => {
+      withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
+      skills();
+      render(<NewSessionPicker />);
+      await settle();
+
+      await userEvent.clear(firstMessage());
+      await userEvent.type(firstMessage(), 'look at HIVE-226');
+      expect(notice()).toBeNull();
+      await userEvent.click(rowsFor(/^nova-web/)[0]);
+      expect(taskOf()).toBe('look at HIVE-226');
+    });
+
+    it('⌥↵ still starts empty with the skill missing', async () => {
+      withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
+      skills();
+      render(<NewSessionPicker />);
+      await settle();
+
+      await userEvent.type(search(), '{Alt>}{Enter}{/Alt}');
+      expect(taskOf()).toBe('');
+    });
+
+    it('a missing agent: the notice replaces the wake button, and nothing is posted', async () => {
+      withWorkflow({ kind: 'agent', agent: 'builder', via: 'wake' });
+      agents('shipper');
+      render(<NewSessionPicker />);
+
+      expect(notice()).toHaveTextContent("builder isn't installed.");
+      expect(screen.queryByRole('button', { name: 'Wake builder' })).toBeNull();
+      expect(post).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Open a session instead' })).toBeInTheDocument();
+    });
+
+    it('an installed agent wakes as before', async () => {
+      withWorkflow({ kind: 'agent', agent: 'builder', via: 'wake' });
+      agents('builder');
+      render(<NewSessionPicker />);
+
+      expect(notice()).toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: 'Wake builder' }));
+      expect(post).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

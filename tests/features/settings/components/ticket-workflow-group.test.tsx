@@ -7,7 +7,8 @@ import type { CliSkills } from '@shared/skills-contract';
 import { TicketWorkflowGroup } from '@features/settings/components/ticket-workflow-group';
 
 const setJiraConnection = vi.fn((_request: unknown) => Promise.resolve());
-const agents = vi.hoisted(() => ({ names: ['builder', 'shipper'] }));
+const agents = vi.hoisted(() => ({ names: ['builder', 'shipper'] as string[] | null }));
+const installed = vi.hoisted(() => ({ skills: ['work-on', 'debug'] as string[] | null }));
 const cli = vi.hoisted(() => ({ skills: null as CliSkills | null }));
 
 vi.mock('@lib/project-config', async (importOriginal) => ({
@@ -15,18 +16,27 @@ vi.mock('@lib/project-config', async (importOriginal) => ({
   setJiraConnection: (request: unknown) => setJiraConnection(request),
 }));
 vi.mock('@hooks/use-skills', () => ({
-  useSkills: () => ({ skills: [{ name: 'work-on' }, { name: 'debug' }], invalid: [], skillsRoot: '' }),
+  useFreshSkills: () =>
+    installed.skills === null
+      ? null
+      : { skills: installed.skills.map((name) => ({ name })), invalid: [], skillsRoot: '' },
   useCliSkills: () => cli.skills,
 }));
 vi.mock('@hooks/use-agents', () => ({
-  useAgents: () => ({ agents: agents.names.map((name) => ({ name })), agentsRoot: '' }),
+  useAgents: () => (agents.names === null ? null : { agents: agents.names.map((name) => ({ name })), agentsRoot: '' }),
 }));
+// The notice reads the registry; the listing is not this file's subject (HIVE-447).
+vi.mock('@hooks/use-swarms', () => ({
+  useSwarms: () => ({ listing: null, busy: new Set(), removing: new Set(), failures: new Map(), lastUpdate: null }),
+}));
+vi.mock('@hooks/use-swarm-actions', () => ({ useSwarmActions: () => ({ install: vi.fn(), browse: vi.fn() }) }));
 
 const preview = () => screen.getByTestId('ticket-workflow-preview').textContent;
 
 beforeEach(() => {
   vi.clearAllMocks();
   agents.names = ['builder', 'shipper'];
+  installed.skills = ['work-on', 'debug'];
   cli.skills = null;
 });
 
@@ -170,6 +180,68 @@ describe('TicketWorkflowGroup', () => {
       render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'hive:work-on' }} />);
       await userEvent.selectOptions(screen.getByLabelText('Skill'), 'graphify');
       expect(setJiraConnection).toHaveBeenLastCalledWith({ workflow: { kind: 'skill', skill: 'graphify' } });
+    });
+  });
+
+  describe('a skill or agent that is not installed (HIVE-447)', () => {
+    const notice = () => screen.queryByRole('status');
+    const options = () => [...(screen.getByLabelText('Skill') as HTMLSelectElement).options].map((o) => o.value);
+
+    it('keeps a saved hive:work-on selected and names its swarm under the select', () => {
+      installed.skills = [];
+      render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'hive:work-on' }} />);
+      expect((screen.getByLabelText('Skill') as HTMLSelectElement).value).toBe('hive:work-on');
+      expect(options()).toContain('hive:work-on');
+      expect(notice()).toHaveTextContent("work-on isn't installed.");
+    });
+
+    it('does not offer hive:work-on when it is neither installed nor saved', async () => {
+      installed.skills = [];
+      render(<TicketWorkflowGroup workflow={null} />);
+      await userEvent.click(screen.getByRole('radio', { name: 'Run a skill' }));
+      expect(options()).not.toContain('hive:work-on');
+      expect(setJiraConnection).not.toHaveBeenCalled();
+      expect(screen.getByLabelText('Skill name')).toHaveValue('');
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('Run a skill picks the first installed hive skill when work-on is missing', async () => {
+      installed.skills = ['tdd'];
+      render(<TicketWorkflowGroup workflow={null} />);
+      await userEvent.click(screen.getByRole('radio', { name: 'Run a skill' }));
+      expect(setJiraConnection).toHaveBeenLastCalledWith({ workflow: { kind: 'skill', skill: 'hive:tdd' } });
+      expect(options()[0]).toBe('hive:tdd');
+      expect(notice()).toBeNull();
+    });
+
+    it('treats nothing as missing while the skills have not arrived', async () => {
+      installed.skills = null;
+      render(<TicketWorkflowGroup workflow={{ kind: 'skill', skill: 'hive:work-on' }} />);
+      expect(notice()).toBeNull();
+      expect(options()[0]).toBe('hive:work-on');
+    });
+
+    it('Run a skill still saves hive:work-on while the skills have not arrived', async () => {
+      installed.skills = null;
+      render(<TicketWorkflowGroup workflow={null} />);
+      await userEvent.click(screen.getByRole('radio', { name: 'Run a skill' }));
+      expect(setJiraConnection).toHaveBeenLastCalledWith({ workflow: { kind: 'skill', skill: 'hive:work-on' } });
+    });
+
+    it('names the swarm for a saved agent that is not installed, and keeps it selected', () => {
+      agents.names = [];
+      render(<TicketWorkflowGroup workflow={{ kind: 'agent', agent: 'shipper', via: 'wake' }} />);
+      expect((screen.getByLabelText('Agent') as HTMLSelectElement).value).toBe('shipper');
+      expect(notice()).toHaveTextContent("shipper isn't installed.");
+    });
+
+    it('shows nothing for an installed agent, or before the agents arrive', () => {
+      const { unmount } = render(<TicketWorkflowGroup workflow={{ kind: 'agent', agent: 'shipper', via: 'wake' }} />);
+      expect(notice()).toBeNull();
+      unmount();
+      agents.names = null;
+      render(<TicketWorkflowGroup workflow={{ kind: 'agent', agent: 'shipper', via: 'wake' }} />);
+      expect(notice()).toBeNull();
     });
   });
 });

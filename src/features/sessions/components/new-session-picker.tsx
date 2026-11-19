@@ -17,9 +17,12 @@ import { SwarmCreature, type Creature } from '@components/ui/swarm-creature';
 import { can } from '@config/runtime';
 import { CliDock } from '@features/shared/components/cli-dock';
 import { CodexModelField } from '@features/shared/components/codex-model-field';
+import { MissingSwarm } from '@features/shared/components/missing-swarm';
 import { OptionStepper } from '@features/shared/components/option-stepper';
+import { useAgents } from '@hooks/use-agents';
 import { useNewSessionPick } from '@hooks/use-new-session-pick';
 import { useProjectAccess, useProjectConfig } from '@hooks/use-project-config';
+import { useFreshSkills } from '@hooks/use-skills';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { lockedClis, unavailableReasons } from '@lib/harness/session-cli';
 import { CLI_VOCAB, cliTakesEffort } from '@shared/cli-contract';
@@ -161,8 +164,27 @@ export function NewSessionPicker() {
   const wake = start?.kind === 'wake' && !sessionInstead ? start : null;
   const firstMessage = edited ?? (start?.kind === 'message' ? start.text : '');
 
+  /*
+    HIVE-447: the workflow needs a shipped skill or agent this machine does not have. Only `hive:` skills are
+    checked (another namespace is a CLI plugin's, which the app cannot see), nothing counts as missing until the
+    snapshot has arrived, and an edited first message is the person's own and is sent as written.
+  */
+  // Read on open: nothing else reads the skills before Settings › Skills does.
+  const skills = useFreshSkills();
+  const agents = useAgents();
+  const hiveSkill =
+    facts !== null && workflow?.kind === 'skill' && workflow.skill.startsWith('hive:')
+      ? workflow.skill.slice('hive:'.length)
+      : null;
+  const missingSkill =
+    hiveSkill !== null && edited === null && skills !== null && !skills.skills.some((s) => s.name === hiveSkill)
+      ? hiveSkill
+      : null;
+  const missingAgent =
+    wake !== null && agents !== null && !agents.agents.some((agent) => agent.name === wake.agent) ? wake.agent : null;
+
   const wakeAgent = () => {
-    if (wake === null || facts === null) return;
+    if (wake === null || facts === null || missingAgent !== null) return;
     setWakeProblem(null);
     void window.hive?.ledger
       .post({ to: wake.agent, kind: 'ask', body: wake.body, meta: { ticket: facts.key } })
@@ -179,6 +201,8 @@ export function NewSessionPicker() {
     // disabled when the project has no real directory, but Enter in the search
     // box reaches here too (story 090).
     if (blocked || !can.spawnSessionIn(projectId)) return;
+    // HIVE-447: the first message names a skill that is not installed; ⌥↵ never typed it, so it still starts.
+    if (missingSkill !== null && !empty) return;
     // Task is empty unless the picker came from a ticket: the picker starts a
     // session, and the first message gives it its job (story 043).
     // `spawnSession` opens the new tab, which also dismisses the picker.
@@ -325,6 +349,7 @@ export function NewSessionPicker() {
               key={project.id}
               project={project}
               blocked={blocked}
+              held={missingSkill !== null}
               onSelect={spawn}
             />
           ))}
@@ -387,8 +412,11 @@ export function NewSessionPicker() {
               <b className="font-semibold text-ink">{wake.agent}</b>
               {' instead of opening a session.'}
             </p>
+            {missingAgent === null ? null : <MissingSwarm kind="agent" name={missingAgent} />}
             <div className="flex flex-wrap gap-2">
-              <Button variant="primary" onClick={wakeAgent}>{`Wake ${wake.agent}`}</Button>
+              {missingAgent === null ? (
+                <Button variant="primary" onClick={wakeAgent}>{`Wake ${wake.agent}`}</Button>
+              ) : null}
               <Button onClick={() => setSessionInstead(true)}>Open a session instead</Button>
             </div>
             {wakeProblem === null ? null : (
@@ -422,6 +450,13 @@ export function NewSessionPicker() {
                 ? 'Set one for every ticket in Settings › Projects › Ticket workflow. ⌥↵ starts empty.'
                 : 'From Settings › Projects › Ticket workflow; a change here is for this session only. ⌥↵ starts empty.'}
             </span>
+            {missingSkill === null ? null : (
+              <MissingSwarm kind="skill" name={missingSkill}>
+                <Button size="sm" variant="ghost" onClick={() => setEdited('')}>
+                  Start without it
+                </Button>
+              </MissingSwarm>
+            )}
           </div>
         )}
 
@@ -471,6 +506,7 @@ export function NewSessionPicker() {
                     key={project.id}
                     project={project}
                     blocked={blocked}
+                    held={missingSkill !== null}
                     onSelect={spawn}
                     startsOn={rowStart.source === 'project' ? rowStart.cli : undefined}
                     skippedCli={skipped?.cli}
@@ -505,10 +541,13 @@ export function NewSessionPicker() {
 function PinnedProject({
   project,
   blocked,
+  held = false,
   onSelect,
 }: {
   project: ProjectRowData;
   blocked: boolean;
+  /** HIVE-447: the first message names a missing skill; the notice above says what to do. */
+  held?: boolean;
   onSelect: (id: string) => void;
 }) {
   const { id, name, icon } = project;
@@ -519,7 +558,7 @@ function PinnedProject({
       <button
         type="button"
         onClick={() => onSelect(id)}
-        disabled={!access.spawnable || blocked}
+        disabled={!access.spawnable || blocked || held}
         className="flex items-center gap-2 rounded-full border border-border bg-chip px-3.5 py-2 tabular-nums text-ui text-ink hover:border-brand hover:bg-hover disabled:cursor-not-allowed disabled:text-subtle disabled:hover:border-border disabled:hover:bg-chip"
       >
         <Icon
@@ -542,6 +581,7 @@ function PinnedProject({
 function ProjectRow({
   project,
   blocked,
+  held = false,
   onSelect,
   startsOn,
   skippedCli,
@@ -549,6 +589,8 @@ function ProjectRow({
 }: {
   project: ProjectRowData;
   blocked: boolean;
+  /** HIVE-447: the first message names a missing skill; the notice above says what to do. */
+  held?: boolean;
   onSelect: (id: string) => void;
   /** The project's own CLI, when the row starts on it rather than on this run's pick (HIVE-378). */
   startsOn?: HarnessId;
@@ -573,7 +615,7 @@ function ProjectRow({
       <button
         type="button"
         onClick={() => onSelect(id)}
-        disabled={!access.spawnable || blocked}
+        disabled={!access.spawnable || blocked || held}
         className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover disabled:cursor-not-allowed disabled:hover:bg-transparent"
       >
         <Icon
