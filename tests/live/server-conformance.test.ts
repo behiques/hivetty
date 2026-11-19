@@ -1,6 +1,6 @@
 // @vitest-environment node
 import assert from 'node:assert/strict';
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { execFile, execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   existsSync,
@@ -60,7 +60,7 @@ import {
 } from '../../shared/remote-contract';
 import { startStubCloud, type StubCloud } from '../e2e/electron/fixtures/stub-cloud';
 import { SecureTestSocket } from '../support/secure-test-socket';
-import { serverCommand, writeKeyFile } from '../support/server-edition';
+import { SERVER_BIN, SERVER_NODE, serverCommand, writeKeyFile } from '../support/server-edition';
 
 /**
  * Server-mode conformance (HIVE-142): the eight acceptance criteria plus the
@@ -1684,6 +1684,17 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
     if (!existsSync(MAIN_ENTRY)) {
       throw new Error(`${MAIN_ENTRY} is missing. Run \`pnpm desktop:build\` before \`pnpm test:server\`.`);
     }
+    /*
+      The edition is proven under the Node its tarball ships (26, `scripts/pack-server.mjs`). Without
+      `HIVE_SERVER_NODE` it is served by this process's own Node, and under Node 22 case 24 fails in a
+      full run: the producer never pauses for the stalled client. Refused here, in one line, instead.
+    */
+    if (EDITION && SERVER_BIN === undefined) {
+      const major = execFileSync(SERVER_NODE, ['-p', 'process.versions.node.split(".")[0]'], { encoding: 'utf8' }).trim();
+      if (major !== '26') {
+        throw new Error(`the server edition must be served by Node 26, not ${major} (${SERVER_NODE}). Set HIVE_SERVER_NODE to a Node 26 binary.`);
+      }
+    }
     evidenceDir = mkdtempSync(join(tmpdir(), 'hive-live-server-evidence-'));
     // HIVE-428: one stub cloud for the file; `team` so every lease it issues is licensed.
     stub = await startStubCloud();
@@ -2317,6 +2328,8 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
     let device: MintedDevice;
     /** A genuinely second device, so "two clients" is two credentials (HIVE-145). */
     let secondDevice: MintedDevice;
+    /** The audit case's own device: every line naming it is that case's, with no clock to compare (HIVE-427). */
+    let auditDevice: MintedDevice;
     /** A second project, so two surfaces can watch different trees (HIVE-145). */
     let otherProjectDir: string;
 
@@ -2351,6 +2364,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
 
       device = mintDevice('Link-Device');
       secondDevice = mintDevice('Link-Device-2');
+      auditDevice = mintDevice('Audit-Device');
       otherProjectDir = mkdtempSync(join(tmpdir(), 'hive-live-server-other-'));
       writeFileSync(join(otherProjectDir, 'README.md'), 'the other tree\n', 'utf8');
 
@@ -2367,7 +2381,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
         ],
         server: {
           bind: { host: '127.0.0.1', port: bootPort, allowedOrigins: [] },
-          devices: [device.device, secondDevice.device],
+          devices: [device.device, secondDevice.device, auditDevice.device],
         },
       }));
       app = booted.child;
@@ -2602,11 +2616,11 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
 
     /**
      * The audit trail, read back from the served process (HIVE-427). The file is beside the config on both
-     * sides. This block's devices are shared with every other case, so only lines written since this case
-     * began are counted; cases run one at a time.
+     * sides. The case attaches as a device nothing else uses, so its lines are exactly the ones naming that
+     * device. A timestamp filter on the shared device tied with the previous case's attach in the same
+     * millisecond and counted two.
      */
     it('writes the audit trail: the attach, an execute call and one input, never the keystrokes (HIVE-427)', async () => {
-      const startedAt = new Date().toISOString();
       const now = new Date();
       const pad = (value: number): string => String(value).padStart(2, '0');
       const today = `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -2620,10 +2634,10 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
               .split('\n')
               .filter((text) => text.length > 0)
               .map((text) => JSON.parse(text) as Line)
-              .filter((line) => line.deviceId === device.device.id && line.at >= startedAt)
+              .filter((line) => line.deviceId === auditDevice.device.id)
           : [];
 
-      const client = await attached();
+      const client = await openClient(url, { id: auditDevice.device.id, token: auditDevice.token }, {});
       const spawned = await client.call(CH.ptySpawnTerminal, { sessionId, projectId: seededProjectId, cols: 80, rows: 24 });
       expect(spawned.kind, JSON.stringify(spawned)).toBe('result');
       for (let i = 0; i < 5; i += 1) client.notify(CH.ptyWrite, { sessionId, data: `echo ${marker}-${String(i)}\r` });
@@ -2634,7 +2648,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       const lines = ours();
       const attaches = lines.filter((line) => line.event === 'attach');
       expect(attaches, JSON.stringify(lines)).toHaveLength(1);
-      expect(attaches[0]).toMatchObject({ via: 'direct', deviceName: device.device.name });
+      expect(attaches[0]).toMatchObject({ via: 'direct', deviceName: auditDevice.device.name });
       expect(lines.some((line) => line.event === 'call' && line.channel === CH.ptySpawnTerminal)).toBe(true);
       const inputs = lines.filter((line) => line.event === 'input');
       expect(inputs, JSON.stringify(lines)).toHaveLength(1);
