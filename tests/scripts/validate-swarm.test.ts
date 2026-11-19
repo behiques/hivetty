@@ -1,7 +1,8 @@
 // @vitest-environment node
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -64,6 +65,14 @@ describe('validateRepo', () => {
       readSwarm: fakeReader(reads),
       parseSwarmTag,
     });
+
+  it('fails a repoDir that is not a directory with a line, not a throw', async () => {
+    const missing = join(repo, 'missing');
+
+    expect(await validateRepo({ repoDir: missing, readSwarm: fakeReader({}), parseSwarmTag })).toEqual([
+      `${missing} is not a directory`,
+    ]);
+  });
 
   it('fails a repo with no swarm in it', async () => {
     expect(await run({})).toEqual([`no swarm.json found in ${repo} or its folders`]);
@@ -133,5 +142,18 @@ describe('validateRepo', () => {
     swarmAt('');
 
     expect(await run({ [repo]: ok('1.0.0') }, 'v1.0.0')).toEqual([]);
+  });
+});
+
+describe('the command line', () => {
+  it('still runs when invoked through a symlinked path', () => {
+    const script = resolve(import.meta.dirname, '../../scripts/validate-swarm.mjs');
+    const link = join(repo, 'validate-swarm.mjs');
+    symlinkSync(script, link);
+
+    const run = spawnSync(process.execPath, [link], { encoding: 'utf8' });
+
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('usage: pnpm swarm:validate');
   });
 });

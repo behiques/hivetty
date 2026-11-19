@@ -14,7 +14,7 @@
  * new dependency. The folder discovery and the tag check take the reader as an
  * argument, so the unit test never loads Vite.
  */
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,6 +35,8 @@ export function findSwarmFolders(repoDir) {
 
 /** The failure lines for a repo, empty when it is valid. */
 export async function validateRepo({ repoDir, tag, readSwarm, parseSwarmTag }) {
+  if (!statSync(repoDir, { throwIfNoEntry: false })?.isDirectory()) return [`${repoDir} is not a directory`];
+
   const folders = findSwarmFolders(repoDir);
   if (folders.length === 0) return [`no swarm.json found in ${repoDir} or its folders`];
 
@@ -80,7 +82,8 @@ export async function loadSwarmModules() {
   return { readSwarm: reader.module.readSwarm, parseSwarmTag: contract.module.parseSwarmTag };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// Node realpaths the main module's URL but not argv[1], so a symlinked path compares real to real.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const tagAt = args.indexOf('--tag');
   const tag = tagAt === -1 ? undefined : args[tagAt + 1];
