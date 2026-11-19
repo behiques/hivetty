@@ -712,7 +712,9 @@ describe.skipIf(!RUN || IMAGE === undefined)(`the image ${IMAGE ?? ''} (HIVE-426
       '--health-interval=2s',
     ]);
     await waitForContainer(name, async () => (await inspect(name, '{{.State.Health.Status}}')) === 'healthy', 'healthy');
-    expect(existsSync(join(home.root, 'tmp'))).toBe(true);
+    // Asked from inside the container, as the server's own uid: on a Linux host the runner's uid cannot see into a
+    // 0700 home owned by 20001, and existsSync answers false on that EACCES whether or not tmp/ is there.
+    await expect(docker(['exec', name, 'test', '-d', `${IMAGE_HOME}/tmp`])).resolves.toBeDefined();
 
     const started = Date.now();
     await docker(['stop', '-t', '30', name], 45_000);

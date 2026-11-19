@@ -319,14 +319,26 @@ jobs:
         # tell", and that fails too. The signed-in inspect comes first so a
         # 404 can only mean "refused", never "no such tag". Every manifest
         # type is accepted, so a 404 can never mean "not in that format".
+        # The anonymous token is asked for first, and its own answer is read:
+        # GHCR refuses one for a private package (401/403), so that is private.
+        # Anything but a 200 carrying a token is "could not tell": an empty
+        # bearer earns a 403 even from a public package.
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
+          tokfile=$(mktemp)
           for name in hivetty-server; do
             repo="behiques/$name"
             docker buildx imagetools inspect "ghcr.io/$repo:$version" > /dev/null \
               || { echo "ABORT: ghcr.io/$repo:$version does not exist."; exit 1; }
-            token=$(curl -sS "https://ghcr.io/token?scope=repository:$repo:pull" | jq -r '.token // empty' || true)
+            tcode=$(curl -sS -o "$tokfile" -w '%{http_code}' "https://ghcr.io/token?scope=repository:$repo:pull" || true)
+            case "$tcode" in
+              401 | 403) echo "ghcr.io/$repo is private (an anonymous token request answered $tcode)."; continue ;;
+              200) token=$(jq -r '.token // empty' "$tokfile" 2> /dev/null || true) ;;
+              *) echo "ABORT: could not tell whether ghcr.io/$repo is private (the anonymous token request answered HTTP '$tcode')."; exit 1 ;;
+            esac
+            [ -n "$token" ] \
+              || { echo "ABORT: could not tell whether ghcr.io/$repo is private (a 200 from the token request carried no token)."; exit 1; }
             code=$(curl -sS -o /dev/null -w '%{http_code}' \
               -H "Authorization: Bearer $token" \
               -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
