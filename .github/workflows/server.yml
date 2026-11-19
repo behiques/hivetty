@@ -1,0 +1,150 @@
+# The server edition, built and booted on Linux (HIVE-425).
+#
+# Each job builds `hivetty-server` as a self-contained tarball with its own
+# Node 26, unpacks it read-only and runs the `server-edition` live suite against
+# the unpacked `bin/hivetty-server`: pair, sign in, attach over the encrypted
+# channel, spawn a PTY, SIGTERM. The tarballs are workflow artifacts and are
+# never attached to a release.
+#
+# `release: true` (what `release.yml` passes on a tag) builds with
+# `HIVETTY_RELEASE=1`. A release build ignores every developer escape hatch, so
+# its smoke is the reduced one: boot, health, no listener without a lease,
+# SIGTERM.
+#
+# No job downloads Electron: the install runs no scripts, because `postinstall`
+# (`check-native-abi.mjs`) runs the Electron binary.
+
+name: Server
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+    inputs:
+      release:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      release:
+        type: boolean
+        default: false
+
+# The same shape as ci.yml. The flavour is part of the group, so a tag's release
+# run never queues behind main's run of the same commit.
+concurrency:
+  group: server-${{ github.event_name == 'pull_request' && github.ref || github.sha }}-${{ inputs.release && 'release' || 'dev' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  tarball:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The primary target: the fleet runs Fargate ARM.
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: linux-x64
+            runner: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install, no scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Inside Debian 12, not on the runner: `pty.node` must load on a bookworm
+      # image (glibc 2.36), and ubuntu-24.04 links against 2.39. Node 26 ships
+      # no corepack, so the pnpm `packageManager` pins runs through npx.
+      - name: Compile node-pty against Debian 12
+        run: |
+          docker run --rm -v "$PWD:/w" -w /w node:26-bookworm \
+            sh -ec 'npx --yes "$(node -p "require(\"./package.json\").packageManager")" rebuild node-pty'
+          sudo chown -R "$(id -u):$(id -g)" node_modules
+
+      - name: Build the server
+        run: pnpm server:build
+        env:
+          HIVETTY_RELEASE: ${{ inputs.release && '1' || '' }}
+
+      - name: Pack
+        run: pnpm server:pack
+
+      - name: Unpack, read-only
+        run: |
+          (cd dist/server && sha256sum -c SHA256SUMS)
+          mkdir -p "$RUNNER_TEMP/unpacked"
+          tar -xzf dist/server/hivetty-server-*.tar.gz -C "$RUNNER_TEMP/unpacked"
+          chmod -R a-w "$RUNNER_TEMP/unpacked"
+          echo "HIVE_SERVER_BIN=$RUNNER_TEMP/unpacked/hivetty-server/bin/hivetty-server" >> "$GITHUB_ENV"
+
+      # A bare Debian 12 slim: no ps, no Python, glibc 2.36, a read-only root.
+      # The tarball's Node starts, and the tarball's node-pty spawns a process.
+      - name: Slim proof
+        run: |
+          cat > "$RUNNER_TEMP/pty-proof.cjs" <<'EOF'
+          const pty = require('/opt/hivetty-server/app/node_modules/node-pty');
+          let out = '';
+          const child = pty.spawn('sh', ['-c', 'echo MARK-slim'], {});
+          child.onData((data) => { out += data; });
+          child.onExit(() => {
+            if (!out.includes('MARK-slim')) { console.error(`no marker: ${out}`); process.exit(1); }
+            console.log('pty ok');
+          });
+          EOF
+          docker run --rm --read-only --tmpfs /tmp -e HIVETTY_HOME=/tmp/home \
+            -v "$RUNNER_TEMP/unpacked/hivetty-server:/opt/hivetty-server:ro" \
+            -v "$RUNNER_TEMP/pty-proof.cjs:/proof.cjs:ro" \
+            debian:bookworm-slim sh -ec '
+              /opt/hivetty-server/bin/hivetty-server --gen-key > /dev/null
+              /opt/hivetty-server/node/bin/node /proof.cjs
+            '
+
+      - name: Smoke the tarball
+        run: pnpm exec vitest run tests/live/server-edition-conformance.test.ts
+        env:
+          HIVE_LIVE_SERVER_EDITION_PROOF: '1'
+          HIVE_SERVER_RELEASE: ${{ inputs.release && '1' || '' }}
+
+      # The fork host on Linux (HIVE-423). The Electron leg stays local: it
+      # needs the binary this job never downloads.
+      - name: PTY host conformance, fork leg
+        run: pnpm exec vitest run tests/live/pty-host-conformance.test.ts
+        env:
+          HIVE_LIVE_PTY_HOST_PROOF: '1'
+          HIVE_PTY_HOST_KINDS: fork
+
+      # Case 9 switches user, so it needs root, and `nobody` must be able to
+      # read the checkout.
+      - name: PTY host case 9, as root
+        run: |
+          dir="$GITHUB_WORKSPACE"
+          while [ "$dir" != / ]; do sudo chmod o+rx "$dir"; dir=$(dirname "$dir"); done
+          sudo env "PATH=$PATH" HIVE_LIVE_PTY_HOST_PROOF=1 HIVE_PTY_HOST_KINDS=fork \
+            pnpm exec vitest run tests/live/pty-host-conformance.test.ts -t '9:'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hivetty-server-${{ matrix.target }}
+          path: |
+            dist/server/hivetty-server-*.tar.gz
+            dist/server/SHA256SUMS
+          retention-days: 7
+          if-no-files-found: error

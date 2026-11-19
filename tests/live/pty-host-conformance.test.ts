@@ -28,7 +28,9 @@ import { CRASH_LIMIT, type HostMessage, SHUTDOWN_TIMEOUT_MS } from '../../shared
  * Cases 1 to 7 run on both hosts; 8 and 9 are the fork host's alone (9 needs root, so it first runs in HIVE-425's
  * Linux CI); 10 runs the `/proc` reader inside a slim Linux image with no `ps`, when Docker is up.
  *
- * `pnpm test:pty-host` builds both hosts and sets `HIVE_LIVE_PTY_HOST_PROOF=1`. CI runs none of the live suites.
+ * `pnpm test:pty-host` builds both hosts and sets `HIVE_LIVE_PTY_HOST_PROOF=1`. `HIVE_PTY_HOST_KINDS` (comma-separated,
+ * default `fork,utilityProcess`) picks the hosts. The `Server` workflow runs the fork leg on Linux, case 9 as root
+ * (HIVE-425); the Electron leg stays local, since those jobs never download Electron.
  */
 const RUN = process.env['HIVE_LIVE_PTY_HOST_PROOF'] === '1';
 const ROOT = join(import.meta.dirname, '../..');
@@ -36,6 +38,7 @@ const FORK_ENTRY = join(ROOT, 'out/server/pty-host.js');
 const UTILITY_ENTRY = join(ROOT, 'out/main/pty-host.js');
 const BRIDGE = join(ROOT, 'tests/support/utility-host-bridge.mjs');
 const CASE_MS = 30_000;
+const KINDS = (process.env['HIVE_PTY_HOST_KINDS'] ?? 'fork,utilityProcess').split(',') as HostKind[];
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -211,7 +214,7 @@ const FACTORIES: Record<HostKind, (made: Made[]) => () => HostChild> = {
   utilityProcess: (made) => utilityFactory(made),
 };
 
-describe.skipIf(!RUN).each(['fork', 'utilityProcess'] as const)('the PTY host under %s (HIVE-423)', (kind) => {
+describe.skipIf(!RUN).each(KINDS)('the PTY host under %s (HIVE-423)', (kind) => {
   const begin = () => start(FACTORIES[kind]);
 
   it('1: spawns, writes and reads, and reports the exit code', async () => {
