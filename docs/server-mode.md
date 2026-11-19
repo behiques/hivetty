@@ -677,6 +677,13 @@ pnpm server:build
 node out/server/index.js
 ```
 
+`pnpm test:server` runs the server conformance suite twice: against the
+desktop app in server mode, then against `hivetty-server` (`out/server/index.js`
+under `HIVE_SERVER_NODE`, or an unpacked tarball named by `HIVE_SERVER_BIN`),
+with the desktop app as the client both times. It needs `pnpm desktop:build`
+first, and it runs locally, not in CI. The `--update` cases are skipped on the
+edition, which has no updater.
+
 ### The tarball
 
 The `Server` workflow (`.github/workflows/server.yml`) builds a self-contained
