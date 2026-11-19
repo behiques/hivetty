@@ -29,6 +29,60 @@ function exitStatus(cause: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined;
 }
 
+/** What `processIdentity` asks of the system; injectable so every platform's branch is testable on any host. */
+export interface ProcessIdentitySystem {
+  platform: NodeJS.Platform;
+  /** `kill(pid, 0)`: false for ESRCH, throws anything else. */
+  alive: (pid: number) => boolean;
+  /** `/proc/<pid>/stat`, read whole. */
+  readStat: (pid: number) => string;
+  /** `ps -o lstart= -p <pid>`, trimmed; throws as `execFileSync` does. */
+  psStart: (pid: number) => string;
+}
+
+const realSystem: ProcessIdentitySystem = {
+  platform: process.platform,
+  alive(pid) {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (cause) {
+      if (errorCode(cause) === 'ESRCH') return false;
+      throw cause;
+    }
+  },
+  readStat: (pid) => readFileSync(`/proc/${String(pid)}/stat`, 'utf8'),
+  psStart: (pid) => execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8' }).trim(),
+};
+
+/**
+ * A pid plus its start time, so a reused pid never passes for the lock's owner. On Linux the start time is
+ * `/proc/<pid>/stat`'s field 22 (HIVE-426): a slim image has no `ps`. Fields are counted after the last `)`, since
+ * the command name may hold spaces and parentheses; the PTY host's `readProcTable` reads the same file by the same rule.
+ */
+export function processIdentity(pid: number, system: ProcessIdentitySystem = realSystem): string | null {
+  if (!system.alive(pid)) return null;
+  if (system.platform === 'linux') {
+    let stat: string;
+    try {
+      stat = system.readStat(pid);
+    } catch (cause) {
+      const code = errorCode(cause);
+      if (code === 'ENOENT' || code === 'ESRCH') return null;
+      throw cause;
+    }
+    const started = stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/)[19];
+    return started === undefined || started === '' ? null : `${String(pid)}:${started}`;
+  }
+  try {
+    const started = system.psStart(pid);
+    return started === '' ? null : `${String(pid)}:${started}`;
+  } catch (cause) {
+    if (exitStatus(cause) === 1) return null;
+    throw cause;
+  }
+}
+
 function defaultIo(): ServerLockIo {
   return {
     create(path, contents) {
@@ -52,23 +106,7 @@ function defaultIo(): ServerLockIo {
       }
     },
     removeRecoveryGuard: (path) => unlinkSync(path),
-    processIdentity(pid) {
-      try {
-        process.kill(pid, 0);
-      } catch (cause) {
-        if (errorCode(cause) === 'ESRCH') return null;
-        throw cause;
-      }
-      try {
-        const started = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
-          encoding: 'utf8',
-        }).trim();
-        return started === '' ? null : `${String(pid)}:${started}`;
-      } catch (cause) {
-        if (exitStatus(cause) === 1) return null;
-        throw cause;
-      }
-    },
+    processIdentity: (pid) => processIdentity(pid),
   };
 }
 

@@ -786,7 +786,8 @@ deadline all apply. When the server stops, the host stops every session and
 exits. When the server dies without stopping it, the host sees its channel close
 and does the same.
 
-On Linux the host reads the process tree from `/proc`, so an image needs no
+On Linux the host reads the process tree from `/proc`, and the server's lock
+reads its holder's start time there too (HIVE-426), so an image needs no
 `procps`. If it cannot read the tree at all, it says so once on stderr, and the
 group kills still run.
 
