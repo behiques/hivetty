@@ -643,6 +643,11 @@ function serverProcess(
   };
 }
 
+/** Where the serving side keeps what Electron calls `userData`: the profile, or the edition's `data/`. */
+function dataDir(configPath: string, userDataDir: string): string {
+  return EDITION ? join(dirname(configPath), 'data') : userDataDir;
+}
+
 /**
  * Spawns the app itself — a long-running process this file must stop with {@link stopApp}. A launch with
  * `--server` is the serving side; any other is the client app, Electron on both sides (HIVE-427).
@@ -2020,7 +2025,8 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       expect(outcome.frame).toMatchObject({ kind: 'attach-refused', code: 'unauthorized' });
     });
 
-    it('refuses --update while the local server is running', async () => {
+    // The server edition has no updater: `--update` is refused with exit 2 (HIVE-422).
+    it.skipIf(EDITION)('refuses --update while the local server is running', async () => {
       const result = await runOneShot(['--update'], configPath, userDataDir);
 
       expect(result.code).toBe(5);
@@ -2129,7 +2135,8 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
     });
   });
 
-  describe('the headless update one-shot (HIVE-158)', () => {
+  // The server edition has no updater: `--update` is refused with exit 2 (HIVE-422).
+  describe.skipIf(EDITION)('the headless update one-shot (HIVE-158)', () => {
     let configPath: string;
     let userDataDir: string;
 
@@ -2606,7 +2613,8 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
      * tells the fix from the bug.
      */
     it('29. refuses a hand-built remote:forget and leaves the server’s credential alone', async () => {
-      const credentialFile = join(userDataDir, 'remote-credential.bin');
+      // On the edition nothing stores a remote credential (it is the desktop shell's); the refusal is what is proved.
+      const credentialFile = join(dataDir(configPath, userDataDir), 'remote-credential.bin');
       const seeded = Buffer.from('live proof: the server’s own credential\n', 'utf8');
       writeFileSync(credentialFile, seeded);
 
