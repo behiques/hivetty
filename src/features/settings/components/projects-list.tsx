@@ -16,6 +16,8 @@ import { ProjectRemoveConfirm } from '@features/settings/components/project-remo
 import { ProjectRow } from '@features/settings/components/project-row';
 import { ProjectRowMenu } from '@features/settings/components/project-row-menu';
 import { DirectoryPicker } from '@features/shared/components/directory-picker';
+import { MissingSwarm } from '@features/shared/components/missing-swarm';
+import { useAgents } from '@hooks/use-agents';
 import { useChooseDirectory } from '@hooks/use-choose-directory';
 import { useAttachedServer } from '@hooks/use-project-config';
 import { projectAliases, type ProjectConfig } from '@shared/config-contract';
@@ -84,6 +86,12 @@ export function ProjectsList({ entries, onRuntimeOverrides }: ProjectsListProps)
     itself in the same sentence.
   */
   const liveCounts = useLiveSessionCounts();
+  /*
+    HIVE-447: only `shipper` is granted a merge (`core/agents/auto-merge.ts`), so a project set to merge unattended
+    merges nothing without one. Not missing until the agents snapshot has arrived.
+  */
+  const agents = useAgents();
+  const noShipper = agents !== null && !agents.agents.some((agent) => agent.name === 'shipper');
   const attachedServer = useAttachedServer();
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -219,6 +227,7 @@ export function ProjectsList({ entries, onRuntimeOverrides }: ProjectsListProps)
               endDrag();
             }}
             onDragEnd={endDrag}
+            notice={project.autoMerge === true && noShipper ? <MissingSwarm kind="agent" name="shipper" /> : null}
             editor={
               active === 'rename' ? (
                 <ProjectNameEditor
