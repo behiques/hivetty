@@ -239,3 +239,14 @@ jobs:
           ls -la dist || true
           echo "--- codesign ---"
           codesign --display --verbose=2 "dist/mac-arm64/HiveTTY Pro.app" 2>&1 || true
+
+  # The server tarballs for this tag, as workflow artifacts (HIVE-425). Never
+  # attached to the release. Ordering this against the app and the images is
+  # HIVE-426's job graph.
+  server:
+    name: Server tarballs
+    uses: ./.github/workflows/server.yml
+    with:
+      release: true
+    permissions:
+      contents: read

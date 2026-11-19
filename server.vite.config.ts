@@ -25,14 +25,17 @@ const noElectron = (): Plugin => ({
 });
 
 /**
- * The SERVER target (HIVE-422): `node out/server/index.js`. A plain Vite SSR build, so dependencies stay external
- * (Vite's SSR default) and `node_modules` resolves them at run time, beside `out/server/mcp-host.js`, the MCP server
- * every session is given, launched with plain Node, and `out/server/pty-host.js`, the PTY host the server forks
- * with its own Node on the first spawn (HIVE-423).
+ * The SERVER target (HIVE-422): `node out/server/index.js`, beside `out/server/mcp-host.js`, the MCP server every
+ * session is given, launched with plain Node, and `out/server/pty-host.js`, the PTY host the server forks with its own
+ * Node on the first spawn (HIVE-423). Every dependency is bundled in (HIVE-425), so `noElectron()` sees their imports
+ * too; `node-pty`, a native package, is the one resolved from `node_modules` at run time, which is all the server
+ * tarball carries beside `out/server/`. No public dir: the server serves no static files.
  */
 export default defineConfig({
   resolve: { alias: aliases },
   plugins: [noElectron()],
+  publicDir: false,
+  ssr: { noExternal: true, external: ['node-pty'] },
   define: {
     // Literals in the bundle, never read at run time: see `server/release.ts`.
     __HIVETTY_RELEASE__: JSON.stringify(process.env.HIVETTY_RELEASE === '1'),

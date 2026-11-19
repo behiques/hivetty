@@ -614,10 +614,9 @@ bytes at normal flush sizes.
 ## The server edition
 
 `hivetty-server` is the same feature code (`core/`) booted by plain Node, with no
-Electron and no window (HIVE-422). It is not public yet: there is no package and
-no image, and sessions cannot start on it. It exists so the pieces below can be
-built and proven before they ship. The desktop app's `--server` mode described
-above is unchanged and works on any plan.
+Electron and no window (HIVE-422). It is not public yet: it ships as a Linux
+tarball built by CI, with no image so far. The desktop app's `--server` mode
+described above is unchanged and works on any plan.
 
 Build it and start it from a checkout:
 
@@ -625,6 +624,39 @@ Build it and start it from a checkout:
 pnpm server:build
 node out/server/index.js
 ```
+
+### The tarball
+
+The `Server` workflow (`.github/workflows/server.yml`) builds a self-contained
+tarball for `linux-arm64` and `linux-x64` on every pull request and every push
+to main (HIVE-425). Each one carries its own Node 26, so the host needs no Node:
+
+```
+hivetty-server/
+  bin/hivetty-server        # the entry point; follows a symlink to find its tree
+  node/bin/node  node/LICENSE
+  app/server/               # out/server/, every dependency bundled in
+  app/node_modules/node-pty/
+  resources/skills/  resources/agents/  resources/shipped-history.json
+  LICENSE  NOTICE  VERSION
+```
+
+The tree is never written to, so it can live in a read-only location; state
+goes to `HIVETTY_HOME`. It needs glibc 2.36 or newer (Debian 12) and
+`libatomic1`, which Node's Linux binaries link and a slim Debian image lacks
+(`apt-get install libatomic1`; the official `node:*-slim` images install it
+too). Start it the
+same way as from a checkout, through `bin/hivetty-server`:
+
+```sh
+bin/hivetty-server --gen-key     # once, then hand the key over as below
+bin/hivetty-server --pair laptop
+bin/hivetty-server --login
+bin/hivetty-server               # serve
+```
+
+The tarballs are workflow artifacts, `hivetty-server-linux-<arch>`, each with a
+`SHA256SUMS`, kept for seven days. No release carries them.
 
 ### Its folder
 
@@ -748,7 +780,7 @@ you get by signing in with `--login`.
 
 | Missing | Ticket |
 | --- | --- |
-| Linux tarballs and images | HIVE-425 |
+| Images | HIVE-426 |
 
 ## Troubleshooting
 

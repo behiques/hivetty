@@ -8,9 +8,11 @@
 # the shell with no bridge behind it.
 #
 # What stays local, and why: the Electron e2e project, `test:pty`,
-# `test:mcp-host` and every live conformance suite. They need macOS, a display,
-# a real PTY under Electron's ABI, or real agent CLIs with credentials, and a
-# runner has none of those. Run them before handing a change over.
+# `test:mcp-host` and every live conformance suite except the two the `Server`
+# workflow runs against the Linux tarball (`server.yml`). They need macOS, a
+# display, a real PTY under Electron's ABI, or real agent CLIs with
+# credentials, and a runner has none of those. Run them before handing a
+# change over.
 #
 # The job's name, `ci`, is the required status check on main. Renaming it
 # un-requires the check without anyone noticing, so it stays as it is.

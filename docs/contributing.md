@@ -17,6 +17,12 @@ pnpm exec playwright install chromium     # once per machine, for e2e
 pnpm desktop:dev
 ```
 
+The repository's Node is 22 (`.nvmrc`), for tooling, lint, the tests and the desktop build.
+Node 26 is only the runtime packed into the server tarball, pinned in `scripts/pack-server.mjs`
+with the SHA-256 of both Linux archives; bumping it is those three values, copied from that
+release's `SHASUMS256.txt`. `pnpm test:server-edition` runs the server under another Node when
+`HIVE_SERVER_NODE` names one, such as `HIVE_SERVER_NODE="$(nvm which 26)"`.
+
 ## Commands
 
 | Command | Does |

@@ -11,6 +11,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { isBuiltin } from 'node:module';
 import { connect as netConnect, createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -35,19 +36,36 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  * lease on disk. Every home carries a secret key, since a server without one refuses to start (HIVE-424); cases 7
  * to 11 sign in against the stub cloud and prove the key's rules on a real process.
  *
- * Gated behind `HIVE_LIVE_SERVER_EDITION_PROOF=1`. CI runs none of the live suites.
+ * `HIVE_SERVER_BIN` points every process at an unpacked tarball's `bin/hivetty-server` in place of `NODE ENTRY`,
+ * and nothing is built. `HIVE_SERVER_RELEASE=1` says that server was built with `HIVETTY_RELEASE=1`, so the cases that
+ * need a developer escape hatch (`HIVETTY_LEASE_KEYS`, `HIVETTY_CLOUD_URL`) are skipped.
+ *
+ * Gated behind `HIVE_LIVE_SERVER_EDITION_PROOF=1`. The `Server` workflow runs this suite against each Linux tarball
+ * (HIVE-425).
  */
 const RUN = process.env['HIVE_LIVE_SERVER_EDITION_PROOF'] === '1';
 const NODE = process.env['HIVE_SERVER_NODE'] ?? process.execPath;
 const ROOT = join(import.meta.dirname, '../..');
 const ENTRY = join(ROOT, 'out/server/index.js');
 const RELEASE_ENTRY = join(ROOT, 'out/server-release/index.js');
+/** An unpacked tarball's `bin/hivetty-server` (HIVE-425); its tree is the folder above `bin/`. */
+const BIN = process.env['HIVE_SERVER_BIN'] || undefined;
+const BIN_ROOT = BIN === undefined ? undefined : join(BIN, '../..');
+/** The built server under test: the repo's `out/server`, or the tarball's `app/server`. */
+const SERVER_OUT = BIN_ROOT === undefined ? join(ROOT, 'out/server') : join(BIN_ROOT, 'app/server');
+/** The server under test is a release build, which ignores every developer escape hatch. */
+const RELEASE = process.env['HIVE_SERVER_RELEASE'] === '1';
 /** Nothing listens here: the licence's cloud calls fail fast, and the lease's `iss` must equal it. */
 const CLOUD = 'http://127.0.0.1:9';
 const LOG_LINE = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z \[[a-z-]+\] /;
 const REFUSAL = "This edition isn't part of your plan";
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** What to spawn for `args`: the tarball's wrapper when `HIVE_SERVER_BIN` is set, else `NODE entry`. */
+function command(args: string[], entry = ENTRY): [file: string, argv: string[]] {
+  return BIN === undefined ? [NODE, [entry, ...args]] : [BIN, args];
+}
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -147,7 +165,7 @@ function useKeyFile(home: Home, key = randomBytes(32).toString('base64')): strin
 
 /** `--login` against the stub cloud: answered mid-run, when the user code is printed. */
 async function signIn(home: Home, cloud: StubCloud): Promise<void> {
-  const child = spawn(NODE, [ENTRY, '--login'], { env: home.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(...command(['--login']), { env: home.env, stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(child);
   let out = '';
   child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString()));
@@ -177,7 +195,7 @@ function runOnce(
   args: string[],
   entry = ENTRY,
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return promisify(execFile)(NODE, [entry, ...args], { env: home.env, timeout: 20_000 })
+  return promisify(execFile)(...command(args, entry), { env: home.env, timeout: 20_000 })
     .then(({ stdout, stderr }) => ({ code: 0, stdout, stderr }))
     .catch((cause: { code?: number | null; stdout?: string; stderr?: string }) => ({
       code: typeof cause.code === 'number' ? cause.code : null,
@@ -205,7 +223,7 @@ interface Served {
 }
 
 function serve(home: Home, entry = ENTRY): Served {
-  const child = spawn(NODE, [entry], { env: home.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(...command([], entry), { env: home.env, stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(child);
   let out = '';
   let err = '';
@@ -237,6 +255,10 @@ async function stopWithin(served: Served, ms: number): Promise<{ code: number | 
 interface Client {
   accepted: Record<string, unknown>;
   call(channel: Channel, payload: unknown): Promise<ServerFrame>;
+  /** A fire-and-forget frame, as the renderer sends `pty:write`. */
+  notify(channel: Channel, payload: unknown): void;
+  /** Every `pty:data` chunk for the session so far, joined. */
+  output(sessionId: string): string;
   close(): void;
 }
 
@@ -244,6 +266,7 @@ function attach(port: number, device: { id: string; token: string }): Promise<Cl
   return new Promise((resolve, reject) => {
     const socket = new SecureTestSocket(`ws://127.0.0.1:${String(port)}`);
     const pending = new Map<string, (frame: ServerFrame) => void>();
+    const output = new Map<string, string>();
     let next = 0;
     const timer = setTimeout(() => reject(new Error('attach produced no answer in 15 s')), 15_000);
     socket.on('error', (cause: Error) => reject(cause));
@@ -266,6 +289,8 @@ function attach(port: number, device: { id: string; token: string }): Promise<Cl
               pending.set(id, answer);
               socket.send(JSON.stringify({ kind: 'call', id, channel, payload }));
             }),
+          notify: (channel, payload) => socket.send(JSON.stringify({ kind: 'notify', channel, payload })),
+          output: (sessionId) => output.get(sessionId) ?? '',
           close: () => socket.terminate(),
         });
         return;
@@ -279,6 +304,14 @@ function attach(port: number, device: { id: string; token: string }): Promise<Cl
         pending.get(frame.id)?.(frame);
         pending.delete(frame.id);
       }
+      // Ack every batch, as the renderer does: past 512 KiB unacked the server pauses the PTY.
+      if (frame.kind === 'event' && frame.channel === CH.ptyData) {
+        const event = frame.payload as { sessionId: string; seq: number; chunk: string };
+        output.set(event.sessionId, (output.get(event.sessionId) ?? '') + event.chunk);
+        socket.send(
+          JSON.stringify({ kind: 'notify', channel: CH.ptyAck, payload: { sessionId: event.sessionId, seq: event.seq } }),
+        );
+      }
     });
   });
 }
@@ -290,8 +323,9 @@ function filesUnder(dir: string): string[] {
   });
 }
 
-describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
+describe.skipIf(!RUN)(`the server edition under ${BIN ?? NODE} (HIVE-422)`, () => {
   beforeAll(async () => {
+    if (BIN !== undefined) return; // a tarball is already built; case 4 runs against it when it is a release one
     // Case 4's bundle: a release build, inside the repo so node_modules and resources/ resolve.
     await promisify(execFile)('pnpm', ['exec', 'vite', 'build', '--config', 'server.vite.config.ts', '--outDir', 'out/server-release'], {
       cwd: ROOT,
@@ -305,7 +339,7 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
     for (const cloud of clouds.splice(0)) await cloud.close();
   });
 
-  it('1 and 6: serves a lease with runners.byo, attaches encrypted, refuses a spawn in words and keeps answering, stops on SIGTERM', async () => {
+  it.skipIf(RELEASE)('1 and 6: serves a lease with runners.byo, attaches encrypted, refuses a spawn in words and keeps answering, stops on SIGTERM', async () => {
     const home = await makeHome();
     const device = await pair(home);
     plantLease(home, ['runners.byo']);
@@ -331,6 +365,10 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
       });
       expect(spawned.kind, JSON.stringify(spawned)).toBe('error');
       expect((spawned as { message: string }).message).toBe(LICENCE_LAPSED);
+      // Case 12's plain shell takes the same gate, so its success there is the licence's doing.
+      const shell = await client.call(CH.ptySpawnTerminal, { sessionId: 'sess-shell', projectId: 'scratch', cols: 80, rows: 24 });
+      expect(shell.kind, JSON.stringify(shell)).toBe('error');
+      expect((shell as { message: string }).message).toBe(LICENCE_LAPSED);
       const again = await client.call(CH.sessionHistory, undefined);
       expect(again.kind, JSON.stringify(again)).toBe('result');
       expect((again as { payload: unknown }).payload).toEqual([]);
@@ -348,7 +386,7 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
     for (const line of lines) expect(line).toMatch(LOG_LINE);
   }, 90_000);
 
-  it('2: refuses a lease without runners.byo, exits 3, and never listens', async () => {
+  it.skipIf(RELEASE)('2: refuses a lease without runners.byo, exits 3, and never listens', async () => {
     const home = await makeHome();
     plantLease(home, ['relay']);
     const served = serve(home);
@@ -375,7 +413,8 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
     expect(await stopWithin(served, 20_000)).toEqual({ code: 0, signal: null });
   }, 60_000);
 
-  it('4: a release build ignores HIVETTY_LEASE_KEYS, HIVETTY_CLOUD_URL and HIVE_E2E', async () => {
+  // Against a tarball, only a release one: a non-release tarball has no release bundle beside it.
+  it.skipIf(BIN !== undefined && !RELEASE)('4: a release build ignores HIVETTY_LEASE_KEYS, HIVETTY_CLOUD_URL and HIVE_E2E', async () => {
     const home = await makeHome();
     await pair(home);
     plantLease(home, ['runners.byo']);
@@ -390,19 +429,63 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
     expect(await stopWithin(served, 20_000)).toEqual({ code: 0, signal: null });
   }, 60_000);
 
-  /*
-    A spawn through the server needs a licensed server; a lapsed one refuses the spawn before the PTY host is tried
-    (case 6 above). Sign-in (case 9) makes a licensed one possible. `pnpm test:pty-host` drives the fork host itself.
-  */
-  it.todo('a licensed server spawns a session through the fork host');
+  it.skipIf(RELEASE)(
+    '12: a licensed server spawns a session through the fork host and its output comes back (HIVE-425)',
+    async () => {
+      const home = await makeHome();
+      const cloud = await useStubCloud(home);
+      useKeyFile(home);
+      await signIn(home, cloud);
+      const device = await pair(home);
+      const served = serve(home);
+      await waitFor(() => served.exit !== null || accepts(home.port), `the listener on ${String(home.port)}`);
+      expect(served.exit, served.stderr()).toBeNull();
+
+      const client = await attach(home.port, device);
+      try {
+        // A plain shell: the same lapse gate (case 6) and fork host as `pty:spawn`, without starting an agent CLI the runner
+        // may lack (or this machine may start for real), so what is typed reaches a shell.
+        const spawned = await client.call(CH.ptySpawnTerminal, {
+          sessionId: 'sess-marker',
+          projectId: 'scratch',
+          cols: 200,
+          rows: 24,
+        });
+        expect(spawned.kind, JSON.stringify(spawned)).toBe('result');
+        // `%s`, so the marker exists only in the output: the PTY echoes the typed line, which holds no `MARK-12`.
+        client.notify(CH.ptyWrite, { sessionId: 'sess-marker', data: "printf 'MARK-%s\\n' 12\r" });
+        await waitFor(() => client.output('sess-marker').includes('MARK-12'), 'the marker in pty:data');
+      } finally {
+        client.close();
+      }
+      expect(await stopWithin(served, 20_000), served.stderr()).toEqual({ code: 0, signal: null });
+    },
+    120_000,
+  );
 
   it('5: nothing under out/server imports electron', () => {
-    expect(existsSync(join(ROOT, 'out/server/pty-host.js'))).toBe(true);
-    const offenders = filesUnder(join(ROOT, 'out/server')).filter((file) => {
+    expect(existsSync(join(SERVER_OUT, 'pty-host.js'))).toBe(true);
+    const offenders = filesUnder(SERVER_OUT).filter((file) => {
       const text = readFileSync(file, 'utf8');
       return text.includes('from "electron"') || text.includes("from 'electron'") || text.includes('require("electron")');
     });
     expect(offenders).toEqual([]);
+  });
+
+  it('5: every dependency but node-pty is bundled, and no public asset is copied in (HIVE-425)', () => {
+    const files = filesUnder(SERVER_OUT);
+    expect(files.filter((file) => file.endsWith('.png'))).toEqual([]);
+    const bare = new Set<string>();
+    // A specifier is a path or a package name, never prose: `from 'not your PR'` in a message string is not one.
+    const specifier = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*)(["'])([\w@.:/-]+)\1/g;
+    for (const file of files.filter((path) => path.endsWith('.js'))) {
+      for (const match of readFileSync(file, 'utf8').matchAll(specifier)) {
+        const name = match[2] ?? '';
+        if (name.startsWith('.') || name.startsWith('/') || isBuiltin(name)) continue;
+        bare.add(name);
+      }
+    }
+    expect([...bare].sort()).toEqual(['node-pty']);
   });
 
   it('7: with no key, serving and --login exit 4 naming both variables and never listen; --pair and --gen-key need none (HIVE-424)', async () => {
@@ -439,7 +522,7 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
     expect(stdout + stderr).toContain('beside the data');
   }, 30_000);
 
-  it('9 and 10: signs in with --login, seals account.bin, serves across a restart, and a wrong key reads as signed out, loudly (HIVE-424)', async () => {
+  it.skipIf(RELEASE)('9 and 10: signs in with --login, seals account.bin, serves across a restart, and a wrong key reads as signed out, loudly (HIVE-424)', async () => {
     const home = await makeHome();
     const cloud = await useStubCloud(home);
     const keyFile = useKeyFile(home);
@@ -470,7 +553,7 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
     await stopWithin(wrong, 20_000);
   }, 120_000);
 
-  it('11: a child the server spawns never sees HIVETTY_SECRET_KEY (HIVE-424)', async () => {
+  it.skipIf(RELEASE)('11: a child the server spawns never sees HIVETTY_SECRET_KEY (HIVE-424)', async () => {
     const home = await makeHome();
     const device = await pair(home);
     plantLease(home, ['runners.byo']);
