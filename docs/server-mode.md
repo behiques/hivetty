@@ -642,7 +642,10 @@ hivetty-server/
 ```
 
 The tree is never written to, so it can live in a read-only location; state
-goes to `HIVETTY_HOME`. It needs glibc 2.36 or newer (Debian 12). Start it the
+goes to `HIVETTY_HOME`. It needs glibc 2.36 or newer (Debian 12) and
+`libatomic1`, which Node's Linux binaries link and a slim Debian image lacks
+(`apt-get install libatomic1`; the official `node:*-slim` images install it
+too). Start it the
 same way as from a checkout, through `bin/hivetty-server`:
 
 ```sh

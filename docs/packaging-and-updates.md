@@ -543,9 +543,10 @@ resources and a pinned Node 26 into
 `dist/server/hivetty-server-<version>-linux-<arch>.tar.gz` with a one-line
 `SHA256SUMS`. The Node archive is checked against the SHA-256 pinned in
 `scripts/pack-server.mjs` before it is unpacked. `node-pty` compiles inside
-`node:26-bookworm`, so the tarball runs on glibc 2.36 and newer. The job then
-unpacks the tarball read-only and runs the `server-edition` live suite against
-it.
+`node:26-bookworm`, so the tarball runs on glibc 2.36 and newer; the host also
+needs `libatomic1`, which Node's Linux binaries link. The job then unpacks the
+tarball read-only, starts it in a read-only `debian:bookworm-slim` with only
+`libatomic1` added, and runs the `server-edition` live suite against it.
 
 `release.yml` calls the same workflow with `release: true`, which builds with
 `HIVETTY_RELEASE=1` and runs the reduced smoke. Every run uploads its tarballs

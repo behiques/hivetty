@@ -96,10 +96,14 @@ jobs:
           chmod -R a-w "$RUNNER_TEMP/unpacked"
           echo "HIVE_SERVER_BIN=$RUNNER_TEMP/unpacked/hivetty-server/bin/hivetty-server" >> "$GITHUB_ENV"
 
-      # A bare Debian 12 slim: no ps, no Python, glibc 2.36, a read-only root.
-      # The tarball's Node starts, and the tarball's node-pty spawns a process.
+      # A bare Debian 12 slim: no ps, no Python, glibc 2.36, a read-only root,
+      # plus libatomic1, the one library Node's Linux binaries need that slim
+      # lacks (the official node:*-slim images install it too). The tarball's
+      # Node starts, and the tarball's node-pty spawns a process.
       - name: Slim proof
         run: |
+          printf 'FROM debian:bookworm-slim\nRUN apt-get update && apt-get install -y --no-install-recommends libatomic1 && rm -rf /var/lib/apt/lists/*\n' \
+            | docker build -q -t hivetty-slim-proof -
           cat > "$RUNNER_TEMP/pty-proof.cjs" <<'EOF'
           const pty = require('/opt/hivetty-server/app/node_modules/node-pty');
           let out = '';
@@ -113,7 +117,7 @@ jobs:
           docker run --rm --read-only --tmpfs /tmp -e HIVETTY_HOME=/tmp/home \
             -v "$RUNNER_TEMP/unpacked/hivetty-server:/opt/hivetty-server:ro" \
             -v "$RUNNER_TEMP/pty-proof.cjs:/proof.cjs:ro" \
-            debian:bookworm-slim sh -ec '
+            hivetty-slim-proof sh -ec '
               /opt/hivetty-server/bin/hivetty-server --gen-key > /dev/null
               /opt/hivetty-server/node/bin/node /proof.cjs
             '
