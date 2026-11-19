@@ -493,3 +493,65 @@ describe('exclude: folders a swarm owns (HIVE-441)', () => {
     expect(await onDisk('skills/b/SKILL.md')).toBe(skill('b'));
   });
 });
+
+describe('claim: folders a swarm install found already on disk (HIVE-447)', () => {
+  const SHIPPED = '---\nname: acr\ndescription: Reviews.\n---\nShipped prompt.\n';
+  const THEIRS = '---\nname: acr\ndescription: Mine.\n---\nMy prompt.\n';
+
+  const readManifestFile = async (): Promise<{ files: Record<string, string>; parts: Record<string, unknown> }> =>
+    JSON.parse(await readFile(manifestFile, 'utf8')) as { files: Record<string, string>; parts: Record<string, unknown> };
+
+  it('keeps a claimed file byte for byte and records it against the shipped copy, so it reads as edited', async () => {
+    await mkdir(join(target, 'agents/acr'), { recursive: true });
+    await writeFile(join(target, 'agents/acr/AGENT.md'), THEIRS, 'utf8');
+    await ship('agents/acr/AGENT.md', SHIPPED);
+
+    const report = await seedShipped({ source, target, manifestFile, claim: new Set(['agents/acr']) });
+
+    expect(await onDisk('agents/acr/AGENT.md')).toBe(THEIRS);
+    const manifest = await readManifestFile();
+    expect(manifest.files['agents/acr/AGENT.md']).toBe(sha(SHIPPED));
+    expect(manifest.parts['agents/acr/AGENT.md']).toEqual(baseOf(SHIPPED));
+    expect(report.kept).toEqual(['agents/acr/AGENT.md']);
+  });
+
+  it('records nothing for the same file without claim', async () => {
+    await mkdir(join(target, 'agents/acr'), { recursive: true });
+    await writeFile(join(target, 'agents/acr/AGENT.md'), THEIRS, 'utf8');
+    await ship('agents/acr/AGENT.md', SHIPPED);
+
+    await seedShipped({ source, target, manifestFile });
+
+    const manifest = await readManifestFile();
+    expect(manifest.files['agents/acr/AGENT.md']).toBeUndefined();
+    expect(manifest.parts['agents/acr/AGENT.md']).toBeUndefined();
+  });
+
+  it('records a claimed skill folder’s other files in files, and keeps their bytes', async () => {
+    await mkdir(join(target, 'skills/tdd'), { recursive: true });
+    await writeFile(join(target, 'skills/tdd/notes.md'), 'my notes\n', 'utf8');
+    await ship('skills/tdd/SKILL.md', skill('tdd'));
+    await ship('skills/tdd/notes.md', 'shipped notes\n');
+
+    const report = await seedShipped({ source, target, manifestFile, claim: new Set(['skills/tdd']) });
+
+    expect(await onDisk('skills/tdd/notes.md')).toBe('my notes\n');
+    expect(await onDisk('skills/tdd/SKILL.md')).toBe(skill('tdd'));
+    const manifest = await readManifestFile();
+    expect(manifest.files['skills/tdd/notes.md']).toBe(sha('shipped notes\n'));
+    expect(manifest.parts['skills/tdd/notes.md']).toBeUndefined();
+    expect(report.kept).toContain('skills/tdd/notes.md');
+    expect(report.created).toEqual(['skills/tdd/SKILL.md']);
+  });
+
+  it('leaves an existing record of a claimed file as it was', async () => {
+    await mkdir(join(target, 'skills/tdd'), { recursive: true });
+    await writeFile(join(target, 'skills/tdd/notes.md'), 'my notes\n', 'utf8');
+    await writeFile(manifestFile, JSON.stringify({ files: { 'skills/tdd/notes.md': 'older' }, parts: {} }), 'utf8');
+    await ship('skills/tdd/notes.md', 'shipped notes\n');
+
+    await seedShipped({ source, target, manifestFile, claim: new Set(['skills/tdd']) });
+
+    expect((await readManifestFile()).files['skills/tdd/notes.md']).toBe('older');
+  });
+});

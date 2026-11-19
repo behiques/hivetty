@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tag } from '@/components/ui/tag';
 import { badgeOf, diffContents, installVersionOf, type ContentsDiff } from '@/features/settings/lib/swarm-view';
 
-import type { InstalledSwarm, SwarmEntry } from '@shared/swarm-contract';
+import { versionLabel, type InstalledSwarm, type SwarmEntry } from '@shared/swarm-contract';
 
 interface SwarmConsentProps {
   entry: SwarmEntry;
@@ -119,7 +119,7 @@ export function SwarmConsent({ entry, installed, target, onConfirm, onCancel }: 
   const lands = installVersionOf(entry);
   const next = target ?? lands;
   let version: string | null = lands === null ? null : `v${lands}`;
-  if (update) version = next === null ? `v${installed.version}` : `v${installed.version} → v${next}`;
+  if (update) version = next === null ? versionLabel(installed.version) : `${versionLabel(installed.version)} → v${next}`;
 
   return (
     <Dialog

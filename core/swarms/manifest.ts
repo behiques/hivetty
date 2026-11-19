@@ -103,7 +103,7 @@ async function readManifest(dir: string, problems: SwarmProblem[]): Promise<Swar
   return parsed.manifest;
 }
 
-async function readSkills(dir: string, problems: SwarmProblem[]): Promise<SwarmContents['skills']> {
+export async function readSkills(dir: string, problems: SwarmProblem[]): Promise<SwarmContents['skills']> {
   // Only real folders reach the app's own skill rules. `readUserSkills` follows
   // a linked folder for a user's own skills, so a swarm's skills are read one
   // folder at a time and a linked entry is never opened.
@@ -140,7 +140,7 @@ async function readSkills(dir: string, problems: SwarmProblem[]): Promise<SwarmC
   return skills;
 }
 
-async function readAgents(
+export async function readAgents(
   dir: string,
   skillNames: readonly string[],
   problems: SwarmProblem[],

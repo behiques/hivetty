@@ -24,7 +24,7 @@ import { baseOf } from '../../../core/seed/merge';
 import { seedShipped } from '../../../core/seed/seed';
 import { collectFiles } from '../../../core/sync/bundle';
 import { createSwarmGit } from '../../../core/swarms/git';
-import { createSwarms, mergeListing, readInstalled, type SwarmDeps } from '../../../core/swarms/install';
+import { createSwarms, mergeListing, readInstalled, takeOver, type SwarmDeps } from '../../../core/swarms/install';
 
 /**
  * Installing a swarm (HIVE-441): Git runs for real against bare repositories in a temp dir, the seeder runs for
@@ -353,15 +353,68 @@ describe('install', () => {
     expect(installedJson().map((held) => held.swarmId)).toEqual(['swA']);
   });
 
-  it('refuses a name the person already has as their own, and leaves their file alone', async () => {
-    write(hive('skills/tdd/SKILL.md'), 'mine\n');
-    const { entry } = released('1.0.0', { skills: ['tdd'], agents: [] });
+  describe('a folder the person already has as their own (HIVE-447)', () => {
+    it('installs, leaves their bytes alone, and records the file as an edited file of the swarm', async () => {
+      write(hive('skills/tdd/SKILL.md'), 'mine\n');
+      const { entry } = released('1.0.0', { skills: ['tdd'], agents: [] });
+      const swarms = createSwarms(makeDeps());
 
-    expect(await createSwarms(makeDeps()).install(entry)).toEqual({
-      ok: false,
-      failure: { code: 'collision', message: 'The skill tdd already exists in ~/.hivetty/skills as your own.' },
+      expect(await swarms.install(entry)).toMatchObject({ ok: true });
+      expect(readHive('skills/tdd/SKILL.md')).toBe('mine\n');
+      const own = readJson<{ files: Record<string, string> }>('swarms/sw1/seed.json');
+      expect(own.files['skills/tdd/SKILL.md']).toBe(sha(skillText('tdd')));
+
+      expect(await swarms.remove('sw1')).toEqual({ ok: true });
+      expect(readHive('skills/tdd/SKILL.md')).toBe('mine\n');
     });
-    expect(readHive('skills/tdd/SKILL.md')).toBe('mine\n');
+
+    it('leaves their file on disk when a first install fails after seeding', async () => {
+      write(hive('skills/tdd/SKILL.md'), 'mine\n');
+      const { entry } = released('1.0.0', { skills: ['tdd'], agents: ['a1'] });
+      const seed = vi.fn<NonNullable<SwarmDeps['seed']>>(async (options) => {
+        await seedShipped(options);
+        throw new Error('ENOSPC');
+      });
+
+      expect(await createSwarms(makeDeps({ seed })).install(entry)).toEqual({
+        ok: false,
+        failure: { code: 'failed', message: 'ENOSPC' },
+      });
+      expect(readHive('skills/tdd/SKILL.md')).toBe('mine\n');
+      expect(existsSync(hive('agents/a1/AGENT.md'))).toBe(false);
+      expect(existsSync(hive('swarms/sw1'))).toBe(false);
+    });
+
+    it.each<[string, NonNullable<SwarmDeps['seed']>]>([
+      ['before the seed writes', () => Promise.reject(new Error('ENOSPC'))],
+      [
+        'after the seed wrote',
+        async (options) => {
+          await seedShipped(options);
+          throw new Error('ENOSPC');
+        },
+      ],
+    ])('keeps their file when it holds the swarm’s exact bytes and a first install fails %s', async (_when, fails) => {
+      write(hive('skills/tdd/SKILL.md'), skillText('tdd'));
+      const { entry } = released('1.0.0', { skills: ['tdd'], agents: ['a1'] });
+
+      expect(await createSwarms(makeDeps({ seed: vi.fn(fails) })).install(entry)).toMatchObject({ ok: false });
+      expect(readHive('skills/tdd/SKILL.md')).toBe(skillText('tdd'));
+      expect(existsSync(hive('agents/a1/AGENT.md'))).toBe(false);
+    });
+
+    it('records a file that holds the swarm’s exact bytes as the swarm’s, so removing the swarm deletes it', async () => {
+      write(hive('skills/tdd/SKILL.md'), skillText('tdd'));
+      const { entry } = released('1.0.0', { skills: ['tdd'], agents: [] });
+      const swarms = createSwarms(makeDeps());
+
+      expect(await swarms.install(entry)).toMatchObject({ ok: true });
+      const own = readJson<{ files: Record<string, string> }>('swarms/sw1/seed.json');
+      expect(own.files['skills/tdd/SKILL.md']).toBe(sha(skillText('tdd')));
+
+      expect(await swarms.remove('sw1')).toEqual({ ok: true });
+      expect(existsSync(hive('skills/tdd/SKILL.md'))).toBe(false);
+    });
   });
 
   describe('a built-in the swarm ships', () => {
@@ -521,27 +574,44 @@ describe('install', () => {
       expect(existsSync(hive('swarms/sw1/pending.json'))).toBe(false);
     });
 
-    it('still refuses a file the person edited since', async () => {
+    it('keeps a file the person edited since, as an edited file of the swarm (HIVE-447)', async () => {
       const { entry } = released('1.0.0');
       await dieMidSeed(entry);
       write(hive('skills/s1/SKILL.md'), 'mine\n');
 
-      expect(await createSwarms(makeDeps()).install(entry)).toMatchObject({ ok: false, failure: { code: 'collision' } });
+      expect(await createSwarms(makeDeps()).install(entry)).toMatchObject({ ok: true });
       expect(readHive('skills/s1/SKILL.md')).toBe('mine\n');
+      expect(readJson<{ files: Record<string, string> }>('swarms/sw1/seed.json').files['skills/s1/SKILL.md']).toBe(
+        sha(skillText('s1')),
+      );
     });
 
-    it('takes the files it left back out when the retry fails too', async () => {
+    it('takes the files it left back out when the retry fails too, and keeps the one the person edited', async () => {
       const { entry } = released('1.0.0');
       await dieMidSeed(entry);
       write(hive('agents/a1/AGENT.md'), 'mine\n');
+      const seed = vi.fn<NonNullable<SwarmDeps['seed']>>(() => Promise.reject(new Error('ENOSPC')));
 
-      expect(await createSwarms(makeDeps()).install(entry)).toMatchObject({ ok: false, failure: { code: 'collision' } });
+      expect(await createSwarms(makeDeps({ seed })).install(entry)).toMatchObject({ ok: false, failure: { code: 'failed' } });
       expect(existsSync(hive('skills/s1'))).toBe(false);
       expect(readHive('agents/a1/AGENT.md')).toBe('mine\n');
     });
   });
 
   describe('an installed.json it cannot read', () => {
+    it('names the folder the app really uses, so a dev build says ~/.hivetty-dev', async () => {
+      const devHive = join(root, '.hivetty-dev');
+      write(join(devHive, 'swarms/installed.json'), 'not json');
+      const { entry } = released('1.0.0');
+
+      const result = await createSwarms(makeDeps({ hiveDir: devHive, shippedManifest: join(devHive, '.seed.json') })).install(entry);
+
+      expect(result).toMatchObject({ ok: false, failure: { code: 'failed' } });
+      expect(result).toMatchObject({
+        failure: { message: expect.stringMatching(/^~\/\.hivetty-dev\/swarms\/installed\.json can't be read/) as unknown },
+      });
+    });
+
     it('refuses to install, and leaves the file as it was', async () => {
       write(hive('swarms/installed.json'), 'not json');
       const { entry } = released('1.0.0');
@@ -840,6 +910,40 @@ describe('remove', () => {
   });
 });
 
+describe('takeOver', () => {
+  const A = skillText('a');
+  const B = skillText('b');
+
+  it('moves the taken folders’ entries with their hash and part base, keeps the others, and moves nothing twice', async () => {
+    const shippedFile = hive('.seed.json');
+    const mineFile = hive('swarms/sw1/seed.json');
+    const shipped = {
+      files: { 'skills/a/SKILL.md': sha(A), 'skills/a/notes.md': sha('n'), 'skills/b/SKILL.md': sha(B) },
+      parts: { 'skills/a/SKILL.md': baseOf(A), 'skills/b/SKILL.md': baseOf(B) },
+    };
+    const mine = { files: { 'skills/a/notes.md': 'mine-already' }, parts: {} };
+
+    await takeOver(shippedFile, shipped, mineFile, mine, new Set(['skills/a']));
+
+    expect(readJson('swarms/sw1/seed.json')).toEqual({
+      files: { 'skills/a/notes.md': 'mine-already', 'skills/a/SKILL.md': sha(A) },
+      parts: { 'skills/a/SKILL.md': baseOf(A) },
+    });
+    expect(readJson('.seed.json')).toEqual({
+      files: { 'skills/b/SKILL.md': sha(B) },
+      parts: { 'skills/b/SKILL.md': baseOf(B) },
+    });
+
+    const mineBefore = readHive('swarms/sw1/seed.json');
+    await takeOver(shippedFile, readJson('.seed.json'), mineFile, readJson('swarms/sw1/seed.json'), new Set(['skills/a']));
+    expect(readHive('swarms/sw1/seed.json')).toBe(mineBefore);
+    expect(readJson('.seed.json')).toEqual({
+      files: { 'skills/b/SKILL.md': sha(B) },
+      parts: { 'skills/b/SKILL.md': baseOf(B) },
+    });
+  });
+});
+
 describe('the seed sets', () => {
   const shippedOptions = () => ({ source: join(root, 'resources'), target: hiveDir, manifestFile: hive('.seed.json') });
 
@@ -865,6 +969,34 @@ describe('the seed sets', () => {
     expect(sets.shipped.source).toBe(shippedOptions().source);
     expect([...(sets.shipped.exclude ?? [])].sort()).toEqual(['agents/a1', 'skills/one', 'skills/two']);
     expect(sets.swarms).toEqual([setOf('swOne'), setOf('swTwo')]);
+  });
+
+  it('reads a bundled entry against the shipped tree and history, with its own manifest (HIVE-447)', async () => {
+    const held = (swarmId: string, version: string) => ({
+      swarmId,
+      slug: swarmId,
+      kind: 'native',
+      org: null,
+      repoUrl: '/r',
+      folder: 'standard',
+      version,
+      commit: 'c'.repeat(40),
+      installedAt: '2026-11-19T00:00:00Z',
+      autoUpdate: true,
+      lastError: null,
+      title: 'T',
+      description: '',
+      contents: { agents: [], skills: [] },
+    });
+    write(hive('swarms/installed.json'), JSON.stringify([held('bundled-standard', 'bundled'), held('swOne', '1.0.0')]));
+    const shipped = { ...shippedOptions(), history: join(root, 'resources/shipped-history.json') };
+
+    const sets = await createSwarms(makeDeps()).seedSets(shipped);
+
+    expect(sets.swarms).toEqual([
+      { source: shipped.source, history: shipped.history, target: hiveDir, manifestFile: hive('swarms/bundled-standard/seed.json') },
+      setOf('swOne'),
+    ]);
   });
 
   it('excludes nothing with nothing installed', async () => {

@@ -177,6 +177,12 @@ describe('SwarmConsent, update mode', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
+  it('labels a bundled installed version "Bundled" in the arrow', () => {
+    const { dialog } = renderConsent(entry, installedSwarm({ ...installed, version: 'bundled' }), '1.0.1');
+
+    expect(within(dialog).getByText('Bundled → v1.0.1')).toBeInTheDocument();
+  });
+
   it('falls back to the row version when no target is given', () => {
     const { dialog } = renderConsent(entry, installed, null);
 

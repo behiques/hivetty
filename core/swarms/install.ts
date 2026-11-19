@@ -11,9 +11,10 @@
  * edited one stays edited. From then on that folder is the swarm's.
  */
 import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from 'node:fs/promises';
-import { dirname, join, sep } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 
 import {
+  isBundled,
   isSwarmFolder,
   isSwarmId,
   swarmTag,
@@ -86,7 +87,7 @@ export const ownedFolders = (manifest: Manifest): Set<string> =>
   new Set([...Object.keys(manifest.files), ...Object.keys(manifest.parts)].map(folderOf));
 
 // The two fields that become paths are checked. The rest is what this module wrote.
-const isInstalled = (entry: unknown): entry is InstalledSwarm =>
+export const isInstalled = (entry: unknown): entry is InstalledSwarm =>
   typeof entry === 'object' &&
   entry !== null &&
   isSwarmId((entry as InstalledSwarm).swarmId) &&
@@ -98,7 +99,7 @@ const isEntryOf = (entry: unknown, swarmId: string): boolean => isInstalled(entr
  * Every entry as written, the ones `isInstalled` refuses included, for a write that puts the list back. Absent is
  * nothing installed; unreadable throws, so an install or a removal never overwrites the other swarms' entries.
  */
-async function readInstalledRaw(file: string): Promise<unknown[]> {
+export async function readInstalledRaw(file: string): Promise<unknown[]> {
   let text: string;
   try {
     text = await readFile(file, 'utf8');
@@ -111,9 +112,9 @@ async function readInstalledRaw(file: string): Promise<unknown[]> {
   return raw;
 }
 
-const unreadable = (cause: unknown): SwarmFailure => ({
+const unreadable = (hiveDir: string, cause: unknown): SwarmFailure => ({
   code: 'failed',
-  message: `~/.hivetty/swarms/installed.json can't be read (${messageOf(cause)}), so HiveTTY Pro changed nothing.`,
+  message: `~/${basename(hiveDir)}/swarms/installed.json can't be read (${messageOf(cause)}), so HiveTTY Pro changed nothing.`,
 });
 
 export async function readInstalled(file: string): Promise<InstalledSwarm[]> {
@@ -124,7 +125,7 @@ export async function readInstalled(file: string): Promise<InstalledSwarm[]> {
   }
 }
 
-async function writeInstalled(file: string, entries: unknown[]): Promise<void> {
+export async function writeInstalled(file: string, entries: unknown[]): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
   await writeFile(`${file}.tmp`, `${JSON.stringify(entries, null, 2)}\n`);
   await rename(`${file}.tmp`, file);
@@ -225,6 +226,32 @@ async function giveBackTaken(
   await writeManifest(shippedManifest, current);
 }
 
+/**
+ * Move every entry of `shipped` under a `taken` folder into `mine` (an entry `mine` already has is kept), then write
+ * `mineFile` and, after it, `shippedFile` without the moved entries. If only the first write lands, both manifests
+ * name the path: sync reads either, the boot seed passes over the folder, and the next call moves nothing twice.
+ * Mutates `mine`.
+ */
+export async function takeOver(
+  shippedFile: string,
+  shipped: Manifest,
+  mineFile: string,
+  mine: Manifest,
+  taken: ReadonlySet<string>,
+): Promise<void> {
+  const move = <T>(from: Record<string, T>, into: Record<string, T>): Record<string, T> => {
+    const stay: Record<string, T> = {};
+    for (const [rel, value] of Object.entries(from)) {
+      if (!taken.has(folderOf(rel))) stay[rel] = value;
+      else if (!(rel in into)) into[rel] = value;
+    }
+    return stay;
+  };
+  const left: Manifest = { files: move(shipped.files, mine.files), parts: move(shipped.parts, mine.parts) };
+  await writeManifest(mineFile, mine);
+  await writeManifest(shippedFile, left);
+}
+
 function gitFailure(error: GitError, entry: SwarmEntry): SwarmFailure {
   if (error.kind === 'no_access') {
     return {
@@ -259,7 +286,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     try {
       raw = await readInstalledRaw(paths.installed);
     } catch (cause) {
-      return { ok: false, failure: unreadable(cause) };
+      return { ok: false, failure: unreadable(deps.hiveDir, cause) };
     }
     const before = raw.filter(isInstalled);
     const previous = before.find((held) => held.swarmId === entry.id) ?? null;
@@ -361,6 +388,10 @@ export function createSwarms(deps: SwarmDeps): Swarms {
           })),
       );
       const clashes: string[] = [];
+      const claimed = new Set<string>();
+      // Files already on disk under a claimed folder: a failed first install never takes them out, even when they
+      // hold the swarm's exact bytes.
+      const theirs = new Set<string>();
       for (const folder of folders) {
         const [kind = '', name = ''] = folder.split('/');
         const noun = kind === 'agents' ? 'agent' : 'skill';
@@ -375,37 +406,32 @@ export function createSwarms(deps: SwarmDeps): Swarms {
           () => true,
           () => false,
         );
-        if (exists) clashes.push(`The ${noun} ${name} already exists in ~/.hivetty/${kind} as your own.`);
+        // The person's own: kept, and recorded as an edited file of this swarm when the seed runs (HIVE-447).
+        if (exists) {
+          claimed.add(folder);
+          for (const file of await walk(join(deps.hiveDir, folder))) theirs.add(`${folder}/${file}`);
+        }
       }
       if (clashes.length > 0) return await fail({ code: 'collision', message: clashes.join(' ') });
 
       // 5. Take over the built-ins this swarm ships: their entries move to this swarm's manifest.
       const taken = new Set(folders.filter((folder) => builtIn.has(folder)));
       if (taken.size > 0) {
-        const move = <T>(from: Record<string, T>, into: Record<string, T>): Record<string, T> => {
-          const stay: Record<string, T> = {};
-          for (const [rel, value] of Object.entries(from)) {
-            if (!taken.has(folderOf(rel))) stay[rel] = value;
-            else if (!(rel in into)) into[rel] = value;
-          }
-          return stay;
-        };
-        const left: Manifest = { files: move(shipped.files, mine.files), parts: move(shipped.parts, mine.parts) };
-        // The swarm's first. If only it lands, both manifests name the path: sync reads either, the boot seed
-        // passes over the folder, and the next install moves nothing twice.
-        await writeManifest(paths.seed(entry.id), mine);
+        // Set before the writes: `giveBackTaken` only restores entries `.seed.json` lacks whose file is on disk.
         if (previous === null) giveBack = () => giveBackTaken(deps.hiveDir, deps.shippedManifest, shipped, taken);
-        await writeManifest(deps.shippedManifest, left);
+        await takeOver(deps.shippedManifest, shipped, paths.seed(entry.id), mine, taken);
       }
 
       // 6. Seed. From here a first install that fails takes its own files back out.
       if (previous === null) {
-        const hashes = { ...leftover, ...(await hashFolders(source, folders)) };
+        const hashes = Object.fromEntries(
+          Object.entries({ ...leftover, ...(await hashFolders(source, folders)) }).filter(([rel]) => !theirs.has(rel)),
+        );
         await mkdir(paths.dir(entry.id), { recursive: true });
         await writeFile(paths.pending(entry.id), `${JSON.stringify({ files: hashes, parts: {} })}\n`);
         undo = () => deleteMatching(deps.hiveDir, hashes);
       }
-      await seed({ source, target: deps.hiveDir, manifestFile: paths.seed(entry.id) });
+      await seed({ source, target: deps.hiveDir, manifestFile: paths.seed(entry.id), claim: claimed });
 
       // 7. The clone, then the entry.
       await rm(paths.repo(entry.id), { recursive: true, force: true });
@@ -440,7 +466,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     try {
       raw = await readInstalledRaw(paths.installed);
     } catch (cause) {
-      return { ok: false, failure: unreadable(cause) };
+      return { ok: false, failure: unreadable(deps.hiveDir, cause) };
     }
     try {
       const manifest = await readManifest(paths.seed(swarmId));
@@ -485,11 +511,14 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     for (const file of await manifestFiles()) {
       for (const folder of ownedFolders(await readManifest(file))) exclude.add(folder);
     }
-    const swarms = (await readInstalled(paths.installed)).map((held) => ({
-      source: join(paths.repo(held.swarmId), held.folder),
-      target: deps.hiveDir,
-      manifestFile: paths.seed(held.swarmId),
-    }));
+    const swarms = (await readInstalled(paths.installed)).map((held): SeedOptions => {
+      const manifestFile = paths.seed(held.swarmId);
+      // HIVE-447: an adopted Standard has no clone until its first update: its files read against the shipped tree.
+      if (isBundled(held.version)) {
+        return { source: shipped.source, history: shipped.history, target: deps.hiveDir, manifestFile };
+      }
+      return { source: join(paths.repo(held.swarmId), held.folder), target: deps.hiveDir, manifestFile };
+    });
     return { shipped: { ...shipped, exclude }, swarms };
   };
 

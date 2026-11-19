@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -85,7 +85,12 @@ async function openLink(app: ElectronApplication, link: string): Promise<void> {
 }
 
 let stub: StubCloud;
-test.beforeEach(async () => {
+test.beforeEach(async ({}, testInfo) => {
+  // HIVE-447: a seeded home is adopted as the Standard swarm on its first launch. These cases test the pane on a
+  // home with nothing installed, so the home is pre-marked as adopted: no boot seed, no adoption. None of them uses
+  // a built-in agent or skill. The adopted home's pane is covered by unit tests and by PR 3's Playwright case.
+  mkdirSync(testInfo.outputPath('swarms'), { recursive: true });
+  writeFileSync(testInfo.outputPath('swarms', 'adopted'), '');
   stub = await startStubCloud();
   stub.controls.setSwarms(ROWS);
 });

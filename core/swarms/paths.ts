@@ -3,7 +3,8 @@
  *
  * `installed.json` lists the installed swarms, `registry.json` keeps the
  * cloud's last list for offline use, and `askpass.sh` answers Git's prompts
- * for a native fetch. Each swarm gets `<id>/repo` (its clone), `<id>/repo.new`
+ * for a native fetch. `adopted` marks a home whose built-ins became the Standard
+ * swarm (HIVE-447): the boot seed never runs there again. Each swarm gets `<id>/repo` (its clone), `<id>/repo.new`
  * (the clone an install is staging), `<id>/seed.json` (its seed manifest) and
  * `<id>/pending.json` (a first install's file hashes while it seeds).
  *
@@ -21,6 +22,7 @@ export interface SwarmPaths {
   installed: string;
   registry: string;
   askpass: string;
+  adopted: string;
   dir(id: string): string;
   repo(id: string): string;
   staging(id: string): string;
@@ -40,6 +42,7 @@ export function swarmPaths(hiveDir: string): SwarmPaths {
     installed: join(root, 'installed.json'),
     registry: join(root, 'registry.json'),
     askpass: join(root, 'askpass.sh'),
+    adopted: join(root, 'adopted'),
     dir,
     repo: (id) => join(dir(id), 'repo'),
     staging: (id) => join(dir(id), 'repo.new'),

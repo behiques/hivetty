@@ -6,9 +6,11 @@
  * arrive through `setSwarmHooks`, as settings sync's do, so this folder
  * depends on neither the licence client nor the IPC layer.
  */
+import { lstat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import {
+  isBundled,
   parseSwarmAutoUpdateRequest,
   parseSwarmRequest,
   type InstalledSwarm,
@@ -23,8 +25,10 @@ import {
 import { configPath } from '../config/paths';
 import { platform } from '../platform';
 import { shippedOptions } from '../seed';
+import { serial } from '../seed/actions';
 import type { SeedOptions } from '../seed/seed';
 
+import { adoptBuiltIns, rekeyAdopted, rekeyTarget } from './adopt';
 import { createSwarmGit, type SwarmGit } from './git';
 import { createSwarms, mergeListing, type Swarms } from './install';
 import { swarmPaths } from './paths';
@@ -92,7 +96,18 @@ function swarms(): Swarms {
   return engine;
 }
 
-const registry = (): Promise<RegistryRead> => readRegistry(hooks.authedFetch(), swarmPaths(hiveDir()).registry);
+const registry = async (): Promise<RegistryRead> => {
+  const read = await readRegistry(hooks.authedFetch(), swarmPaths(hiveDir()).registry);
+  // HIVE-447: the adopted Standard takes the registry's id, in the install queue and after the boot seed. Never the
+  // reason a read fails. No caller reads the registry from inside the queue, so this never waits on itself. Asked
+  // first outside the queue, so a read with nothing to re-key never waits behind an install's clone.
+  if (rekeyTarget(read.swarms, await swarms().installed()) === null) return read; // installed() never rejects
+  await serial(async () => {
+    await hooks.ready();
+    await rekeyAdopted(hiveDir(), read.swarms);
+  }).catch(() => undefined);
+  return read;
+};
 
 // Whether it worked or not: a failed update may have changed files before it failed.
 const refresh = (): void => {
@@ -161,6 +176,9 @@ export function swarmCalls(): SwarmCalls {
     list,
     install: async (payload) => {
       const { swarmId } = parseSwarmRequest(payload);
+      // The install waits for the seed and the adoption in its queue anyway. Waiting here first lets the read below
+      // re-key an entry adopted meanwhile, so a first-launch click updates it instead of colliding with it.
+      await hooks.ready();
       // The row comes from the registry, never from the caller: a renderer cannot name a repository.
       const entry = (await registry()).swarms.find((row) => row.id === swarmId);
       if (entry === undefined) {
@@ -175,7 +193,8 @@ export function swarmCalls(): SwarmCalls {
       const result = await swarms().remove(swarmId); // never rejects
       if (result.ok) {
         updater().clear(swarmId);
-        if (before !== null) {
+        // A bundled Standard was never reported as installed (HIVE-447).
+        if (before !== null && !isBundled(before.version)) {
           void reportInstall(hooks.authedFetch(), swarmId, { state: 'removed', version: before.version });
         }
       }
@@ -217,6 +236,36 @@ export function swarmSessionChanged(): void {
 /** The shipped seed options, minus the folders swarms own, and one set per installed swarm. */
 export const swarmSeedSets = (): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }> =>
   swarms().seedSets(shippedOptions());
+
+/**
+ * The boot seed, then adoption (HIVE-447). Once a home is adopted the seed from `resources/` never runs there
+ * again. This is the promise every install, removal and seed action waits for (`hooks.ready`), so adoption runs
+ * here and never in their queue: queued behind them it would wait on itself. Never rejects.
+ *
+ * `seed` answers null for a seed that failed, as `seedShippedIntoHive` does: no adoption and no marker then, so a
+ * home whose seed failed is seeded again at the next launch.
+ */
+export async function seedAndAdopt(seed: (exclude: ReadonlySet<string> | undefined) => Promise<unknown>): Promise<void> {
+  try {
+    const dir = hiveDir();
+    const adopted = await lstat(swarmPaths(dir).adopted).then(
+      () => true,
+      () => false,
+    );
+    if (adopted) return;
+    // A failed read of the swarm-owned folders never stops the seed (HIVE-441), a synchronous throw included.
+    const exclude = await Promise.resolve()
+      .then(swarmSeedSets)
+      .then(
+        (sets) => sets.shipped.exclude,
+        () => undefined,
+      );
+    if ((await seed(exclude)) === null) throw new Error('the shipped seed failed');
+    await adoptBuiltIns({ hiveDir: dir, shippedManifest: shippedOptions().manifestFile });
+  } catch (cause) {
+    console.info(`[hive] the built-in agents and skills could not be adopted as the Standard swarm (${String(cause)})`);
+  }
+}
 
 /** Every swarm's seed manifest on disk, installed.json or not (HIVE-441): what settings sync reads beside the shipped one. */
 export const swarmManifestFiles = (): Promise<string[]> => swarms().manifestFiles();

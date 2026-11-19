@@ -36,6 +36,12 @@ const available = swarmItem({
 const updating = swarmItem({ installed: installedSwarm(), update: { target: '1.5.0', updating: true } });
 const failedUpdate = swarmItem({ installed: installedSwarm({ lastError: FAILED }), update: { target: '1.5.0', updating: false } });
 const gone = swarmItem({ entry: null, installed: installedSwarm({ version: '1.2.0' }) });
+const bundled = swarmItem({
+  entry: swarmEntry({ kind: 'community' }),
+  installed: installedSwarm({ version: 'bundled' }),
+  update: { target: '1.0.1', updating: false },
+});
+const bundledCurrent = swarmItem({ installed: installedSwarm({ version: 'bundled' }) });
 
 describe('rowState', () => {
   it.each<[string, SwarmListItem, SwarmListing['source'], boolean, SwarmRowState]>([
@@ -66,6 +72,9 @@ describe('stateText', () => {
     ['updating', updating, 'Updating…'],
     ['failed-update', failedUpdate, 'v1.4.0 · update failed'],
     ['gone', gone, 'v1.2.0'],
+    ['available', bundled, 'Bundled · v1.0.1 available'],
+    ['current', bundledCurrent, 'Bundled'],
+    ['current', swarmItem({ entry: null, installed: installedSwarm({ version: 'bundled' }) }), 'Bundled'],
   ])('%s', (state, item, expected) => {
     expect(stateText(state, item)).toBe(expected);
   });

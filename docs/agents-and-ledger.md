@@ -2728,6 +2728,17 @@ and writes `resources/swarm.lock.json`, a sha256 per file.
 `tests/resources/swarm-lock.test.ts` fails on any file that differs from the
 lock.
 
+Agents and skills now come from swarms. The built-ins in `resources/` are
+seeded once more and then adopted as the installed swarm Standard (HIVE-447):
+`seedAndAdopt` in `core/swarms/index.ts` is the boot seed's promise. It seeds
+from `resources/` as above, then `adoptBuiltIns` (`core/swarms/adopt.ts`)
+writes Standard's entry at the version `bundled`, moves every built-in entry
+from `.seed.json` to that swarm's manifest, and writes the marker
+`~/.hivetty/swarms/adopted` last. A home with the marker is never seeded from
+`resources/` again, so removing Standard stays removed. Adoption needs no
+network, no Git and no registry. A failed seed or a failed adoption is logged,
+leaves no marker, and is tried again at the next launch.
+
 `AGENT.md` and `SKILL.md` are the exception to "left alone": an edited one is
 **merged**, because one edited key used to freeze a whole agent, prompt and
 all. `seed/merge.ts` splits the file into parts: each top-level frontmatter
@@ -2782,15 +2793,41 @@ is merged or kept, and Settings' *edited*, **Keep mine** and **Reset to
 shipped** act on it through the same `shipped:*` channels, on whichever set
 owns the name.
 
-A swarm may not ship a name another swarm owns, or one that is the person's
-own file: either refuses the install before anything is written. A name a
-built-in owns is taken over: its entries move from `.seed.json` to the swarm's
-manifest, and from then on the boot seed passes over that folder, so
-`resources/` never writes over a swarm's file.
+A swarm may not ship a name another swarm owns: that refuses the install
+before anything is written. A name a built-in owns is taken over: its entries
+move from `.seed.json` to the swarm's manifest, and from then on the boot seed
+passes over that folder, so `resources/` never writes over a swarm's file.
+
+A folder the person already has, that no manifest owns, is kept (HIVE-447). The
+install goes on, their bytes stay as they are, and each of their files that
+differs from the swarm's copy is recorded against it (`claim` in
+`SeedOptions`), so it reads as an edited file of the swarm, with **Keep mine**
+and **Reset to shipped**. A first install that fails never takes out a file
+that was on disk before it.
 
 Remove deletes the files the swarm wrote that are still byte-identical to what
-it wrote, and keeps the edited ones as the person's. Until HIVE-447, a removed
-swarm's taken-over built-ins come back from `resources/` at the next launch.
+it wrote, and keeps the edited ones as the person's. On an adopted home the
+marker outlives the entry, so a removed swarm's taken-over built-ins do not
+come back from `resources/`.
+
+#### The adopted Standard (HIVE-447)
+
+Adoption writes Standard's entry under the local id `bundled-standard` (a
+registry id is a cuid, which holds no `-`). The first registry read that
+returns a native row with slug `standard` re-keys it: `rekeyAdopted` moves
+`seed.json` to `swarms/<id>/`, removes `swarms/bundled-standard/`, then
+rewrites the entry's `swarmId`, inside the install queue and after the boot
+seed. The `registry()` wrapper in `core/swarms/index.ts` asks first, outside
+the queue, so a read with nothing to re-key never waits behind an install. From
+then on the listing, install and the updater match it by id like any other
+swarm.
+
+An entry at the version `bundled` has no clone, so its seed set reads its
+files against the shipped tree and history in `resources/`, with the swarm's
+own manifest: Settings shows its edited files as it did the built-ins'.
+Removing it sends no `removed` report, since it was never reported as
+installed. `isBundled` is the only check for that version; nothing compares it
+with `compareVersions`.
 
 A token is asked of the cloud for each install, rides one Git command's
 environment, is answered by `askpass.sh`, and runs with `credential.helper`

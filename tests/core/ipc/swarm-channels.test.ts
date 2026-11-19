@@ -103,12 +103,23 @@ const sets = vi.hoisted(() => {
   return { S, W };
 });
 const swarmSeedSets = vi.hoisted(() => vi.fn());
+/** HIVE-447: the boot seed's promise. The test holds it open to prove what waits for it. */
+const boot = vi.hoisted(() => ({ release: (): void => undefined }));
+const seedAndAdopt = vi.hoisted(() =>
+  vi.fn(
+    (_seed: (exclude: ReadonlySet<string> | undefined) => Promise<unknown>) =>
+      new Promise<void>((resolve) => {
+        boot.release = resolve;
+      }),
+  ),
+);
 const swarmSeedSetFor = vi.hoisted(() => vi.fn());
 vi.mock('../../../core/swarms', () => ({
   swarmCalls: () => swarmSpies,
   setSwarmHooks,
   swarmSeedSets,
   swarmSeedSetFor,
+  seedAndAdopt,
   startSwarmUpdates,
   swarmRunsIdle,
   swarmSessionChanged,
@@ -151,6 +162,7 @@ beforeEach(() => {
   handlers.clear();
   shutdownHooks.length = 0;
   registerIpcHandlers();
+  boot.release(); // most cases want a finished boot; the boot cases hold their own
 });
 
 afterEach(() => {
@@ -297,19 +309,60 @@ describe('the shipped handlers over every seed set (HIVE-441)', () => {
   });
 });
 
-describe('the boot seed (HIVE-441)', () => {
-  it('passes over every folder an installed swarm owns', async () => {
-    await vi.waitFor(() => expect(seed.seedShippedIntoHive).toHaveBeenCalledTimes(1));
+describe('the boot seed (HIVE-441, HIVE-447)', () => {
+  /** Lets every pending step run, on fake time: AGENTS.md allows no real waits. */
+  const settle = async (): Promise<void> => {
+    vi.useFakeTimers();
+    try {
+      await vi.advanceTimersByTimeAsync(20);
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+
+  const restart = (): void => {
+    resetIpcHandlers();
+    vi.clearAllMocks();
+    swarmSeedSets.mockResolvedValue({ shipped: sets.S, swarms: [sets.W] });
+    registerIpcHandlers();
+  };
+
+  it('seeds and adopts through seedAndAdopt, whose seed is the shipped seed with the exclude set it is handed', async () => {
+    expect(seedAndAdopt).toHaveBeenCalledTimes(1);
+    const seedFn = seedAndAdopt.mock.calls[0]?.[0];
+
+    await seedFn?.(sets.S.exclude);
+
     expect(seed.seedShippedIntoHive).toHaveBeenCalledWith(undefined, sets.S.exclude);
   });
 
-  it('still seeds, passing over nothing, when the seed sets cannot be read', async () => {
-    resetIpcHandlers();
-    vi.clearAllMocks();
-    swarmSeedSets.mockRejectedValue(new Error('installed.json unreadable'));
-    registerIpcHandlers();
+  it('holds every swarm install until the seed and the adoption have finished', async () => {
+    restart();
+    const hooksGiven = setSwarmHooks.mock.calls.at(-1)?.[0] as { ready: () => Promise<unknown> };
+    let ready = false;
+    void hooksGiven.ready().then(() => {
+      ready = true;
+    });
 
-    await vi.waitFor(() => expect(seed.seedShippedIntoHive).toHaveBeenCalledTimes(1));
-    expect(seed.seedShippedIntoHive).toHaveBeenCalledWith(undefined, undefined);
+    await settle();
+    expect(ready).toBe(false);
+
+    boot.release();
+    await vi.waitFor(() => expect(ready).toBe(true));
+  });
+
+  it('holds the shipped actions until then too', async () => {
+    restart();
+    let answered = false;
+    void invoke(CH.shippedStatus, undefined).then(() => {
+      answered = true;
+    });
+
+    await settle();
+    expect(answered).toBe(false);
+    expect(seed.shippedStatus).not.toHaveBeenCalled();
+
+    boot.release();
+    await vi.waitFor(() => expect(answered).toBe(true));
   });
 });

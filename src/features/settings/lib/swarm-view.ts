@@ -1,11 +1,13 @@
 import type { ShippedStatus } from '@shared/shipped-contract';
-import type {
-  InstalledSwarm,
-  SwarmContents,
-  SwarmEntry,
-  SwarmFailure,
-  SwarmListing,
-  SwarmListItem,
+import {
+  isBundled,
+  versionLabel,
+  type InstalledSwarm,
+  type SwarmContents,
+  type SwarmEntry,
+  type SwarmFailure,
+  type SwarmListing,
+  type SwarmListItem,
 } from '@shared/swarm-contract';
 
 export type SwarmRowState =
@@ -35,7 +37,7 @@ export function rowState(
 }
 
 export function stateText(state: SwarmRowState, item: SwarmListItem): string {
-  const version = item.installed === null ? '' : `v${item.installed.version}`;
+  const version = item.installed === null ? '' : versionLabel(item.installed.version);
   const target = item.update === null ? '' : `v${item.update.target}`;
   switch (state) {
     case 'not-installed':
@@ -53,7 +55,8 @@ export function stateText(state: SwarmRowState, item: SwarmListItem): string {
     case 'gone':
       return version;
     case 'current':
-      return `${version} · up to date`;
+      // "bundled" is older than every release: never claim it is up to date.
+      return item.installed !== null && isBundled(item.installed.version) ? version : `${version} · up to date`;
   }
 }
 

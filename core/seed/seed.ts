@@ -108,6 +108,8 @@ export interface SeedOptions {
   history?: string;
   /** Folders (`skills/tdd`, `agents/builder`) an installed swarm owns: passed over as if not shipped (HIVE-441). */
   exclude?: ReadonlySet<string>;
+  /** Folders a swarm install found already on disk, owned by nobody (HIVE-447): their files stay, recorded as edited. */
+  claim?: ReadonlySet<string>;
 }
 
 /** The files merged part by part rather than whole. */
@@ -249,6 +251,7 @@ export async function seedShipped(options: SeedOptions): Promise<SeedReport> {
 
   for (const folder of await shippedFolders(options.source, options.exclude)) {
     const destinationDir = join(options.target, folder);
+    const claimed = options.claim?.has(folder) === true;
     if (await throughLink(options.target, folder)) {
       report.skipped.push(folder);
       continue;
@@ -326,6 +329,11 @@ export async function seedShipped(options: SeedOptions): Promise<SeedReport> {
         // No record and no shipped version to compare against: a file that
         // was there before the app shipped one. Theirs, as it always was.
         if (base === null) {
+          // Claimed (HIVE-447): still theirs, byte for byte, and from now on an edited file of the swarm that ships it.
+          if (claimed) {
+            next[rel] = shippedHash;
+            parts[rel] = baseOf(text);
+          }
           report.kept.push(rel);
           continue;
         }
@@ -356,7 +364,9 @@ export async function seedShipped(options: SeedOptions): Promise<SeedReport> {
 
       // Edited by the user since the last seed, or present before the first
       // one. Theirs. The manifest keeps whatever it held, so a later revert
-      // to the seeded bytes reads as untouched again.
+      // to the seeded bytes reads as untouched again. A claimed file with no record is recorded against the shipped
+      // copy, so it reads as edited (HIVE-447).
+      if (claimed && !(rel in manifest.files)) next[rel] = shippedHash;
       report.kept.push(rel);
     }
   }
