@@ -317,14 +317,6 @@ describe('the explorer tree', () => {
   });
 });
 
-/**
- * Which pane settings opens on (HIVE-116).
- *
- * The overlay's rule — always land on Projects — was written for the route
- * that dominates: the picker discovering there are no projects. A caller that
- * *names* a pane is answering a question the user just asked, and the rule has
- * to make room for it without losing the default.
- */
 describe('the swarm install link request (HIVE-442)', () => {
   beforeEach(() => {
     useUiStore.getState().reset();
@@ -349,6 +341,14 @@ describe('the swarm install link request (HIVE-442)', () => {
   });
 });
 
+/**
+ * Which pane settings opens on (HIVE-116).
+ *
+ * The overlay's rule — always land on Projects — was written for the route
+ * that dominates: the picker discovering there are no projects. A caller that
+ * *names* a pane is answering a question the user just asked, and the rule has
+ * to make room for it without losing the default.
+ */
 describe('openSettings and its pane', () => {
   beforeEach(() => {
     useUiStore.getState().reset();

@@ -1058,11 +1058,11 @@ export const useMarkAnsweredHere = () => useUiStore((state) => state.markAnswere
 /** Inbox arrival and drawer actions, referentially stable. */
 export const useInboxActions = () => useUiStore(useShallow(inboxActionsSelector));
 
-/** Settings actions, referentially stable across unrelated state changes. */
 /** HIVE-442: the swarm an install link named, until Settings › Swarms resolves it. */
 export const useSwarmInstallRequest = () => useUiStore((state) => state.swarmInstallRequest);
 export const useSetSwarmInstallRequest = () => useUiStore((state) => state.setSwarmInstallRequest);
 
+/** Settings actions, referentially stable across unrelated state changes. */
 export const useSettingsActions = () =>
   useUiStore(useShallow(settingsActionsSelector));
 
