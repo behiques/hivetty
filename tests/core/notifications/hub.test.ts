@@ -1439,16 +1439,16 @@ describe('deliverAsWell: the row that replaces another keeps its toast (6 Oct 20
     hub.raise({ kind: 'session.idle', title: 'is yours again', action: session });
     present.mockClear();
 
-    hub.raise({ kind: 'session.input_needed', title: 'is waiting on you', action: session, deliverAsWell: 'session.idle' });
+    hub.raise({ kind: 'session.input_needed', title: 'summoning you', action: session, deliverAsWell: 'session.idle' });
 
     expect(present).toHaveBeenCalledTimes(1);
   });
 
   it('keeps its own delivery when there is no idle row to take over', () => {
-    hub.raise({ kind: 'session.input_needed', title: 'is waiting on you', action: session, deliverAsWell: 'session.idle' });
+    hub.raise({ kind: 'session.input_needed', title: 'summoning you', action: session, deliverAsWell: 'session.idle' });
     hub.raise({ kind: 'session.idle', title: 'is yours again', action: { type: 'session', entityId: 'term-9' } });
     present.mockClear();
-    hub.raise({ kind: 'session.input_needed', title: 'is waiting on you', action: session, deliverAsWell: 'session.idle' });
+    hub.raise({ kind: 'session.input_needed', title: 'summoning you', action: session, deliverAsWell: 'session.idle' });
 
     expect(present).not.toHaveBeenCalled();
   });

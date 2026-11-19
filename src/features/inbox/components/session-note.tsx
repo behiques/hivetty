@@ -4,6 +4,7 @@ import { isSession } from '@/types/entity';
 import type { HiveNotification } from '@/types/notification';
 
 import { Button } from '@components/ui/button';
+import { Hint } from '@components/ui/hint';
 import { useCurrentRow, useDisplayName, useEntity, useOpenEntity } from '@stores/hive-store';
 import { useInboxActions } from '@stores/ui-store';
 
@@ -70,10 +71,13 @@ export function SessionNote({ notif, variant, onFold }: SessionNoteProps) {
     >
       <div className="flex items-center gap-[7px] text-control text-muted">
         <span aria-hidden className="size-2 shrink-0 rounded-full bg-amber" />
-        <b className="font-semibold text-ink">{name}</b>
-        <span>{notif.title}</span>
+        {/* One line: a long name gives way with an ellipsis, what happened never does. */}
+        <Hint label={name}>
+          <b className="min-w-0 truncate font-semibold text-ink">{name}</b>
+        </Hint>
+        <span className="shrink-0 whitespace-nowrap">{notif.title}</span>
         <span className="flex-1" />
-        <span className="tabular-nums text-amber-text">now</span>
+        <span className="shrink-0 tabular-nums text-amber-text">now</span>
         <button
           type="button"
           aria-label="Fold into the pill"

@@ -144,7 +144,7 @@ const PLAIN_COPY: Partial<
   Record<NotificationKind, { title: string; body: string }>
 > = {
   'session.input_needed': {
-    title: 'is waiting on you',
+    title: 'summoning you',
     body: 'It finished its turn and has nothing left to do.',
   },
   'session.idle': {
@@ -246,7 +246,7 @@ function waitingKind(kind: unknown, reason: unknown): NotificationKind | undefin
  * `terminated` was the only ending this module knew, because it was the only
  * one main could publish. `/done` added a second, and every check that meant
  * "this session is finished" has to cover both or it silently covers neither
- * for half of them: a `/done` row would keep a pending "is waiting on you" row
+ * for half of them: a `/done` row would keep a pending "summoning you" row
  * alive, promotable into a toast whose click opens a session that is gone.
  *
  * A predicate rather than three widened conditions, so the next ending is added

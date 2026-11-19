@@ -169,7 +169,7 @@ describe('the Notification hook', () => {
     expect(raised().kind).toBe('session.input_needed');
     // It replaces the session's idle row, so it delivers at least as that row would.
     expect(raised().deliverAsWell).toBe('session.idle');
-    expect(raised().title).toBe('is waiting on you');
+    expect(raised().title).toBe('summoning you');
     expect(raised().action).toEqual({ type: 'session', entityId: 'lead-form' });
   });
 
@@ -267,7 +267,7 @@ describe('the Notification hook', () => {
     n.observe(CH.sessionStatus, notice('call-notes', 'idle'));
 
     expect(raise).toHaveBeenCalledTimes(2);
-    expect(raise.mock.calls[1][0].title).toBe('is waiting on you');
+    expect(raise.mock.calls[1][0].title).toBe('summoning you');
   });
 });
 
