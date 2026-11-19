@@ -1,5 +1,7 @@
 import { resolve } from 'node:path';
 
+import { isSwarmId } from '@shared/swarm-contract';
+
 /**
  * The `hivetty://` deep link (HIVE-264). Packaged builds own `hivetty` (Info.plist, through
  * electron-builder's `protocols`); unpackaged builds register `hivetty-dev` at runtime, so a dev build
@@ -24,6 +26,25 @@ export function parseCallback(url: string, scheme: Scheme): { code: string; stat
   const code = parsed.searchParams.get('code');
   const state = parsed.searchParams.get('state');
   return code && state ? { code, state } : null;
+}
+
+/**
+ * Only `<scheme>://swarms/install?id=<swarm id>` (HIVE-442); anything else is dropped. A link names a swarm
+ * and nothing more: the app looks the repository up itself, and shows the consent screen before any install.
+ */
+export function parseSwarmInstall(url: string, scheme: Scheme): { swarmId: string } | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== `${scheme}:` || parsed.host !== 'swarms' || parsed.pathname !== '/install') return null;
+  if (parsed.username !== '' || parsed.password !== '' || parsed.hash !== '') return null;
+  const params = [...parsed.searchParams];
+  if (params.length !== 1 || params[0]?.[0] !== 'id') return null;
+  const swarmId = params[0][1];
+  return isSwarmId(swarmId) ? { swarmId } : null;
 }
 
 export function findDeepLink(argv: readonly string[], scheme: Scheme): string | null {

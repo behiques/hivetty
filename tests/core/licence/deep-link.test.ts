@@ -6,6 +6,7 @@ import {
   findDeepLink,
   installDeepLinks,
   parseCallback,
+  parseSwarmInstall,
   redirectUriFor,
   schemeFor,
 } from '../../../core/licence/deep-link';
@@ -40,6 +41,45 @@ describe('parseCallback', () => {
     ['https', 'https://auth/callback?code=x&state=y', 'hivetty'],
   ] as const)('drops %s', (_name, url, scheme) => {
     expect(parseCallback(url, scheme)).toBeNull();
+  });
+});
+
+describe('parseSwarmInstall', () => {
+  it.each([
+    ['the packaged scheme', 'hivetty://swarms/install?id=a1_B-9', 'hivetty', 'a1_B-9'],
+    ['the dev scheme', 'hivetty-dev://swarms/install?id=x', 'hivetty-dev', 'x'],
+  ] as const)('accepts %s', (_name, url, scheme, swarmId) => {
+    expect(parseSwarmInstall(url, scheme)).toEqual({ swarmId });
+  });
+
+  it.each([
+    ['a dev build handed the packaged scheme', 'hivetty://swarms/install?id=x', 'hivetty-dev'],
+    ['the packaged build handed the dev scheme', 'hivetty-dev://swarms/install?id=x', 'hivetty'],
+    ['https', 'https://swarms/install?id=x', 'hivetty'],
+    ['host swarm', 'hivetty://swarm/install?id=x', 'hivetty'],
+    ['host auth', 'hivetty://auth/install?id=x', 'hivetty'],
+    ['a trailing slash', 'hivetty://swarms/install/?id=x', 'hivetty'],
+    ['a longer path', 'hivetty://swarms/install/x?id=x', 'hivetty'],
+    ['another path', 'hivetty://swarms/remove?id=x', 'hivetty'],
+    ['no path', 'hivetty://swarms?id=x', 'hivetty'],
+    ['a port', 'hivetty://swarms:80/install?id=x', 'hivetty'],
+    ['a user and password', 'hivetty://u:p@swarms/install?id=x', 'hivetty'],
+    ['a fragment', 'hivetty://swarms/install?id=x#frag', 'hivetty'],
+    ['no id', 'hivetty://swarms/install', 'hivetty'],
+    ['an empty id', 'hivetty://swarms/install?id=', 'hivetty'],
+    ['a path in the id', 'hivetty://swarms/install?id=../x', 'hivetty'],
+    ['an encoded slash in the id', 'hivetty://swarms/install?id=a%2Fb', 'hivetty'],
+    ['a 65-character id', `hivetty://swarms/install?id=${'a'.repeat(65)}`, 'hivetty'],
+    ['a repeated id', 'hivetty://swarms/install?id=x&id=y', 'hivetty'],
+    ['another parameter', 'hivetty://swarms/install?id=x&repoUrl=https://evil', 'hivetty'],
+    ['not a URL', 'not a url', 'hivetty'],
+    ['the sign-in callback', 'hivetty://auth/callback?code=x&state=y', 'hivetty'],
+  ] as const)('drops %s', (_name, url, scheme) => {
+    expect(parseSwarmInstall(url, scheme)).toBeNull();
+  });
+
+  it('leaves parseCallback dropping a swarm link', () => {
+    expect(parseCallback('hivetty://swarms/install?id=x', 'hivetty')).toBeNull();
   });
 });
 
