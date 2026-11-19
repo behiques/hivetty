@@ -110,5 +110,12 @@ given and take the full-bleed master.
 `skills/<name>/` and `agents/<name>/AGENT.md` are copied into `~/.hivetty` when the app
 starts (HIVE-162, `core/seed/`). An agent folder ships exactly its `AGENT.md`;
 a skill folder ships whole. The user's edits win over updates; see
-`docs/guide/skills.md`. `agents/README.md` exists so the folder is packaged before the
-first agent lands: electron-builder ships nothing for an empty directory.
+`docs/guide/skills.md`.
+
+The Standard swarm's source is `behiques/hivetty-swarms` (HIVE-439). These two
+folders are a copy of the tag recorded in `swarm.lock.json`, with a sha256 per
+file. Never edit them here: edit the swarm in hivetty-swarms, tag it, then run
+`pnpm swarm:pull <tag>`, which replaces both folders with the tag's and writes
+the lock. `tests/resources/swarm-lock.test.ts` recomputes the hashes, so a hand
+edit, an added file or a removed one fails `pnpm test`. The lock sits outside
+the two packaged folders, so it does not ship.

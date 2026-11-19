@@ -2721,6 +2721,13 @@ only when the copy on disk is byte-identical to what the last seed wrote
 (`~/.hivetty/.seed.json` holds that hash per file), and otherwise left alone. A
 shipped file that is later dropped from `resources/` is never deleted.
 
+Those two folders are not edited in this repo (HIVE-439). The Standard swarm's
+source is `behiques/hivetty-swarms`: change an agent or a skill there, tag it,
+and bring the tag in with `pnpm swarm:pull <tag>`, which replaces both folders
+and writes `resources/swarm.lock.json`, a sha256 per file.
+`tests/resources/swarm-lock.test.ts` fails on any file that differs from the
+lock.
+
 `AGENT.md` and `SKILL.md` are the exception to "left alone": an edited one is
 **merged**, because one edited key used to freeze a whole agent, prompt and
 all. `seed/merge.ts` splits the file into parts: each top-level frontmatter
