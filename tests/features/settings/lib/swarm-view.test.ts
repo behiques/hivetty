@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   badgeOf,
   browseGroups,
-  consentFingerprint,
   countsOf,
   diffContents,
   installVersionOf,
@@ -257,29 +256,18 @@ describe('needsConsent', () => {
     installed: installedSwarm({ kind: 'organization', org: ACME }),
   });
 
-  const seen = notInstalled.entry === null ? '' : consentFingerprint(notInstalled.entry);
-
-  it.each<[string, SwarmListItem, string | null, boolean]>([
-    ['not installed', notInstalled, null, true],
-    ['not installed, consented to this very row before (Try again)', notInstalled, seen, false],
-    ['installed community', available, null, true],
-    ['installed native', current, null, false],
-    ['installed organization', organization, null, false],
-    ['installed community, an earlier consent never skips the review', available, seen, true],
-    ['installed community with no row (kind from the installed entry)', swarmItem({ entry: null, installed: installedSwarm({ kind: 'community' }) }), null, true],
-  ])('%s', (_name, item, consented, expected) => {
-    expect(needsConsent(item, consented)).toBe(expected);
+  it.each<[string, SwarmListItem, boolean]>([
+    ['not installed', notInstalled, true],
+    ['installed community', available, true],
+    ['installed native', current, false],
+    ['installed organization', organization, false],
+    ['installed community with no row (kind from the installed entry)', swarmItem({ entry: null, installed: installedSwarm({ kind: 'community' }) }), true],
+  ])('%s', (_name, item, expected) => {
+    expect(needsConsent(item)).toBe(expected);
   });
 
-  it.each<[string, Partial<Parameters<typeof swarmEntry>[0]>]>([
-    ['a new version', { version: '1.5.0' }],
-    ['a new commit', { commit: 'b'.repeat(40) }],
-    ['a tool added to an agent', { agents: [{ name: 'builder', description: 'Builds plans.', tools: ['Read', 'Edit', 'Bash', 'WebFetch'] }] }],
-    ['a new agent', { agents: [...swarmEntry().agents, { name: 'spy', description: 'x', tools: ['Bash'] }] }],
-    ['a new skill', { skills: [...swarmEntry().skills, { name: 'exfil', description: 'x' }] }],
-    ['a new pin', { policy: 'pinned', pinnedVersion: '2.0.0' }],
-  ])('a retry asks again when the registry row changed since consent: %s', (_name, over) => {
-    expect(needsConsent(swarmItem({ entry: swarmEntry(over) }), seen)).toBe(true);
+  it('a retry of a failed first install needs consent: the registry row may have moved since the failure', () => {
+    expect(needsConsent(swarmItem({ entry: swarmEntry({ version: '1.5.0' }) }))).toBe(true);
   });
 
   it.each<[string, SwarmListItem]>([
@@ -293,14 +281,6 @@ describe('needsConsent', () => {
     ],
   ])('asks when either kind is community: %s', (_name, item) => {
     expect(needsConsent(item)).toBe(true);
-  });
-
-  it('a description or install count moving does not ask again', () => {
-    expect(needsConsent(swarmItem({ entry: swarmEntry({ description: 'Reworded.', installs: 99 }) }), seen)).toBe(false);
-  });
-
-  it('defaults to no earlier consent', () => {
-    expect(needsConsent(notInstalled)).toBe(true);
   });
 });
 

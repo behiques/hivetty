@@ -6,7 +6,6 @@ import { SwarmConsent } from '@/features/settings/components/swarm-consent';
 import { SwarmRow } from '@/features/settings/components/swarm-row';
 import { SwarmsBrowse } from '@/features/settings/components/swarms-browse';
 import {
-  consentFingerprint,
   installedRows,
   keptFiles,
   needsConsent,
@@ -61,11 +60,6 @@ export function SwarmsSection() {
   const [consentId, setConsentId] = useState<string | null>(null);
   const consent = consentId === null ? null : (listing?.items.find((item) => item.entry?.id === consentId) ?? null);
   const [notices, setNotices] = useState<ReadonlyMap<string, string>>(new Map());
-  /*
-    What the person said yes to for each first install, as `consentFingerprint`s. Try again on a failed
-    install skips the dialog only while the row still matches; a row that moved asks again.
-  */
-  const [consented, setConsented] = useState<ReadonlyMap<string, string>>(new Map());
   const account = useAccount();
   const signedIn = account?.kind === 'signed-in';
   const linkRequest = useSwarmInstallRequest();
@@ -107,10 +101,10 @@ export function SwarmsSection() {
     void loadShipped();
   }, [listing]);
 
-  /** Every path to `swarms:install` (HIVE-442). Consent first, unless this very row was already consented to. */
+  /** Every path to `swarms:install` (HIVE-442). Consent first for anything not installed, Try again included. */
   const request = (item: SwarmListItem): void => {
     if (item.entry === null) return; // no registry row: nothing can be installed
-    if (needsConsent(item, consented.get(item.entry.id) ?? null)) setConsentId(item.entry.id);
+    if (needsConsent(item)) setConsentId(item.entry.id);
     else void installSwarm(item.entry.id);
   };
 
@@ -118,9 +112,7 @@ export function SwarmsSection() {
     const item = consent;
     setConsentId(null);
     if (!item?.entry) return;
-    const { entry } = item;
-    if (item.installed === null) setConsented((was) => new Map(was).set(entry.id, consentFingerprint(entry)));
-    void installSwarm(entry.id);
+    void installSwarm(item.entry.id);
   };
 
   const check = (): void => {

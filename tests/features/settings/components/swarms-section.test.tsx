@@ -218,43 +218,23 @@ describe('SwarmsSection', () => {
     expect(swarms.dismissSwarmFailure).toHaveBeenCalledWith('standard');
   });
 
-  const consentThenFail = () => {
-    const view = render(<SwarmsSection />);
+  it('Try again on a failed first install opens the dialog again, even after consent; Install in it installs once', () => {
+    const { rerender } = render(<SwarmsSection />);
     fireEvent.click(screen.getByRole('button', { name: 'Browse swarms' }));
     fireEvent.click(within(screen.getByRole('region', { name: 'Native' })).getByRole('button', { name: 'Install' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Install' }));
     expect(swarms.installSwarm).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Installed swarms' }));
-    return view;
-  };
-
-  it('Try again installs with no dialog when the row is still the one consented to', () => {
-    const { rerender } = consentThenFail();
     serve({ failures: new Map([['standard', FAILED]]) });
     rerender(<SwarmsSection />);
 
     fireEvent.click(within(rowOf('Standard')).getByRole('button', { name: 'Try again' }));
 
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(swarms.installSwarm).toHaveBeenCalledTimes(2);
-  });
-
-  it('Try again reopens the dialog when the registry row moved since consent', () => {
-    const { rerender } = consentThenFail();
-    const moved = swarmItem({
-      entry: swarmEntry({
-        id: 'standard',
-        version: '1.5.0',
-        agents: [{ name: 'builder', description: 'Builds plans.', tools: ['Read', 'Edit', 'Bash', 'WebFetch'] }],
-      }),
-    });
-    serve({ listing: swarmListing([moved, community, organization]), failures: new Map([['standard', FAILED]]) });
-    rerender(<SwarmsSection />);
-
-    fireEvent.click(within(rowOf('Standard')).getByRole('button', { name: 'Try again' }));
-
-    expect(within(screen.getByRole('dialog')).getByText('WebFetch')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Install Standard' })).toBeInTheDocument();
     expect(swarms.installSwarm).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Install' }));
+    expect(swarms.installSwarm).toHaveBeenCalledTimes(2);
+    expect(swarms.installSwarm).toHaveBeenLastCalledWith('standard');
   });
 
   it('a removal in flight reads Removing…', () => {
