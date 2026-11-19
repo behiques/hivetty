@@ -73,7 +73,8 @@ describe('stateText', () => {
     ['failed-update', failedUpdate, 'v1.4.0 · update failed'],
     ['gone', gone, 'v1.2.0'],
     ['available', bundled, 'Bundled · v1.0.1 available'],
-    ['current', bundledCurrent, 'Bundled · up to date'],
+    ['current', bundledCurrent, 'Bundled'],
+    ['current', swarmItem({ entry: null, installed: installedSwarm({ version: 'bundled' }) }), 'Bundled'],
   ])('%s', (state, item, expected) => {
     expect(stateText(state, item)).toBe(expected);
   });

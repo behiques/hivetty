@@ -310,6 +310,16 @@ describe('the shipped handlers over every seed set (HIVE-441)', () => {
 });
 
 describe('the boot seed (HIVE-441, HIVE-447)', () => {
+  /** Lets every pending step run, on fake time: AGENTS.md allows no real waits. */
+  const settle = async (): Promise<void> => {
+    vi.useFakeTimers();
+    try {
+      await vi.advanceTimersByTimeAsync(20);
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+
   const restart = (): void => {
     resetIpcHandlers();
     vi.clearAllMocks();
@@ -334,7 +344,7 @@ describe('the boot seed (HIVE-441, HIVE-447)', () => {
       ready = true;
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await settle();
     expect(ready).toBe(false);
 
     boot.release();
@@ -348,7 +358,7 @@ describe('the boot seed (HIVE-441, HIVE-447)', () => {
       answered = true;
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await settle();
     expect(answered).toBe(false);
     expect(seed.shippedStatus).not.toHaveBeenCalled();
 

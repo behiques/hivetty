@@ -176,6 +176,9 @@ export function swarmCalls(): SwarmCalls {
     list,
     install: async (payload) => {
       const { swarmId } = parseSwarmRequest(payload);
+      // The install waits for the seed and the adoption in its queue anyway. Waiting here first lets the read below
+      // re-key an entry adopted meanwhile, so a first-launch click updates it instead of colliding with it.
+      await hooks.ready();
       // The row comes from the registry, never from the caller: a renderer cannot name a repository.
       const entry = (await registry()).swarms.find((row) => row.id === swarmId);
       if (entry === undefined) {

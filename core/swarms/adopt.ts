@@ -113,10 +113,6 @@ export async function adoptBuiltIns(deps: AdoptDeps): Promise<void> {
   await writeFile(paths.adopted, ''); // last: only a finished adoption stops the boot seed
 }
 
-/**
- * The registry named Standard: the adopted entry takes the registry's id, so install, update and the listing
- * match it by id like any other swarm. Each step tolerates having already run.
- */
 /** The registry's Standard row, when its id can become a folder and is not the local one. */
 function standardRow(rows: readonly SwarmEntry[]): SwarmEntry | null {
   const row = rows.find((one) => one.kind === STANDARD.kind && one.slug === STANDARD.slug);
@@ -134,6 +130,10 @@ export function rekeyTarget(rows: readonly SwarmEntry[], held: readonly Installe
   return row;
 }
 
+/**
+ * The registry named Standard: the adopted entry takes the registry's id, so install, update and the listing
+ * match it by id like any other swarm. Each step tolerates having already run.
+ */
 export async function rekeyAdopted(hiveDir: string, rows: readonly SwarmEntry[]): Promise<boolean> {
   if (standardRow(rows) === null) return false;
   const paths = swarmPaths(hiveDir);

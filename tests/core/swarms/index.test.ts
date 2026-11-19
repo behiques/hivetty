@@ -697,6 +697,34 @@ describe('the adopted Standard and the registry (HIVE-447)', () => {
     expect(answer).toBe('listed');
   });
 
+  it('re-keys the adopted entry before an install clicked while the boot adoption was still running', async () => {
+    const { writeFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const installedJson = join(home, 'swarms/installed.json');
+    await writeFile(installedJson, '[]'); // first launch: adoption has not written its entry yet
+    let finishAdoption: () => void = () => undefined;
+    const adopted = new Promise<void>((resolve) => (finishAdoption = resolve)).then(() =>
+      writeFile(installedJson, JSON.stringify([{ ...heldAt('bundled-standard', 'bundled'), autoUpdate: true }])),
+    );
+    h.ready.mockImplementation(() => adopted);
+    // As the engine does: the queue waits for the seed and the adoption, then reads what it replaces.
+    let replaced: InstalledSwarm | null | undefined;
+    engine.installIf.mockImplementation(async (target: SwarmEntry) => {
+      await h.ready();
+      replaced = ((await engine.installed()) as InstalledSwarm[]).find((held) => held.swarmId === target.id) ?? null;
+      return { ok: true, installed: heldAt(target.id, '1.0.1') };
+    });
+
+    const clicked = swarmCalls().install({ swarmId: REAL });
+    await new Promise((resolve) => setImmediate(resolve));
+    finishAdoption();
+    await clicked;
+
+    // Without the re-key the install finds nothing to replace and collides with bundled-standard's folders.
+    expect(replaced?.swarmId).toBe(REAL);
+    expect(replaced?.version).toBe('bundled');
+  });
+
   it('never fails the read when the re-key throws', async () => {
     const { writeFile } = await import('node:fs/promises');
     const { join } = await import('node:path');

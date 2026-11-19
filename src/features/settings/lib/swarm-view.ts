@@ -1,5 +1,6 @@
 import type { ShippedStatus } from '@shared/shipped-contract';
 import {
+  isBundled,
   versionLabel,
   type InstalledSwarm,
   type SwarmContents,
@@ -54,7 +55,8 @@ export function stateText(state: SwarmRowState, item: SwarmListItem): string {
     case 'gone':
       return version;
     case 'current':
-      return `${version} · up to date`;
+      // "bundled" is older than every release: never claim it is up to date.
+      return item.installed !== null && isBundled(item.installed.version) ? version : `${version} · up to date`;
   }
 }
 
