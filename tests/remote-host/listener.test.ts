@@ -1411,14 +1411,6 @@ describe('post-attach frames', () => {
   });
 });
 
-/**
- * The call deadline (HIVE-144): `dispatch.call` never rejects, but a handler
- * can fail to settle at all — `agents:run` genuinely can, per
- * `listener.ts`'s own comment at the `dispatch.call` site. Fake timers
- * throughout, armed *after* {@link attachedSocket}'s real handshake has
- * already completed, so the production `setTimeout` under test is the only
- * timer these cases control.
- */
 describe('the audit trail (HIVE-427)', () => {
   const attachFrame = (deviceId: string, token: string, protocol = REMOTE_PROTOCOL_VERSION) => ({
     kind: 'attach', protocol, deviceId, token,
@@ -1515,6 +1507,14 @@ describe('the audit trail (HIVE-427)', () => {
   });
 });
 
+/**
+ * The call deadline (HIVE-144): `dispatch.call` never rejects, but a handler
+ * can fail to settle at all — `agents:run` genuinely can, per
+ * `listener.ts`'s own comment at the `dispatch.call` site. Fake timers
+ * throughout, armed *after* {@link attachedSocket}'s real handshake has
+ * already completed, so the production `setTimeout` under test is the only
+ * timer these cases control.
+ */
 describe('the call deadline (HIVE-144)', () => {
   afterEach(() => {
     vi.useRealTimers();
