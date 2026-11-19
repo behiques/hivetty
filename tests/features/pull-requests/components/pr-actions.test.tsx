@@ -36,6 +36,16 @@ describe('PrActions', () => {
     expect(screen.getByRole('button', { name: /Merge · after approval/ })).toBeDisabled();
   });
 
+  it("starts the Button actions at the left in the link's weight, not centred and semibold", () => {
+    render(<PrActions row={hatchRow()} />);
+    for (const name of [/Merge/, /Ask acr/]) {
+      const action = screen.getByRole('button', { name });
+      expect(action).toHaveClass('justify-start', 'font-normal');
+      expect(action).not.toHaveClass('justify-center');
+      expect(action).not.toHaveClass('font-semibold');
+    }
+  });
+
   it("answers the shipper's merge card with the narrowest rung (R5)", async () => {
     answerAsk.mockResolvedValue({ ok: true, id: 'x' });
     useHiveStore.setState({ ledger: [mergeCard] });

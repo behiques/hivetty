@@ -166,10 +166,11 @@ export function PrProperties({
   );
 }
 
-// The resets (`rounded-none border-0 leading-normal hover:bg-transparent hover:text-brand`) undo the
-// ghost `Button`'s chrome on the two actions that use it; on the link they are no-ops (HIVE-225).
+// The resets (`justify-start rounded-none border-0 font-normal leading-normal hover:bg-transparent
+// hover:text-brand`) undo the ghost `Button`'s chrome on the two actions that use it; on the link
+// they are no-ops (HIVE-225).
 const ACTION =
-  'flex items-center gap-2 rounded-none border-0 px-1 py-1.5 text-left text-control leading-normal text-brand hover:bg-transparent hover:text-brand hover:underline disabled:cursor-not-allowed disabled:text-subtle disabled:no-underline aria-disabled:cursor-not-allowed aria-disabled:text-subtle aria-disabled:no-underline';
+  'flex items-center justify-start gap-2 rounded-none border-0 px-1 py-1.5 text-left font-normal text-control leading-normal text-brand hover:bg-transparent hover:text-brand hover:underline disabled:cursor-not-allowed disabled:text-subtle disabled:no-underline aria-disabled:cursor-not-allowed aria-disabled:text-subtle aria-disabled:no-underline';
 
 /**
  * What can be done from the page (HIVE-205, D16). No new `gh` writes: Merge
