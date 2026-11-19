@@ -1197,6 +1197,17 @@ whose listener `index.ts` installs in `will-finish-launching` so a link that col
 missed; links are held until the licence starts at `whenReady`. `second-instance` argv is scanned too, for
 Windows and Linux. Only `…://auth/callback` with the pending `state` is ever acted on.
 
+The router carries a second kind of link since HIVE-442: `…://swarms/install?id=<swarm id>`. The one handler
+`index.ts` attaches is a dispatcher, `routeDeepLink` in `electron/main/swarm-link.ts`: a link that
+`parseSwarmInstall` (`core/licence/deep-link.ts`) accepts goes to the swarms, and every other link to
+`licence.handleCallback` as before, the malformed ones included. A swarm link is held in `core/swarms` by
+`requestSwarmInstall` (one id, the latest) and the app's window is brought forward through
+`focusPrimaryWindow` (`lifecycle.ts`, shared with `second-instance`), after the `whenReady` callbacks already
+queued, so a link that cold-starts the app does not open a second window. Core pushes
+`swarms:install-requested` (local only); the renderer takes the id with `swarms:take-install-request`
+(process-local) on mount and on each push, so a link that arrives before the window loads is not lost. The
+renderer opens Settings › Swarms, which shows sign-in, the consent dialog or a sentence. A link never installs.
+
 The account calls (`account:state`, `account:sign-in`, `account:cancel`, `account:sign-out`) are
 `PROCESS_LOCAL` and `account:changed` is `LOCAL_ONLY_EVENTS`: an attached window never signs the server in.
 In a dev build a link reaches a running app only: macOS ignores `setAsDefaultProtocolClient`'s arguments.

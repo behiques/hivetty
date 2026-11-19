@@ -34,6 +34,7 @@ New here? Start with [Getting started](guide/getting-started.md), then
 
 | Page | What you will learn |
 | --- | --- |
+| [Swarms](guide/swarms.md) | Install sets of agents and skills, keep them updated, and install from a link |
 | [Agents](guide/agents.md) | Background runs on Claude Code, Codex or Copilot that wake on their own |
 | [The ledger](guide/ledger.md) | The shared log sessions and agents talk through |
 | [Slack](guide/slack.md) | Let agents read Slack, and command them from it |
