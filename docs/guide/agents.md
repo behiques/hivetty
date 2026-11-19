@@ -20,21 +20,26 @@ body that is its standing job. Each wake is one headless run of its CLI (`claude
   <img src="../assets/diagrams/agent-wake.light.svg" alt="An agent wakes, reads its ledger inbox, does its job, then either asks you and waits for the answer or reports done">
 </picture>
 
-## Agents the app ships
+## Agents from swarms
 
-Agents come with HiveTTY: the app's own `resources/agents/` is copied into
-`~/.hivetty/agents` on launch, the way shipped skills are ([Custom skills](skills.md)).
-Today that is **builder**, which builds an approved plan in its own worktree and opens
-the draft PR, **shipper**, the PR endgame, **acr**, the reviewer it asks (named after the
-review tool it runs, `acr`, which is a command on the machine, not this agent), and **fixer**,
-which works through a PR's findings on the PR branch. None of them ships with a budget: no
-`limits.budget_usd` and no `limits.daily_usd`, so a fresh install spends without a cap until you set
-one in Settings › Agents, and a cap you set stays set through updates. Your edits win, and updates still arrive
-around them: each setting and the prompt update on their own, so a `limits.parallel` you raised
-stays raised while a new prompt and new keys such as `lane:` still land. Settings › Agents marks
-an agent you changed with a blue dot and names what differs, with **Reset to shipped**. If you
-rewrote the prompt and a newer one ships, the dot turns amber and the new prompt is held until
-you choose **Compare**, **Take shipped prompt** or **Keep mine**. An agent you deleted stays deleted.
+Agents come in swarms: sets of agents and skills that install together and update when their
+publisher releases a new version ([Swarms](swarms.md)). An existing install already has the
+**Standard** swarm, which carries the ticket-to-merge workflow: **builder**, which builds an
+approved plan in its own worktree and opens the draft PR, **shipper**, the PR endgame, **acr**,
+the reviewer it asks (named after the review tool it runs, `acr`, which is a command on the
+machine, not this agent), and **fixer**, which works through a PR's findings on the PR branch.
+Settings › Automation › Swarms installs, updates and removes swarms. With no agent installed at
+all, the Agents place, Settings › Agents and Home say agents come in swarms and offer
+**Install Standard** and **Browse swarms**.
+
+None of Standard's agents has a budget: no `limits.budget_usd` and no `limits.daily_usd`, so they
+spend without a cap until you set one in Settings › Agents, and a cap you set stays set through
+updates. Your edits win, and updates still arrive around them: each setting and the prompt update
+on their own, so a `limits.parallel` you raised stays raised while a new prompt and new keys such
+as `lane:` still land. Settings › Agents marks an agent you changed with a blue dot and names what
+differs, with **Reset to shipped**. If you rewrote the prompt and a newer one arrives, the dot
+turns amber and the new prompt is held until you choose **Compare**, **Take shipped prompt** or
+**Keep mine**. An agent you deleted stays deleted.
 
 ## Create an agent
 
