@@ -238,6 +238,9 @@ export const swarmSeedSets = (): Promise<{ shipped: SeedOptions; swarms: SeedOpt
  * The boot seed, then adoption (HIVE-447). Once a home is adopted the seed from `resources/` never runs there
  * again. This is the promise every install, removal and seed action waits for (`hooks.ready`), so adoption runs
  * here and never in their queue: queued behind them it would wait on itself. Never rejects.
+ *
+ * `seed` answers null for a seed that failed, as `seedShippedIntoHive` does: no adoption and no marker then, so a
+ * home whose seed failed is seeded again at the next launch.
  */
 export async function seedAndAdopt(seed: (exclude: ReadonlySet<string> | undefined) => Promise<unknown>): Promise<void> {
   const dir = hiveDir();
@@ -252,7 +255,7 @@ export async function seedAndAdopt(seed: (exclude: ReadonlySet<string> | undefin
     () => undefined,
   );
   try {
-    await seed(exclude);
+    if ((await seed(exclude)) === null) throw new Error('the shipped seed failed');
     await adoptBuiltIns({ hiveDir: dir, shippedManifest: shippedOptions().manifestFile });
   } catch (cause) {
     console.info(`[hive] the built-in agents and skills could not be adopted as the Standard swarm (${String(cause)})`);

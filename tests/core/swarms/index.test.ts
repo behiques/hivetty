@@ -725,13 +725,14 @@ describe('seedAndAdopt: the boot seed, then adoption (HIVE-447)', () => {
     await fs.mkdir(at('agents/builder'), { recursive: true });
     await fs.writeFile(at('agents/builder/AGENT.md'), AGENT);
     await fs.writeFile(at('.seed.json'), JSON.stringify({ files: { 'agents/builder/AGENT.md': 'h' }, parts: {} }));
-    return null;
+    return { created: ['agents/builder/AGENT.md'], upgraded: [], kept: [], merged: [], skipped: [] };
   });
 
   beforeEach(async () => {
     home = await fs.mkdtemp(join(tmpdir(), 'hive-seed-adopt-'));
     config.path = join(home, 'config.json');
-    engine.seedSets.mockResolvedValue({ shipped: { source: '/r', target: home, manifestFile: at('.seed.json'), exclude: EXCLUDE }, swarms: [] });
+    const shipped = { source: '/r', target: home, manifestFile: at('.seed.json'), exclude: EXCLUDE };
+    engine.seedSets.mockResolvedValue({ shipped, swarms: [] });
   });
 
   afterEach(async () => {
@@ -769,6 +770,19 @@ describe('seedAndAdopt: the boot seed, then adoption (HIVE-447)', () => {
 
     expect(await exists('swarms/adopted')).toBe(false);
     expect(info).toHaveBeenCalledWith(expect.stringContaining('could not be adopted as the Standard swarm'));
+  });
+
+  it('leaves no marker when the seed reports failure with null, as seedShippedIntoHive does, and seeds again next launch', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const failing = vi.fn((_exclude: ReadonlySet<string> | undefined): Promise<unknown> => Promise.resolve(null));
+
+    await expect(seedAndAdopt(failing)).resolves.toBeUndefined();
+    expect(await exists('swarms/adopted')).toBe(false);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('could not be adopted as the Standard swarm'));
+
+    await seedAndAdopt(seedBuiltIns);
+    expect(seedBuiltIns).toHaveBeenCalledTimes(1);
+    expect(await exists('swarms/adopted')).toBe(true);
   });
 
   it('logs a seed that rejects, adopts nothing and resolves', async () => {
