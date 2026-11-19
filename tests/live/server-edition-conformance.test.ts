@@ -14,7 +14,7 @@ import {
 import { isBuiltin } from 'node:module';
 import { connect as netConnect, createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -42,6 +42,12 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  *
  * Gated behind `HIVE_LIVE_SERVER_EDITION_PROOF=1`. The `Server` workflow runs this suite against each Linux tarball
  * (HIVE-425).
+ *
+ * `HIVE_SERVER_IMAGE=<image ref>` runs only the image cases instead (HIVE-426): the base image booted with `docker run
+ * --read-only --user 20001:20001`, its home a host folder mounted at `/var/lib/hivetty` and chowned to that uid by a
+ * throwaway container, its key a file under `/run/secrets`. Case I1 needs Linux host networking to reach the loopback
+ * bind; `HIVE_SERVER_RELEASE=1` skips it. The `Server` workflow runs them against the image it builds from each tarball,
+ * and `release.yml` against the image it pushed.
  */
 const RUN = process.env['HIVE_LIVE_SERVER_EDITION_PROOF'] === '1';
 const NODE = process.env['HIVE_SERVER_NODE'] ?? process.execPath;
@@ -55,6 +61,8 @@ const BIN_ROOT = BIN === undefined ? undefined : join(BIN, '../..');
 const SERVER_OUT = BIN_ROOT === undefined ? join(ROOT, 'out/server') : join(BIN_ROOT, 'app/server');
 /** The server under test is a release build, which ignores every developer escape hatch. */
 const RELEASE = process.env['HIVE_SERVER_RELEASE'] === '1';
+/** The base image under test (HIVE-426); set, only the image cases run. */
+const IMAGE = process.env['HIVE_SERVER_IMAGE'] || undefined;
 /** Nothing listens here: the licence's cloud calls fail fast, and the lease's `iss` must equal it. */
 const CLOUD = 'http://127.0.0.1:9';
 const LOG_LINE = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z \[[a-z-]+\] /;
@@ -119,13 +127,16 @@ async function useStubCloud(home: Home): Promise<StubCloud> {
   return cloud;
 }
 
-/** A scratch HIVETTY_HOME with a loopback bind on a free port and one project, and its own HOME. */
-async function makeHome(): Promise<Home> {
+/**
+ * A scratch HIVETTY_HOME with a loopback bind on a free port and one project, and its own HOME. `serverRoot` is the
+ * path the home has where the server runs (a container's mount point), which is the path `config.json` names.
+ */
+async function makeHome(serverRoot?: string): Promise<Home> {
   const root = mkdtempSync(join(tmpdir(), 'hive-server-edition-'));
   homes.push(root);
   const port = await freePort();
-  const project = join(root, 'project');
-  mkdirSync(project);
+  const project = join(serverRoot ?? root, 'project');
+  mkdirSync(join(root, 'project'));
   mkdirSync(join(root, 'user'));
   writeFileSync(
     join(root, 'config.json'),
@@ -207,6 +218,11 @@ function runOnce(
 async function pair(home: Home): Promise<{ id: string; token: string }> {
   const { code, stdout, stderr } = await runOnce(home, ['--pair', 'smoke']);
   expect(code, stderr).toBe(0);
+  return parsePair(stdout);
+}
+
+/** `--pair`'s stdout: the token on the first line, then `Device id: …`. */
+function parsePair(stdout: string): { id: string; token: string } {
   const token = stdout.split('\n')[0]?.trim() ?? '';
   const id = /Device id: (\S+)/.exec(stdout)?.[1] ?? '';
   expect(token).not.toBe('');
@@ -323,7 +339,7 @@ function filesUnder(dir: string): string[] {
   });
 }
 
-describe.skipIf(!RUN)(`the server edition under ${BIN ?? NODE} (HIVE-422)`, () => {
+describe.skipIf(!RUN || IMAGE !== undefined)(`the server edition under ${BIN ?? NODE} (HIVE-422)`, () => {
   beforeAll(async () => {
     if (BIN !== undefined) return; // a tarball is already built; case 4 runs against it when it is a release one
     // Case 4's bundle: a release build, inside the repo so node_modules and resources/ resolve.
@@ -581,4 +597,128 @@ describe.skipIf(!RUN)(`the server edition under ${BIN ?? NODE} (HIVE-422)`, () =
     expect(lines.filter((line) => line.startsWith('HIVETTY_SECRET_KEY'))).toEqual([]);
     await stopWithin(served, 20_000);
   }, 60_000);
+});
+
+/** The uid the image cases run as: not the image's 10001, so nothing may assume it. */
+const IMAGE_USER = '20001:20001';
+const IMAGE_HOME = '/var/lib/hivetty';
+const containers: string[] = [];
+
+function docker(args: string[], timeout = 60_000): Promise<{ stdout: string; stderr: string }> {
+  return promisify(execFile)('docker', args, { timeout });
+}
+
+/** `chown -R` the host folders to `owner`, from a throwaway root container, so uid 20001 (and back) owns them. */
+async function chownAll(dirs: string[], owner: string): Promise<void> {
+  if (IMAGE === undefined) return;
+  const mounts = dirs.flatMap((dir, i) => ['-v', `${dir}:/h${String(i)}`]);
+  const targets = dirs.map((_, i) => `/h${String(i)}`);
+  await docker(['run', '--rm', '--user', '0', '--entrypoint', 'chown', ...mounts, IMAGE, '-R', owner, ...targets]);
+}
+
+/** A home and its key folder, laid out for the image and owned by uid 20001. */
+async function imageHome(lease?: string[]): Promise<{ home: Home; keyDir: string; dirs: string[] }> {
+  const home = await makeHome(IMAGE_HOME);
+  const keyDir = dirname(useKeyFile(home));
+  if (lease !== undefined) plantLease(home, lease);
+  const dirs = [home.root, keyDir];
+  await chownAll(dirs, IMAGE_USER);
+  return { home, keyDir, dirs };
+}
+
+/** `docker run` as every image case runs it: read-only, uid 20001, the home and the key mounted. */
+function runArgs(home: Home, keyDir: string, extra: string[], args: string[] = []): string[] {
+  return [
+    'run',
+    '--read-only',
+    '--user',
+    IMAGE_USER,
+    '-v',
+    `${home.root}:${IMAGE_HOME}`,
+    '-v',
+    `${keyDir}:/run/secrets:ro`,
+    '-e',
+    'HIVETTY_SECRET_KEY_FILE=/run/secrets/key',
+    ...extra,
+    IMAGE ?? '',
+    ...args,
+  ];
+}
+
+/** A served container, detached, under a name no other case uses. */
+async function serveImage(home: Home, keyDir: string, extra: string[]): Promise<string> {
+  const name = `hive-server-edition-${randomBytes(4).toString('hex')}`;
+  containers.push(name);
+  await docker(runArgs(home, keyDir, ['-d', '--name', name, ...extra]));
+  return name;
+}
+
+async function inspect(name: string, format: string): Promise<string> {
+  return (await docker(['inspect', '-f', format, name])).stdout.trim();
+}
+
+/** Waits for `predicate`, failing early, with the container's logs, when it stops running. */
+async function waitForContainer(name: string, predicate: () => Promise<boolean>, what: string): Promise<void> {
+  await waitFor(async () => {
+    if ((await inspect(name, '{{.State.Running}}')) !== 'true') {
+      const logs = await docker(['logs', name]);
+      throw new Error(`${name} exited before ${what}:\n${logs.stdout}${logs.stderr}`);
+    }
+    return predicate();
+  }, what, 60_000);
+}
+
+describe.skipIf(!RUN || IMAGE === undefined)(`the image ${IMAGE ?? ''} (HIVE-426)`, () => {
+  afterEach(async () => {
+    for (const name of containers.splice(0)) await docker(['rm', '-f', name]).catch(() => undefined);
+    // Back to this process's uid first, or the cleanup fails on what uid 20001 wrote. Docker Desktop's file sharing
+    // refuses some of these chowns while the host already owns every file; a chown that truly failed shows up as the
+    // rmSync's EACCES below, so its own error is not the one to report.
+    const owner = `${String(process.getuid?.())}:${String(process.getgid?.())}`;
+    const roots = homes.splice(0);
+    if (roots.length > 0) await chownAll(roots, owner).catch(() => undefined);
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
+  });
+
+  it.skipIf(RELEASE)('I1: pairs, serves a runners.byo lease and accepts an encrypted attach, then stops with 0', async () => {
+    const { home, keyDir } = await imageHome(['runners.byo']);
+    const dev = [
+      '-e',
+      `HIVETTY_CLOUD_URL=${home.env['HIVETTY_CLOUD_URL'] ?? ''}`,
+      '-e',
+      `HIVETTY_LEASE_KEYS=${home.env['HIVETTY_LEASE_KEYS'] ?? ''}`,
+    ];
+    const paired = await docker(runArgs(home, keyDir, ['--rm', ...dev], ['--pair', 'smoke']));
+    const device = parsePair(paired.stdout);
+
+    const name = await serveImage(home, keyDir, [...dev, '--network', 'host']);
+    await waitForContainer(name, () => accepts(home.port), `the listener on ${String(home.port)}`);
+    const client = await attach(home.port, device);
+    try {
+      expect(client.accepted['protocol']).toBe(REMOTE_PROTOCOL_VERSION);
+    } finally {
+      client.close();
+    }
+
+    await docker(['stop', '-t', '30', name], 45_000);
+    expect(await inspect(name, '{{.State.ExitCode}}')).toBe('0');
+  }, 120_000);
+
+  it('I2: with no lease, the image reports healthy, creates TMPDIR, stops with 0 inside 30 s, and logs in lines', async () => {
+    const { home, keyDir } = await imageHome();
+    const name = await serveImage(home, keyDir, [
+      '-e',
+      `HIVETTY_CLOUD_URL=${CLOUD}`,
+      '--health-interval=2s',
+    ]);
+    await waitForContainer(name, async () => (await inspect(name, '{{.State.Health.Status}}')) === 'healthy', 'healthy');
+    expect(existsSync(join(home.root, 'tmp'))).toBe(true);
+
+    const started = Date.now();
+    await docker(['stop', '-t', '30', name], 45_000);
+    expect(Date.now() - started).toBeLessThan(30_000);
+    expect(await inspect(name, '{{.State.ExitCode}}')).toBe('0');
+    const { stdout } = await docker(['logs', name]);
+    for (const line of stdout.split('\n').filter((entry) => entry !== '')) expect(line).toMatch(LOG_LINE);
+  }, 120_000);
 });
