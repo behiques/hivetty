@@ -337,6 +337,8 @@ const onDetach = (): OnDetach => {
  */
 type BuildSnapshot = () => Promise<Partial<Record<Channel, unknown>>>;
 let capturedBuildSnapshot: BuildSnapshot | null = null;
+/** The audit writer the composition hands the listener (HIVE-427), captured the same way. */
+let capturedAudit: unknown = null;
 
 /** The captured builder, or a failure naming why it is missing. */
 const buildSnapshot = (): BuildSnapshot => {
@@ -361,7 +363,9 @@ vi.mock('@remote-host/listener', async (importOriginal) => {
       onAttach: OnAttach;
       onDetach: OnDetach;
       buildSnapshot: BuildSnapshot;
+      audit?: unknown;
     }) => {
+      capturedAudit = options.audit;
       capturedOnAttach = options.onAttach;
       capturedOnDetach = options.onDetach;
       capturedBuildSnapshot = options.buildSnapshot;
@@ -467,6 +471,7 @@ const { AddressRefusedError, RELAY_SERVER_OFFLINE, RelayClosedError, ServerTooOl
   '../../../electron/remote-client/socket'
 );
 const { BACKOFF_MS } = await import('../../../shared/remote-contract');
+const { audit } = await import('../../../core/audit/audit');
 const { attachedResumeTracker, attachedServerName, dialNowAttached, registerIpc, switchIpcMode } = await import(
   '../../../electron/main/ipc/router'
 );
@@ -497,6 +502,7 @@ beforeEach(() => {
   capturedOnAttach = null;
   capturedOnDetach = null;
   capturedBuildSnapshot = null;
+  capturedAudit = null;
   resumeAnswer = () => null;
   generationAnswer = () => 1;
   ledgerReadImpl = () => ({ entries: [], openAsks: [], claims: {} });
@@ -519,6 +525,13 @@ afterEach(() => {
   resetRemoteProxy();
   resetIpcHandlers();
   resetServerModeForTest();
+});
+
+describe('the audit trail (HIVE-427)', () => {
+  it("hands the listener core's audit writer (HIVE-427)", () => {
+    registerIpcHandlers();
+    expect(capturedAudit).toBe(audit);
+  });
 });
 
 describe('acceptRelaySocket (HIVE-429)', () => {
