@@ -8,6 +8,7 @@ import {
   isSwarmRepoUrl,
   parseSwarmEntry,
   parseSwarmManifest,
+  parseSwarmAutoUpdateRequest,
   parseSwarmRequest,
   parseSwarmTag,
   swarmTag,
@@ -282,5 +283,29 @@ describe('parseSwarmRequest', () => {
 
   it.each<unknown>([{}, null, { swarmId: '../x' }])('throws for %j', (payload) => {
     expect(() => parseSwarmRequest(payload)).toThrow('swarmId is not a swarm id');
+  });
+});
+
+describe('parseSwarmAutoUpdateRequest', () => {
+  it('returns the id and the flag', () => {
+    expect(parseSwarmAutoUpdateRequest({ swarmId: 'a1', autoUpdate: false })).toEqual({ swarmId: 'a1', autoUpdate: false });
+  });
+
+  it('drops any other key', () => {
+    expect(parseSwarmAutoUpdateRequest({ swarmId: 'a1', autoUpdate: true, repoUrl: 'https://evil' })).toEqual({
+      swarmId: 'a1',
+      autoUpdate: true,
+    });
+  });
+
+  it.each<unknown>([
+    null,
+    {},
+    { swarmId: '../x', autoUpdate: true },
+    { swarmId: 'a1' },
+    { swarmId: 'a1', autoUpdate: 'true' },
+    { swarmId: 'a1', autoUpdate: 1 },
+  ])('throws for %j', (payload) => {
+    expect(() => parseSwarmAutoUpdateRequest(payload)).toThrow();
   });
 });

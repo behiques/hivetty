@@ -23,6 +23,7 @@ import {
   type SwarmInstallResult,
   type SwarmListing,
   type SwarmRemoveResult,
+  type SwarmUpdate,
 } from '@shared/swarm-contract';
 
 import { serial } from '../seed/actions';
@@ -411,6 +412,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
         autoUpdate: previous?.autoUpdate ?? entry.kind !== 'community',
         lastError: null,
         title: read.manifest.title,
+        description: read.manifest.description,
         contents: read.contents,
       };
       await writeInstalled(paths.installed, [...raw.filter((held) => !isEntryOf(held, entry.id)), installed]);
@@ -490,15 +492,27 @@ export function createSwarms(deps: SwarmDeps): Swarms {
   };
 }
 
-/** Registry rows first, each with its installed entry; then installed swarms the registry did not return. */
-export function mergeListing(registry: RegistryRead, installed: InstalledSwarm[]): SwarmListing {
+/**
+ * Registry rows first, each with its installed entry; then installed swarms the registry did not return. Each
+ * installed swarm carries the updater's pending update (HIVE-442).
+ */
+export function mergeListing(
+  registry: RegistryRead,
+  installed: InstalledSwarm[],
+  pending: (swarmId: string) => SwarmUpdate | null = () => null,
+): SwarmListing {
   const held = new Map(installed.map((entry) => [entry.swarmId, entry]));
   const listed = new Set(registry.swarms.map((entry) => entry.id));
   return {
     source: registry.source,
     items: [
-      ...registry.swarms.map((entry) => ({ entry, installed: held.get(entry.id) ?? null })),
-      ...installed.filter((entry) => !listed.has(entry.swarmId)).map((entry) => ({ entry: null, installed: entry })),
+      ...registry.swarms.map((entry) => {
+        const mine = held.get(entry.id) ?? null;
+        return { entry, installed: mine, update: mine === null ? null : pending(entry.id) };
+      }),
+      ...installed
+        .filter((entry) => !listed.has(entry.swarmId))
+        .map((entry) => ({ entry: null, installed: entry, update: pending(entry.swarmId) })),
     ],
   };
 }

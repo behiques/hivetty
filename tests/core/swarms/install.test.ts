@@ -202,12 +202,14 @@ describe('install', () => {
         autoUpdate: false,
         lastError: null,
         title: 'Standard',
+        description: 'Ticket to merge.',
         contents: {
           agents: [{ name: 'a1', description: 'Helps out.', tools: ['Read', 'Bash'] }],
           skills: [{ name: 's1', description: 'Does s1.' }],
         },
       },
     ]);
+    expect(result.ok && result.installed.description).toBe('Ticket to merge.');
     expect(cloneToken).not.toHaveBeenCalled();
   });
 
@@ -848,6 +850,7 @@ describe('mergeListing', () => {
     autoUpdate: false,
     lastError: null,
     title: swarmId,
+    description: '',
     contents: { agents: [], skills: [] },
   });
 
@@ -859,10 +862,25 @@ describe('mergeListing', () => {
     expect(listing).toEqual({
       source: 'cache',
       items: [
-        { entry: a, installed: installedFor('A') },
-        { entry: b, installed: null },
-        { entry: null, installed: installedFor('C') },
+        { entry: a, installed: installedFor('A'), update: null },
+        { entry: b, installed: null, update: null },
+        { entry: null, installed: installedFor('C'), update: null },
       ],
     });
+  });
+
+  it('carries the pending update of each installed swarm, asked for the ones the registry left out too', () => {
+    const a = entryFor({ id: 'a1' });
+    const b = entryFor({ id: 'b1' });
+    const update = { target: '1.1.0', updating: false };
+    const pending = vi.fn((id: string) => (id === 'a1' || id === 'c1' ? update : null));
+    const listing = mergeListing({ source: 'cloud', swarms: [a, b] }, [installedFor('c1'), installedFor('a1')], pending);
+
+    expect(listing.items).toEqual([
+      { entry: a, installed: installedFor('a1'), update },
+      { entry: b, installed: null, update: null },
+      { entry: null, installed: installedFor('c1'), update },
+    ]);
+    expect(pending.mock.calls.map(([id]) => id).sort()).toEqual(['a1', 'c1']);
   });
 });
