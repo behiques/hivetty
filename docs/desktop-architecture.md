@@ -553,6 +553,15 @@ two can diverge), `core/pty-host/` (the supervisor, which forks through
 `main` target**, so it lands at `out/main/pty-host.js` and inherits main's
 module format, externals and output directory.
 
+There are two hosts and one child (HIVE-423). The desktop forks a
+`utilityProcess`. `hivetty-server` has no Electron, so it forks
+`out/server/pty-host.js` with `child_process.fork` (`server/pty-host-fork.ts`).
+In the child, `pty-host/port.ts` picks the port it was started with:
+`parentPort`, or one built over the fork channel. A fork channel that closes
+reaches the host as a `shutdown` command, so a server that dies leaves no
+sessions behind. On Linux the child reads the process tree from `/proc`, not
+`ps`.
+
 Supervisor behaviour worth knowing before changing it:
 
 - **Lazy start.** Nothing forks until the first spawn — most launches land on
@@ -1068,7 +1077,14 @@ ABI, no window, no Chromium. It is what makes the middle layer possible.
 ```sh
 pnpm test:pty                    # the full matrix
 pnpm test:pty --filter signals   # one property group
+pnpm test:pty-host               # the host process itself, under both parents
 ```
+
+`pnpm test:pty-host` drives the real supervisor over the host once under
+`utilityProcess` (through a small Electron main that relays it) and once under
+`child_process.fork`: spawn, resize, kill, pause, a host crash, the crash-loop
+guard and shutdown. It also runs the `/proc` reader in a Linux image with no
+`ps` when Docker is up (HIVE-423).
 
 It drives the **real** session manager, not a reimplementation:
 `electron.vite.config.ts` emits `pty-host/session-manager.ts` as a third

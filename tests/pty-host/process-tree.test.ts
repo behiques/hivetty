@@ -1,11 +1,43 @@
 // @vitest-environment node
+import { execFile } from 'node:child_process';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
   createProcessControl,
   parseProcessTable,
+  readProcTable,
   walkDescendants,
 } from '../../pty-host/process-tree';
+
+vi.mock('node:child_process', () => ({
+  execFile: vi.fn(
+    (_file: string, _args: string[], _options: object, done: (error: Error | null, stdout: string) => void) =>
+      done(null, '  100     1   100\n  200   100   200\n'),
+  ),
+}));
+
+/** A `/proc` with shell 100, its backgrounded job 200 (own group, awkward name), 200's child 201, and stranger 300. */
+function procFixture(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'hive-proc-'));
+  const stat = (pid: number, comm: string, ppid: number, pgrp: number): void => {
+    mkdirSync(join(dir, String(pid)));
+    writeFileSync(join(dir, String(pid), 'stat'), `${pid} (${comm}) S ${ppid} ${pgrp} 100 0 -1 4194304 0 0\n`);
+  };
+  stat(100, 'sh', 1, 100);
+  stat(200, 'we) ird (na me', 100, 200);
+  stat(201, 'sleep', 200, 200);
+  stat(300, 'other', 1, 300);
+  mkdirSync(join(dir, '400')); // ended between the listing and the read: no stat
+  mkdirSync(join(dir, '500'));
+  writeFileSync(join(dir, '500', 'stat'), '500 6 7 8\n'); // no ")": never kernel output, never trusted
+  mkdirSync(join(dir, 'self'));
+  writeFileSync(join(dir, 'cpuinfo'), 'x');
+  return dir;
+}
 
 /**
  * Reading and signalling the process tree (HIVE-72).
@@ -209,5 +241,68 @@ describe('isAlive', () => {
 
     // Above the pid ceiling on both platforms that matter.
     expect(control.isAlive(0x7fffffff)).toBe(false);
+  });
+});
+
+describe('readProcTable (HIVE-423)', () => {
+  it('prints pid, ppid and pgid per process, reading past a comm with spaces and parentheses', async () => {
+    const lines = (await readProcTable(procFixture())).split('\n').sort();
+    expect(lines).toEqual(['100 1 100', '200 100 200', '201 200 200', '300 1 300']);
+  });
+
+  it('answers the empty table when the folder cannot be listed', async () => {
+    expect(await readProcTable(join(tmpdir(), 'hive-proc-missing'))).toBe('');
+  });
+
+  it('answers the empty table, not a partial one, when a stat fails for a reason other than the process ending', async () => {
+    // EMFILE under a low fd ulimit is the real case; EISDIR is the same "not ENOENT" failure, reproducible in a fixture.
+    const dir = procFixture();
+    mkdirSync(join(dir, '600', 'stat'), { recursive: true });
+    expect(await readProcTable(dir)).toBe('');
+  });
+
+  it('reads a table larger than one batch whole', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hive-proc-'));
+    for (let pid = 2; pid < 302; pid += 1) {
+      mkdirSync(join(dir, String(pid)));
+      writeFileSync(join(dir, String(pid), 'stat'), `${pid} (sh) S 1 ${pid} 0 0\n`);
+    }
+    expect((await readProcTable(dir)).split('\n')).toHaveLength(300);
+  });
+});
+
+describe('the default table reader (HIVE-423)', () => {
+  it('reads /proc on linux and never execs ps', async () => {
+    vi.mocked(execFile).mockClear();
+    const control = createProcessControl({ platform: 'linux', procDir: procFixture() });
+    expect(await control.descendants([100])).toEqual([
+      { pid: 200, pgid: 200 },
+      { pid: 201, pgid: 200 },
+    ]);
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it('still execs the pinned /bin/ps on darwin', async () => {
+    vi.mocked(execFile).mockClear();
+    const control = createProcessControl({ platform: 'darwin' });
+    expect(await control.descendants([100])).toEqual([{ pid: 200, pgid: 200 }]);
+    expect(vi.mocked(execFile).mock.calls[0]?.[0]).toBe('/bin/ps');
+  });
+
+  it('warns once, however many times the table comes back empty', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const control = createProcessControl({ readTable: () => Promise.resolve('') });
+    expect(await control.descendants([100, 101])).toEqual([]);
+    expect(await control.descendants([100])).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('2 session');
+    warn.mockRestore();
+  });
+
+  it('does not warn when there are no roots', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await createProcessControl({ readTable: () => Promise.resolve('') }).descendants([]);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

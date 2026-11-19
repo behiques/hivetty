@@ -31,10 +31,9 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  * to over the encrypted channel from outside the process. `server/index.ts` and `server/boot.ts` are composition,
  * excluded from coverage; this suite is their proof.
  *
- * Sessions cannot spawn yet (HIVE-423). Case 1 plants a signed lease the server reads as lapsed, signed out: the
- * edition gate then decides from the lease on disk. Every home carries a secret key, since a server without one
- * refuses to start (HIVE-424); cases 7 to 11 sign in against the stub cloud and prove the key's rules on a real
- * process.
+ * Case 1 plants a signed lease the server reads as lapsed, signed out: the edition gate then decides from the
+ * lease on disk. Every home carries a secret key, since a server without one refuses to start (HIVE-424); cases 7
+ * to 11 sign in against the stub cloud and prove the key's rules on a real process.
  *
  * Gated behind `HIVE_LIVE_SERVER_EDITION_PROOF=1`. CI runs none of the live suites.
  */
@@ -392,13 +391,13 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
   }, 60_000);
 
   /*
-    NO_PTY_HOST over the wire needs a licensed server; a lapsed one refuses the spawn before the PTY host is tried
-    (case 6 above). Sign-in (case 9) now makes one possible, but the refusal stops being true when the fork adapter
-    lands (HIVE-423), so it is left to that story. `tests/server/platform.test.ts` proves the throw itself.
+    A spawn through the server needs a licensed server; a lapsed one refuses the spawn before the PTY host is tried
+    (case 6 above). Sign-in (case 9) makes a licensed one possible. `pnpm test:pty-host` drives the fork host itself.
   */
-  it.todo('a spawn on a licensed server is refused with NO_PTY_HOST (void once HIVE-423 lands)');
+  it.todo('a licensed server spawns a session through the fork host');
 
   it('5: nothing under out/server imports electron', () => {
+    expect(existsSync(join(ROOT, 'out/server/pty-host.js'))).toBe(true);
     const offenders = filesUnder(join(ROOT, 'out/server')).filter((file) => {
       const text = readFileSync(file, 'utf8');
       return text.includes('from "electron"') || text.includes("from 'electron'") || text.includes('require("electron")');

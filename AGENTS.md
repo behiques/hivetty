@@ -54,7 +54,7 @@ This is **HiveTTY Pro**, a commercial, proprietary app by Behiques Consulting LL
 | `pnpm test:coverage` | Vitest with the 80% coverage gate |
 | `pnpm test:e2e` | Playwright — both the web and electron projects |
 | `pnpm test:e2e:web` · `:electron` | Either half alone — browser specs (070), or the built app (085), in the background (`HIVE_E2E_FOREGROUND=1` to watch) |
-| `pnpm test:pty` · `:mcp-host` | PTY conformance — real PTYs, Electron ABI, no UI (098); and the built stdio MCP host under Electron's own Node, no `claude`, answering every request, a U+2028 or U+2029 inside one included (HIVE-354) |
+| `pnpm test:pty` · `:pty-host` · `:mcp-host` | PTY conformance — real PTYs, Electron ABI, no UI (098); the host process itself, once under `utilityProcess` and once under `child_process.fork` (HIVE-423); and the built stdio MCP host under Electron's own Node, no `claude`, answering every request, a U+2028 or U+2029 inside one included (HIVE-354) |
 | `pnpm test:hooks` · `:statusline` · `:skills` · `:codex-plugin` · … (one script per `tests/live/*-conformance.test.ts`) | Live conformance suites against a real `claude`, `codex` or `copilot`, Docker, or the built app (some need a `desktop:build` first). Each is skipped, not failed, when its CLI or credentials are absent; read the test file for what it proves |
 | `pnpm verify:boundaries` | Proves every architecture fence still fires |
 

@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { readdir, readFile } from 'node:fs/promises';
 
 /**
  * Reading and signalling the process tree (HIVE-72).
@@ -132,8 +133,54 @@ export function walkDescendants(
   return found;
 }
 
+/** How many `/proc/<pid>/stat` files are open at once: well under any fd ulimit, so EMFILE stays rare. */
+const PROC_READ_BATCH = 64;
+
+/** The process ended between the listing and the read. Anything else means the table cannot be trusted whole. */
+const ENDED = new Set(['ENOENT', 'ESRCH']);
+
+/**
+ * Linux (HIVE-423): the three columns `ps` prints, read from `/proc/<pid>/stat`, so a slim image with no
+ * `procps` still finds a session's descendants. Any failure to list answers `''`, as the `ps` reader does,
+ * and so does any failed read other than an ended process: a partial table would hide descendants without
+ * the caller's warning.
+ */
+export async function readProcTable(procDir = '/proc'): Promise<string> {
+  let names: string[];
+  try {
+    names = await readdir(procDir); // throws: the caller sees '' and warns once
+  } catch {
+    return '';
+  }
+  const pids = names.filter((name) => /^\d+$/.test(name));
+  const readOne = async (pid: string): Promise<string> => {
+    let stat: string;
+    try {
+      stat = await readFile(`${procDir}/${pid}/stat`, 'utf8');
+    } catch (error) {
+      if (ENDED.has((error as NodeJS.ErrnoException).code ?? '')) return '';
+      throw error;
+    }
+    // `comm` may hold spaces, parentheses and newlines: the fields start after the LAST ")".
+    const close = stat.lastIndexOf(')');
+    if (close === -1) return '';
+    const [, ppid, pgrp] = stat.slice(close + 1).trim().split(/\s+/);
+    return `${pid} ${ppid} ${pgrp}`; // a short line prints "undefined", which the parser drops
+  };
+  const lines: string[] = [];
+  try {
+    for (let start = 0; start < pids.length; start += PROC_READ_BATCH) {
+      lines.push(...(await Promise.all(pids.slice(start, start + PROC_READ_BATCH).map(readOne))));
+    }
+  } catch {
+    return ''; // EMFILE, EACCES, …: the caller sees '' and warns once
+  }
+  return lines.filter((line) => line !== '').join('\n');
+}
+
 /** Read the table, answering `''` for any failure at all. */
-function readProcessTable(): Promise<string> {
+function readProcessTable(platform: NodeJS.Platform, procDir?: string): Promise<string> {
+  if (platform === 'linux') return readProcTable(procDir);
   return new Promise((resolve) => {
     execFile(
       // Pinned rather than resolved through PATH: this runs with the app's
@@ -152,12 +199,17 @@ interface ProcessControlDeps {
   /** Injected so tests never exec a real `ps`. */
   readTable?: () => Promise<string>;
   platform?: NodeJS.Platform;
+  /** Linux only: where the process table is mounted. A parameter so a test names a fixture tree. */
+  procDir?: string;
 }
 
 export function createProcessControl({
-  readTable = readProcessTable,
+  readTable,
   platform = process.platform,
+  procDir,
 }: ProcessControlDeps = {}): ProcessControl {
+  const read = readTable ?? (() => readProcessTable(platform, procDir));
+  let warned = false;
   return {
     signalGroup(pgid, signal) {
       // Belt and braces: the parser already drops these, and this is the call
@@ -191,8 +243,16 @@ export function createProcessControl({
       // about not shelling out to a `ps` that does not exist.
       if (platform === 'win32') return [];
 
-      const table = await readTable();
-      if (table === '') return [];
+      const table = await read();
+      if (table === '') {
+        if (!warned) {
+          warned = true;
+          console.warn(
+            `[pty-host] the process table could not be read; descendants of ${roots.length} session(s) will not be cleaned up`,
+          );
+        }
+        return [];
+      }
 
       return walkDescendants(parseProcessTable(table), roots);
     },

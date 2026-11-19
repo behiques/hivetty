@@ -32,6 +32,7 @@ pnpm desktop:dev
 | `pnpm test:coverage` | Vitest with the 80% gate |
 | `pnpm test:e2e` | Playwright: web specs and the built app |
 | `pnpm test:pty` | PTY conformance: real PTYs, Electron ABI, no UI |
+| `pnpm test:pty-host` | the PTY host process under `utilityProcess` and under `child_process.fork` |
 | `pnpm verify:boundaries` | proves every architecture fence still fires |
 
 Run one spec with `pnpm exec vitest run <path>`; `pnpm test -- <path>` runs everything.
