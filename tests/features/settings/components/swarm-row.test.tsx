@@ -275,3 +275,26 @@ describe('SwarmRow kept files', () => {
     expect(calls.onKeep).toHaveBeenCalledWith(tdd);
   });
 });
+
+describe('SwarmRow notice', () => {
+  it("shows the pane's sentence under the row in red", () => {
+    render(
+      <SwarmRow
+        item={swarmItem({ installed: installedSwarm() })}
+        source="cloud"
+        busy={false}
+        failure={undefined}
+        kept={[]}
+        notice="The swarm folder is in use."
+        onAction={vi.fn()}
+        onDismiss={vi.fn()}
+        onAutoUpdate={vi.fn()}
+        onRemove={vi.fn()}
+        onTake={vi.fn()}
+        onKeep={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('The swarm folder is in use.')).toHaveClass('text-red');
+  });
+});

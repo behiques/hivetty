@@ -17,6 +17,7 @@ export type SettingsSection =
   | 'codex'
   | 'copilot'
   | 'shell'
+  | 'swarms'
   | 'agents'
   | 'skills'
   | 'ticket-workflow'

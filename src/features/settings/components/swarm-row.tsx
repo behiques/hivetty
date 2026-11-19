@@ -27,6 +27,8 @@ interface SwarmRowProps {
   /** A first install that failed in this run: the row is "Not installed" with this message. */
   failure: SwarmFailure | undefined;
   kept: KeptFile[];
+  /** A sentence the pane holds for this row, such as why Remove was refused. */
+  notice?: string | null;
   onAction: () => void;
   onDismiss: () => void;
   onAutoUpdate: (next: boolean) => void;
@@ -116,6 +118,7 @@ export function SwarmRow({
   busy,
   failure,
   kept,
+  notice = null,
   onAction,
   onDismiss,
   onAutoUpdate,
@@ -173,6 +176,8 @@ export function SwarmRow({
       {message === null ? null : (
         <p className={cn('text-ui-sm', state === 'gone' ? 'text-subtle' : 'text-red')}>{message}</p>
       )}
+
+      {notice === null ? null : <p className="text-ui-sm text-red">{notice}</p>}
 
       {kept.length === 0 ? null : <KeptFiles kept={kept} onTake={onTake} onKeep={onKeep} />}
 
