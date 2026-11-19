@@ -11,6 +11,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { isBuiltin } from 'node:module';
 import { connect as netConnect, createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -403,6 +404,22 @@ describe.skipIf(!RUN)(`the server edition under ${NODE} (HIVE-422)`, () => {
       return text.includes('from "electron"') || text.includes("from 'electron'") || text.includes('require("electron")');
     });
     expect(offenders).toEqual([]);
+  });
+
+  it('5: every dependency but node-pty is bundled, and no public asset is copied in (HIVE-425)', () => {
+    const files = filesUnder(join(ROOT, 'out/server'));
+    expect(files.filter((file) => file.endsWith('.png'))).toEqual([]);
+    const bare = new Set<string>();
+    // A specifier is a path or a package name, never prose: `from 'not your PR'` in a message string is not one.
+    const specifier = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*)(["'])([\w@.:/-]+)\1/g;
+    for (const file of files.filter((path) => path.endsWith('.js'))) {
+      for (const match of readFileSync(file, 'utf8').matchAll(specifier)) {
+        const name = match[2] ?? '';
+        if (name.startsWith('.') || name.startsWith('/') || isBuiltin(name)) continue;
+        bare.add(name);
+      }
+    }
+    expect([...bare].sort()).toEqual(['node-pty']);
   });
 
   it('7: with no key, serving and --login exit 4 naming both variables and never listen; --pair and --gen-key need none (HIVE-424)', async () => {
