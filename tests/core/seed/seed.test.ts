@@ -466,3 +466,30 @@ describe('seedShipped', () => {
     ]);
   });
 });
+
+describe('exclude: folders a swarm owns (HIVE-441)', () => {
+  it('neither reads nor writes an excluded folder, and leaves it out of the manifest', async () => {
+    await ship('skills/a/SKILL.md', skill('a'));
+    await ship('skills/b/SKILL.md', skill('b'));
+
+    await seedShipped({ source, target, manifestFile, exclude: new Set(['skills/b']) });
+
+    expect(await onDisk('skills/a/SKILL.md')).toBe(skill('a'));
+    await expect(readFile(join(target, 'skills/b/SKILL.md'))).rejects.toThrow();
+    const manifest = JSON.parse(await readFile(manifestFile, 'utf8')) as {
+      files: Record<string, string>;
+      parts: Record<string, unknown>;
+    };
+    expect(Object.keys(manifest.files)).toEqual(['skills/a/SKILL.md']);
+    expect(Object.keys(manifest.parts)).toEqual(['skills/a/SKILL.md']);
+  });
+
+  it('seeds everything as before without exclude', async () => {
+    await ship('skills/a/SKILL.md', skill('a'));
+    await ship('skills/b/SKILL.md', skill('b'));
+
+    await seedShipped({ source, target, manifestFile });
+
+    expect(await onDisk('skills/b/SKILL.md')).toBe(skill('b'));
+  });
+});
