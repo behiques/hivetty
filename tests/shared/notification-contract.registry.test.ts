@@ -267,7 +267,22 @@ const LANES: Record<NotificationKind, NotificationLane> = {
   'clone.done': 'echo',
   'app.update_available': 'echo',
   'app.update_ready': 'echo',
+  'swarm.updated': 'echo',
 };
+
+describe('swarm.updated (HIVE-442)', () => {
+  it('is an app kind delivered both ways by default', () => {
+    expect(NOTIFICATION_KIND_SPECS['swarm.updated']).toMatchObject({
+      source: 'app',
+      label: 'When a swarm updates itself',
+      description: 'An installed swarm moved to a newer version with nobody asking.',
+      icon: 'ph-arrow-circle-up',
+      tone: 'green',
+      lane: 'echo',
+      defaultDelivery: 'both',
+    });
+  });
+});
 
 describe('lanes (HIVE-214)', () => {
   it('puts every kind in its lane', () => {

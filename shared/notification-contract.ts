@@ -113,6 +113,7 @@ export const NOTIFICATION_KINDS = [
   'agent.failed',
   'app.update_available',
   'app.update_ready',
+  'swarm.updated',
 ] as const;
 
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
@@ -568,6 +569,24 @@ export const NOTIFICATION_KIND_SPECS: Record<
      *
      * It cannot repeat: a download completes once per version per launch.
      */
+    defaultDelivery: 'both',
+  },
+  /**
+   * An installed swarm updated itself (HIVE-442): a native or organization
+   * swarm with "Update automatically" on, or pinned by its organization,
+   * moved to a newer version while no agent run was live.
+   *
+   * `both`, because the person did not ask for it and their agents and skills
+   * just changed underneath them. It cannot repeat: the dedup id carries the
+   * swarm and the version.
+   */
+  'swarm.updated': {
+    source: 'app',
+    label: 'When a swarm updates itself',
+    description: 'An installed swarm moved to a newer version with nobody asking.',
+    icon: 'ph-arrow-circle-up',
+    tone: 'green',
+    lane: 'echo',
     defaultDelivery: 'both',
   },
   /**
