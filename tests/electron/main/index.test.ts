@@ -175,8 +175,18 @@ describe('deep links and the licence (HIVE-264)', () => {
 
   it('starts the licence at whenReady, attaches the router to it, and forwards second-instance argv', () => {
     expect(lockHeld).toMatch(/app\.whenReady\(\)\.then\(\(\) => \{\s*const licence = startLicence\(/);
-    expect(lockHeld).toContain('deepLinks.attach((url) => void licence.handleCallback(url))');
+    // HIVE-442: through the one router, which hands every link that is not a swarm install link to the callback.
+    expect(lockHeld).toMatch(/deepLinks\.attach\(\(url\) =>\s*routeDeepLink\(url, \{/);
+    expect(lockHeld).toContain('handleCallback: (link) => void licence.handleCallback(link)');
     expect(lockHeld).toContain('cloudUrl: getConfig().account?.cloudUrl');
     expect(lockHeld).toContain('onSecondInstanceArgv: deepLinks.deliverArgv');
+  });
+
+  it('holds a swarm link in core and focuses only after the callbacks already queued on whenReady (HIVE-442)', () => {
+    expect(lockHeld).toContain('scheme: deepLinks.scheme');
+    expect(lockHeld).toContain('requestInstall: requestSwarmInstall');
+    expect(lockHeld).toContain('focus: () => void app.whenReady().then(() => focusPrimaryWindow(createWindow))');
+    // The startup window comes from registerLifecycle's own whenReady callback, registered at module load.
+    expect(lockHeld.indexOf('registerLifecycle(')).toBeGreaterThan(-1);
   });
 });

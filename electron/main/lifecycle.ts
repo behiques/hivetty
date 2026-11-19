@@ -44,6 +44,22 @@ interface LifecycleDeps {
 /** Set once `before-quit` fires, so teardown runs exactly once. */
 let quitting = false;
 
+/**
+ * Focus the app's window, or open one when there is none (HIVE-442 lifted it out of `second-instance`, so an
+ * install link brings the app forward the same way).
+ */
+export function focusPrimaryWindow(createWindow: () => void): void {
+  // The *app's* window, not merely the first one open — with the About panel
+  // up and the main window closed, the first one is the panel.
+  const existing = primaryWindow();
+  if (!existing) {
+    createWindow();
+    return;
+  }
+  if (existing.isMinimized()) existing.restore();
+  bringForward(existing);
+}
+
 /** Test-only. */
 export function resetQuitting(): void {
   quitting = false;
@@ -94,15 +110,7 @@ export function registerLifecycle({
    */
   app.on('second-instance', (_event, argv: string[]) => {
     onSecondInstanceArgv?.(argv);
-    // The *app's* window, not merely the first one open — with the About panel
-    // up and the main window closed, the first one is the panel.
-    const existing = primaryWindow();
-    if (!existing) {
-      createWindow();
-      return;
-    }
-    if (existing.isMinimized()) existing.restore();
-    bringForward(existing);
+    focusPrimaryWindow(() => createWindow());
   });
 
   void app.whenReady().then(() => {

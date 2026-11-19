@@ -46,7 +46,7 @@ import { runOneShot } from '../../core/server/one-shot';
 import { claimServerLock, hiveLockPath } from '../../core/server/server-lock';
 import { isServerMode, setServerMode } from '../../core/server-mode';
 import { onShutdown } from '../../core/shutdown';
-import { swarmManifestFiles, swarmSeedSetFor, swarmSeedSets } from '../../core/swarms';
+import { requestSwarmInstall, swarmManifestFiles, swarmSeedSetFor, swarmSeedSets } from '../../core/swarms';
 import { startSync } from '../../core/sync';
 
 import { applyDevDockIcon } from './app-icon';
@@ -55,8 +55,9 @@ import { bringForward } from './background';
 import { installContentSecurityPolicy } from './csp';
 import { registerIpc, switchIpcMode } from './ipc/router';
 import { createWindowBroadcaster } from './ipc/window-broadcaster';
-import { registerLifecycle } from './lifecycle';
+import { focusPrimaryWindow, registerLifecycle } from './lifecycle';
 import { createDesktopPlatform } from './platform';
+import { routeDeepLink } from './swarm-link';
 import { createServerTray } from './tray';
 import { runHeadlessUpdate, runUnattended, startUpdateChecks } from './updates';
 import { createWindow } from './window';
@@ -261,7 +262,16 @@ if (!app.requestSingleInstanceLock()) {
       openPath: (path) => shell.openPath(path),
     });
     onShutdown(() => sync.stop());
-    deepLinks.attach((url) => void licence.handleCallback(url));
+    deepLinks.attach((url) =>
+      routeDeepLink(url, {
+        scheme: deepLinks.scheme,
+        handleCallback: (link) => void licence.handleCallback(link),
+        // HIVE-442: held in core until the renderer takes it; it opens the consent dialog and installs nothing.
+        requestInstall: requestSwarmInstall,
+        // After the callbacks already queued on whenReady: on a cold start the window is created by one of them.
+        focus: () => void app.whenReady().then(() => focusPrimaryWindow(createWindow)),
+      }),
+    );
   });
   /**
    * Registers every channel, and with them the pty-host supervisor and its
