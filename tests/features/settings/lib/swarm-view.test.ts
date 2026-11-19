@@ -261,10 +261,26 @@ describe('needsConsent', () => {
     ['installed native', current, false, false],
     ['installed organization', organization, false, false],
     ['installed community, a retry never skips the review', available, true, true],
-    ['installed community with no row (kind from the entry)', swarmItem({ entry: null, installed: installedSwarm({ kind: 'community' }) }), false, true],
+    ['installed community with no row (kind from the installed entry)', swarmItem({ entry: null, installed: installedSwarm({ kind: 'community' }) }), false, true],
   ])('%s', (_name, item, retry, expected) => {
     expect(needsConsent(item, retry)).toBe(expected);
   });
+
+  it.each<[string, SwarmListItem]>([
+    [
+      'the registry now calls it native, the installed entry community',
+      swarmItem({ entry: swarmEntry({ kind: 'native' }), installed: installedSwarm({ kind: 'community' }) }),
+    ],
+    [
+      'the registry now calls it community, the installed entry native',
+      swarmItem({ entry: swarmEntry({ kind: 'community' }), installed: installedSwarm({ kind: 'native' }) }),
+    ],
+  ])('asks when either kind is community: %s', (_name, item) => {
+    expect(needsConsent(item)).toBe(true);
+  });
+
+  // Parked (Task 2 review): Try again skips consent without checking the row is still the version the person saw.
+  it.todo('a retry asks again when the registry row changed since the consented install failed');
 
   it('defaults retry to false', () => {
     expect(needsConsent(notInstalled)).toBe(true);

@@ -170,5 +170,6 @@ export function keptFiles(
  */
 export function needsConsent(item: SwarmListItem, retry = false): boolean {
   if (item.installed === null) return !retry;
-  return (item.entry?.kind ?? item.installed.kind) === 'community';
+  // Either kind: a registry that relabels a community swarm must not let its next update through unseen.
+  return item.entry?.kind === 'community' || item.installed.kind === 'community';
 }
