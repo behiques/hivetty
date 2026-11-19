@@ -2,9 +2,17 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { Agent } from '@/types/entity';
+
 import { PrActions } from '@features/pull-requests/components/pr-properties';
 import { useHiveStore } from '@stores/hive-store';
 import { hatchRow } from '@tests/support/hatchery';
+
+// The notice reads the registry and opens Settings; neither is this file's subject (HIVE-447).
+vi.mock('@hooks/use-swarms', () => ({
+  useSwarms: () => ({ listing: null, busy: new Set(), removing: new Set(), failures: new Map(), lastUpdate: null }),
+}));
+vi.mock('@hooks/use-swarm-actions', () => ({ useSwarmActions: () => ({ install: vi.fn(), browse: vi.fn() }) }));
 
 const answerAsk = vi.fn();
 const post = vi.fn();
@@ -19,11 +27,17 @@ const mergeCard = {
   meta: { kind: 'permission', tool: 'Bash', input: { command: 'gh pr merge 1182 --squash --repo acme/incorpx-server' } },
 };
 const original = window.hive;
+/** acr, installed: the store's agent entities are what `useIsAgentId` reads. */
+const withAcr = (): void =>
+  useHiveStore.setState((state) => ({
+    entities: { ...state.entities, acr: { kind: 'agent', id: 'acr' } as Agent },
+  }));
 
 beforeEach(() => {
   vi.clearAllMocks();
   useHiveStore.getState().reset();
   useHiveStore.setState({ answerAsk, openEntity });
+  withAcr();
   window.hive = { ledger: { post } } as unknown as typeof window.hive;
 });
 afterEach(() => {
@@ -81,6 +95,20 @@ describe('PrActions', () => {
       meta: { pr: 1182, repo: 'acme/incorpx-server' },
     });
     expect(await screen.findByText('Asked acr')).toBeInTheDocument();
+  });
+
+  it('without acr installed, names its swarm in place of the button and posts nothing (HIVE-447)', async () => {
+    useHiveStore.getState().reset();
+    useHiveStore.setState({ answerAsk, openEntity });
+    render(<PrActions row={hatchRow()} />);
+
+    expect(screen.queryByRole('button', { name: 'Ask acr to look again' })).toBeNull();
+    expect(screen.getByText('acr')).toBeInTheDocument();
+    expect(screen.getByText(/comes with|isn't installed/)).toBeInTheDocument();
+    for (const button of screen.getAllByRole('button')) {
+      if (!(button as HTMLButtonElement).disabled) await userEvent.click(button);
+    }
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("shows acr's refusal inline", async () => {

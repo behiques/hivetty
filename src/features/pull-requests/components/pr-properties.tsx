@@ -9,9 +9,17 @@ import { Button } from '@components/ui/button';
 import { statusLabel } from '@components/ui/status-dot';
 import { Flap } from '@features/pull-requests/components/flap';
 import { checkTime } from '@features/pull-requests/session-pr';
+import { MissingSwarm } from '@features/shared/components/missing-swarm';
 import type { PrCheck, PrDetail, PrReview } from '@shared/github-contract';
 import type { LedgerResult } from '@shared/ledger-contract';
-import { useAnswerAsk, useEntity, useMergeAsk, useOpenEntity, useReviewUrls } from '@stores/hive-store';
+import {
+  useAnswerAsk,
+  useEntity,
+  useIsAgentId,
+  useMergeAsk,
+  useOpenEntity,
+  useReviewUrls,
+} from '@stores/hive-store';
 import { usePrPageActions } from '@stores/ui-store';
 
 const HEADING = 'flex items-center pt-3 pb-1 text-micro font-semibold tracking-[0.06em] text-subtle uppercase';
@@ -189,6 +197,7 @@ export function PrActions({ row }: { row: HatcheryRow }) {
   const [sending, setSending] = useState(false);
   /* A ref as well as the state: two clicks inside one frame both read `sending` false. */
   const inFlight = useRef(false);
+  const hasAcr = useIsAgentId('acr');
   const session = pr.session;
 
   const github = (
@@ -255,10 +264,15 @@ export function PrActions({ row }: { row: HatcheryRow }) {
           Ready for review
         </a>
       ) : null}
-      <Button variant="ghost" className={ACTION} pending={sending} onClick={askAcr}>
-        <Binoculars size={13} aria-hidden />
-        Ask acr to look again
-      </Button>
+      {/* HIVE-447: with no acr the ledger would refuse the ask; say which swarm brings it instead. */}
+      {hasAcr ? (
+        <Button variant="ghost" className={ACTION} pending={sending} onClick={askAcr}>
+          <Binoculars size={13} aria-hidden />
+          Ask acr to look again
+        </Button>
+      ) : (
+        <MissingSwarm kind="agent" name="acr" />
+      )}
       {session === null ? null : (
         <button type="button" className={ACTION} onClick={() => openEntity(session)}>
           <Hexagon size={13} aria-hidden />
