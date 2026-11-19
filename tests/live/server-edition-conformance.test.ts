@@ -255,6 +255,10 @@ async function stopWithin(served: Served, ms: number): Promise<{ code: number | 
 interface Client {
   accepted: Record<string, unknown>;
   call(channel: Channel, payload: unknown): Promise<ServerFrame>;
+  /** A fire-and-forget frame, as the renderer sends `pty:write`. */
+  notify(channel: Channel, payload: unknown): void;
+  /** Every `pty:data` chunk for the session so far, joined. */
+  output(sessionId: string): string;
   close(): void;
 }
 
@@ -262,6 +266,7 @@ function attach(port: number, device: { id: string; token: string }): Promise<Cl
   return new Promise((resolve, reject) => {
     const socket = new SecureTestSocket(`ws://127.0.0.1:${String(port)}`);
     const pending = new Map<string, (frame: ServerFrame) => void>();
+    const output = new Map<string, string>();
     let next = 0;
     const timer = setTimeout(() => reject(new Error('attach produced no answer in 15 s')), 15_000);
     socket.on('error', (cause: Error) => reject(cause));
@@ -284,6 +289,8 @@ function attach(port: number, device: { id: string; token: string }): Promise<Cl
               pending.set(id, answer);
               socket.send(JSON.stringify({ kind: 'call', id, channel, payload }));
             }),
+          notify: (channel, payload) => socket.send(JSON.stringify({ kind: 'notify', channel, payload })),
+          output: (sessionId) => output.get(sessionId) ?? '',
           close: () => socket.terminate(),
         });
         return;
@@ -296,6 +303,14 @@ function attach(port: number, device: { id: string; token: string }): Promise<Cl
       if (frame.kind === 'result' || frame.kind === 'error') {
         pending.get(frame.id)?.(frame);
         pending.delete(frame.id);
+      }
+      // Ack every batch, as the renderer does: past 512 KiB unacked the server pauses the PTY.
+      if (frame.kind === 'event' && frame.channel === CH.ptyData) {
+        const event = frame.payload as { sessionId: string; seq: number; chunk: string };
+        output.set(event.sessionId, (output.get(event.sessionId) ?? '') + event.chunk);
+        socket.send(
+          JSON.stringify({ kind: 'notify', channel: CH.ptyAck, payload: { sessionId: event.sessionId, seq: event.seq } }),
+        );
       }
     });
   });
@@ -410,11 +425,39 @@ describe.skipIf(!RUN)(`the server edition under ${BIN ?? NODE} (HIVE-422)`, () =
     expect(await stopWithin(served, 20_000)).toEqual({ code: 0, signal: null });
   }, 60_000);
 
-  /*
-    A spawn through the server needs a licensed server; a lapsed one refuses the spawn before the PTY host is tried
-    (case 6 above). Sign-in (case 9) makes a licensed one possible. `pnpm test:pty-host` drives the fork host itself.
-  */
-  it.todo('a licensed server spawns a session through the fork host');
+  it.skipIf(RELEASE)(
+    '12: a licensed server spawns a session through the fork host and its output comes back (HIVE-425)',
+    async () => {
+      const home = await makeHome();
+      const cloud = await useStubCloud(home);
+      useKeyFile(home);
+      await signIn(home, cloud);
+      const device = await pair(home);
+      const served = serve(home);
+      await waitFor(() => served.exit !== null || accepts(home.port), `the listener on ${String(home.port)}`);
+      expect(served.exit, served.stderr()).toBeNull();
+
+      const client = await attach(home.port, device);
+      try {
+        // A plain shell: the same licence gate and fork host as `pty:spawn`, without starting an agent CLI the runner
+        // may lack (or this machine may start for real), so what is typed reaches a shell.
+        const spawned = await client.call(CH.ptySpawnTerminal, {
+          sessionId: 'sess-marker',
+          projectId: 'scratch',
+          cols: 200,
+          rows: 24,
+        });
+        expect(spawned.kind, JSON.stringify(spawned)).toBe('result');
+        // `%s`, so the marker exists only in the output: the PTY echoes the typed line, which holds no `MARK-12`.
+        client.notify(CH.ptyWrite, { sessionId: 'sess-marker', data: "printf 'MARK-%s\\n' 12\r" });
+        await waitFor(() => client.output('sess-marker').includes('MARK-12'), 'the marker in pty:data');
+      } finally {
+        client.close();
+      }
+      expect(await stopWithin(served, 20_000), served.stderr()).toEqual({ code: 0, signal: null });
+    },
+    120_000,
+  );
 
   it('5: nothing under out/server imports electron', () => {
     expect(existsSync(join(SERVER_OUT, 'pty-host.js'))).toBe(true);
