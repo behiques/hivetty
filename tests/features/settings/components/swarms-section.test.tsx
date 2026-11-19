@@ -408,3 +408,25 @@ describe('an install link (HIVE-442)', () => {
     expect(swarms.installSwarm).not.toHaveBeenCalled();
   });
 });
+
+describe('a browse request (HIVE-447)', () => {
+  it('opens on Browse and clears the request', () => {
+    useUiStore.getState().setSwarmsBrowseRequest(true);
+    render(<SwarmsSection />);
+
+    expect(screen.getByRole('heading', { name: 'Browse swarms' })).toBeInTheDocument();
+    expect(useUiStore.getState().swarmsBrowseRequest).toBe(false);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(swarms.installSwarm).not.toHaveBeenCalled();
+  });
+
+  it('switches an open pane from the installed list to Browse', () => {
+    render(<SwarmsSection />);
+    expect(screen.queryByRole('heading', { name: 'Browse swarms' })).not.toBeInTheDocument();
+
+    act(() => useUiStore.getState().setSwarmsBrowseRequest(true));
+
+    expect(screen.getByRole('heading', { name: 'Browse swarms' })).toBeInTheDocument();
+    expect(useUiStore.getState().swarmsBrowseRequest).toBe(false);
+  });
+});

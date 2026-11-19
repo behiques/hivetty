@@ -24,7 +24,12 @@ import {
   removeSwarm,
   setSwarmAutoUpdate,
 } from '@/lib/swarms';
-import { useSetSwarmInstallRequest, useSwarmInstallRequest } from '@/stores/ui-store';
+import {
+  useSetSwarmInstallRequest,
+  useSetSwarmsBrowseRequest,
+  useSwarmInstallRequest,
+  useSwarmsBrowseRequest,
+} from '@/stores/ui-store';
 
 import type { SwarmListItem } from '@shared/swarm-contract';
 
@@ -65,6 +70,8 @@ export function SwarmsSection() {
   const linkRequest = useSwarmInstallRequest();
   const setLinkRequest = useSetSwarmInstallRequest();
   const [linkUnavailable, setLinkUnavailable] = useState(false);
+  const browseRequest = useSwarmsBrowseRequest();
+  const setBrowseRequest = useSetSwarmsBrowseRequest();
   const wasSignedIn = useRef(signedIn);
   const linkResolution =
     linkRequest === null || account === null ? null : resolveInstallLink(linkRequest, signedIn, listing);
@@ -88,6 +95,13 @@ export function SwarmsSection() {
       setLinkRequest(null);
     }
   }, [linkKind, linkConsentId, setLinkRequest]);
+
+  // A missing-swarm notice's Browse swarms (HIVE-447): open on Browse, then clear the request. Nothing else.
+  useEffect(() => {
+    if (!browseRequest) return;
+    setBrowsing(true);
+    setBrowseRequest(false);
+  }, [browseRequest, setBrowseRequest]);
 
   // Signed in with a link waiting: the list read signed out has no rows for this account, so read it again.
   useEffect(() => {

@@ -48,6 +48,9 @@ the picker from re-rendering thirteen live terminals.
   `useSwarmInstallRequest()`; components set it with `useSetSwarmInstallRequest()`. Settings › Swarms
   clears it once `resolveInstallLink` answers consent, installed or unavailable; sign-in and wait keep it.
   It never installs: the furthest a link goes is the consent dialog.
+  The missing-swarm notice adds (HIVE-447), not persisted: `swarmsBrowseRequest`, true when a notice's
+  Browse swarms asked for Settings › Swarms on its Browse view; set with `useSetSwarmsBrowseRequest()`,
+  read with `useSwarmsBrowseRequest()`, and cleared by the pane once it shows Browse. It installs nothing.
   The Sessions place adds (HIVE-197), none persisted: `sessionsProject`
   (the overmind's project filter, `null` for all), `sessionsFilter`
   (`'all' | 'live' | 'ended'`), `endedExpanded` ("N more ›" pressed) and
@@ -491,6 +494,8 @@ Components never read a store object directly and never call `getState()`.
 | `useEpicLabel(key)` | the ring's label, `KEY · title · done/total` (`+` when capped), only for an epic |
 | `useSwarmInstallRequest()` | the swarm id an install link named, until Settings › Swarms resolves it (HIVE-442) |
 | `useSetSwarmInstallRequest()` | `ui-store`'s `setSwarmInstallRequest`; the pane clears the request with it (HIVE-442) |
+| `useSwarmsBrowseRequest()` | true while a missing-swarm notice's Browse swarms waits for Settings › Swarms to open on Browse (HIVE-447) |
+| `useSetSwarmsBrowseRequest()` | `ui-store`'s `setSwarmsBrowseRequest`; `useSwarmActions().browse` sets it, the pane clears it (HIVE-447) |
 
 Derived values are computed in selectors and **never stored** — one source of
 truth for every number on screen.
