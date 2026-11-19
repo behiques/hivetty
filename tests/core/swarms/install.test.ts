@@ -403,7 +403,18 @@ describe('install', () => {
       expect(existsSync(hive('agents/a1/AGENT.md'))).toBe(false);
     });
 
-    it.todo('a claimed file that holds the swarm’s exact bytes is recorded as seeded, so remove deletes it (ruling: spec scopes claim to files that differ)');
+    it('records a file that holds the swarm’s exact bytes as the swarm’s, so removing the swarm deletes it', async () => {
+      write(hive('skills/tdd/SKILL.md'), skillText('tdd'));
+      const { entry } = released('1.0.0', { skills: ['tdd'], agents: [] });
+      const swarms = createSwarms(makeDeps());
+
+      expect(await swarms.install(entry)).toMatchObject({ ok: true });
+      const own = readJson<{ files: Record<string, string> }>('swarms/sw1/seed.json');
+      expect(own.files['skills/tdd/SKILL.md']).toBe(sha(skillText('tdd')));
+
+      expect(await swarms.remove('sw1')).toEqual({ ok: true });
+      expect(existsSync(hive('skills/tdd/SKILL.md'))).toBe(false);
+    });
   });
 
   describe('a built-in the swarm ships', () => {
