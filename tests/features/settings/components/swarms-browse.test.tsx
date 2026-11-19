@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SwarmsBrowse } from '@/features/settings/components/swarms-browse';
 
 import type { AccountState } from '@shared/account-contract';
-import type { SwarmListing } from '@shared/swarm-contract';
+import type { SwarmFailure, SwarmListing } from '@shared/swarm-contract';
 
 import { installedSwarm, swarmEntry, swarmItem, swarmListing } from '../../../support/swarms';
 
@@ -38,9 +38,13 @@ const community = swarmItem({
 });
 const LISTING = swarmListing([community, zeta, acme, native]);
 
-function renderBrowse(listing: SwarmListing | null = LISTING, busy: ReadonlySet<string> = new Set()) {
+function renderBrowse(
+  listing: SwarmListing | null = LISTING,
+  busy: ReadonlySet<string> = new Set(),
+  failures: ReadonlyMap<string, SwarmFailure> = new Map(),
+) {
   const calls = { onBack: vi.fn(), onInstall: vi.fn(), onReview: vi.fn(), onRetry: vi.fn() };
-  render(<SwarmsBrowse listing={listing} busy={busy} {...calls} />);
+  render(<SwarmsBrowse listing={listing} busy={busy} failures={failures} {...calls} />);
   return calls;
 }
 
@@ -177,5 +181,34 @@ describe('SwarmsBrowse', () => {
 
     expect(screen.queryByText('Sign in to browse swarms.')).toBeNull();
     expect(groupLabels()).toEqual([]);
+  });
+
+  it('a failed install started here shows its message and Try again on the row', () => {
+    const failed: SwarmFailure = { code: 'failed', message: 'Git could not reach the repository.' };
+    const calls = renderBrowse(LISTING, new Set(), new Map([['standard', failed]]));
+    const group = screen.getByRole('region', { name: 'Native' });
+
+    expect(within(group).getByText(failed.message)).toBeInTheDocument();
+    expect(within(group).queryByRole('button', { name: 'Install' })).toBeNull();
+    fireEvent.click(within(group).getByRole('button', { name: 'Try again' }));
+    expect(calls.onInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it('an installed swarm with a ready update or a failed one offers the update, not a green Installed', () => {
+    const ready = swarmItem({
+      entry: swarmEntry({ id: 'acme-tools', kind: 'organization', title: 'Acme Tools', org: { id: 'o1', name: 'Acme' } }),
+      installed: installedSwarm({ swarmId: 'acme-tools', kind: 'organization', version: '1.0.0' }),
+      update: { target: '1.4.0', updating: false },
+    });
+    const failedUpdate = swarmItem({
+      installed: installedSwarm({ lastError: { code: 'failed', message: 'No.' } }),
+    });
+    const calls = renderBrowse(swarmListing([ready, failedUpdate]));
+
+    expect(screen.queryByText('Installed')).toBeNull();
+    const buttons = screen.getAllByRole('button', { name: 'Update now' });
+    expect(buttons).toHaveLength(2);
+    fireEvent.click(buttons[0]!);
+    expect(calls.onReview).toHaveBeenCalledTimes(1);
   });
 });

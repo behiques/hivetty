@@ -59,7 +59,13 @@ describe('without a bridge (the browser target)', () => {
     expect(await removeSwarm('standard')).toBeNull();
     await setSwarmAutoUpdate('standard', false);
 
-    expect(swarmsSnapshot()).toEqual({ listing: null, busy: new Set(), failures: new Map(), lastUpdate: null });
+    expect(swarmsSnapshot()).toEqual({
+      listing: null,
+      busy: new Set(),
+      removing: new Set(),
+      failures: new Map(),
+      lastUpdate: null,
+    });
   });
 });
 
@@ -191,14 +197,43 @@ describe('installSwarm', () => {
   });
 });
 
+describe('a rejected call on an installed swarm', () => {
+  it('is held, since main recorded nothing the listing could bring back', async () => {
+    const h = bridge(swarmListing([swarmItem({ installed: installedSwarm(), update: { target: '1.5.0', updating: false } })]));
+    await loadSwarms();
+    h.install.mockRejectedValueOnce(new Error('IPC broke'));
+
+    expect(await installSwarm('standard')).toBe(false);
+
+    expect(swarmsSnapshot().failures.get('standard')).toEqual({ code: 'failed', message: 'IPC broke' });
+  });
+
+  it('is dropped once the listing shows no update pending for it', async () => {
+    const h = bridge(swarmListing([swarmItem({ installed: installedSwarm(), update: { target: '1.5.0', updating: false } })]));
+    await loadSwarms();
+    h.install.mockRejectedValueOnce(new Error('IPC broke'));
+    await installSwarm('standard');
+
+    h.list.mockResolvedValue(INSTALLED);
+    await loadSwarms();
+
+    expect(swarmsSnapshot().failures.has('standard')).toBe(false);
+  });
+});
+
 describe('removeSwarm', () => {
   it('marks busy, removes, reloads and answers null', async () => {
     const h = bridge(INSTALLED);
     const seen: boolean[] = [];
     subscribeSwarms(() => seen.push(swarmsSnapshot().busy.has('standard')));
 
+    const removing: boolean[] = [];
+    subscribeSwarms(() => removing.push(swarmsSnapshot().removing.has('standard')));
+
     expect(await removeSwarm('standard')).toBeNull();
 
+    expect(removing[0]).toBe(true);
+    expect(swarmsSnapshot().removing.size).toBe(0);
     expect(h.remove).toHaveBeenCalledWith({ swarmId: 'standard' });
     expect(seen[0]).toBe(true);
     expect(swarmsSnapshot().busy.size).toBe(0);

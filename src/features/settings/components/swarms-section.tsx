@@ -5,7 +5,7 @@ import { SettingsSectionHeader } from '@/features/settings/components/settings-s
 import { SwarmConsent } from '@/features/settings/components/swarm-consent';
 import { SwarmRow } from '@/features/settings/components/swarm-row';
 import { SwarmsBrowse } from '@/features/settings/components/swarms-browse';
-import { installedRows, keptFiles, needsConsent, rowState } from '@/features/settings/lib/swarm-view';
+import { consentFingerprint, installedRows, keptFiles, needsConsent } from '@/features/settings/lib/swarm-view';
 import { useShipped } from '@/hooks/use-shipped';
 import { useSwarms } from '@/hooks/use-swarms';
 import { keepShippedMine, loadShipped, takeShippedPrompt } from '@/lib/shipped';
@@ -27,7 +27,7 @@ const idOf = (item: SwarmListItem): string => item.entry?.id ?? item.installed?.
 
 /** Settings › Automation › Swarms (HIVE-442): the installed list, Browse in place, and consent before installing. */
 export function SwarmsSection() {
-  const { listing, busy, failures, lastUpdate } = useSwarms();
+  const { listing, busy, removing, failures, lastUpdate } = useSwarms();
   const agents = useShipped('agents');
   const skills = useShipped('skills');
   const [browsing, setBrowsing] = useState(false);
@@ -40,23 +40,31 @@ export function SwarmsSection() {
   const [consentId, setConsentId] = useState<string | null>(null);
   const consent = consentId === null ? null : (listing?.items.find((item) => item.entry?.id === consentId) ?? null);
   const [notices, setNotices] = useState<ReadonlyMap<string, string>>(new Map());
+  /*
+    What the person said yes to for each first install, as `consentFingerprint`s. Try again on a failed
+    install skips the dialog only while the row still matches; a row that moved asks again.
+  */
+  const [consented, setConsented] = useState<ReadonlyMap<string, string>>(new Map());
 
   // Kept files are read from the shipped status; ask again whenever the list moves.
   useEffect(() => {
     void loadShipped();
   }, [listing]);
 
-  /** Every path to `swarms:install` (HIVE-442). Consent first, unless the rule says this one was already given. */
-  const request = (item: SwarmListItem, retry = false): void => {
+  /** Every path to `swarms:install` (HIVE-442). Consent first, unless this very row was already consented to. */
+  const request = (item: SwarmListItem): void => {
     if (item.entry === null) return; // no registry row: nothing can be installed
-    if (needsConsent(item, retry)) setConsentId(item.entry.id);
+    if (needsConsent(item, consented.get(item.entry.id) ?? null)) setConsentId(item.entry.id);
     else void installSwarm(item.entry.id);
   };
 
   const confirm = (): void => {
     const item = consent;
     setConsentId(null);
-    if (item?.entry) void installSwarm(item.entry.id);
+    if (!item?.entry) return;
+    const { entry } = item;
+    if (item.installed === null) setConsented((was) => new Map(was).set(entry.id, consentFingerprint(entry)));
+    void installSwarm(entry.id);
   };
 
   const check = (): void => {
@@ -83,6 +91,7 @@ export function SwarmsSection() {
         <SwarmsBrowse
           listing={listing}
           busy={busy}
+          failures={failures}
           onBack={() => setBrowsing(false)}
           onInstall={(item) => request(item)}
           onReview={(item) => request(item)}
@@ -119,17 +128,17 @@ export function SwarmsSection() {
               {rows.map((item) => {
                 const id = idOf(item);
                 const isBusy = busy.has(id);
-                const state = rowState(item, listing.source, isBusy);
                 return (
                   <SwarmRow
                     key={id}
                     item={item}
                     source={listing.source}
                     busy={isBusy}
+                    removing={removing.has(id)}
                     failure={failures.get(id)}
                     kept={item.installed === null ? [] : keptFiles(item.installed, agents, skills)}
                     notice={notices.get(id) ?? null}
-                    onAction={() => request(item, state === 'not-installed')}
+                    onAction={() => request(item)}
                     onDismiss={() => dismissSwarmFailure(id)}
                     onAutoUpdate={(next) => void setSwarmAutoUpdate(id, next)}
                     onRemove={() => remove(id)}

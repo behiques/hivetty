@@ -17,6 +17,7 @@ function renderRow(
   over: {
     source?: SwarmListing['source'];
     busy?: boolean;
+    removing?: boolean;
     failure?: SwarmFailure;
     kept?: KeptFile[];
   } = {},
@@ -34,6 +35,7 @@ function renderRow(
       item={item}
       source={over.source ?? 'cloud'}
       busy={over.busy ?? false}
+      removing={over.removing ?? false}
       failure={over.failure}
       kept={over.kept ?? []}
       {...calls}
@@ -105,6 +107,24 @@ describe('SwarmRow, one case per state', () => {
     expect(actionsShown()).toEqual([]);
     expect(screen.getByRole('switch', { name: 'Update automatically' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled();
+  });
+
+  it('removing: reads Removing…, every control disabled', () => {
+    renderRow(swarmItem({ installed: installedSwarm() }), { busy: true, removing: true });
+
+    expect(screen.getByText('Removing…')).toBeInTheDocument();
+    expect(screen.queryByText('Updating…')).toBeNull();
+    expect(screen.getByRole('switch', { name: 'Update automatically' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled();
+  });
+
+  it('an update whose call was rejected shows the held message beside Update now', () => {
+    renderRow(swarmItem({ installed: installedSwarm({ version: '1.3.0' }), update: { target: '1.4.0', updating: false } }), {
+      failure: FAILED,
+    });
+
+    expect(screen.getByText(FAILED.message)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Update now' })).toBeInTheDocument();
   });
 
   it("failed update: the installed entry's error and Update now", () => {

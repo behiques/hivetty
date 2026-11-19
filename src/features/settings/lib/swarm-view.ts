@@ -11,13 +11,20 @@ import type {
 export type SwarmRowState =
   | 'not-installed'
   | 'updating'
+  | 'removing'
   | 'available'
   | 'ready'
   | 'failed-update'
   | 'gone'
   | 'current';
 
-export function rowState(item: SwarmListItem, source: SwarmListing['source'], busy: boolean): SwarmRowState {
+export function rowState(
+  item: SwarmListItem,
+  source: SwarmListing['source'],
+  busy: boolean,
+  removing = false,
+): SwarmRowState {
+  if (removing) return 'removing';
   if (busy || item.update?.updating === true) return 'updating';
   if (item.installed === null) return 'not-installed';
   // Offline and signed out, every installed swarm has no row: only a fresh list says it left.
@@ -35,6 +42,8 @@ export function stateText(state: SwarmRowState, item: SwarmListItem): string {
       return 'Not installed';
     case 'updating':
       return 'Updating…';
+    case 'removing':
+      return 'Removing…';
     case 'available':
       return `${version} · ${target} available`;
     case 'ready':
@@ -164,12 +173,35 @@ export function keptFiles(
   ];
 }
 
+/** The version an install of this row lands: a pinned organization swarm installs its pin, not the registry's newest. */
+export function installVersionOf(entry: SwarmEntry): string | null {
+  return entry.kind === 'organization' && entry.policy === 'pinned' && entry.pinnedVersion !== null
+    ? entry.pinnedVersion
+    : entry.version;
+}
+
+/**
+ * What the consent dialog showed for a first install, as one comparable string: everything that decides what
+ * lands on disk (version, commit, pin, every agent with its tools, every skill), and nothing cosmetic.
+ */
+export function consentFingerprint(entry: SwarmEntry): string {
+  return JSON.stringify([
+    entry.version,
+    entry.commit,
+    entry.policy,
+    entry.pinnedVersion,
+    entry.agents.map((agent) => [agent.name, [...agent.tools].sort()]),
+    entry.skills.map((skill) => skill.name),
+  ]);
+}
+
 /**
  * Whether the consent dialog comes before `swarms:install` (HIVE-442): before every first install, and before
- * every community update. `retry` is Try again on an install that failed in this run, which was already consented to.
+ * every community update. `consented` is the {@link consentFingerprint} the person already said yes to for this
+ * swarm in this run (Try again on a failed install); it skips the dialog only while the row still matches it.
  */
-export function needsConsent(item: SwarmListItem, retry = false): boolean {
-  if (item.installed === null) return !retry;
+export function needsConsent(item: SwarmListItem, consented: string | null = null): boolean {
+  if (item.installed === null) return item.entry === null || consented !== consentFingerprint(item.entry);
   // Either kind: a registry that relabels a community swarm must not let its next update through unseen.
   return item.entry?.kind === 'community' || item.installed.kind === 'community';
 }

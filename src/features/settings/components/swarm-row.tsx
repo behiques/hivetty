@@ -24,6 +24,8 @@ interface SwarmRowProps {
   item: SwarmListItem;
   source: SwarmListing['source'];
   busy: boolean;
+  /** The call in flight is a removal. */
+  removing?: boolean;
   /** A first install that failed in this run: the row is "Not installed" with this message. */
   failure: SwarmFailure | undefined;
   kept: KeptFile[];
@@ -46,6 +48,7 @@ const DOT: Record<SwarmRowState, string> = {
   'failed-update': 'bg-red',
   // ccpulse is collapsed by the reduced-motion rule in global.css, so the dot stands still there.
   updating: 'bg-brand animate-ccpulse',
+  removing: 'bg-brand animate-ccpulse',
   gone: 'bg-muted',
 };
 
@@ -68,6 +71,8 @@ function actionOf(state: SwarmRowState, item: SwarmListItem): string | null {
 function messageOf(state: SwarmRowState, item: SwarmListItem, failure: SwarmFailure | undefined): string | null {
   if (state === 'not-installed') return failure?.message ?? null;
   if (state === 'failed-update') return item.installed?.lastError?.message ?? null;
+  // A rejected update call: main recorded no lastError, so the pane's held failure is all there is.
+  if (state === 'ready' || state === 'available') return failure?.message ?? null;
   if (state === 'gone') {
     const org = item.installed?.kind === 'organization' ? item.installed.org?.name : undefined;
     return org === undefined ? "No longer available. It won't update." : `No longer available from ${org}. It won't update.`;
@@ -116,6 +121,7 @@ export function SwarmRow({
   item,
   source,
   busy,
+  removing = false,
   failure,
   kept,
   notice = null,
@@ -127,13 +133,13 @@ export function SwarmRow({
   onKeep,
 }: SwarmRowProps) {
   const [confirming, setConfirming] = useState(false);
-  const state = rowState(item, source, busy);
+  const state = rowState(item, source, busy, removing);
   const action = actionOf(state, item);
   const message = messageOf(state, item, failure);
   const title = item.installed?.title ?? item.entry?.title ?? '';
   const contents = item.installed?.contents ?? item.entry ?? { agents: [], skills: [] };
   const publisher = publisherOf(item);
-  const updating = state === 'updating';
+  const updating = state === 'updating' || state === 'removing';
   const org = item.entry?.org ?? item.installed?.org ?? null;
   const pinned =
     item.entry?.kind === 'organization' && item.entry.policy === 'pinned' && item.entry.pinnedVersion !== null

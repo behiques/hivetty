@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   badgeOf,
   browseGroups,
+  consentFingerprint,
   countsOf,
   diffContents,
+  installVersionOf,
   installedRows,
   keptFiles,
   matches,
@@ -254,16 +256,29 @@ describe('needsConsent', () => {
     installed: installedSwarm({ kind: 'organization', org: ACME }),
   });
 
-  it.each<[string, SwarmListItem, boolean, boolean]>([
-    ['not installed', notInstalled, false, true],
-    ['not installed, the retry of a failed install', notInstalled, true, false],
-    ['installed community', available, false, true],
-    ['installed native', current, false, false],
-    ['installed organization', organization, false, false],
-    ['installed community, a retry never skips the review', available, true, true],
-    ['installed community with no row (kind from the installed entry)', swarmItem({ entry: null, installed: installedSwarm({ kind: 'community' }) }), false, true],
-  ])('%s', (_name, item, retry, expected) => {
-    expect(needsConsent(item, retry)).toBe(expected);
+  const seen = notInstalled.entry === null ? '' : consentFingerprint(notInstalled.entry);
+
+  it.each<[string, SwarmListItem, string | null, boolean]>([
+    ['not installed', notInstalled, null, true],
+    ['not installed, consented to this very row before (Try again)', notInstalled, seen, false],
+    ['installed community', available, null, true],
+    ['installed native', current, null, false],
+    ['installed organization', organization, null, false],
+    ['installed community, an earlier consent never skips the review', available, seen, true],
+    ['installed community with no row (kind from the installed entry)', swarmItem({ entry: null, installed: installedSwarm({ kind: 'community' }) }), null, true],
+  ])('%s', (_name, item, consented, expected) => {
+    expect(needsConsent(item, consented)).toBe(expected);
+  });
+
+  it.each<[string, Partial<Parameters<typeof swarmEntry>[0]>]>([
+    ['a new version', { version: '1.5.0' }],
+    ['a new commit', { commit: 'b'.repeat(40) }],
+    ['a tool added to an agent', { agents: [{ name: 'builder', description: 'Builds plans.', tools: ['Read', 'Edit', 'Bash', 'WebFetch'] }] }],
+    ['a new agent', { agents: [...swarmEntry().agents, { name: 'spy', description: 'x', tools: ['Bash'] }] }],
+    ['a new skill', { skills: [...swarmEntry().skills, { name: 'exfil', description: 'x' }] }],
+    ['a new pin', { policy: 'pinned', pinnedVersion: '2.0.0' }],
+  ])('a retry asks again when the registry row changed since consent: %s', (_name, over) => {
+    expect(needsConsent(swarmItem({ entry: swarmEntry(over) }), seen)).toBe(true);
   });
 
   it.each<[string, SwarmListItem]>([
@@ -279,10 +294,32 @@ describe('needsConsent', () => {
     expect(needsConsent(item)).toBe(true);
   });
 
-  // Parked (Task 2 review): Try again skips consent without checking the row is still the version the person saw.
-  it.todo('a retry asks again when the registry row changed since the consented install failed');
+  it('a description or install count moving does not ask again', () => {
+    expect(needsConsent(swarmItem({ entry: swarmEntry({ description: 'Reworded.', installs: 99 }) }), seen)).toBe(false);
+  });
 
-  it('defaults retry to false', () => {
+  it('defaults to no earlier consent', () => {
     expect(needsConsent(notInstalled)).toBe(true);
+  });
+});
+
+describe('installVersionOf', () => {
+  it('is the pinned version for a pinned organization swarm, which is what installs', () => {
+    expect(
+      installVersionOf(swarmEntry({ kind: 'organization', org: ACME, version: '1.4.0', policy: 'pinned', pinnedVersion: '1.2.0' })),
+    ).toBe('1.2.0');
+  });
+
+  it("is the registry's version otherwise", () => {
+    expect(installVersionOf(swarmEntry({ version: '1.4.0' }))).toBe('1.4.0');
+    expect(installVersionOf(swarmEntry({ kind: 'organization', org: ACME, policy: 'latest', version: '1.4.0' }))).toBe('1.4.0');
+    expect(installVersionOf(swarmEntry({ kind: 'organization', org: ACME, policy: 'pinned', pinnedVersion: null, version: '1.4.0' }))).toBe('1.4.0');
+  });
+});
+
+describe('rowState while removing', () => {
+  it('reads removing, not updating', () => {
+    expect(rowState(current, 'cloud', true, true)).toBe('removing');
+    expect(stateText('removing', current)).toBe('Removing…');
   });
 });

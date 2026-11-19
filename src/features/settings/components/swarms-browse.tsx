@@ -4,15 +4,25 @@ import { useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { SearchBox } from '@/components/ui/search-box';
 import { Tag } from '@/components/ui/tag';
-import { badgeOf, browseGroups, countsOf, matches, type BrowseGroup } from '@/features/settings/lib/swarm-view';
+import {
+  badgeOf,
+  browseGroups,
+  countsOf,
+  installVersionOf,
+  matches,
+  needsConsent,
+  type BrowseGroup,
+} from '@/features/settings/lib/swarm-view';
 import { useAccount } from '@/hooks/use-account';
 import { signIn } from '@/lib/account';
 
-import type { SwarmListing, SwarmListItem } from '@shared/swarm-contract';
+import type { SwarmFailure, SwarmListing, SwarmListItem } from '@shared/swarm-contract';
 
 interface SwarmsBrowseProps {
   listing: SwarmListing | null;
   busy: ReadonlySet<string>;
+  /** First installs that failed in this run: the row shows why, with Try again. */
+  failures: ReadonlyMap<string, SwarmFailure>;
   onBack: () => void;
   onInstall: (item: SwarmListItem) => void;
   onReview: (item: SwarmListItem) => void;
@@ -24,11 +34,13 @@ type BrowseItem = BrowseGroup['items'][number];
 function RowControl({
   item,
   busy,
+  failed,
   onInstall,
   onReview,
 }: {
   item: BrowseItem;
   busy: boolean;
+  failed: boolean;
   onInstall: () => void;
   onReview: () => void;
 }) {
@@ -42,15 +54,16 @@ function RowControl({
   }
   if (item.installed === null) {
     return (
-      <Button size="sm" variant="primary" onClick={onInstall}>
-        Install
+      <Button size="sm" variant={failed ? 'secondary' : 'primary'} onClick={onInstall}>
+        {failed ? 'Try again' : 'Install'}
       </Button>
     );
   }
-  if (item.entry.kind === 'community' && item.update !== null) {
+  // The installed list's action, so Browse never calls a pending or failed update "Installed".
+  if (item.update !== null || item.installed.lastError !== null) {
     return (
       <Button size="sm" variant="primary" onClick={onReview}>
-        Review update
+        {needsConsent(item) ? 'Review update' : 'Update now'}
       </Button>
     );
   }
@@ -74,7 +87,7 @@ function Notice({ text, action, onAction }: { text: string; action: string; onAc
 }
 
 /** Browse the swarm registry (HIVE-442), in place of the installed list. Install goes through the pane's consent. */
-export function SwarmsBrowse({ listing, busy, onBack, onInstall, onReview, onRetry }: SwarmsBrowseProps) {
+export function SwarmsBrowse({ listing, busy, failures, onBack, onInstall, onReview, onRetry }: SwarmsBrowseProps) {
   const account = useAccount();
   const [query, setQuery] = useState('');
 
@@ -108,11 +121,11 @@ export function SwarmsBrowse({ listing, busy, onBack, onInstall, onReview, onRet
             <h3 className="text-ui-sm font-semibold tracking-[0.06em] text-subtle uppercase">{group.label}</h3>
             <ul className="flex flex-col rounded-lg border border-border">
               {group.items.map((item) => {
-                const meta = [
-                  item.entry.publisher,
-                  countsOf(item.entry),
-                  item.entry.version === null ? '' : `v${item.entry.version}`,
-                ].filter((part) => part !== '');
+                const lands = installVersionOf(item.entry);
+                const meta = [item.entry.publisher, countsOf(item.entry), lands === null ? '' : `v${lands}`].filter(
+                  (part) => part !== '',
+                );
+                const failure = item.installed === null ? failures.get(item.entry.id) : undefined;
                 return (
                   <li
                     key={item.entry.id}
@@ -131,11 +144,13 @@ export function SwarmsBrowse({ listing, busy, onBack, onInstall, onReview, onRet
                       {item.entry.description === '' ? null : (
                         <span className="text-ui-sm text-muted">{item.entry.description}</span>
                       )}
+                      {failure === undefined ? null : <span className="text-ui-sm text-red">{failure.message}</span>}
                     </div>
                     <div className="shrink-0">
                       <RowControl
                         item={item}
                         busy={busy.has(item.entry.id)}
+                        failed={failure !== undefined}
                         onInstall={() => onInstall(item)}
                         onReview={() => onReview(item)}
                       />

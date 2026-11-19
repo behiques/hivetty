@@ -13,11 +13,19 @@ import type { SwarmFailure, SwarmListing } from '@shared/swarm-contract';
 export interface SwarmsSnapshot {
   listing: SwarmListing | null;
   busy: ReadonlySet<string>;
+  /** The ids whose call in flight is a removal, so the row reads "Removing…" and not "Updating…". */
+  removing: ReadonlySet<string>;
   failures: ReadonlyMap<string, SwarmFailure>;
   lastUpdate: { title: string; version: string } | null;
 }
 
-const EMPTY: SwarmsSnapshot = { listing: null, busy: new Set(), failures: new Map(), lastUpdate: null };
+const EMPTY: SwarmsSnapshot = {
+  listing: null,
+  busy: new Set(),
+  removing: new Set(),
+  failures: new Map(),
+  lastUpdate: null,
+};
 
 let snapshot: SwarmsSnapshot = EMPTY;
 let unsubscribeChanged: (() => void) | null = null;
@@ -43,11 +51,28 @@ export function swarmsSnapshot(): SwarmsSnapshot {
 
 const messageOf = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
 
-function setBusy(swarmId: string, on: boolean): void {
+function setBusy(swarmId: string, on: boolean, removal = false): void {
   const busy = new Set(snapshot.busy);
+  const removing = new Set(snapshot.removing);
   if (on) busy.add(swarmId);
   else busy.delete(swarmId);
-  publish({ busy });
+  if (on && removal) removing.add(swarmId);
+  else removing.delete(swarmId);
+  publish({ busy, removing });
+}
+
+/**
+ * A held failure of an installed swarm (a rejected update call) lasts while its update is still pending; once the
+ * listing shows none, it was applied or withdrawn, and the message would be stale.
+ */
+function pruneFailures(listing: SwarmListing): void {
+  const settled = listing.items.filter(
+    (item) => item.installed !== null && item.update === null && snapshot.failures.has(item.installed.swarmId),
+  );
+  if (settled.length === 0) return;
+  const failures = new Map(snapshot.failures);
+  for (const item of settled) if (item.installed !== null) failures.delete(item.installed.swarmId);
+  publish({ failures });
 }
 
 function setFailure(swarmId: string, failure: SwarmFailure | null): void {
@@ -74,7 +99,9 @@ export async function loadSwarms(): Promise<void> {
   }
 
   try {
-    publish({ listing: await bridge.swarms.list() });
+    const listing = await bridge.swarms.list();
+    publish({ listing });
+    pruneFailures(listing);
   } catch (cause) {
     console.error('[hive] could not list the swarms:', cause);
   }
@@ -99,7 +126,8 @@ const isInstalled = (swarmId: string): boolean =>
 /**
  * Install, or update an installed swarm. True when it installed. A failed
  * first install is held here as the row's "Not installed"; a failed update
- * comes back as the installed entry's `lastError`, so it is not held twice.
+ * comes back as the installed entry's `lastError`, so it is not held twice,
+ * unless the call itself was rejected and main recorded nothing.
  */
 export async function installSwarm(swarmId: string): Promise<boolean> {
   const bridge = window.hive;
@@ -108,16 +136,18 @@ export async function installSwarm(swarmId: string): Promise<boolean> {
 
   setBusy(swarmId, true);
   let failure: SwarmFailure | null = null;
+  let rejected = false;
   try {
     const result = await bridge.swarms.install({ swarmId });
     if (!result.ok) failure = result.failure;
   } catch (cause) {
     failure = { code: 'failed', message: messageOf(cause) };
+    rejected = true;
   }
   setBusy(swarmId, false);
 
   if (failure === null) setFailure(swarmId, null);
-  else if (!isInstalled(swarmId)) setFailure(swarmId, failure);
+  else if (rejected || !isInstalled(swarmId)) setFailure(swarmId, failure);
 
   await loadSwarms();
 
@@ -130,7 +160,7 @@ export async function removeSwarm(swarmId: string): Promise<string | null> {
 
   if (!bridge) return null;
 
-  setBusy(swarmId, true);
+  setBusy(swarmId, true, true);
   let message: string | null = null;
   try {
     const result = await bridge.swarms.remove({ swarmId });

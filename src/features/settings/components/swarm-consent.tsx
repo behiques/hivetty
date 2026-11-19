@@ -3,7 +3,7 @@ import { useId, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tag } from '@/components/ui/tag';
-import { badgeOf, diffContents, type ContentsDiff } from '@/features/settings/lib/swarm-view';
+import { badgeOf, diffContents, installVersionOf, type ContentsDiff } from '@/features/settings/lib/swarm-view';
 
 import type { InstalledSwarm, SwarmEntry } from '@shared/swarm-contract';
 
@@ -116,8 +116,9 @@ function WhatChanges({ installed, entry }: { installed: InstalledSwarm; entry: S
 export function SwarmConsent({ entry, installed, target, onConfirm, onCancel }: SwarmConsentProps) {
   const update = installed !== null;
   const badge = badgeOf({ entry, installed, update: null });
-  const next = target ?? entry.version;
-  let version: string | null = entry.version === null ? null : `v${entry.version}`;
+  const lands = installVersionOf(entry);
+  const next = target ?? lands;
+  let version: string | null = lands === null ? null : `v${lands}`;
   if (update) version = next === null ? `v${installed.version}` : `v${installed.version} → v${next}`;
 
   return (

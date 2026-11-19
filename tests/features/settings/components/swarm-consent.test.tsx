@@ -54,6 +54,15 @@ describe('SwarmConsent, install mode', () => {
     expect(within(dialog).getByText('1 skill')).toBeInTheDocument();
   });
 
+  it('names the pinned version for a pinned organization swarm, the one that installs', () => {
+    const { dialog } = renderConsent(
+      swarmEntry({ kind: 'organization', org: { id: 'o', name: 'Acme' }, version: '1.4.0', policy: 'pinned', pinnedVersion: '1.2.0' }),
+    );
+
+    expect(within(dialog).getByText('v1.2.0')).toBeInTheDocument();
+    expect(within(dialog).queryByText('v1.4.0')).toBeNull();
+  });
+
   it('leaves the version out when the row has none', () => {
     const { dialog } = renderConsent(swarmEntry({ kind: 'organization', org: { id: 'o', name: 'Acme' }, version: null }));
 
