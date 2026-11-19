@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { parseSwarmTag } from '@shared/swarm-contract';
 
-import { hashTree, LOCK_FILE, pullSwarm, SWARM_REPO } from '../../scripts/swarm-pull.mjs';
+import { hashTree, LOCK_FILE, pullSwarm, readLock, SWARM_REPO } from '../../scripts/swarm-pull.mjs';
 
 interface Read {
   manifest: { version: string } | null;
@@ -139,11 +139,43 @@ describe('pullSwarm', () => {
     expectUntouched();
   });
 
+  it.each(['other/v1.0.0', 'v1.0.0'])('refuses %s, a tag outside standard/, before cloning anything', async (tag) => {
+    await expect(
+      pullSwarm({
+        tag,
+        repoUrl: join(root, 'no-such-repo'),
+        resourcesDir: resources,
+        readSwarm: fileReader,
+        parseSwarmTag,
+      }),
+    ).rejects.toThrow(/is not a standard\/ tag/);
+    expectUntouched();
+  });
+
   it('refuses a swarm.json version that differs from the tag, naming both', async () => {
     const other = (): Promise<Read> => Promise.resolve({ manifest: { version: '2.0.0' }, problems: [] });
 
     await expect(pull('standard/v1.0.0', other)).rejects.toThrow(/is version 1\.0\.0 but its swarm\.json says 2\.0\.0/);
     expectUntouched();
+  });
+});
+
+describe('readLock', () => {
+  it('reads the lock it finds', () => {
+    const lock = { repo: SWARM_REPO, tag: 'standard/v1.0.0', commit: 'a'.repeat(40), files: {} };
+    write(join(resources, LOCK_FILE), JSON.stringify(lock));
+
+    expect(readLock(resources)).toEqual(lock);
+  });
+
+  it('names pnpm swarm:pull when the lock is missing', () => {
+    expect(() => readLock(resources)).toThrow(/swarm\.lock\.json.*pnpm swarm:pull <tag>/s);
+  });
+
+  it('names pnpm swarm:pull when the lock is not JSON', () => {
+    write(join(resources, LOCK_FILE), '{"repo": ');
+
+    expect(() => readLock(resources)).toThrow(/swarm\.lock\.json.*pnpm swarm:pull <tag>/s);
   });
 });
 

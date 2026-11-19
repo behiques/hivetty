@@ -25,6 +25,8 @@ export const LOCK_FILE: string;
 
 export function hashTree(resourcesDir: string): Record<string, string>;
 
+export function readLock(resourcesDir: string): SwarmLock;
+
 export function pullSwarm(input: {
   tag: string;
   repoUrl: string;

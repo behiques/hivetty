@@ -51,9 +51,21 @@ export function hashTree(resourcesDir) {
   return Object.fromEntries(files.sort(([a], [b]) => (a < b ? -1 : 1)));
 }
 
+/** The lock under `resourcesDir`; a missing or unreadable one throws naming the command that writes it. */
+export function readLock(resourcesDir) {
+  try {
+    return JSON.parse(readFileSync(join(resourcesDir, LOCK_FILE), 'utf8'));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`${LOCK_FILE} cannot be read (${reason}). Run pnpm swarm:pull <tag>, like standard/v1.0.0.`);
+  }
+}
+
 export async function pullSwarm({ tag, repoUrl, resourcesDir, readSwarm, parseSwarmTag }) {
   const parsed = parseSwarmTag(tag);
   if (parsed === null) throw new Error(`${tag} is not v<x.y.z> or <folder>/v<x.y.z>.`);
+  // The lock is a copy of the Standard swarm, and the drift test refuses any other folder.
+  if (parsed.folder !== 'standard') throw new Error(`${tag} is not a standard/ tag, like standard/v1.0.0.`);
 
   const clone = mkdtempSync(join(tmpdir(), 'hive-swarm-pull-'));
 
