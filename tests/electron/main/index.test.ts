@@ -186,7 +186,12 @@ describe('deep links and the licence (HIVE-264)', () => {
     expect(lockHeld).toContain('scheme: deepLinks.scheme');
     expect(lockHeld).toContain('requestInstall: requestSwarmInstall');
     expect(lockHeld).toContain('focus: () => void app.whenReady().then(() => focusPrimaryWindow(createWindow))');
-    // The startup window comes from registerLifecycle's own whenReady callback, registered at module load.
-    expect(lockHeld.indexOf('registerLifecycle(')).toBeGreaterThan(-1);
+    /*
+      The startup window comes from registerLifecycle's own whenReady callback. Called directly in the lock-held
+      branch (two-space indent), not inside a callback, it queues that callback at module load: before any link
+      can arrive and queue focus behind it. Moved into a `.then(` or an event handler, it would queue after.
+    */
+    expect(lockHeld).toMatch(/^ {2}registerLifecycle\(\{ createWindow,/m);
+    expect(lockHeld).not.toMatch(/^ {3,}registerLifecycle\(/m);
   });
 });

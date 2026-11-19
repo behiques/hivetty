@@ -96,7 +96,7 @@ itself: you still read the dialog and choose **Install**.
 
 - Signed out, the pane says "Sign in to install this swarm." Sign in, and the dialog opens.
 - A swarm your account cannot see reads "This swarm isn't available to your account."
-- A swarm you already have opens on its row.
+- A swarm you already have is left as it is: no dialog opens, and the pane shows your list with its row.
 
 ## The update notification
 
