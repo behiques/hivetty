@@ -479,11 +479,12 @@ A server writes one line for each of these (HIVE-427):
 - **`attach`**: a paired device's socket was accepted.
 - **`detach`**: that socket closed. A socket that was never accepted writes neither.
 - **`refused`**: an attach that named a device was turned away. `outcome` says
-  why: `unauthorized` (an unknown device or a token that did not match),
+  why: `unauthorized` (a device that is not paired, or no longer is),
   `device-mismatch` (the attach named another device than the one the channel
   was keyed for), `protocol-mismatch` or `revoked`. A refusal before the attach
-  names anyone (the connection cap, the handshake deadline, an old plaintext
-  client, a malformed first frame) is not written.
+  names anyone (a wrong token, which fails the encrypted handshake, the
+  connection cap, the handshake deadline, an old plaintext client, a malformed
+  first frame) is not written.
 - **`call`**: every call on a channel graded `execute`, such as
   `pty:spawn-terminal` or `agents:run`, written when it arrives. Reads and
   mutations are not written.

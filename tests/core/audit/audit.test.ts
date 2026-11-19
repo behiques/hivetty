@@ -64,6 +64,33 @@ describe('the file sink', () => {
     expect(readdirSync(dir()).sort()).toEqual(['2026-10-01.jsonl.bak', '2026-10-19.jsonl', '2026-11-18.jsonl', 'notes.txt']);
   });
 
+  it('still appends when the prune throws, and says so once', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // A day-named directory past retention: rmSync without recursive throws on it.
+    mkdirSync(join(dir(), '2026-10-01.jsonl', 'inside'), { recursive: true });
+    writeFileSync(join(dir(), '2026-10-02.jsonl'), '');
+    audit(attach);
+    audit(attach);
+    expect(lines('2026-11-18')).toHaveLength(2);
+    // One stuck entry does not keep the rest of the sweep from running.
+    expect(readdirSync(dir()).sort()).toEqual(['2026-10-01.jsonl', '2026-11-18.jsonl']);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(String(error.mock.calls[0]?.[0])).toContain('prune');
+  });
+
+  it('sweeps at most once a day, even while the append keeps failing', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mkdirSync(join(dir(), '2026-11-18.jsonl'), { recursive: true });
+    audit(attach);
+    writeFileSync(join(dir(), '2026-10-01.jsonl'), '');
+    audit(attach);
+    expect(readdirSync(dir())).toContain('2026-10-01.jsonl');
+    // Recover, so the next test starts outside a failure streak.
+    rmSync(join(dir(), '2026-11-18.jsonl'), { recursive: true });
+    audit(attach);
+    expect(lines('2026-11-18')).toHaveLength(1);
+  });
+
   it('logs once and does not throw while the file cannot be written, then logs again after a recovery', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     writeFileSync(join(home, 'audit'), 'a file where the folder should be');

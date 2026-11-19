@@ -28,6 +28,8 @@ const DAY_FILE = /^\d{4}-\d{2}-\d{2}\.jsonl$/;
 
 const listeners = new Set<(entry: AuditEntry) => void>();
 let lastFile = '';
+/** The day file whose sweep has run, kept apart from `lastFile` so a failing append does not re-sweep. */
+let prunedFor = '';
 let failing = false;
 
 const pad = (value: number): string => String(value).padStart(2, '0');
@@ -37,16 +39,35 @@ const localDay = (date: Date): string =>
 function writeToFile(line: string, now: Date): void {
   const dir = join(dirname(configPath()), 'audit');
   const file = join(dir, `${localDay(now)}.jsonl`);
-  // A new day (or the first line after boot): make the folder and drop what is past retention.
+  // A new day (or the first line after boot, or after a failed write): make sure the folder is there.
   if (file !== lastFile) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const oldest = `${localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - RETENTION_DAYS))}.jsonl`;
-    for (const name of readdirSync(dir)) {
-      if (DAY_FILE.test(name) && name < oldest) rmSync(join(dir, name), { force: true });
-    }
     lastFile = file;
   }
+  // Once per day file, before the append, and never in its way: a prune that throws costs old files, not this line.
+  if (file !== prunedFor) {
+    prunedFor = file;
+    prune(dir, now);
+  }
   appendFileSync(file, `${line}\n`, { mode: 0o600 });
+}
+
+function prune(dir: string, now: Date): void {
+  const oldest = `${localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - RETENTION_DAYS))}.jsonl`;
+  let failure: unknown;
+  try {
+    for (const name of readdirSync(dir)) {
+      if (!DAY_FILE.test(name) || name >= oldest) continue;
+      try {
+        rmSync(join(dir, name), { force: true });
+      } catch (cause) {
+        failure ??= cause;
+      }
+    }
+  } catch (cause) {
+    failure = cause;
+  }
+  if (failure !== undefined) console.error(`[hive] the audit trail could not prune old day files: ${describe(failure)}`);
 }
 
 /** Write one audit line and tell every {@link onAudit} subscriber. Never throws. */
