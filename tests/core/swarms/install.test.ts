@@ -2,6 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -475,6 +476,90 @@ describe('install', () => {
     expect(existsSync(hive('skills/s1/SKILL.md'))).toBe(false);
     expect(existsSync(hive('swarms/sw1'))).toBe(false);
     expect(installedJson()).toEqual([]);
+  });
+
+  describe('a first install the app died in the middle of', () => {
+    /** Seeds for real, then leaves `~/.hivetty` as a killed process would have: seeded files, no undo. */
+    const dieMidSeed = async (entry: SwarmEntry): Promise<void> => {
+      const crashed = join(root, 'crashed');
+      const seed = vi.fn<NonNullable<SwarmDeps['seed']>>(async (options) => {
+        write(join(options.target, 'skills/s1/SKILL.md'), readFileSync(join(options.source, 'skills/s1/SKILL.md'), 'utf8'));
+        cpSync(hiveDir, crashed, { recursive: true });
+        throw new Error('killed');
+      });
+      await createSwarms(makeDeps({ seed })).install(entry);
+      rmSync(hiveDir, { recursive: true, force: true });
+      cpSync(crashed, hiveDir, { recursive: true });
+      expect(existsSync(hive('skills/s1/SKILL.md'))).toBe(true);
+      expect(existsSync(hive('swarms/sw1/seed.json'))).toBe(false);
+    };
+
+    it('installs on the retry, adopting the files it left', async () => {
+      const { entry } = released('1.0.0');
+      await dieMidSeed(entry);
+
+      expect((await createSwarms(makeDeps()).install(entry)).ok).toBe(true);
+      expect(Object.keys(readJson<{ files: object }>('swarms/sw1/seed.json').files).sort()).toEqual([
+        'agents/a1/AGENT.md',
+        'skills/s1/SKILL.md',
+      ]);
+      expect(filesUnder(hive('swarms/sw1')).filter((file) => !file.includes(`${join('sw1', 'repo')}`))).toEqual([
+        hive('swarms/sw1/seed.json'),
+      ]);
+    });
+
+    it('still refuses a file the person edited since', async () => {
+      const { entry } = released('1.0.0');
+      await dieMidSeed(entry);
+      write(hive('skills/s1/SKILL.md'), 'mine\n');
+
+      expect(await createSwarms(makeDeps()).install(entry)).toMatchObject({ ok: false, failure: { code: 'collision' } });
+      expect(readHive('skills/s1/SKILL.md')).toBe('mine\n');
+    });
+
+    it('takes the files it left back out when the retry fails too', async () => {
+      const { entry } = released('1.0.0');
+      await dieMidSeed(entry);
+      write(hive('agents/a1/AGENT.md'), 'mine\n');
+
+      expect(await createSwarms(makeDeps()).install(entry)).toMatchObject({ ok: false, failure: { code: 'collision' } });
+      expect(existsSync(hive('skills/s1'))).toBe(false);
+      expect(readHive('agents/a1/AGENT.md')).toBe('mine\n');
+    });
+  });
+
+  describe('an installed.json it cannot read', () => {
+    it('refuses to install, and leaves the file as it was', async () => {
+      write(hive('swarms/installed.json'), 'not json');
+      const { entry } = released('1.0.0');
+
+      expect(await createSwarms(makeDeps()).install(entry)).toMatchObject({ ok: false, failure: { code: 'failed' } });
+      expect(readHive('swarms/installed.json')).toBe('not json');
+      expect(existsSync(hive('skills'))).toBe(false);
+    });
+
+    it('refuses to remove, and deletes no file', async () => {
+      const swarms = createSwarms(makeDeps());
+      expect((await swarms.install(released('1.0.0').entry)).ok).toBe(true);
+      write(hive('swarms/installed.json'), 'not json');
+
+      expect(await swarms.remove('sw1')).toMatchObject({ ok: false, failure: { code: 'failed' } });
+      expect(readHive('swarms/installed.json')).toBe('not json');
+      expect(existsSync(hive('skills/s1/SKILL.md'))).toBe(true);
+    });
+
+    it('keeps an entry it cannot read when an install or a removal writes the list back', async () => {
+      const odd = { swarmId: '../x', folder: 'standard', note: 'kept' };
+      write(hive('swarms/installed.json'), JSON.stringify([odd]));
+      const swarms = createSwarms(makeDeps());
+
+      expect((await swarms.install(released('1.0.0').entry)).ok).toBe(true);
+      expect(readJson<unknown[]>('swarms/installed.json')[0]).toEqual(odd);
+      expect(await swarms.install({ ...released('1.0.0').entry, commit: 'f'.repeat(40) })).toMatchObject({ ok: false });
+      expect(readJson<unknown[]>('swarms/installed.json')[0]).toEqual(odd);
+      expect(await swarms.remove('sw1')).toEqual({ ok: true });
+      expect(readJson<unknown[]>('swarms/installed.json')).toEqual([odd]);
+    });
   });
 
   it('keeps an installed swarm at its version, with lastError, when a later install fails', async () => {

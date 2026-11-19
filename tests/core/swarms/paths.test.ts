@@ -16,6 +16,7 @@ describe('swarmPaths', () => {
     expect(paths.repo('x')).toBe('/h/swarms/x/repo');
     expect(paths.staging('x')).toBe('/h/swarms/x/repo.new');
     expect(paths.seed('x')).toBe('/h/swarms/x/seed.json');
+    expect(paths.pending('x')).toBe('/h/swarms/x/pending.json');
   });
 
   it.each<[string, () => string]>([
@@ -23,6 +24,7 @@ describe('swarmPaths', () => {
     ["repo('a/b')", () => paths.repo('a/b')],
     ["staging('')", () => paths.staging('')],
     ["seed('..')", () => paths.seed('..')],
+    ["pending('.')", () => paths.pending('.')],
   ])('%s throws, so a bad id never becomes a path', (_label, call) => {
     expect(call).toThrow('not a swarm id');
   });

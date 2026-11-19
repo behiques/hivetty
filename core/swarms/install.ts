@@ -72,27 +72,72 @@ const folderOf = (rel: string): string => rel.split('/').slice(0, 2).join('/');
 export const ownedFolders = (manifest: Manifest): Set<string> =>
   new Set([...Object.keys(manifest.files), ...Object.keys(manifest.parts)].map(folderOf));
 
+// The two fields that become paths are checked. The rest is what this module wrote.
+const isInstalled = (entry: unknown): entry is InstalledSwarm =>
+  typeof entry === 'object' &&
+  entry !== null &&
+  isSwarmId((entry as InstalledSwarm).swarmId) &&
+  isSwarmFolder((entry as InstalledSwarm).folder);
+
+const isEntryOf = (entry: unknown, swarmId: string): boolean => isInstalled(entry) && entry.swarmId === swarmId;
+
+/**
+ * Every entry as written, the ones `isInstalled` refuses included, for a write that puts the list back. Absent is
+ * nothing installed; unreadable throws, so an install or a removal never overwrites the other swarms' entries.
+ */
+async function readInstalledRaw(file: string): Promise<unknown[]> {
+  let text: string;
+  try {
+    text = await readFile(file, 'utf8');
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw cause;
+  }
+  const raw: unknown = JSON.parse(text);
+  if (!Array.isArray(raw)) throw new Error('not a list');
+  return raw;
+}
+
+const unreadable = (cause: unknown): SwarmFailure => ({
+  code: 'failed',
+  message: `~/.hivetty/swarms/installed.json can't be read (${messageOf(cause)}), so HiveTTY Pro changed nothing.`,
+});
+
 export async function readInstalled(file: string): Promise<InstalledSwarm[]> {
   try {
-    const raw: unknown = JSON.parse(await readFile(file, 'utf8'));
-    if (!Array.isArray(raw)) return [];
-    // The two fields that become paths are checked. The rest is what this module wrote.
-    return raw.filter(
-      (entry): entry is InstalledSwarm =>
-        typeof entry === 'object' &&
-        entry !== null &&
-        isSwarmId((entry as InstalledSwarm).swarmId) &&
-        isSwarmFolder((entry as InstalledSwarm).folder),
-    );
+    return (await readInstalledRaw(file)).filter(isInstalled);
   } catch {
-    return []; // absent or unreadable: nothing is installed
+    return []; // unreadable: a reader sees nothing installed, and only a writer refuses
   }
 }
 
-async function writeInstalled(file: string, entries: InstalledSwarm[]): Promise<void> {
+async function writeInstalled(file: string, entries: unknown[]): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
   await writeFile(`${file}.tmp`, `${JSON.stringify(entries, null, 2)}\n`);
   await rename(`${file}.tmp`, file);
+}
+
+/** A first install's file hashes, written before it seeds: what a retry adopts, or takes back out, if the app died. */
+async function readPending(file: string): Promise<Record<string, string>> {
+  try {
+    const raw: unknown = JSON.parse(await readFile(file, 'utf8'));
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+    return Object.fromEntries(Object.entries(raw).filter((pair): pair is [string, string] => typeof pair[1] === 'string'));
+  } catch {
+    return {};
+  }
+}
+
+/** Whether every file under `folder` holds the bytes a dead first install wrote there. */
+async function onlyLeftover(hiveDir: string, folder: string, leftover: Record<string, string>): Promise<boolean> {
+  if (await throughLink(hiveDir, folder)) return false;
+  const files = await walk(join(hiveDir, folder));
+  if (files.length === 0) return false;
+  for (const file of files) {
+    const rel = `${folder}/${file}`;
+    if (leftover[rel] === undefined || sha256(await readFile(join(hiveDir, rel))) !== leftover[rel]) return false;
+  }
+  return true;
 }
 
 const SEEDED_FILE = /^(?:skills|agents)\/[^/]+\/.+$/;
@@ -191,10 +236,19 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     // The id becomes a path, and `swarmPaths` throws on a bad one: refused here, so install never rejects.
     if (!isSwarmId(entry.id)) return { ok: false, failure: { code: 'failed', message: 'Not a swarm id.' } };
     const staging = paths.staging(entry.id);
-    const before = await readInstalled(paths.installed);
+    let raw: unknown[];
+    try {
+      raw = await readInstalledRaw(paths.installed);
+    } catch (cause) {
+      return { ok: false, failure: unreadable(cause) };
+    }
+    const before = raw.filter(isInstalled);
     const previous = before.find((held) => held.swarmId === entry.id) ?? null;
+    // What a first install the app died in the middle of left behind: adopted when untouched, else taken back out.
+    const leftover = previous === null ? await readPending(paths.pending(entry.id)) : {};
     // Set once files may have been written for a swarm that was not installed: what takes them back out.
-    let undo: (() => Promise<void>) | null = null;
+    let undo: (() => Promise<void>) | null =
+      Object.keys(leftover).length > 0 ? () => deleteMatching(deps.hiveDir, leftover) : null;
     // Set once a first install has moved built-ins' entries out of `.seed.json`: what puts them back.
     let giveBack: (() => Promise<void>) | null = null;
 
@@ -206,7 +260,9 @@ export function createSwarms(deps: SwarmDeps): Swarms {
       if (previous === null) {
         await rm(paths.dir(entry.id), { recursive: true, force: true }).catch(() => undefined);
       } else {
-        const kept = before.map((held) => (held.swarmId === entry.id ? { ...held, lastError: failure } : held));
+        const kept = raw.map((held) =>
+          isEntryOf(held, entry.id) ? { ...(held as InstalledSwarm), lastError: failure } : held,
+        );
         await writeInstalled(paths.installed, kept).catch(() => undefined);
       }
       return { ok: false, failure };
@@ -294,6 +350,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
           continue;
         }
         if (own.has(folder) || builtIn.has(folder)) continue;
+        if (await onlyLeftover(deps.hiveDir, folder, leftover)) continue;
         const exists = await lstat(join(deps.hiveDir, folder)).then(
           () => true,
           () => false,
@@ -323,7 +380,9 @@ export function createSwarms(deps: SwarmDeps): Swarms {
 
       // 6. Seed. From here a first install that fails takes its own files back out.
       if (previous === null) {
-        const hashes = await hashFolders(source, folders);
+        const hashes = { ...leftover, ...(await hashFolders(source, folders)) };
+        await mkdir(paths.dir(entry.id), { recursive: true });
+        await writeFile(paths.pending(entry.id), `${JSON.stringify(hashes)}\n`);
         undo = () => deleteMatching(deps.hiveDir, hashes);
       }
       await seed({ source, target: deps.hiveDir, manifestFile: paths.seed(entry.id) });
@@ -346,7 +405,8 @@ export function createSwarms(deps: SwarmDeps): Swarms {
         title: read.manifest.title,
         contents: read.contents,
       };
-      await writeInstalled(paths.installed, [...before.filter((held) => held.swarmId !== entry.id), installed]);
+      await writeInstalled(paths.installed, [...raw.filter((held) => !isEntryOf(held, entry.id)), installed]);
+      await rm(paths.pending(entry.id), { force: true });
       return { ok: true, installed };
     } catch (cause) {
       return fail(cause instanceof GitError ? gitFailure(cause, entry) : { code: 'failed', message: messageOf(cause) });
@@ -355,13 +415,18 @@ export function createSwarms(deps: SwarmDeps): Swarms {
 
   const removeNow = async (swarmId: string): Promise<SwarmRemoveResult> => {
     if (!isSwarmId(swarmId)) return { ok: false, failure: { code: 'failed', message: 'Not a swarm id.' } };
+    let raw: unknown[];
+    try {
+      raw = await readInstalledRaw(paths.installed);
+    } catch (cause) {
+      return { ok: false, failure: unreadable(cause) };
+    }
     try {
       const manifest = await readManifest(paths.seed(swarmId));
       // Files first, then the record of them: a removal cut short still knows what it owned, and removing again finishes it.
       await deleteMatching(deps.hiveDir, manifest.files);
       await rm(paths.dir(swarmId), { recursive: true, force: true });
-      const kept = (await readInstalled(paths.installed)).filter((held) => held.swarmId !== swarmId);
-      await writeInstalled(paths.installed, kept);
+      await writeInstalled(paths.installed, raw.filter((held) => !isEntryOf(held, swarmId)));
       return { ok: true };
     } catch (cause) {
       return { ok: false, failure: { code: 'failed', message: messageOf(cause) } };

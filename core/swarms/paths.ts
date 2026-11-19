@@ -4,7 +4,8 @@
  * `installed.json` lists the installed swarms, `registry.json` keeps the
  * cloud's last list for offline use, and `askpass.sh` answers Git's prompts
  * for a native fetch. Each swarm gets `<id>/repo` (its clone), `<id>/repo.new`
- * (the clone an install is staging) and `<id>/seed.json` (its seed manifest).
+ * (the clone an install is staging), `<id>/seed.json` (its seed manifest) and
+ * `<id>/pending.json` (a first install's file hashes while it seeds).
  *
  * The id comes from the cloud and from IPC, so it is checked here, where it
  * becomes a path: a bad id throws before it can name a folder.
@@ -24,6 +25,7 @@ export interface SwarmPaths {
   repo(id: string): string;
   staging(id: string): string;
   seed(id: string): string;
+  pending(id: string): string;
 }
 
 export function swarmPaths(hiveDir: string): SwarmPaths {
@@ -42,5 +44,6 @@ export function swarmPaths(hiveDir: string): SwarmPaths {
     repo: (id) => join(dir(id), 'repo'),
     staging: (id) => join(dir(id), 'repo.new'),
     seed: (id) => join(dir(id), 'seed.json'),
+    pending: (id) => join(dir(id), 'pending.json'),
   };
 }
