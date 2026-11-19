@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Agent } from '@/types/entity';
 
 import { PrActions } from '@features/pull-requests/components/pr-properties';
+import { resetAgents, setAgentsForTest } from '@lib/agents';
+import type { AgentSummary } from '@shared/agent-contract';
 import { useHiveStore } from '@stores/hive-store';
 import { hatchRow } from '@tests/support/hatchery';
 
@@ -42,6 +44,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   window.hive = original;
+  resetAgents();
 });
 
 describe('PrActions', () => {
@@ -100,6 +103,7 @@ describe('PrActions', () => {
   it('without acr installed, names its swarm in place of the button and posts nothing (HIVE-447)', async () => {
     useHiveStore.getState().reset();
     useHiveStore.setState({ answerAsk, openEntity });
+    setAgentsForTest({ agents: [{ name: 'shipper' } as AgentSummary], agentsRoot: '' });
     render(<PrActions row={hatchRow()} />);
 
     expect(screen.queryByRole('button', { name: 'Ask acr to look again' })).toBeNull();
@@ -109,6 +113,16 @@ describe('PrActions', () => {
       if (!(button as HTMLButtonElement).disabled) await userEvent.click(button);
     }
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it('says nothing of a missing acr until the agents snapshot has loaded (HIVE-447)', () => {
+    useHiveStore.getState().reset();
+    useHiveStore.setState({ answerAsk, openEntity });
+    resetAgents();
+    render(<PrActions row={hatchRow()} />);
+
+    expect(screen.queryByText(/comes with|isn't installed/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Ask acr to look again' })).toBeInTheDocument();
   });
 
   it("shows acr's refusal inline", async () => {

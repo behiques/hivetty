@@ -10,6 +10,7 @@ import { statusLabel } from '@components/ui/status-dot';
 import { Flap } from '@features/pull-requests/components/flap';
 import { checkTime } from '@features/pull-requests/session-pr';
 import { MissingSwarm } from '@features/shared/components/missing-swarm';
+import { useAgents } from '@hooks/use-agents';
 import type { PrCheck, PrDetail, PrReview } from '@shared/github-contract';
 import type { LedgerResult } from '@shared/ledger-contract';
 import {
@@ -198,6 +199,8 @@ export function PrActions({ row }: { row: HatcheryRow }) {
   /* A ref as well as the state: two clicks inside one frame both read `sending` false. */
   const inFlight = useRef(false);
   const hasAcr = useIsAgentId('acr');
+  /* The entities fill from the agents snapshot: before it loads, "no acr" is not yet known. */
+  const missingAcr = useAgents() !== null && !hasAcr;
   const session = pr.session;
 
   const github = (
@@ -265,13 +268,13 @@ export function PrActions({ row }: { row: HatcheryRow }) {
         </a>
       ) : null}
       {/* HIVE-447: with no acr the ledger would refuse the ask; say which swarm brings it instead. */}
-      {hasAcr ? (
+      {missingAcr ? (
+        <MissingSwarm kind="agent" name="acr" />
+      ) : (
         <Button variant="ghost" className={ACTION} pending={sending} onClick={askAcr}>
           <Binoculars size={13} aria-hidden />
           Ask acr to look again
         </Button>
-      ) : (
-        <MissingSwarm kind="agent" name="acr" />
       )}
       {session === null ? null : (
         <button type="button" className={ACTION} onClick={() => openEntity(session)}>
