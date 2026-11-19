@@ -8,7 +8,8 @@ export const NO_SECRET_STORE = 'This server has no secret store yet (HIVE-424). 
 
 /**
  * The server's platform (HIVE-422): core's port, built from plain Node. No keychain, so no credential is ever
- * written; no screen, so no `desktop`; the PTY host is a `child_process.fork` child (HIVE-423). The MCP host runs under this same Node.
+ * written; no screen, so no `desktop`; the PTY host is a `child_process.fork` child (HIVE-423). The MCP host runs
+ * under this same Node.
  */
 export function createServerPlatform(input: {
   dataDir: string;

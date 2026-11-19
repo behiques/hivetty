@@ -683,11 +683,28 @@ one it prints *This edition isn't part of your plan* and exits 3. A machine
 that has never held a lease waits. A lease that lapses while it serves keeps it
 serving, so attached clients see the lapse.
 
+### The PTY host
+
+On the first spawn the server forks `out/server/pty-host.js` with its own Node
+(HIVE-423). The host speaks the same protocol as the desktop's, so the code that
+watches it is the same: the heartbeat, the crash-loop guard and the shutdown
+deadline all apply. When the server stops, the host stops every session and
+exits. When the server dies without stopping it, the host sees its channel close
+and does the same.
+
+On Linux the host reads the process tree from `/proc`, so an image needs no
+`procps`. If it cannot read the tree at all, it says so once on stderr, and the
+group kills still run.
+
+`createServerPlatform` takes a `hostUser` (a uid and a gid) that runs the host,
+and so every terminal, as another user. A runner sets it (HIVE-300); a personal
+server leaves it out. A spawn over the wire still needs a licensed server, and
+nobody can sign in yet (HIVE-424).
+
 ### What does not work yet
 
 | Missing | Ticket |
 | --- | --- |
-| Sessions: a spawn is refused (*The PTY host on the server arrives with HIVE-423.*) | HIVE-423 |
 | Sign-in, and every credential: there is no secret store, and nothing is ever stored unencrypted | HIVE-424 |
 | Linux tarballs and images | HIVE-425 |
 
