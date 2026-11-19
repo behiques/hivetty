@@ -1,7 +1,17 @@
 // @vitest-environment node
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -12,7 +22,7 @@ import type { InstalledSwarm, SwarmEntry } from '@shared/swarm-contract';
 import { baseOf } from '../../../core/seed/merge';
 import { seedShipped } from '../../../core/seed/seed';
 import { createSwarmGit } from '../../../core/swarms/git';
-import { createSwarms, readInstalled, type SwarmDeps } from '../../../core/swarms/install';
+import { createSwarms, mergeListing, readInstalled, type SwarmDeps } from '../../../core/swarms/install';
 
 /**
  * Installing a swarm (HIVE-441): Git runs for real against bare repositories in a temp dir, the seeder runs for
@@ -397,6 +407,22 @@ describe('install', () => {
       expectMoved();
     });
 
+    it('leaves the swarm’s file alone in the next boot seed, which writes no entry for it', async () => {
+      write(hive('skills/tdd/SKILL.md'), OLD);
+      const { entry } = released('1.0.0', { skills: ['tdd'], agents: [], body: 'New body.' });
+      const swarms = createSwarms(makeDeps());
+      expect((await swarms.install(entry)).ok).toBe(true);
+
+      const resources = join(root, 'resources');
+      write(join(resources, 'skills/tdd/SKILL.md'), OLD);
+      const { shipped } = await swarms.seedSets({ source: resources, target: hiveDir, manifestFile: hive('.seed.json') });
+      await seedShipped(shipped);
+
+      expect(readHive('skills/tdd/SKILL.md')).toBe(skillText('tdd', 'New body.'));
+      const files = Object.keys(readJson<{ files: object }>('.seed.json').files);
+      expect(files.filter((rel) => rel.startsWith('skills/tdd/'))).toEqual([]);
+    });
+
     describe('when the seed throws on a first install', () => {
       const throwingSeed = vi.fn<NonNullable<SwarmDeps['seed']>>(async (options) => {
         await seedShipped(options);
@@ -523,5 +549,166 @@ describe('readInstalled', () => {
 
   it('reads an absent file as nothing installed', async () => {
     expect(await readInstalled(join(root, 'absent.json'))).toEqual([]);
+  });
+});
+
+describe('remove', () => {
+  const NOTES = 'notes\n';
+
+  it('deletes untouched files and emptied folders, keeps an edited one, and drops the clone and the entry', async () => {
+    const swarms = createSwarms(makeDeps());
+    const { entry } = released('1.0.0', { extra: { 'skills/s1/notes.md': NOTES } });
+    expect((await swarms.install(entry)).ok).toBe(true);
+    write(hive('skills/s1/notes.md'), 'my notes\n');
+
+    expect(await swarms.remove('sw1')).toEqual({ ok: true });
+
+    expect(existsSync(hive('skills/s1/SKILL.md'))).toBe(false);
+    expect(existsSync(hive('agents/a1'))).toBe(false);
+    expect(readHive('skills/s1/notes.md')).toBe('my notes\n');
+    expect(existsSync(hive('swarms/sw1'))).toBe(false);
+    expect(installedJson()).toEqual([]);
+    expect(statSync(hive('skills')).isDirectory()).toBe(true);
+    expect(statSync(hive('agents')).isDirectory()).toBe(true);
+  });
+
+  it('answers ok for an id that is not installed', async () => {
+    expect(await createSwarms(makeDeps()).remove('nothing')).toEqual({ ok: true });
+  });
+
+  it('refuses a bad id and touches nothing', async () => {
+    write(join(root, 'x', 'seed.json'), '{}');
+    expect(await createSwarms(makeDeps()).remove('../x')).toMatchObject({ ok: false, failure: { code: 'failed' } });
+    expect(existsSync(join(root, 'x', 'seed.json'))).toBe(true);
+  });
+
+  it('never deletes a file outside the skill and agent folders, whatever the manifest says', async () => {
+    const swarms = createSwarms(makeDeps());
+    const { entry } = released('1.0.0');
+    expect((await swarms.install(entry)).ok).toBe(true);
+    write(join(root, 'outside.txt'), 'outside');
+    write(hive('config.json'), '{}');
+    write(
+      hive('swarms/sw1/seed.json'),
+      JSON.stringify({
+        files: {
+          '../outside.txt': sha('outside'),
+          'config.json': sha('{}'),
+          'skills/../../outside.txt': sha('outside'),
+        },
+        parts: {},
+      }),
+    );
+
+    expect(await swarms.remove('sw1')).toEqual({ ok: true });
+
+    expect(readFileSync(join(root, 'outside.txt'), 'utf8')).toBe('outside');
+    expect(readHive('config.json')).toBe('{}');
+  });
+
+  it('never deletes through a linked folder', async () => {
+    const swarms = createSwarms(makeDeps());
+    const { entry } = released('1.0.0', { agents: [] });
+    expect((await swarms.install(entry)).ok).toBe(true);
+    const elsewhere = join(root, 'elsewhere');
+    write(join(elsewhere, 'SKILL.md'), skillText('s1'));
+    rmSync(hive('skills/s1'), { recursive: true });
+    symlinkSync(elsewhere, hive('skills/s1'));
+
+    expect(await swarms.remove('sw1')).toEqual({ ok: true });
+
+    expect(readFileSync(join(elsewhere, 'SKILL.md'), 'utf8')).toBe(skillText('s1'));
+  });
+
+  it('waits its turn behind an install of the same swarm', async () => {
+    const swarms = createSwarms(makeDeps());
+    const { entry } = released('1.0.0');
+    const order: string[] = [];
+
+    await Promise.all([
+      swarms.install(entry).then((result) => order.push(`install:${String(result.ok)}`)),
+      swarms.remove('sw1').then((result) => order.push(`remove:${String(result.ok)}`)),
+    ]);
+
+    expect(order).toEqual(['install:true', 'remove:true']);
+    expect(installedJson()).toEqual([]);
+    expect(existsSync(hive('skills/s1/SKILL.md'))).toBe(false);
+  });
+});
+
+describe('the seed sets', () => {
+  const shippedOptions = () => ({ source: join(root, 'resources'), target: hiveDir, manifestFile: hive('.seed.json') });
+
+  const installTwo = async () => {
+    const swarms = createSwarms(makeDeps());
+    const one = released('1.0.0', { skills: ['one'], agents: ['a1'] }, { id: 'swOne' });
+    const two = released('1.0.0', { skills: ['two'], agents: [] }, { id: 'swTwo' });
+    expect((await swarms.install(one.entry)).ok).toBe(true);
+    expect((await swarms.install(two.entry)).ok).toBe(true);
+    return swarms;
+  };
+
+  const setOf = (id: string) => ({
+    source: hive(`swarms/${id}/repo/standard`),
+    target: hiveDir,
+    manifestFile: hive(`swarms/${id}/seed.json`),
+  });
+
+  it('excludes every folder an installed swarm owns from the shipped set, and gives each swarm its own', async () => {
+    const swarms = await installTwo();
+    const sets = await swarms.seedSets(shippedOptions());
+
+    expect(sets.shipped.source).toBe(shippedOptions().source);
+    expect([...(sets.shipped.exclude ?? [])].sort()).toEqual(['agents/a1', 'skills/one', 'skills/two']);
+    expect(sets.swarms).toEqual([setOf('swOne'), setOf('swTwo')]);
+  });
+
+  it('excludes nothing with nothing installed', async () => {
+    const sets = await createSwarms(makeDeps()).seedSets(shippedOptions());
+    expect([...(sets.shipped.exclude ?? [])]).toEqual([]);
+    expect(sets.swarms).toEqual([]);
+  });
+
+  it('answers the owning swarm’s set for its folder, and the shipped set for any other', async () => {
+    const swarms = await installTwo();
+
+    expect(await swarms.seedSetFor(shippedOptions(), 'skills/two')).toEqual(setOf('swTwo'));
+    expect(await swarms.seedSetFor(shippedOptions(), 'agents/a1')).toEqual(setOf('swOne'));
+    const other = await swarms.seedSetFor(shippedOptions(), 'skills/tdd');
+    expect(other.source).toBe(shippedOptions().source);
+    expect(other.exclude?.has('skills/one')).toBe(true);
+  });
+});
+
+describe('mergeListing', () => {
+  const installedFor = (swarmId: string): InstalledSwarm => ({
+    swarmId,
+    slug: swarmId,
+    kind: 'community',
+    org: null,
+    repoUrl: 'https://github.com/o/r',
+    folder: 'standard',
+    version: '1.0.0',
+    commit: 'a'.repeat(40),
+    installedAt: '2026-11-19T12:00:00.000Z',
+    autoUpdate: false,
+    lastError: null,
+    title: swarmId,
+    contents: { agents: [], skills: [] },
+  });
+
+  it('puts registry rows first with their installed entry, then installed swarms the registry left out', () => {
+    const a = entryFor({ id: 'A' });
+    const b = entryFor({ id: 'B' });
+    const listing = mergeListing({ source: 'cache', swarms: [a, b] }, [installedFor('C'), installedFor('A')]);
+
+    expect(listing).toEqual({
+      source: 'cache',
+      items: [
+        { entry: a, installed: installedFor('A') },
+        { entry: b, installed: null },
+        { entry: null, installed: installedFor('C') },
+      ],
+    });
   });
 });

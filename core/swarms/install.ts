@@ -21,6 +21,8 @@ import {
   type SwarmEntry,
   type SwarmFailure,
   type SwarmInstallResult,
+  type SwarmListing,
+  type SwarmRemoveResult,
 } from '@shared/swarm-contract';
 
 import { serial } from '../seed/actions';
@@ -32,11 +34,13 @@ import {
   walk,
   writeManifest,
   type Manifest,
+  type SeedOptions,
 } from '../seed/seed';
 
 import { GitError, type SwarmGit } from './git';
 import { readSwarm } from './manifest';
 import { swarmPaths } from './paths';
+import type { RegistryRead } from './registry';
 
 export interface SwarmDeps {
   /** `~/.hivetty`. */
@@ -55,6 +59,11 @@ export interface SwarmDeps {
 export interface Swarms {
   installed(): Promise<InstalledSwarm[]>;
   install(entry: SwarmEntry): Promise<SwarmInstallResult>;
+  remove(swarmId: string): Promise<SwarmRemoveResult>;
+  /** The shipped set with every swarm-owned folder excluded, and one set per installed swarm. */
+  seedSets(shipped: SeedOptions): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }>;
+  /** The set that owns `<kind>/<name>`: a swarm's, else the shipped one. */
+  seedSetFor(shipped: SeedOptions, folder: string): Promise<SeedOptions>;
 }
 
 const folderOf = (rel: string): string => rel.split('/').slice(0, 2).join('/');
@@ -344,6 +353,32 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     }
   };
 
+  const removeNow = async (swarmId: string): Promise<SwarmRemoveResult> => {
+    if (!isSwarmId(swarmId)) return { ok: false, failure: { code: 'failed', message: 'Not a swarm id.' } };
+    try {
+      const manifest = await readManifest(paths.seed(swarmId));
+      // Files first, then the record of them: a removal cut short still knows what it owned, and removing again finishes it.
+      await deleteMatching(deps.hiveDir, manifest.files);
+      await rm(paths.dir(swarmId), { recursive: true, force: true });
+      const kept = (await readInstalled(paths.installed)).filter((held) => held.swarmId !== swarmId);
+      await writeInstalled(paths.installed, kept);
+      return { ok: true };
+    } catch (cause) {
+      return { ok: false, failure: { code: 'failed', message: messageOf(cause) } };
+    }
+  };
+
+  const seedSets = async (shipped: SeedOptions): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }> => {
+    const swarms: SeedOptions[] = [];
+    const exclude = new Set<string>();
+    for (const held of await readInstalled(paths.installed)) {
+      const manifestFile = paths.seed(held.swarmId);
+      for (const folder of ownedFolders(await readManifest(manifestFile))) exclude.add(folder);
+      swarms.push({ source: join(paths.repo(held.swarmId), held.folder), target: deps.hiveDir, manifestFile });
+    }
+    return { shipped: { ...shipped, exclude }, swarms };
+  };
+
   return {
     installed: () => readInstalled(paths.installed),
     // The seed actions' own queue: reset, keep-mine and an install all write seed manifests.
@@ -352,5 +387,31 @@ export function createSwarms(deps: SwarmDeps): Swarms {
         await deps.ready?.();
         return installNow(entry);
       }),
+    remove: (swarmId) =>
+      serial(async () => {
+        await deps.ready?.();
+        return removeNow(swarmId);
+      }),
+    seedSets,
+    seedSetFor: async (shipped, folder) => {
+      const sets = await seedSets(shipped);
+      for (const set of sets.swarms) {
+        if (ownedFolders(await readManifest(set.manifestFile)).has(folder)) return set;
+      }
+      return sets.shipped;
+    },
+  };
+}
+
+/** Registry rows first, each with its installed entry; then installed swarms the registry did not return. */
+export function mergeListing(registry: RegistryRead, installed: InstalledSwarm[]): SwarmListing {
+  const held = new Map(installed.map((entry) => [entry.swarmId, entry]));
+  const listed = new Set(registry.swarms.map((entry) => entry.id));
+  return {
+    source: registry.source,
+    items: [
+      ...registry.swarms.map((entry) => ({ entry, installed: held.get(entry.id) ?? null })),
+      ...installed.filter((entry) => !listed.has(entry.swarmId)).map((entry) => ({ entry: null, installed: entry })),
+    ],
   };
 }
