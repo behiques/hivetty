@@ -60,6 +60,11 @@ export interface SwarmDeps {
 export interface Swarms {
   installed(): Promise<InstalledSwarm[]>;
   install(entry: SwarmEntry): Promise<SwarmInstallResult>;
+  /**
+   * HIVE-442: `install`, asking `onlyIf` first with the entry installed when the install's turn in the queue comes.
+   * False installs nothing and answers null: a removal or a switch turned off while it waited wins.
+   */
+  installIf(entry: SwarmEntry, onlyIf: (previous: InstalledSwarm | null) => boolean): Promise<SwarmInstallResult | null>;
   remove(swarmId: string): Promise<SwarmRemoveResult>;
   /** HIVE-442: the row's "Update automatically" switch. Null when the swarm is not installed or the list cannot be written. */
   setAutoUpdate(swarmId: string, autoUpdate: boolean): Promise<InstalledSwarm | null>;
@@ -243,7 +248,10 @@ export function createSwarms(deps: SwarmDeps): Swarms {
   const seed = deps.seed ?? seedShipped;
   const now = deps.now ?? (() => new Date());
 
-  const installNow = async (entry: SwarmEntry): Promise<SwarmInstallResult> => {
+  const installNow = async (
+    entry: SwarmEntry,
+    onlyIf: (previous: InstalledSwarm | null) => boolean = () => true,
+  ): Promise<SwarmInstallResult | null> => {
     // The id becomes a path, and `swarmPaths` throws on a bad one: refused here, so install never rejects.
     if (!isSwarmId(entry.id)) return { ok: false, failure: { code: 'failed', message: 'Not a swarm id.' } };
     const staging = paths.staging(entry.id);
@@ -255,6 +263,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     }
     const before = raw.filter(isInstalled);
     const previous = before.find((held) => held.swarmId === entry.id) ?? null;
+    if (!onlyIf(previous)) return null;
     // What a first install the app died in the middle of left behind: adopted when untouched, else taken back out.
     const leftover = previous === null ? await readPending(paths.pending(entry.id)) : {};
     // Set once files may have been written for a swarm that was not installed: what takes them back out.
@@ -490,7 +499,13 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     install: (entry) =>
       serial(async () => {
         await deps.ready?.();
-        return installNow(entry);
+        // Without a guard nothing refuses: never null.
+        return (await installNow(entry)) as SwarmInstallResult;
+      }),
+    installIf: (entry, onlyIf) =>
+      serial(async () => {
+        await deps.ready?.();
+        return installNow(entry, onlyIf);
       }),
     remove: (swarmId) =>
       serial(async () => {

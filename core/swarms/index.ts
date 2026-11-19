@@ -98,10 +98,22 @@ const refresh = (): void => {
 const installedOne = async (swarmId: string): Promise<InstalledSwarm | null> =>
   (await swarms().installed()).find((held) => held.swarmId === swarmId) ?? null; // never rejects: unreadable reads as nothing
 
-/** The one install path (HIVE-442): a click and the updater both end here, so both report and both tell the renderer. */
-async function applyInstall(entry: SwarmEntry): Promise<SwarmInstallResult> {
-  const before = await installedOne(entry.id);
-  const result = await swarms().install(entry); // never rejects
+/**
+ * The one install path (HIVE-442): a click and the updater both end here, so both report and both tell the renderer.
+ * What it replaced is read inside the install queue, so an automatic update that landed while a click waited is not
+ * named as this install's. `onlyIf` false installs nothing, reports nothing and answers null.
+ */
+async function applyInstall(
+  entry: SwarmEntry,
+  onlyIf: (installed: InstalledSwarm | null) => boolean = () => true,
+): Promise<SwarmInstallResult | null> {
+  const seen: { before: InstalledSwarm | null } = { before: null };
+  const result = await swarms().installIf(entry, (previous) => {
+    seen.before = previous;
+    return onlyIf(previous);
+  }); // never rejects
+  if (result === null) return null;
+  const { before } = seen;
   if (result.ok) updater().clear(entry.id);
   const report = reportFor(entry, result);
   if (report !== null) void reportInstall(hooks.authedFetch(), entry.id, report); // never rejects, never awaited
@@ -149,7 +161,8 @@ export function swarmCalls(): SwarmCalls {
       if (entry === undefined) {
         return { ok: false, failure: { code: 'unavailable', message: "This swarm isn't available to your account." } };
       }
-      return applyInstall(entry);
+      // Nothing refuses a click: never null.
+      return (await applyInstall(entry)) as SwarmInstallResult;
     },
     remove: async (payload) => {
       const { swarmId } = parseSwarmRequest(payload);

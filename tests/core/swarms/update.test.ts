@@ -71,13 +71,17 @@ function harness(
   installed: InstalledSwarm[],
   source: RegistryRead['source'] = 'cloud',
 ): Harness['deps'] {
+  const installedNow = vi.fn<SwarmUpdaterDeps['installed']>().mockResolvedValue(installed);
   return {
     registry: vi.fn<SwarmUpdaterDeps['registry']>().mockResolvedValue({ source, swarms: rows }),
-    installed: vi.fn<SwarmUpdaterDeps['installed']>().mockResolvedValue(installed),
+    installed: installedNow,
     newestVersion: vi.fn<SwarmUpdaterDeps['newestVersion']>().mockResolvedValue(null),
-    apply: vi.fn<SwarmUpdaterDeps['apply']>((entry) =>
-      Promise.resolve(appliedAt(entry, entry.kind === 'organization' ? (entry.pinnedVersion ?? '9.9.9') : (entry.version ?? ''))),
-    ),
+    // As the engine does: the guard is asked with what is installed when the install's turn comes.
+    apply: vi.fn<SwarmUpdaterDeps['apply']>(async (entry, onlyIf) => {
+      const now = (await installedNow()).find((held) => held.swarmId === entry.id) ?? null;
+      if (onlyIf !== undefined && !onlyIf(now)) return null;
+      return appliedAt(entry, entry.kind === 'organization' ? (entry.pinnedVersion ?? '9.9.9') : (entry.version ?? ''));
+    }),
     runsLive: vi.fn<SwarmUpdaterDeps['runsLive']>().mockReturnValue(false),
     changed: vi.fn<SwarmUpdaterDeps['changed']>(),
     notify: vi.fn<SwarmUpdaterDeps['notify']>(),
@@ -117,7 +121,7 @@ describe('check', () => {
     const done = updater.check();
     await flush();
     expect(deps.apply).toHaveBeenCalledTimes(1);
-    expect(deps.apply).toHaveBeenCalledWith(row);
+    expect(deps.apply).toHaveBeenCalledWith(row, expect.any(Function));
     expect(updater.pending('a1')).toEqual({ target: '1.4.0', updating: true });
     expect(deps.changed).toHaveBeenCalled();
 
@@ -168,7 +172,7 @@ describe('check', () => {
     const updater = createSwarmUpdater(deps);
 
     await updater.check();
-    expect(deps.apply).toHaveBeenCalledWith(row);
+    expect(deps.apply).toHaveBeenCalledWith(row, expect.any(Function));
     expect(deps.newestVersion).not.toHaveBeenCalled();
   });
 
@@ -451,6 +455,71 @@ describe('what changed since the check', () => {
 
     expect(deps.apply).not.toHaveBeenCalled();
     expect(updater.pending('a1')).toBeNull();
+  });
+
+  describe('while an earlier swarm installs', () => {
+    const rows = [rowFor(), rowFor({ id: 'b1', slug: 'other', title: 'Other' })];
+    const both = (b1: Partial<InstalledSwarm> = {}): InstalledSwarm[] => [
+      heldFor(),
+      heldFor({ swarmId: 'b1', slug: 'other', title: 'Other', ...b1 }),
+    ];
+
+    async function midway(after: InstalledSwarm[]): Promise<{ deps: ReturnType<typeof harness>; updater: ReturnType<typeof createSwarmUpdater> }> {
+      const deps = harness(rows, both());
+      const first = deferred<SwarmInstallResult>();
+      const real = deps.apply.getMockImplementation();
+      deps.apply.mockImplementationOnce(() => first.promise);
+      if (real !== undefined) deps.apply.mockImplementation(real);
+      const updater = createSwarmUpdater(deps);
+      const done = updater.check();
+      await flush();
+      expect(deps.apply).toHaveBeenCalledTimes(1);
+
+      deps.installed.mockResolvedValue(after);
+      first.resolve(appliedAt(rows[0] as SwarmEntry, '1.4.0'));
+      await done;
+      return { deps, updater };
+    }
+
+    it('never reinstalls a swarm removed meanwhile', async () => {
+      const { deps, updater } = await midway([heldFor({ version: '1.4.0' })]);
+
+      expect(deps.notify).toHaveBeenCalledTimes(1);
+      expect(deps.notify).not.toHaveBeenCalledWith(expect.objectContaining({ swarmId: 'b1' }));
+      expect(updater.pending('b1')).toBeNull();
+    });
+
+    it('never updates a swarm switched off meanwhile, and leaves it pending', async () => {
+      const after = both({ autoUpdate: false });
+      after[0] = heldFor({ version: '1.4.0' });
+      const { deps, updater } = await midway(after);
+
+      expect(deps.notify).not.toHaveBeenCalledWith(expect.objectContaining({ swarmId: 'b1' }));
+      expect(updater.pending('b1')).toEqual({ target: '1.4.0', updating: false });
+    });
+
+    it('never reinstalls a swarm whose removal lands between the read and the install', async () => {
+      const deps = harness([rowFor()], [heldFor()]);
+      deps.apply.mockImplementation((entry, onlyIf) => Promise.resolve(onlyIf?.(null) === false ? null : appliedAt(entry, '1.4.0')));
+      const updater = createSwarmUpdater(deps);
+
+      await updater.check();
+
+      expect(deps.notify).not.toHaveBeenCalled();
+      expect(updater.pending('a1')).toBeNull();
+    });
+  });
+
+  it('says the list changed once a failed update stops showing as updating', async () => {
+    const deps = harness([rowFor()], [heldFor()]);
+    deps.apply.mockResolvedValue({ ok: false, failure: { code: 'offline', message: 'no' } });
+    const updater = createSwarmUpdater(deps);
+    const seen: unknown[] = [];
+    deps.changed.mockImplementation(() => seen.push(updater.pending('a1')));
+
+    await updater.check();
+
+    expect(seen.at(-1)).toEqual({ target: '1.4.0', updating: false });
   });
 
   it('treats a pinned policy on a native row as the switch, not as a pin', async () => {

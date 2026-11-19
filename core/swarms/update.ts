@@ -13,8 +13,11 @@ export interface SwarmUpdaterDeps {
   registry: () => Promise<RegistryRead>;
   installed: () => Promise<InstalledSwarm[]>;
   newestVersion: (repoUrl: string, folder: string) => Promise<string | null>;
-  /** The app's one install path: it reports and tells the renderer itself. Never rejects. */
-  apply: (entry: SwarmEntry) => Promise<SwarmInstallResult>;
+  /**
+   * The app's one install path: it reports and tells the renderer itself. Never rejects. `onlyIf` is asked with the
+   * entry installed when the install's turn comes; false installs nothing and answers null.
+   */
+  apply: (entry: SwarmEntry, onlyIf: (installed: InstalledSwarm | null) => boolean) => Promise<SwarmInstallResult | null>;
   runsLive: () => boolean;
   /** A pending update appeared, moved or cleared: the list should be read again. */
   changed: () => void;
@@ -63,32 +66,51 @@ export function createSwarmUpdater(deps: SwarmUpdaterDeps): SwarmUpdater {
 
   const drop = (swarmId: string): boolean => held.delete(swarmId);
 
-  const applyOne = async (swarmId: string, pending: Pending): Promise<void> => {
+  /** Gone, cleared or already at the target drops it; not automatic, or failed and not retried, waits. */
+  const verdictOf = (
+    swarmId: string,
+    pending: Pending,
+    installed: InstalledSwarm | null,
+    retryFailed: boolean,
+  ): 'apply' | 'drop' | 'wait' => {
+    if (!held.has(swarmId) || installed === null || installed.version === pending.target) return 'drop';
+    if (!isAutomatic(pending.entry, installed) || (pending.failed && !retryFailed)) return 'wait';
+    return 'apply';
+  };
+
+  const applyOne = async (swarmId: string, pending: Pending, retryFailed: boolean): Promise<void> => {
     held.set(swarmId, { ...pending, updating: true });
     deps.changed();
-    const result = await deps.apply(pending.entry); // never rejects; a failure is a result
-    if (result.ok) {
+    // Decided again inside the install queue: a removal or a switch turned off since the read below wins.
+    const decided: { verdict: 'apply' | 'drop' | 'wait' } = { verdict: 'apply' };
+    const result = await deps.apply(pending.entry, (installed) => {
+      decided.verdict = verdictOf(swarmId, pending, installed, retryFailed);
+      return decided.verdict === 'apply';
+    }); // never rejects; a failure is a result
+    if (result?.ok === true) {
       held.delete(swarmId);
       deps.notify({ swarmId, title: result.installed.title, version: result.installed.version });
-    } else {
-      held.set(swarmId, { ...pending, updating: false, failed: true });
+      return;
     }
+    if (result === null && decided.verdict === 'drop') held.delete(swarmId);
+    else held.set(swarmId, { ...pending, updating: false, failed: result !== null || pending.failed });
+    deps.changed(); // the install path said nothing after "updating": the row is read again
   };
 
   const applyPending = async (retryFailed: boolean): Promise<void> => {
-    if (held.size === 0) return;
-    // Read again, from disk only: a switch turned off, a removal or a clicked install since the check wins.
-    const now = new Map((await deps.installed()).map((installed) => [installed.swarmId, installed]));
     let moved = false;
     for (const [swarmId, pending] of [...held]) {
-      const installed = now.get(swarmId);
-      if (installed === undefined || installed.version === pending.target) {
+      // Read again before each, from disk only: the install before this one may have taken minutes, and a switch
+      // turned off, a removal or a clicked install since then wins.
+      const installed = (await deps.installed()).find((one) => one.swarmId === swarmId) ?? null;
+      const verdict = verdictOf(swarmId, pending, installed, retryFailed);
+      if (verdict === 'drop') {
         moved = drop(swarmId) || moved;
         continue;
       }
-      if (!isAutomatic(pending.entry, installed) || (pending.failed && !retryFailed)) continue;
+      if (verdict === 'wait') continue;
       if (deps.runsLive()) break; // asked per swarm: a run may start between two installs
-      await applyOne(swarmId, pending);
+      await applyOne(swarmId, pending, retryFailed);
     }
     if (moved) deps.changed();
   };

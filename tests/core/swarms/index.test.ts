@@ -10,6 +10,7 @@ import type { AuthedFetch, RegistryRead } from '../../../core/swarms/registry';
 const engine = vi.hoisted(() => ({
   installed: vi.fn(),
   install: vi.fn(),
+  installIf: vi.fn(),
   remove: vi.fn(),
   setAutoUpdate: vi.fn(),
   seedSets: vi.fn(),
@@ -93,6 +94,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   registry.readRegistry.mockResolvedValue(read);
   engine.installed.mockResolvedValue([]);
+  // As the engine does: the guard is asked with what is installed when the install's turn comes.
+  engine.installIf.mockImplementation(
+    async (target: SwarmEntry, onlyIf: (previous: InstalledSwarm | null) => boolean): Promise<unknown> => {
+      const previous = ((await engine.installed()) as InstalledSwarm[]).find((held) => held.swarmId === target.id) ?? null;
+      return onlyIf(previous) ? engine.install(target) : null;
+    },
+  );
   h = hooks();
   setSwarmHooks(h);
 });
@@ -330,6 +338,18 @@ describe('the one install path (HIVE-442)', () => {
     await swarmCalls().install({ swarmId: 'a1' });
 
     expect(h.changed).toHaveBeenCalledWith({ updated: { swarmId: 'a1', title: 'Standard', version: '1.0.0' } });
+  });
+
+  it('takes the version it replaced from inside the install queue, not from a read before it', async () => {
+    // An automatic update to 1.0.0 lands while this click waits its turn: the click replaces nothing.
+    engine.installed.mockResolvedValue([heldAt('a1', '0.9.0')]);
+    engine.installIf.mockImplementation((_entry: SwarmEntry, onlyIf: (previous: InstalledSwarm | null) => boolean) =>
+      Promise.resolve(onlyIf(heldAt('a1', '1.0.0')) ? { ok: true, installed: heldAt('a1', '1.0.0') } : null),
+    );
+
+    await swarmCalls().install({ swarmId: 'a1' });
+
+    expect(h.changed).toHaveBeenCalledWith({ updated: null });
   });
 
   it('names no update for a reinstall at the same version', async () => {

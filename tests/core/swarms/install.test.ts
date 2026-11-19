@@ -612,6 +612,32 @@ describe('install', () => {
     expect(installedJson()).toHaveLength(1);
   });
 
+  it('asks installIf with the entry installed inside the queue, and installs nothing when it says no', async () => {
+    const repo = makeRepo([
+      { tag: 'standard/v1.0.0', files: swarmFiles('1.0.0') },
+      { tag: 'standard/v1.1.0', files: swarmFiles('1.1.0', { body: 'new text' }) },
+    ]);
+    const swarms = createSwarms(makeDeps());
+    const at = (version: string) =>
+      entryFor({ repoUrl: repo.bare, version, commit: repo.commitOf(`standard/v${version}`) });
+    const seen: (string | null)[] = [];
+    const answer =
+      (yes: boolean) =>
+      (previous: InstalledSwarm | null): boolean => {
+        seen.push(previous?.version ?? null);
+        return yes;
+      };
+    expect(await swarms.installIf(at('1.0.0'), answer(true))).toMatchObject({ ok: true });
+    const before = readHive('swarms/installed.json');
+
+    const refused = await swarms.installIf(at('1.1.0'), answer(false));
+
+    expect(refused).toBeNull();
+    expect(seen).toEqual([null, '1.0.0']);
+    expect(readHive('swarms/installed.json')).toBe(before);
+    expect(readHive('skills/s1/SKILL.md')).toBe(skillText('s1'));
+  });
+
   it('waits for the boot seed, then runs two installs one after the other', async () => {
     let open: () => void = () => undefined;
     const ready = new Promise<void>((resolve) => {
