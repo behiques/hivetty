@@ -71,12 +71,13 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       # Inside Debian 12, not on the runner: `pty.node` must load on a bookworm
-      # image (glibc 2.36), and ubuntu-24.04 links against 2.39. Node 26 ships
-      # no corepack, so the pnpm `packageManager` pins runs through npx.
+      # image (glibc 2.36), and ubuntu-24.04 links against 2.39. node-pty's own
+      # install script, run by npm in its real folder: no pnpm in the container,
+      # so the runner's store and `.modules.yaml` are left alone.
       - name: Compile node-pty against Debian 12
         run: |
           docker run --rm -v "$PWD:/w" -w /w node:26-bookworm \
-            sh -ec 'npx --yes "$(node -p "require(\"./package.json\").packageManager")" rebuild node-pty'
+            sh -ec 'cd "$(readlink -f node_modules/node-pty)" && npm run install'
           sudo chown -R "$(id -u):$(id -g)" node_modules
 
       - name: Build the server

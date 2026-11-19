@@ -38,7 +38,12 @@ const FORK_ENTRY = join(ROOT, 'out/server/pty-host.js');
 const UTILITY_ENTRY = join(ROOT, 'out/main/pty-host.js');
 const BRIDGE = join(ROOT, 'tests/support/utility-host-bridge.mjs');
 const CASE_MS = 30_000;
-const KINDS = (process.env['HIVE_PTY_HOST_KINDS'] ?? 'fork,utilityProcess').split(',') as HostKind[];
+const KINDS = (process.env['HIVE_PTY_HOST_KINDS'] ?? 'fork,utilityProcess').split(',').map((kind) => {
+  if (kind !== 'fork' && kind !== 'utilityProcess') {
+    throw new Error(`HIVE_PTY_HOST_KINDS: "${kind}" is not a host; use fork, utilityProcess or both, comma-separated`);
+  }
+  return kind;
+});
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
