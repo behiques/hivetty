@@ -73,7 +73,7 @@ src/
                          muta, tone, kit, palette, the comb (MUTA_SCALE) and
                          lib/theme/colour, and nothing else from lib/
   stores/                hive, ui, appearance, editor
-core/                    config, sessions, hooks, ledger, agents, integrations, server
+core/                    config, sessions, hooks, ledger, agents, integrations, server, audit
   platform/              the port to the shell: setPlatform() / platform(), the desktop member
   harness/               the port, and an adapter each: claude-code/, codex/, copilot/
   licence/               sign-in, the lease and its entitlements, devices, billing

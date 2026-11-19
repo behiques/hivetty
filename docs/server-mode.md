@@ -472,6 +472,57 @@ machine that is not serving stamps nothing. Any `answeredOn` the caller sent is
 dropped first. The Inbox uses it to say "answered on mac-mini" when a card
 leaves.
 
+## The audit trail
+
+A server writes one line for each of these (HIVE-427):
+
+- **`attach`**: a paired device's socket was accepted.
+- **`detach`**: that socket closed. A socket that was never accepted writes neither.
+- **`refused`**: an attach that named a device was turned away. `outcome` says
+  why: `unauthorized` (a device that is not paired, or no longer is),
+  `device-mismatch` (the attach named another device than the one the channel
+  was keyed for), `protocol-mismatch` or `revoked`. A refusal before the attach
+  names anyone (a wrong token, which fails the encrypted handshake, the
+  connection cap, the handshake deadline, an old plaintext client, a malformed
+  first frame) is not written.
+- **`call`**: every call on a channel graded `execute`, such as
+  `pty:spawn-terminal` or `agents:run`, written when it arrives. Reads and
+  mutations are not written.
+- **`input`**: the first `pty:write` or `pty:prompt` for each session on each
+  attach. Typing more into the same session writes nothing more; a new attach
+  writes again.
+
+Payloads are never written, and neither are keystrokes. The one field read from
+a payload is `sessionId`, when it is a string of 128 characters or fewer.
+
+Each line is one JSON object. `at` is UTC; `deviceName` is absent when the id
+matches no paired device; `channel` and `sessionId` appear on `call` and `input`
+only, and `outcome` on `refused` only:
+
+```json
+{"at":"2026-11-18T14:02:11.204Z","event":"attach","deviceId":"d7c1","deviceName":"MacBook","via":"direct"}
+{"at":"2026-11-18T14:02:15.880Z","event":"call","deviceId":"d7c1","deviceName":"MacBook","via":"direct","channel":"pty:spawn-terminal","sessionId":"s-41"}
+{"at":"2026-11-18T14:02:16.031Z","event":"input","deviceId":"d7c1","deviceName":"MacBook","via":"direct","channel":"pty:write","sessionId":"s-41"}
+{"at":"2026-11-18T14:20:03.517Z","event":"detach","deviceId":"d7c1","deviceName":"MacBook","via":"direct"}
+{"at":"2026-11-18T15:44:50.002Z","event":"refused","deviceId":"a90e","deviceName":"Old iPad","via":"relay","outcome":"revoked"}
+```
+
+**Where it goes.** By default, to the `audit/` folder beside `config.json`:
+`~/.hivetty/audit/` on a desktop in server mode, `$HIVETTY_HOME/audit/` on
+`hivetty-server`. There is one file per local day, `YYYY-MM-DD.jsonl`, and the
+first line of a new day deletes day files more than 30 days old. A file in that
+folder whose name is not a date is left alone. The folder and the files are
+readable by their owner only.
+
+With `HIVETTY_AUDIT=stdout` the server writes no file and prints each line to
+stdout as `audit {json}`, without the time and tag every other line carries, so
+a container's log collector can pick the trail out by its first word. Any other
+value, or none, means the file.
+
+**A write that fails never refuses a call.** If the line cannot be written (a
+full disk, a folder the server cannot write), the server logs it once, keeps
+serving, and logs again only after a write has succeeded in between.
+
 ## Reaching it from anywhere
 
 **Direct attach stays on a private network.** The client dials loopback, an
@@ -687,6 +738,7 @@ blank:
 | `config.json` | The same workspace config the desktop reads, `server` block included. `HIVE_CONFIG_PATH` overrides it. |
 | `ledger/`, `skills/`, `agents/` | As on the desktop. |
 | `goals/` | Goal briefs. `HIVE_GOALS_DIR` overrides it. |
+| `audit/` | The audit trail, one file per day (see [The audit trail](#the-audit-trail)). |
 | `data/` | What the desktop keeps in its `userData`: the lease, session history, the heartbeat. Created private to its owner. |
 
 One process per folder and config: a second server on the same `HIVETTY_HOME`
@@ -763,7 +815,9 @@ shutdown hooks, and exits 0. It waits at most `HIVETTY_SHUTDOWN_BUDGET_MS`
 
 Every line the server writes starts with an ISO time and a tag:
 `2026-11-18T09:30:00.000Z [relay] connected`. A line that has no tag of its own
-gets `[hive]`.
+gets `[hive]`. With `HIVETTY_AUDIT=stdout`, audit lines appear on stdout as
+`audit {json}`, without the time and tag every other line carries (see
+[The audit trail](#the-audit-trail)).
 
 The server writes `data/heartbeat` (the time and its pid) at boot and every
 15 seconds. `node out/server/index.js --health` reads it and exits 0 when it is
