@@ -204,7 +204,15 @@ import type {
   SlackStatus,
   SlackTokensState,
 } from './slack-contract';
-import type { SwarmInstallResult, SwarmListing, SwarmRemoveResult, SwarmRequest } from './swarm-contract';
+import type {
+  InstalledSwarm,
+  SwarmAutoUpdateRequest,
+  SwarmInstallResult,
+  SwarmListing,
+  SwarmRemoveResult,
+  SwarmRequest,
+  SwarmsChanged,
+} from './swarm-contract';
 import type { SetSyncGroupRequest, SyncedAppearance, SyncSetupResult, SyncStatus } from './sync-contract';
 import type { UpdateStatus } from './update-contract';
 
@@ -959,6 +967,12 @@ export const CH = {
   swarmsInstall: 'swarms:install',
   /** HIVE-441: remove a swarm from this machine. Edited files stay. Process-local. */
   swarmsRemove: 'swarms:remove',
+  /** HIVE-442: turn a swarm's "Update automatically" on or off. Process-local. */
+  swarmsSetAutoUpdate: 'swarms:set-auto-update',
+  /** HIVE-442: look for newer versions now, apply the automatic ones, and answer the list. Process-local. */
+  swarmsCheck: 'swarms:check',
+  /** HIVE-442, push: swarms changed on this machine; read the list again. Local only. */
+  swarmsChanged: 'swarms:changed',
   /** HIVE-291: this account's orgs, from the cloud; `[]` when it cannot say. Process-local. */
   accountOrgs: 'account:orgs',
   /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. Process-local. */
@@ -2504,6 +2518,11 @@ export interface HiveBridge {
     /** By registry id. The app looks the repository up itself; a caller cannot name one. */
     install(request: SwarmRequest): Promise<SwarmInstallResult>;
     remove(request: SwarmRequest): Promise<SwarmRemoveResult>;
+    /** HIVE-442: null when the swarm is not installed or the list could not be written. */
+    setAutoUpdate(request: SwarmAutoUpdateRequest): Promise<InstalledSwarm | null>;
+    /** Looks for newer versions now and answers the list afterwards. */
+    check(): Promise<SwarmListing>;
+    onChanged(callback: (event: SwarmsChanged) => void): () => void;
   };
   remote: {
     /**

@@ -1116,6 +1116,27 @@ describe('the swarm verbs (HIVE-441)', () => {
     await (swarms()[verb] as (request: unknown) => Promise<unknown>)({ swarmId: 'a1' });
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(channel, { swarmId: 'a1' });
   });
+
+  it('swarms.setAutoUpdate invokes swarms:set-auto-update with the request (HIVE-442)', async () => {
+    await (swarms().setAutoUpdate as (request: unknown) => Promise<unknown>)({ swarmId: 'a1', autoUpdate: false });
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.swarmsSetAutoUpdate, { swarmId: 'a1', autoUpdate: false });
+  });
+
+  it('swarms.check invokes swarms:check with no argument (HIVE-442)', async () => {
+    await (swarms().check as () => Promise<unknown>)();
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.swarmsCheck);
+  });
+
+  it('swarms.onChanged hands the pushed payload over, and its disposer unsubscribes (HIVE-442)', () => {
+    const callback = vi.fn();
+    const dispose = (swarms().onChanged as (cb: unknown) => () => void)(callback);
+    const payload = { updated: { swarmId: 'a1', title: 'Standard', version: '1.4.0' } };
+    listeners.get(CH.swarmsChanged)?.[0]?.({}, payload);
+    expect(callback).toHaveBeenCalledWith(payload);
+
+    dispose();
+    expect(listeners.get(CH.swarmsChanged) ?? []).toHaveLength(0);
+  });
 });
 
 describe('the relay status verbs (HIVE-429)', () => {

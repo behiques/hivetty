@@ -494,7 +494,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'now', 'onApplyAppearance', 'onStatus', 'openConflicts', 'reportAppearance', 'reset', 'setGroup', 'setup', 'status',
   ]);
   // HIVE-441: install and remove take a swarm id; the app looks the repository up itself, so the page cannot name a URL.
-  expect(surface.swarms).toEqual(['install', 'list', 'remove']);
+  expect(surface.swarms).toEqual(['check', 'install', 'list', 'onChanged', 'remove', 'setAutoUpdate']);
   // HIVE-367: cliSkills lists the user's own CLI skills by name, read-only.
   expect(surface.skills).toEqual([
     'cliSkills',

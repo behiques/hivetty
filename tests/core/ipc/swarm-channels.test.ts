@@ -86,8 +86,14 @@ const swarmSpies = vi.hoisted(() => ({
   list: vi.fn(() => Promise.resolve('LIST')),
   install: vi.fn((_payload: unknown) => Promise.resolve('INSTALL')),
   remove: vi.fn((_payload: unknown) => Promise.resolve('REMOVE')),
+  setAutoUpdate: vi.fn((_payload: unknown) => Promise.resolve('SET_AUTO_UPDATE')),
+  check: vi.fn(() => Promise.resolve('CHECK')),
 }));
 const setSwarmHooks = vi.hoisted(() => vi.fn());
+const stopSwarmTimer = vi.hoisted(() => vi.fn());
+const startSwarmUpdates = vi.hoisted(() => vi.fn(() => stopSwarmTimer));
+const swarmRunsIdle = vi.hoisted(() => vi.fn());
+const swarmSessionChanged = vi.hoisted(() => vi.fn());
 
 /** Two seed sets: the shipped one, `S`, and one installed swarm's, `W`, which owns `skills/tdd`. */
 const sets = vi.hoisted(() => {
@@ -102,6 +108,9 @@ vi.mock('../../../core/swarms', () => ({
   setSwarmHooks,
   swarmSeedSets,
   swarmSeedSetFor,
+  startSwarmUpdates,
+  swarmRunsIdle,
+  swarmSessionChanged,
 }));
 
 /** `core/seed`'s actions, so the spec proves which set each one was handed. */
@@ -166,11 +175,76 @@ describe('the swarm channels', () => {
     expect(swarmSpies[verb]).toHaveBeenCalledWith({ swarmId: 'a1' });
   });
 
-  it('feeds the engine its five hooks once', () => {
+  it('feeds the engine its eight hooks once', () => {
     expect(setSwarmHooks).toHaveBeenCalledTimes(1);
     const hooks = setSwarmHooks.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(Object.keys(hooks).sort()).toEqual(['afterAgents', 'afterSkills', 'authedFetch', 'env', 'ready']);
+    expect(Object.keys(hooks).sort()).toEqual([
+      'afterAgents',
+      'afterSkills',
+      'authedFetch',
+      'changed',
+      'env',
+      'notify',
+      'ready',
+      'runsLive',
+    ]);
     for (const member of Object.values(hooks)) expect(typeof member).toBe('function');
+  });
+});
+
+describe('the swarm update channels (HIVE-442)', () => {
+  interface Hooks {
+    runsLive: () => boolean;
+    changed: (event: unknown) => void;
+    notify: (updated: { swarmId: string; title: string; version: string }) => void;
+  }
+  const hooksGiven = (): Hooks => setSwarmHooks.mock.calls.at(-1)?.[0] as Hooks;
+
+  it('swarms:set-auto-update hands its payload to the engine untouched', async () => {
+    await expect(invoke(CH.swarmsSetAutoUpdate, { swarmId: 'a1', autoUpdate: false })).resolves.toBe('SET_AUTO_UPDATE');
+    expect(swarmSpies.setAutoUpdate).toHaveBeenCalledWith({ swarmId: 'a1', autoUpdate: false });
+  });
+
+  it('swarms:check reaches the engine', async () => {
+    await expect(invoke(CH.swarmsCheck, undefined)).resolves.toBe('CHECK');
+    expect(swarmSpies.check).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts the six-hour check and looks at the session once, at registration', () => {
+    expect(startSwarmUpdates).toHaveBeenCalledTimes(1);
+    expect(swarmSessionChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops the timer on teardown, and starts one timer per registration', () => {
+    resetIpcHandlers();
+    expect(stopSwarmTimer).toHaveBeenCalledTimes(1);
+
+    registerIpcHandlers();
+    expect(startSwarmUpdates).toHaveBeenCalledTimes(2);
+  });
+
+  it('counts no live run before any run starts', () => {
+    expect(hooksGiven().runsLive()).toBe(false);
+  });
+
+  it('pushes swarms:changed through the broadcaster', () => {
+    resetIpcHandlers();
+    const emit = vi.fn();
+    registerIpcHandlers({ emit });
+
+    hooksGiven().changed({ updated: null });
+
+    expect(emit).toHaveBeenCalledWith(CH.swarmsChanged, { updated: null });
+  });
+
+  it('raises one swarm.updated notification for an automatic update', async () => {
+    hooksGiven().notify({ swarmId: 'a1', title: 'Standard', version: '1.4.0' });
+    hooksGiven().notify({ swarmId: 'a1', title: 'Standard', version: '1.4.0' });
+
+    const listed = (await invoke(CH.notificationsList, undefined)) as { kind: string; title: string }[];
+    const swarm = listed.filter((row) => row.kind === 'swarm.updated');
+    expect(swarm).toHaveLength(1);
+    expect(swarm[0]?.title).toBe('Standard updated to v1.4.0');
   });
 });
 

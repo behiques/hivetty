@@ -211,7 +211,15 @@ import type {
   SlackStatus,
   SlackTokensState,
 } from '@shared/slack-contract';
-import type { SwarmInstallResult, SwarmListing, SwarmRemoveResult, SwarmRequest } from '@shared/swarm-contract';
+import type {
+  InstalledSwarm,
+  SwarmAutoUpdateRequest,
+  SwarmInstallResult,
+  SwarmListing,
+  SwarmRemoveResult,
+  SwarmRequest,
+  SwarmsChanged,
+} from '@shared/swarm-contract';
 import type { SetSyncGroupRequest, SyncedAppearance, SyncSetupResult, SyncStatus } from '@shared/sync-contract';
 import type { UpdateStatus } from '@shared/update-contract';
 
@@ -470,6 +478,11 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.swarmsInstall, request) as Promise<SwarmInstallResult>,
     remove: (request: SwarmRequest): Promise<SwarmRemoveResult> =>
       ipcRenderer.invoke(CH.swarmsRemove, request) as Promise<SwarmRemoveResult>,
+    // HIVE-442.
+    setAutoUpdate: (request: SwarmAutoUpdateRequest): Promise<InstalledSwarm | null> =>
+      ipcRenderer.invoke(CH.swarmsSetAutoUpdate, request) as Promise<InstalledSwarm | null>,
+    check: (): Promise<SwarmListing> => ipcRenderer.invoke(CH.swarmsCheck) as Promise<SwarmListing>,
+    onChanged: (callback: (event: SwarmsChanged) => void) => subscribe<SwarmsChanged>(CH.swarmsChanged, callback),
   },
   // HIVE-144. Storing and forgetting the credential this machine was handed
   // to attach outward, as a client, to someone else's server. Its own
