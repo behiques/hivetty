@@ -6,6 +6,14 @@
 # The tag is the trigger and `package.json`'s version is the source of truth —
 # electron-builder reads it, and the two cannot disagree because `pnpm version`
 # writes both. See `docs/packaging-and-updates.md`.
+#
+# One tag releases the desktop app publicly and the `hivetty-server` base image
+# privately (HIVE-426). The jobs: `create-draft`, then `desktop` and
+# `server-tarballs` in parallel, then `server-image` (pushes
+# `ghcr.io/behiques/hivetty-server:<version>`), then `publish` (checks every
+# image is private, flips the draft, then moves `:next` or `:latest`), then
+# `tidy`. A dispatch from a branch runs `desktop` and the tarballs as before,
+# pushes no image and publishes nothing.
 
 name: Release
 
@@ -19,47 +27,28 @@ on:
   # mid-download would fail the checksum.
   workflow_dispatch:
 
-# Least privilege, and `contents: write` is the whole of what is needed —
-# electron-builder creates the release and uploads to it with `GH_TOKEN`.
+# Least privilege. `contents: write` is for the release; each job narrows it,
+# and only the two image jobs add `packages: write` (HIVE-426).
 permissions:
   contents: write
 
 jobs:
-  macos:
-    name: macOS (arm64)
-    # An Apple Silicon runner, deliberately, not `macos-latest`-whatever-that-is.
-    # The build must produce an arm64 bundle, and `node-pty`'s prebuild is
-    # selected by the *host* architecture during install — cross-building it
-    # from an Intel runner is the slow way to discover that at first launch.
-    runs-on: macos-15
-    timeout-minutes: 30
-
+  create-draft:
+    name: Draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v5
-        with:
-          # Matches `engines.node` in package.json. `cache: pnpm` needs
-          # pnpm/action-setup to have run first, which is why it is above.
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - name: Install
-        # `postinstall` runs `check-native-abi.mjs --fix`, which chmods
-        # `node-pty`'s spawn-helper. That has to happen *before* packaging: the
-        # bit is copied into the bundle as found, and a 0644 helper is an app
-        # whose terminals all fail at spawn.
-        run: pnpm install --frozen-lockfile
-
-      - name: Verify
-        # The same gates AGENTS.md requires of any change. A release is the last
-        # place to find out that type-check was red.
+      - name: The tag is package.json's version
+        # The image is tagged from the tag and electron-builder reads
+        # package.json: one release, one version.
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
-          pnpm run lint
-          pnpm run type-check
-          pnpm run test
+          set -euo pipefail
+          version=$(jq -r .version package.json)
+          [ "v$version" = "$GITHUB_REF_NAME" ] \
+            || { echo "ABORT: tag $GITHUB_REF_NAME is not package.json's v$version."; exit 1; }
 
       - name: Create the draft release, so nothing has to race to create it
         if: startsWith(github.ref, 'refs/tags/')
@@ -102,6 +91,43 @@ jobs:
             --verify-tag \
             --notes "Download the \`.dmg\` below. Once installed, HiveTTY Pro checks for new versions itself and tells you in the Inbox."
 
+  desktop:
+    name: macOS (arm64)
+    needs: create-draft
+    # An Apple Silicon runner, deliberately, not `macos-latest`-whatever-that-is.
+    # The build must produce an arm64 bundle, and `node-pty`'s prebuild is
+    # selected by the *host* architecture during install — cross-building it
+    # from an Intel runner is the slow way to discover that at first launch.
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          # Matches `engines.node` in package.json. `cache: pnpm` needs
+          # pnpm/action-setup to have run first, which is why it is above.
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        # `postinstall` runs `check-native-abi.mjs --fix`, which chmods
+        # `node-pty`'s spawn-helper. That has to happen *before* packaging: the
+        # bit is copied into the bundle as found, and a 0644 helper is an app
+        # whose terminals all fail at spawn.
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify
+        # The same gates AGENTS.md requires of any change. A release is the last
+        # place to find out that type-check was red.
+        run: |
+          pnpm run lint
+          pnpm run type-check
+          pnpm run test
+
       # `APPLE_API_KEY` is a **path**, not a key.
       #
       # `@electron/notarize` documents it as "file system path to the `.p8`
@@ -131,9 +157,9 @@ jobs:
       - name: Build and publish
         env:
           # electron-builder uploads the dmg, the zip and latest-mac.yml to the
-          # draft created above. It no longer creates anything: `releaseType:
+          # draft `create-draft` made. It no longer creates anything: `releaseType:
           # draft` in electron-builder.yml means it also never flips the draft,
-          # so publication is one decision made in one place — the step below,
+          # so publication is one decision made in one place — the `publish` job,
           # and only when the build actually succeeded.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The Developer ID certificate, as a base64 `.p12` plus its password.
@@ -172,11 +198,162 @@ jobs:
           # below still runs against it.
         run: pnpm run desktop:publish
 
+      - name: Record what shipped
+        # The signature state of the shipped bundle, in the build log, on every
+        # release. The whole update design turns on whether this says `adhoc`,
+        # and reading it out of a log beats re-deriving it from a local build
+        # that may not match.
+        if: always()
+        run: |
+          echo "--- dist ---"
+          ls -la dist || true
+          echo "--- codesign ---"
+          codesign --display --verbose=2 "dist/mac-arm64/HiveTTY Pro.app" 2>&1 || true
+
+  # The server tarballs for this tag, as workflow artifacts (HIVE-425). Never
+  # attached to the release; `server-image` builds from them.
+  server-tarballs:
+    name: Server tarballs
+    uses: ./.github/workflows/server.yml
+    with:
+      release: true
+    permissions:
+      contents: read
+
+  # The private base image (HIVE-426). Pushes `:<version>` and nothing else:
+  # `publish` moves `:latest` or `:next`, once every job has passed.
+  server-image:
+    name: Server image
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: server-tarballs
+    # arm64 is the fleet's architecture, so it is the native one. amd64's
+    # `apt-get` runs under QEMU; nothing compiles.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # One folder per artifact, which is the build context the Dockerfile reads.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: hivetty-server-linux-*
+          path: ${{ runner.temp }}/ctx
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Build and push the version tag
+        id: push
+        run: |
+          set -euo pipefail
+          image="ghcr.io/behiques/hivetty-server"
+          args=()
+          while IFS= read -r pin; do args+=(--build-arg "$pin"); done \
+            < <(grep -E '^[A-Z_]+=' packaging/server/versions.env)
+          docker buildx build \
+            --platform linux/arm64,linux/amd64 \
+            -f packaging/server/Dockerfile \
+            "${args[@]}" \
+            -t "$image:${GITHUB_REF_NAME#v}" \
+            --push \
+            --metadata-file "$RUNNER_TEMP/metadata.json" \
+            "$RUNNER_TEMP/ctx"
+          digest=$(jq -r '."containerimage.digest" // empty' "$RUNNER_TEMP/metadata.json")
+          [[ "$digest" == sha256:* ]] || { echo "ABORT: the push reported no digest."; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      # What was pushed, booted: the reduced image case, on the native architecture.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install, no scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Boot the pushed image
+        run: pnpm exec vitest run tests/live/server-edition-conformance.test.ts
+        env:
+          HIVE_LIVE_SERVER_EDITION_PROOF: '1'
+          HIVE_SERVER_IMAGE: ghcr.io/behiques/hivetty-server@${{ steps.push.outputs.digest }}
+          HIVE_SERVER_RELEASE: '1'
+
+  # All or nothing: every job above passed, or nothing below runs. The order
+  # of the steps is the contract. HIVE-303 adds `runner-image` to `needs`,
+  # `hivetty-runner` to both loops, and its digest to the last step.
+  publish:
+    name: Publish
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [create-draft, desktop, server-image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Log in to GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Every image is private
+        # Asked the way a stranger would: with no credentials, GHCR must refuse
+        # the manifest. A 200 is a public package. Anything else is "could not
+        # tell", and that fails too. The signed-in inspect comes first so a
+        # 404 can only mean "refused", never "no such tag". Every manifest
+        # type is accepted, so a 404 can never mean "not in that format".
+        # The anonymous token is asked for first, and its own answer is read:
+        # GHCR refuses one for a private package (401/403), so that is private.
+        # Anything but a 200 carrying a token is "could not tell": an empty
+        # bearer earns a 403 even from a public package.
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          tokfile=$(mktemp)
+          for name in hivetty-server; do
+            repo="behiques/$name"
+            docker buildx imagetools inspect "ghcr.io/$repo:$version" > /dev/null \
+              || { echo "ABORT: ghcr.io/$repo:$version does not exist."; exit 1; }
+            tcode=$(curl -sS -o "$tokfile" -w '%{http_code}' "https://ghcr.io/token?scope=repository:$repo:pull" || true)
+            case "$tcode" in
+              401 | 403) echo "ghcr.io/$repo is private (an anonymous token request answered $tcode)."; continue ;;
+              200) token=$(jq -r '.token // empty' "$tokfile" 2> /dev/null || true) ;;
+              *) echo "ABORT: could not tell whether ghcr.io/$repo is private (the anonymous token request answered HTTP '$tcode')."; exit 1 ;;
+            esac
+            [ -n "$token" ] \
+              || { echo "ABORT: could not tell whether ghcr.io/$repo is private (a 200 from the token request carried no token)."; exit 1; }
+            code=$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H "Authorization: Bearer $token" \
+              -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+              "https://ghcr.io/v2/$repo/manifests/$version" || true)
+            case "$code" in
+              401 | 403 | 404) echo "ghcr.io/$repo is private (an anonymous pull answered $code)." ;;
+              200) echo "ABORT: ghcr.io/$repo is PUBLIC. Make it private in the package's settings, then re-run this job."; exit 1 ;;
+              *) echo "ABORT: could not tell whether ghcr.io/$repo is private (HTTP '$code')."; exit 1 ;;
+            esac
+          done
+
       - name: Publish the release
         # Only on success, and only once `latest-mac.yml` is actually there. A
         # release without it is not a release — the updater reads that file and
         # nothing else to decide a new version exists.
-        if: success() && startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -195,10 +372,34 @@ jobs:
           fi
           echo "Published $GITHUB_REF_NAME."
 
+      - name: Move the image's moving tag
+        # After the flip, never before. A prerelease moves `:next` and never
+        # `:latest`. Retagging a digest copies no layers.
+        env:
+          SERVER_DIGEST: ${{ needs.server-image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then moving=next; else moving=latest; fi
+          image="ghcr.io/behiques/hivetty-server"
+          docker buildx imagetools create -t "$image:$moving" "$image@$SERVER_DIGEST"
+          {
+            echo "### $GITHUB_REF_NAME"
+            echo "- \`$image:$version\` and \`:$moving\`: \`$SERVER_DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  tidy:
+    name: Tidy
+    # `always()`, because the case that hurt was a failed run leaving an
+    # unusable release behind.
+    if: always() && startsWith(github.ref, 'refs/tags/')
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
       - name: Tidy the releases for this tag
         # `always()`, because the case that hurt was a **failed** run leaving an
         # unusable release behind. Runs after both outcomes.
-        if: always() && startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # One rule, which covers every way this can go wrong: **keep exactly the
@@ -227,26 +428,3 @@ jobs:
           else
             echo "Kept release $keep."
           fi
-
-      - name: Record what shipped
-        # The signature state of the shipped bundle, in the build log, on every
-        # release. The whole update design turns on whether this says `adhoc`,
-        # and reading it out of a log beats re-deriving it from a local build
-        # that may not match.
-        if: always()
-        run: |
-          echo "--- dist ---"
-          ls -la dist || true
-          echo "--- codesign ---"
-          codesign --display --verbose=2 "dist/mac-arm64/HiveTTY Pro.app" 2>&1 || true
-
-  # The server tarballs for this tag, as workflow artifacts (HIVE-425). Never
-  # attached to the release. Ordering this against the app and the images is
-  # HIVE-426's job graph.
-  server:
-    name: Server tarballs
-    uses: ./.github/workflows/server.yml
-    with:
-      release: true
-    permissions:
-      contents: read

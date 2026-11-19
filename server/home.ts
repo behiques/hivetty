@@ -9,7 +9,8 @@ const blank = (value: string | undefined): boolean => value === undefined || val
 /**
  * HIVE-422: the server's one folder. `HIVETTY_HOME`, else `~/.hivetty`: `config.json` and `goals/` inside it (an
  * explicit `HIVE_CONFIG_PATH` or `HIVE_GOALS_DIR` wins), and `data/` for what the desktop keeps in `userData`.
- * Returns the data folder, created private to its owner.
+ * Returns the data folder, created private to its owner. A non-blank `TMPDIR` is created too (HIVE-426): a fresh
+ * image volume has no `tmp/`, and the image's entrypoint has no shell step to make it.
  */
 export function applyHome(
   env: NodeJS.ProcessEnv,
@@ -21,5 +22,6 @@ export function applyHome(
   if (blank(env.HIVE_GOALS_DIR)) env.HIVE_GOALS_DIR = join(root, 'goals');
   const dataDir = join(root, 'data');
   mkdir(dataDir);
+  if (!blank(env.TMPDIR)) mkdir(env.TMPDIR as string);
   return dataDir;
 }

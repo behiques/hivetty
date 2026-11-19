@@ -6,6 +6,11 @@
 # channel, spawn a PTY, SIGTERM. The tarballs are workflow artifacts and are
 # never attached to a release.
 #
+# Each job also builds the `hivetty-server` base image from its own tarball
+# (HIVE-426), lints its Dockerfile, and boots it read-only as uid 20001 through
+# the same suite's image cases. Nothing here pushes an image: `release.yml`
+# does, on a tag.
+#
 # `release: true` (what `release.yml` passes on a tag) builds with
 # `HIVETTY_RELEASE=1`. A release build ignores every developer escape hatch, so
 # its smoke is the reduced one: boot, health, no listener without a lease,
@@ -144,6 +149,36 @@ jobs:
           while [ "$dir" != / ]; do sudo chmod o+rx "$dir"; dir=$(dirname "$dir"); done
           sudo env "PATH=$PATH" HIVE_LIVE_PTY_HOST_PROOF=1 HIVE_PTY_HOST_KINDS=fork \
             pnpm exec vitest run tests/live/pty-host-conformance.test.ts -t '9:'
+
+      # The base image (HIVE-426), from this job's own tarball. Never pushed.
+      - name: Lint the Dockerfile
+        # One leg is enough for a lint.
+        if: matrix.target == 'linux-x64'
+        run: |
+          docker run --rm -i \
+            -v "$PWD/packaging/server/.hadolint.yaml:/.config/hadolint.yaml:ro" \
+            hadolint/hadolint:v2.12.0 < packaging/server/Dockerfile
+
+      - name: Build the image
+        run: |
+          set -euo pipefail
+          ctx="$RUNNER_TEMP/ctx/hivetty-server-${{ matrix.target }}"
+          mkdir -p "$ctx"
+          cp dist/server/hivetty-server-*.tar.gz dist/server/SHA256SUMS "$ctx/"
+          args=()
+          while IFS= read -r pin; do args+=(--build-arg "$pin"); done \
+            < <(grep -E '^[A-Z_]+=' packaging/server/versions.env)
+          docker build -f packaging/server/Dockerfile "${args[@]}" -t hivetty-server:ci "$RUNNER_TEMP/ctx"
+
+      # Read-only, as uid 20001: pair, a dev lease, the encrypted attach, the
+      # image's own health check, docker stop. A release tarball takes no test
+      # lease, so its run is the reduced one.
+      - name: Boot the image
+        run: pnpm exec vitest run tests/live/server-edition-conformance.test.ts
+        env:
+          HIVE_LIVE_SERVER_EDITION_PROOF: '1'
+          HIVE_SERVER_IMAGE: hivetty-server:ci
+          HIVE_SERVER_RELEASE: ${{ inputs.release && '1' || '' }}
 
       - uses: actions/upload-artifact@v4
         with:

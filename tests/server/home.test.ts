@@ -41,6 +41,18 @@ describe('applyHome (HIVE-422)', () => {
     expect(mkdir).toHaveBeenCalledWith('/srv/h/data');
   });
 
+  it('creates a non-blank TMPDIR after the data folder (HIVE-426)', () => {
+    const mkdir = vi.fn();
+    applyHome({ HIVETTY_HOME: '/srv/h', TMPDIR: '/srv/h/tmp' }, home, mkdir);
+    expect(mkdir.mock.calls).toEqual([['/srv/h/data'], ['/srv/h/tmp']]);
+  });
+
+  it('leaves a blank TMPDIR alone (HIVE-426)', () => {
+    const mkdir = vi.fn();
+    applyHome({ HIVETTY_HOME: '/srv/h', TMPDIR: '  ' }, home, mkdir);
+    expect(mkdir).toHaveBeenCalledTimes(1);
+  });
+
   it('creates the folder for real by default, private to its owner', async () => {
     const { mkdtempSync, rmSync, statSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');

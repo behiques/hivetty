@@ -9,6 +9,8 @@ import {
   claimServerLock,
   hasActiveServerLock,
   hiveLockPath,
+  processIdentity,
+  type ProcessIdentitySystem,
   type ServerLockIo,
 } from '../../../core/server/server-lock';
 
@@ -176,5 +178,64 @@ describe('the hive lock on a real folder (HIVE-227)', () => {
     const claim = claimServerLock(path);
     expect(claim.kind).toBe('claimed');
     if (claim.kind === 'claimed') claim.release();
+  });
+});
+
+describe('processIdentity (HIVE-426)', () => {
+  function system(overrides: Partial<ProcessIdentitySystem>): ProcessIdentitySystem {
+    return {
+      platform: 'linux',
+      alive: () => true,
+      readStat: () => {
+        throw new Error('readStat not expected');
+      },
+      psStart: () => {
+        throw new Error('ps not expected');
+      },
+      ...overrides,
+    };
+  }
+
+  function enoent(): Error {
+    return Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' });
+  }
+
+  it('on Linux, reads the start time from /proc/<pid>/stat, field 22, after the last parenthesis', () => {
+    // The command name `a) (b` holds a space and both parentheses; starttime is the 20th field after `)`.
+    const fields = ['S', '1', '77', '77', '0', '-1', '4194560', '0', '0', '0', '0', '0', '0', '0', '0', '20', '0', '1', '0', '98765', '1000'];
+    const readStat = vi.fn(() => `77 (a) (b) ${fields.join(' ')}\n`);
+    expect(processIdentity(77, system({ readStat }))).toBe('77:98765');
+    expect(readStat).toHaveBeenCalledWith(77);
+  });
+
+  it('on Linux, a process gone before its stat is read has no identity', () => {
+    expect(processIdentity(77, system({ readStat: () => { throw enoent(); } }))).toBeNull();
+    expect(
+      processIdentity(77, system({ readStat: () => { throw Object.assign(new Error('gone'), { code: 'ESRCH' }); } })),
+    ).toBeNull();
+  });
+
+  it('on Linux, a stat line with no command name or too few fields has no identity', () => {
+    expect(processIdentity(77, system({ readStat: () => '77 S 1 77 77 0 -1 4194560 0 0 0 0 0 0 0 0 20 0 1 0 98765 1000' }))).toBeNull();
+    expect(processIdentity(77, system({ readStat: () => '77 (sh) S 1 77' }))).toBeNull();
+  });
+
+  it('on Linux, any other read error still throws', () => {
+    const denied = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    expect(() => processIdentity(77, system({ readStat: () => { throw denied; } }))).toThrow(denied);
+  });
+
+  it('elsewhere, asks ps for the start time, as before', () => {
+    const psStart = vi.fn(() => 'Tue Nov 18 22:00:00 2026');
+    expect(processIdentity(77, system({ platform: 'darwin', psStart }))).toBe('77:Tue Nov 18 22:00:00 2026');
+    expect(psStart).toHaveBeenCalledWith(77);
+  });
+
+  it('a dead pid has no identity, without reading anything', () => {
+    expect(processIdentity(77, system({ alive: () => false }))).toBeNull();
+  });
+
+  it('runs the real system for this process', () => {
+    expect(processIdentity(process.pid)).toMatch(new RegExp(`^${String(process.pid)}:\\S`));
   });
 });

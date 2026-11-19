@@ -533,7 +533,7 @@ xattr -dr com.apple.quarantine "/Applications/HiveTTY Pro.app"
 An update the app fetches itself is never quarantined, which was a real argument
 for the in-app path even back when the swap was refused.
 
-## The server tarballs
+## The server tarballs and the base image
 
 `.github/workflows/server.yml` builds `hivetty-server` for `linux-arm64`
 (`ubuntu-24.04-arm`) and `linux-x64` (`ubuntu-latest`) on every pull request and
@@ -548,11 +548,45 @@ needs `libatomic1`, which Node's Linux binaries link. The job then unpacks the
 tarball read-only, starts it in a read-only `debian:bookworm-slim` with only
 `libatomic1` added, and runs the `server-edition` live suite against it.
 
+Each job then builds the `hivetty-server` base image from its own tarball
+(HIVE-426): `packaging/server/Dockerfile`, linted by hadolint on the x64 leg,
+built natively on each runner with `packaging/server/versions.env` as build
+args, and booted by the same suite's image cases (`HIVE_SERVER_IMAGE`): read-only,
+as uid 20001, pair, a dev lease and an encrypted attach (case I1), the image's
+own health check and `docker stop` (case I2). `server.yml` never pushes an
+image.
+
 `release.yml` calls the same workflow with `release: true`, which builds with
 `HIVETTY_RELEASE=1` and runs the reduced smoke. Every run uploads its tarballs
-as workflow artifacts with `retention-days: 7`, and only after the smoke
-passed. A release never carries them: no job downloads Electron, and none
-attaches a tarball to a GitHub release.
+as workflow artifacts with `retention-days: 7`, and only after the smoke and
+the image passed. A release never carries them: no job downloads Electron, and none
+attaches a tarball or an image to a GitHub release.
+
+### The release graph
+
+One `v*` tag releases the desktop app and the private image. `release.yml` has
+six jobs:
+
+1. `create-draft`: fails unless the tag is `v` plus `package.json`'s version, then
+   creates the draft release.
+2. `desktop` (macos-15): Verify, then `desktop:publish` uploads the dmg, the zip
+   and `latest-mac.yml` to the draft.
+3. `server-tarballs`: `server.yml` with `release: true`, in parallel with `desktop`.
+4. `server-image`: one buildx run on `ubuntu-24.04-arm` (amd64 under QEMU)
+   pushes `ghcr.io/behiques/hivetty-server:<version>`, then boots the pushed
+   digest (case I2).
+5. `publish`, only once every job above passed, in this order: every image is
+   private (an anonymous pull must be refused), then the `latest-mac.yml` check
+   and the draft flip, then `:next` (a prerelease) or `:latest` (a stable tag)
+   moved to the pushed digest. A public package fails the run before the flip,
+   and a moving tag never moves before it.
+6. `tidy`, always: keeps the release for the tag that carries `latest-mac.yml`
+   and deletes every other one. A run that failed at the image or the privacy
+   check leaves a complete, unpublished draft; re-run the failed jobs.
+
+A dispatch from a branch runs `desktop` and the tarballs, pushes no image and
+publishes nothing. Nothing past `server-tarballs` can run before a tag.
+`packaging/server/README.md` has the details.
 
 ## Where the code lives
 
