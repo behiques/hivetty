@@ -243,18 +243,20 @@ export const swarmSeedSets = (): Promise<{ shipped: SeedOptions; swarms: SeedOpt
  * home whose seed failed is seeded again at the next launch.
  */
 export async function seedAndAdopt(seed: (exclude: ReadonlySet<string> | undefined) => Promise<unknown>): Promise<void> {
-  const dir = hiveDir();
-  const adopted = await lstat(swarmPaths(dir).adopted).then(
-    () => true,
-    () => false,
-  );
-  if (adopted) return;
-  // A failed read of the swarm-owned folders never stops the seed (HIVE-441).
-  const exclude = await swarmSeedSets().then(
-    (sets) => sets.shipped.exclude,
-    () => undefined,
-  );
   try {
+    const dir = hiveDir();
+    const adopted = await lstat(swarmPaths(dir).adopted).then(
+      () => true,
+      () => false,
+    );
+    if (adopted) return;
+    // A failed read of the swarm-owned folders never stops the seed (HIVE-441), a synchronous throw included.
+    const exclude = await Promise.resolve()
+      .then(swarmSeedSets)
+      .then(
+        (sets) => sets.shipped.exclude,
+        () => undefined,
+      );
     if ((await seed(exclude)) === null) throw new Error('the shipped seed failed');
     await adoptBuiltIns({ hiveDir: dir, shippedManifest: shippedOptions().manifestFile });
   } catch (cause) {

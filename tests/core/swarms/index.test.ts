@@ -761,6 +761,30 @@ describe('seedAndAdopt: the boot seed, then adoption (HIVE-447)', () => {
     expect(seedBuiltIns).toHaveBeenCalledWith(undefined);
   });
 
+  it('seeds with nothing excluded when reading the seed sets throws outright, and never rejects', async () => {
+    engine.seedSets.mockImplementation(() => {
+      throw new TypeError('The "path" argument must be of type string');
+    });
+
+    await expect(seedAndAdopt(seedBuiltIns)).resolves.toBeUndefined();
+
+    expect(seedBuiltIns).toHaveBeenCalledWith(undefined);
+  });
+
+  it('never rejects when the shipped options cannot be read', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const seed = await import('../../../core/seed');
+    const shippedOptions = vi.spyOn(seed, 'shippedOptions').mockImplementation(() => {
+      throw new TypeError('no resources path');
+    });
+
+    await expect(seedAndAdopt(seedBuiltIns)).resolves.toBeUndefined();
+
+    expect(await exists('swarms/adopted')).toBe(false);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('no resources path'));
+    shippedOptions.mockRestore();
+  });
+
   it('logs a failed adoption, leaves no marker, and resolves, so the next launch tries again', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     await fs.mkdir(at('swarms'), { recursive: true });
