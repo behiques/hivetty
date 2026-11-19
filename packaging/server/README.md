@@ -57,9 +57,11 @@ docker run --rm -i -v "$PWD/packaging/server/.hadolint.yaml:/.config/hadolint.ya
 
 ## Run it against the dev cloud
 
-The home is a volume at `/var/lib/hivetty` owned by the uid the container runs
-as. The image's own volume is owned by 10001, so under any other `--user` mount
-a folder that uid owns. The root filesystem can be read-only.
+The home is a volume at `/var/lib/hivetty`, and it must be owned by the uid the
+container runs as: under a `--user` that does not own it nothing runs,
+`--gen-key` included, because the server creates its folders before anything
+else. The image's own volume is owned by 10001, so under any other `--user`
+mount a folder that uid owns, as below. The root filesystem can be read-only.
 
 The secret key lives in a file **outside** the home, mounted under
 `/run/secrets/` and named by `HIVETTY_SECRET_KEY_FILE`:

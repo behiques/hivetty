@@ -317,7 +317,8 @@ jobs:
         # Asked the way a stranger would: with no credentials, GHCR must refuse
         # the manifest. A 200 is a public package. Anything else is "could not
         # tell", and that fails too. The signed-in inspect comes first so a
-        # 404 can only mean "refused", never "no such tag".
+        # 404 can only mean "refused", never "no such tag". Every manifest
+        # type is accepted, so a 404 can never mean "not in that format".
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
@@ -328,7 +329,7 @@ jobs:
             token=$(curl -sS "https://ghcr.io/token?scope=repository:$repo:pull" | jq -r '.token // empty' || true)
             code=$(curl -sS -o /dev/null -w '%{http_code}' \
               -H "Authorization: Bearer $token" \
-              -H 'Accept: application/vnd.oci.image.index.v1+json' \
+              -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
               "https://ghcr.io/v2/$repo/manifests/$version" || true)
             case "$code" in
               401 | 403 | 404) echo "ghcr.io/$repo is private (an anonymous pull answered $code)." ;;
