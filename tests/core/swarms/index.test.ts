@@ -232,7 +232,6 @@ describe('the engine', () => {
 
     await expect(deps.cloneToken('a1')).resolves.toEqual({ token: 't', repoUrl: a1.repoUrl });
     expect(registry.cloneToken).toHaveBeenCalledWith(authedFetch, 'a1');
-    h.ready.mockClear(); // the list's registry read waits for it too (HIVE-447)
 
     await deps.ready?.();
     expect(h.ready).toHaveBeenCalledTimes(1);
@@ -241,7 +240,6 @@ describe('the engine', () => {
   it('reads the hooks at call time, so hooks set after the engine was made are the ones used', async () => {
     await swarmCalls().list();
     const deps = createSwarms.mock.calls[0]?.[0] as SwarmDeps;
-    h.ready.mockClear(); // the list's registry read waits for it too (HIVE-447)
     const later = hooks();
     setSwarmHooks(later);
 
@@ -322,13 +320,8 @@ const heldAt = (swarmId: string, version: string, patch: Partial<InstalledSwarm>
   ...patch,
 });
 
-// A registry read re-keys the adopted Standard (HIVE-447), which reads installed.json from disk: a few turns of the
-// event loop, not only microtasks.
 const flush = async (): Promise<void> => {
-  for (let i = 0; i < 5; i += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
-    for (let j = 0; j < 30; j += 1) await Promise.resolve();
-  }
+  for (let i = 0; i < 30; i += 1) await Promise.resolve();
 };
 
 describe('the one install path (HIVE-442)', () => {
@@ -667,6 +660,22 @@ describe('the adopted Standard and the registry (HIVE-447)', () => {
     const listing = await swarmCalls().check();
 
     expect(listing.items[0]?.update).toEqual({ target: '1.0.1', updating: false });
+  });
+
+  it('never waits behind the install queue when there is nothing to re-key', async () => {
+    const { serial } = await import('../../../core/seed/actions');
+    engine.installed.mockResolvedValue([heldAt(REAL, '1.0.1')]);
+    let release: () => void = () => undefined;
+    const held = serial(() => new Promise<void>((resolve) => (release = resolve))); // an install cloning
+
+    const answer = await Promise.race([
+      swarmCalls().list().then(() => 'listed'),
+      new Promise((resolve) => setTimeout(() => resolve('waited'), 200)),
+    ]);
+
+    release();
+    await held;
+    expect(answer).toBe('listed');
   });
 
   it('never fails the read when the re-key throws', async () => {

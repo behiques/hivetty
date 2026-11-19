@@ -117,9 +117,25 @@ export async function adoptBuiltIns(deps: AdoptDeps): Promise<void> {
  * The registry named Standard: the adopted entry takes the registry's id, so install, update and the listing
  * match it by id like any other swarm. Each step tolerates having already run.
  */
-export async function rekeyAdopted(hiveDir: string, rows: readonly SwarmEntry[]): Promise<boolean> {
+/** The registry's Standard row, when its id can become a folder and is not the local one. */
+function standardRow(rows: readonly SwarmEntry[]): SwarmEntry | null {
   const row = rows.find((one) => one.kind === STANDARD.kind && one.slug === STANDARD.slug);
-  if (row === undefined || !isSwarmId(row.id) || row.id === ADOPTED_SWARM_ID) return false;
+  return row === undefined || !isSwarmId(row.id) || row.id === ADOPTED_SWARM_ID ? null : row;
+}
+
+/**
+ * The registry's Standard row when an adopted entry waits to take its id, else null. Pure, so a caller can ask
+ * before it queues anything.
+ */
+export function rekeyTarget(rows: readonly SwarmEntry[], held: readonly InstalledSwarm[]): SwarmEntry | null {
+  const row = standardRow(rows);
+  if (row === null) return null;
+  if (!held.some((one) => one.swarmId === ADOPTED_SWARM_ID) || held.some((one) => one.swarmId === row.id)) return null;
+  return row;
+}
+
+export async function rekeyAdopted(hiveDir: string, rows: readonly SwarmEntry[]): Promise<boolean> {
+  if (standardRow(rows) === null) return false;
   const paths = swarmPaths(hiveDir);
   let raw: unknown[];
   try {
@@ -127,10 +143,8 @@ export async function rekeyAdopted(hiveDir: string, rows: readonly SwarmEntry[])
   } catch {
     return false; // unreadable: a writer refuses, and the next read tries again
   }
-  const held = raw.filter(isInstalled);
-  if (!held.some((one) => one.swarmId === ADOPTED_SWARM_ID) || held.some((one) => one.swarmId === row.id)) {
-    return false;
-  }
+  const row = rekeyTarget(rows, raw.filter(isInstalled));
+  if (row === null) return false;
   await mkdir(paths.dir(row.id), { recursive: true });
   // The manifest first. If only it moves, the entry still says `bundled-standard`: the boot seed reads every
   // folder's manifest whatever installed.json says, and the next call finds nothing to move and finishes.

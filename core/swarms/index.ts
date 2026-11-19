@@ -26,7 +26,7 @@ import { shippedOptions } from '../seed';
 import { serial } from '../seed/actions';
 import type { SeedOptions } from '../seed/seed';
 
-import { rekeyAdopted } from './adopt';
+import { rekeyAdopted, rekeyTarget } from './adopt';
 import { createSwarmGit, type SwarmGit } from './git';
 import { createSwarms, mergeListing, type Swarms } from './install';
 import { swarmPaths } from './paths';
@@ -97,7 +97,9 @@ function swarms(): Swarms {
 const registry = async (): Promise<RegistryRead> => {
   const read = await readRegistry(hooks.authedFetch(), swarmPaths(hiveDir()).registry);
   // HIVE-447: the adopted Standard takes the registry's id, in the install queue and after the boot seed. Never the
-  // reason a read fails. No caller reads the registry from inside the queue, so this never waits on itself.
+  // reason a read fails. No caller reads the registry from inside the queue, so this never waits on itself. Asked
+  // first outside the queue, so a read with nothing to re-key never waits behind an install's clone.
+  if (rekeyTarget(read.swarms, await swarms().installed()) === null) return read; // installed() never rejects
   await serial(async () => {
     await hooks.ready();
     await rekeyAdopted(hiveDir(), read.swarms);
