@@ -18,7 +18,7 @@ import {
   setProjectConfigForTest,
 } from '@lib/project-config';
 import { resetAgents, setAgentsForTest } from '@lib/agents';
-import { resetSkills, setSkillsForTest } from '@lib/skills';
+import { resetSkills } from '@lib/skills';
 import type { AgentSummary } from '@shared/agent-contract';
 import type { SkillSummary } from '@shared/skills-contract';
 import { useHiveStore } from '@stores/hive-store';
@@ -1107,11 +1107,16 @@ describe('NewSessionPicker — the ticket workflow', () => {
 
   /** HIVE-447: a workflow that needs a shipped skill or agent this machine does not have. */
   describe('a missing skill or agent', () => {
-    const skills = (...names: string[]) =>
-      setSkillsForTest({ skills: names.map((name) => ({ name }) as SkillSummary), invalid: [], skillsRoot: '' });
+    /** What main answers for the skills: the picker reads them itself when it opens; nothing plants a snapshot. */
+    const skills = (...names: string[]) => {
+      const list = () => Promise.resolve({ skills: names.map((name) => ({ name }) as SkillSummary), invalid: [], skillsRoot: '' });
+      (window.hive as unknown as { skills: unknown }).skills = { list };
+    };
     const agents = (...names: string[]) =>
       setAgentsForTest({ agents: names.map((name) => ({ name }) as AgentSummary), agentsRoot: '' });
     const notice = () => screen.queryByRole('status');
+    /** Let the picker's own read of the skills land. */
+    const settle = () => act(async () => {});
 
     afterEach(() => {
       resetSkills();
@@ -1123,7 +1128,7 @@ describe('NewSessionPicker — the ticket workflow', () => {
       skills('debug');
       render(<NewSessionPicker />);
 
-      expect(notice()).toHaveTextContent("work-on isn't installed.");
+      expect(await screen.findByRole('status')).toHaveTextContent("work-on isn't installed.");
       await userEvent.click(rowsFor(/^nova-web/)[0]);
       await userEvent.type(search(), '{Enter}');
       await userEvent.type(firstMessage(), '{Enter}');
@@ -1135,7 +1140,7 @@ describe('NewSessionPicker — the ticket workflow', () => {
       skills();
       render(<NewSessionPicker />);
 
-      await userEvent.click(screen.getByRole('button', { name: 'Start without it' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Start without it' }));
 
       expect(notice()).toBeNull();
       expect(firstMessage()).toHaveValue('');
@@ -1145,6 +1150,7 @@ describe('NewSessionPicker — the ticket workflow', () => {
 
     it('treats nothing as missing while the skills have not arrived', async () => {
       withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
+      (window.hive as unknown as { skills: unknown }).skills = { list: () => new Promise(() => {}) };
       render(<NewSessionPicker />);
 
       expect(notice()).toBeNull();
@@ -1156,6 +1162,7 @@ describe('NewSessionPicker — the ticket workflow', () => {
       withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
       skills('work-on');
       render(<NewSessionPicker />);
+      await settle();
 
       expect(notice()).toBeNull();
       await userEvent.click(rowsFor(/^nova-web/)[0]);
@@ -1166,6 +1173,7 @@ describe('NewSessionPicker — the ticket workflow', () => {
       withWorkflow({ kind: 'skill', skill: 'workstream:work-on' });
       skills();
       render(<NewSessionPicker />);
+      await settle();
 
       expect(notice()).toBeNull();
       await userEvent.click(rowsFor(/^nova-web/)[0]);
@@ -1176,6 +1184,7 @@ describe('NewSessionPicker — the ticket workflow', () => {
       withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
       skills();
       render(<NewSessionPicker />);
+      await settle();
 
       await userEvent.clear(firstMessage());
       await userEvent.type(firstMessage(), 'look at HIVE-226');
@@ -1188,6 +1197,7 @@ describe('NewSessionPicker — the ticket workflow', () => {
       withWorkflow({ kind: 'skill', skill: 'hive:work-on' });
       skills();
       render(<NewSessionPicker />);
+      await settle();
 
       await userEvent.type(search(), '{Alt>}{Enter}{/Alt}');
       expect(taskOf()).toBe('');

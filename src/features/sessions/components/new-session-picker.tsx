@@ -22,7 +22,7 @@ import { OptionStepper } from '@features/shared/components/option-stepper';
 import { useAgents } from '@hooks/use-agents';
 import { useNewSessionPick } from '@hooks/use-new-session-pick';
 import { useProjectAccess, useProjectConfig } from '@hooks/use-project-config';
-import { useSkills } from '@hooks/use-skills';
+import { useFreshSkills } from '@hooks/use-skills';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { lockedClis, unavailableReasons } from '@lib/harness/session-cli';
 import { CLI_VOCAB, cliTakesEffort } from '@shared/cli-contract';
@@ -169,7 +169,8 @@ export function NewSessionPicker() {
     checked (another namespace is a CLI plugin's, which the app cannot see), nothing counts as missing until the
     snapshot has arrived, and an edited first message is the person's own and is sent as written.
   */
-  const skills = useSkills();
+  // Read on open: nothing else reads the skills before Settings › Skills does.
+  const skills = useFreshSkills();
   const agents = useAgents();
   const hiveSkill =
     facts !== null && workflow?.kind === 'skill' && workflow.skill.startsWith('hive:')

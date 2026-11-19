@@ -6,7 +6,7 @@ import { TextField } from '@components/ui/text-field';
 import { MissingSwarm } from '@features/shared/components/missing-swarm';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useAgents } from '@hooks/use-agents';
-import { useCliSkills, useSkills } from '@hooks/use-skills';
+import { useCliSkills, useFreshSkills } from '@hooks/use-skills';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { setJiraConnection } from '@lib/project-config';
 import { ticketStart, ticketWorkflowOf, type TicketWorkflow } from '@shared/ticket-workflow';
@@ -47,7 +47,8 @@ const VIAS = [
  * sessions, so picking one says which, and the preview types it that CLI's way.
  */
 export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | null }) {
-  const skills = useSkills();
+  // Read on mount (HIVE-447): nothing else reads the skills before Settings › Skills does.
+  const skills = useFreshSkills();
   const cliList = useCliSkills();
   const cliSkills = cliList ?? [];
   const agents = useAgents();

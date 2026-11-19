@@ -16,7 +16,7 @@ vi.mock('@lib/project-config', async (importOriginal) => ({
   setJiraConnection: (request: unknown) => setJiraConnection(request),
 }));
 vi.mock('@hooks/use-skills', () => ({
-  useSkills: () =>
+  useFreshSkills: () =>
     installed.skills === null
       ? null
       : { skills: installed.skills.map((name) => ({ name })), invalid: [], skillsRoot: '' },

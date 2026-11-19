@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadSkills, resetSkills } from '@/lib/skills';
 
-import { useCliSkills, useSkills } from '@hooks/use-skills';
+import { useCliSkills, useFreshSkills, useSkills } from '@hooks/use-skills';
 
 import type { SkillsSnapshot } from '@shared/skills-contract';
 
@@ -77,5 +77,29 @@ describe('useCliSkills (HIVE-367)', () => {
     });
     expect(cliSkills).toHaveBeenCalledTimes(1);
     expect(result.current).toEqual([{ cli: 'codex', names: ['find-skills'], places: 'p' }]);
+  });
+});
+
+describe('useFreshSkills (HIVE-447)', () => {
+  beforeEach(() => {
+    resetSkills();
+  });
+
+  it('reads the skills when it mounts, so a site that needs one need not wait for the Skills pane', async () => {
+    const list = vi.fn(() => Promise.resolve(snapshot(['work-on'])));
+    (window as unknown as { hive?: unknown }).hive = { skills: { list } };
+
+    const { result } = renderHook(() => useFreshSkills());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(result.current?.skills.map((skill) => skill.name)).toEqual(['work-on']);
+  });
+
+  it('stays null without a bridge', () => {
+    const { result } = renderHook(() => useFreshSkills());
+    expect(result.current).toBeNull();
   });
 });
