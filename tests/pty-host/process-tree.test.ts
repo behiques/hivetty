@@ -253,6 +253,22 @@ describe('readProcTable (HIVE-423)', () => {
   it('answers the empty table when the folder cannot be listed', async () => {
     expect(await readProcTable(join(tmpdir(), 'hive-proc-missing'))).toBe('');
   });
+
+  it('answers the empty table, not a partial one, when a stat fails for a reason other than the process ending', async () => {
+    // EMFILE under a low fd ulimit is the real case; EISDIR is the same "not ENOENT" failure, reproducible in a fixture.
+    const dir = procFixture();
+    mkdirSync(join(dir, '600', 'stat'), { recursive: true });
+    expect(await readProcTable(dir)).toBe('');
+  });
+
+  it('reads a table larger than one batch whole', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hive-proc-'));
+    for (let pid = 2; pid < 302; pid += 1) {
+      mkdirSync(join(dir, String(pid)));
+      writeFileSync(join(dir, String(pid), 'stat'), `${pid} (sh) S 1 ${pid} 0 0\n`);
+    }
+    expect((await readProcTable(dir)).split('\n')).toHaveLength(300);
+  });
 });
 
 describe('the default table reader (HIVE-423)', () => {
