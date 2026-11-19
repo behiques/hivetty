@@ -12,6 +12,7 @@ describe('swarmPaths', () => {
     expect(paths.installed).toBe('/h/swarms/installed.json');
     expect(paths.registry).toBe('/h/swarms/registry.json');
     expect(paths.askpass).toBe('/h/swarms/askpass.sh');
+    expect(paths.adopted).toBe('/h/swarms/adopted');
     expect(paths.dir('x')).toBe('/h/swarms/x');
     expect(paths.repo('x')).toBe('/h/swarms/x/repo');
     expect(paths.staging('x')).toBe('/h/swarms/x/repo.new');

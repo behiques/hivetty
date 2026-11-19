@@ -24,7 +24,7 @@ import { baseOf } from '../../../core/seed/merge';
 import { seedShipped } from '../../../core/seed/seed';
 import { collectFiles } from '../../../core/sync/bundle';
 import { createSwarmGit } from '../../../core/swarms/git';
-import { createSwarms, mergeListing, readInstalled, type SwarmDeps } from '../../../core/swarms/install';
+import { createSwarms, mergeListing, readInstalled, takeOver, type SwarmDeps } from '../../../core/swarms/install';
 
 /**
  * Installing a swarm (HIVE-441): Git runs for real against bare repositories in a temp dir, the seeder runs for
@@ -837,6 +837,40 @@ describe('remove', () => {
     expect(order).toEqual(['install:true', 'remove:true']);
     expect(installedJson()).toEqual([]);
     expect(existsSync(hive('skills/s1/SKILL.md'))).toBe(false);
+  });
+});
+
+describe('takeOver', () => {
+  const A = skillText('a');
+  const B = skillText('b');
+
+  it('moves the taken folders’ entries with their hash and part base, keeps the others, and moves nothing twice', async () => {
+    const shippedFile = hive('.seed.json');
+    const mineFile = hive('swarms/sw1/seed.json');
+    const shipped = {
+      files: { 'skills/a/SKILL.md': sha(A), 'skills/a/notes.md': sha('n'), 'skills/b/SKILL.md': sha(B) },
+      parts: { 'skills/a/SKILL.md': baseOf(A), 'skills/b/SKILL.md': baseOf(B) },
+    };
+    const mine = { files: { 'skills/a/notes.md': 'mine-already' }, parts: {} };
+
+    await takeOver(shippedFile, shipped, mineFile, mine, new Set(['skills/a']));
+
+    expect(readJson('swarms/sw1/seed.json')).toEqual({
+      files: { 'skills/a/notes.md': 'mine-already', 'skills/a/SKILL.md': sha(A) },
+      parts: { 'skills/a/SKILL.md': baseOf(A) },
+    });
+    expect(readJson('.seed.json')).toEqual({
+      files: { 'skills/b/SKILL.md': sha(B) },
+      parts: { 'skills/b/SKILL.md': baseOf(B) },
+    });
+
+    const mineBefore = readHive('swarms/sw1/seed.json');
+    await takeOver(shippedFile, readJson('.seed.json'), mineFile, readJson('swarms/sw1/seed.json'), new Set(['skills/a']));
+    expect(readHive('swarms/sw1/seed.json')).toBe(mineBefore);
+    expect(readJson('.seed.json')).toEqual({
+      files: { 'skills/b/SKILL.md': sha(B) },
+      parts: { 'skills/b/SKILL.md': baseOf(B) },
+    });
   });
 });
 

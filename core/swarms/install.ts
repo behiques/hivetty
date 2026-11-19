@@ -86,7 +86,7 @@ export const ownedFolders = (manifest: Manifest): Set<string> =>
   new Set([...Object.keys(manifest.files), ...Object.keys(manifest.parts)].map(folderOf));
 
 // The two fields that become paths are checked. The rest is what this module wrote.
-const isInstalled = (entry: unknown): entry is InstalledSwarm =>
+export const isInstalled = (entry: unknown): entry is InstalledSwarm =>
   typeof entry === 'object' &&
   entry !== null &&
   isSwarmId((entry as InstalledSwarm).swarmId) &&
@@ -98,7 +98,7 @@ const isEntryOf = (entry: unknown, swarmId: string): boolean => isInstalled(entr
  * Every entry as written, the ones `isInstalled` refuses included, for a write that puts the list back. Absent is
  * nothing installed; unreadable throws, so an install or a removal never overwrites the other swarms' entries.
  */
-async function readInstalledRaw(file: string): Promise<unknown[]> {
+export async function readInstalledRaw(file: string): Promise<unknown[]> {
   let text: string;
   try {
     text = await readFile(file, 'utf8');
@@ -124,7 +124,7 @@ export async function readInstalled(file: string): Promise<InstalledSwarm[]> {
   }
 }
 
-async function writeInstalled(file: string, entries: unknown[]): Promise<void> {
+export async function writeInstalled(file: string, entries: unknown[]): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
   await writeFile(`${file}.tmp`, `${JSON.stringify(entries, null, 2)}\n`);
   await rename(`${file}.tmp`, file);
@@ -223,6 +223,32 @@ async function giveBackTaken(
   await kept(original.files, current.files);
   await kept(original.parts, current.parts);
   await writeManifest(shippedManifest, current);
+}
+
+/**
+ * Move every entry of `shipped` under a `taken` folder into `mine` (an entry `mine` already has is kept), then write
+ * `mineFile` and, after it, `shippedFile` without the moved entries. If only the first write lands, both manifests
+ * name the path: sync reads either, the boot seed passes over the folder, and the next call moves nothing twice.
+ * Mutates `mine`.
+ */
+export async function takeOver(
+  shippedFile: string,
+  shipped: Manifest,
+  mineFile: string,
+  mine: Manifest,
+  taken: ReadonlySet<string>,
+): Promise<void> {
+  const move = <T>(from: Record<string, T>, into: Record<string, T>): Record<string, T> => {
+    const stay: Record<string, T> = {};
+    for (const [rel, value] of Object.entries(from)) {
+      if (!taken.has(folderOf(rel))) stay[rel] = value;
+      else if (!(rel in into)) into[rel] = value;
+    }
+    return stay;
+  };
+  const left: Manifest = { files: move(shipped.files, mine.files), parts: move(shipped.parts, mine.parts) };
+  await writeManifest(mineFile, mine);
+  await writeManifest(shippedFile, left);
 }
 
 function gitFailure(error: GitError, entry: SwarmEntry): SwarmFailure {
@@ -382,20 +408,9 @@ export function createSwarms(deps: SwarmDeps): Swarms {
       // 5. Take over the built-ins this swarm ships: their entries move to this swarm's manifest.
       const taken = new Set(folders.filter((folder) => builtIn.has(folder)));
       if (taken.size > 0) {
-        const move = <T>(from: Record<string, T>, into: Record<string, T>): Record<string, T> => {
-          const stay: Record<string, T> = {};
-          for (const [rel, value] of Object.entries(from)) {
-            if (!taken.has(folderOf(rel))) stay[rel] = value;
-            else if (!(rel in into)) into[rel] = value;
-          }
-          return stay;
-        };
-        const left: Manifest = { files: move(shipped.files, mine.files), parts: move(shipped.parts, mine.parts) };
-        // The swarm's first. If only it lands, both manifests name the path: sync reads either, the boot seed
-        // passes over the folder, and the next install moves nothing twice.
-        await writeManifest(paths.seed(entry.id), mine);
+        // Set before the writes: `giveBackTaken` only restores entries `.seed.json` lacks whose file is on disk.
         if (previous === null) giveBack = () => giveBackTaken(deps.hiveDir, deps.shippedManifest, shipped, taken);
-        await writeManifest(deps.shippedManifest, left);
+        await takeOver(deps.shippedManifest, shipped, paths.seed(entry.id), mine, taken);
       }
 
       // 6. Seed. From here a first install that fails takes its own files back out.
