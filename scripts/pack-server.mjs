@@ -10,12 +10,12 @@ import {
   chmodSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
@@ -49,10 +49,13 @@ export function ptyRuntimeFiles(files) {
   );
 }
 
+/** Every file under `dir`, relative to it. Symlinks are skipped: node-gyp leaves one to the Python it ran. */
 function walk(dir, base = dir) {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
-    return statSync(path).isDirectory() ? walk(path, base) : [relative(base, path)];
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink()) return [];
+    return stat.isDirectory() ? walk(path, base) : [relative(base, path)];
   });
 }
 
@@ -98,8 +101,10 @@ async function main() {
     mkdirSync(dirname(to), { recursive: true });
     cpSync(join(pty, file), to);
   }
-  // node-pty ships spawn-helper 0644, and a 0644 helper fails every spawn.
-  chmodSync(join(stage, 'app/node_modules/node-pty/build/Release/spawn-helper'), 0o755);
+  // node-pty builds spawn-helper on macOS only (its binding.gyp; Linux's pty.cc never calls it), so a Linux pack has
+  // none. Where one exists it may be 0644, and a 0644 helper fails every spawn.
+  const helper = join(stage, 'app/node_modules/node-pty/build/Release/spawn-helper');
+  if (existsSync(helper)) chmodSync(helper, 0o755);
 
   for (const name of ['skills', 'agents', 'shipped-history.json']) {
     cpSync(join(root, 'resources', name), join(stage, 'resources', name), { recursive: true });
