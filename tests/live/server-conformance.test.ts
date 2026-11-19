@@ -16,7 +16,7 @@ import { get as httpGet } from 'node:http';
 import { createRequire } from 'node:module';
 import { connect as netConnect, createServer as createNetServer, type Socket } from 'node:net';
 import { homedir, hostname, tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -59,6 +59,7 @@ import {
 } from '../../shared/remote-contract';
 import { startStubCloud, type StubCloud } from '../e2e/electron/fixtures/stub-cloud';
 import { SecureTestSocket } from '../support/secure-test-socket';
+import { serverCommand, writeKeyFile } from '../support/server-edition';
 
 /**
  * Server-mode conformance (HIVE-142): the eight acceptance criteria plus the
@@ -266,6 +267,18 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  * the re-check sweep) are not in the stub; the cloud's suite (HIVE-285) proves
  * them.
  *
+ * ## Two serving sides (HIVE-427)
+ *
+ * `HIVE_SERVER_SIDE=edition` serves from the server edition instead of the
+ * desktop app: every process {@link serverProcess} names is `hivetty-server`
+ * (`out/server/index.js` under `HIVE_SERVER_NODE`, or an unpacked tarball
+ * named by `HIVE_SERVER_BIN`, as `tests/support/server-edition.ts` says),
+ * with `HIVETTY_HOME` the scratch config's own folder, one key file for the
+ * whole run outside every home, no `--server` (the edition always serves) and
+ * no Electron profile flags. Unset, it is the built Electron app with
+ * `--server`, as it always was. The client is the Electron app on both sides.
+ * `pnpm test:server` runs the file once per side.
+ *
  * ## Evidence
  *
  * A `vitest run` off a TTY (a background shell) prints totals only, so a
@@ -286,6 +299,8 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  */
 
 const RUN = process.env['HIVE_LIVE_SERVER_PROOF'] === '1';
+/** Which build serves (HIVE-427): the Electron app with `--server`, or the server edition (`HIVE_SERVER_SIDE=edition`). */
+const EDITION = process.env['HIVE_SERVER_SIDE'] === 'edition';
 
 const execFileAsync = promisify(execFile);
 
@@ -595,23 +610,62 @@ function scrubbedEnv(overrides: Record<string, string>): NodeJS.ProcessEnv {
   return { ...base, ...overrides };
 }
 
-/** Spawns the app itself — a long-running process this file must stop with {@link stopApp}. */
+/** One key file for the whole edition run, outside every scratch home: a key inside the home exits 4 (HIVE-424). */
+let editionKey: { dir: string; file: string } | undefined;
+
+/**
+ * What to spawn for the serving side, and its environment. Electron: the built app with a scratch
+ * profile and a mock keychain. Edition: `hivetty-server`, its home the config's own folder and its
+ * key a file. `extraEnv` is the Electron side's `HIVE_E2E`/`HIVE_BACKGROUND`; the edition has no window.
+ * `edition` is false for a launch of the client app, which is the Electron app on both sides.
+ */
+function serverProcess(
+  args: readonly string[],
+  configPath: string,
+  userDataDir: string,
+  extraEnv: Record<string, string> = {},
+  edition = EDITION,
+): { file: string; argv: string[]; env: NodeJS.ProcessEnv } {
+  assertScratchPath(configPath);
+  if (!edition) {
+    return {
+      file: electronBinary,
+      argv: [MAIN_ENTRY, ...args, `--user-data-dir=${userDataDir}`, '--use-mock-keychain'],
+      env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, ...extraEnv, ...stubEnv() }),
+    };
+  }
+  editionKey ??= writeKeyFile();
+  const [file, argv] = serverCommand(args.filter((arg) => arg !== '--server'));
+  return {
+    file,
+    argv,
+    env: scrubbedEnv({ HIVETTY_HOME: dirname(configPath), HIVETTY_SECRET_KEY_FILE: editionKey.file, ...stubEnv() }),
+  };
+}
+
+/**
+ * Spawns the app itself — a long-running process this file must stop with {@link stopApp}. A launch with
+ * `--server` is the serving side; any other is the client app, Electron on both sides (HIVE-427).
+ */
 function spawnApp(
   extraArgs: readonly string[],
   configPath: string,
   userDataDir: string,
 ): { child: ChildProcess; record: ProcessRecord } {
-  assertScratchPath(configPath);
-  const args = [MAIN_ENTRY, `--user-data-dir=${userDataDir}`, '--use-mock-keychain', ...extraArgs];
-  const child = spawn(electronBinary, args, {
-    // HIVE_BACKGROUND: the launch never takes the person's focus or the Dock (`electron/main/background.ts`).
-    env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, HIVE_E2E: '1', HIVE_BACKGROUND: '1', ...stubEnv() }),
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  // HIVE_BACKGROUND: the launch never takes the person's focus or the Dock (`electron/main/background.ts`).
+  const serving = extraArgs.includes('--server');
+  const { file, argv, env } = serverProcess(
+    extraArgs,
+    configPath,
+    userDataDir,
+    { HIVE_E2E: '1', HIVE_BACKGROUND: '1' },
+    EDITION && serving,
+  );
+  const child = spawn(file, argv, { env, stdio: ['ignore', 'pipe', 'pipe'] });
 
   const record: ProcessRecord = {
     label: `app ${extraArgs.join(' ')}`,
-    args,
+    args: argv,
     code: null,
     signal: null,
     stdout: '',
@@ -737,13 +791,9 @@ function runOneShot(
   userDataDir: string,
   timeoutMs = 20_000,
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  assertScratchPath(configPath);
   return new Promise((resolve, reject) => {
-    const fullArgs = [MAIN_ENTRY, ...args, `--user-data-dir=${userDataDir}`, '--use-mock-keychain'];
-    const child = spawn(electronBinary, fullArgs, {
-      env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, ...stubEnv() }),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const { file, argv: fullArgs, env } = serverProcess(args, configPath, userDataDir);
+    const child = spawn(file, fullArgs, { env, stdio: ['ignore', 'pipe', 'pipe'] });
 
     const record: ProcessRecord = {
       label: `one-shot ${args.join(' ')}`,
@@ -783,16 +833,21 @@ function runOneShot(
  * having printed `Signed in as` (`core/licence/account-command.ts`),
  * and rejects with its stdout and stderr on anything else, or after 30s.
  */
-function signIn(configPath: string, userDataDir: string, timeoutMs = 30_000): Promise<void> {
-  assertScratchPath(configPath);
-  const env = stubEnv();
+function signIn(
+  configPath: string,
+  userDataDir: string,
+  side: 'serving' | 'client' = 'serving',
+  timeoutMs = 30_000,
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    const args = ['--login'];
-    const fullArgs = [MAIN_ENTRY, ...args, `--user-data-dir=${userDataDir}`, '--use-mock-keychain'];
-    const child = spawn(electronBinary, fullArgs, {
-      env: scrubbedEnv({ [CONFIG_PATH_ENV]: configPath, ...env }),
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const { file, argv: fullArgs, env } = serverProcess(
+      ['--login'],
+      configPath,
+      userDataDir,
+      {},
+      EDITION && side === 'serving',
+    );
+    const child = spawn(file, fullArgs, { env, stdio: ['ignore', 'pipe', 'pipe'] });
     const record: ProcessRecord = {
       label: 'one-shot --login',
       args: fullArgs,
@@ -1677,6 +1732,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
     deadlineRun?.client.close();
     await stopApp(deadlineRun?.app);
     await stub?.close();
+    if (editionKey) rmSync(editionKey.dir, { recursive: true, force: true });
     const findingPath = join(evidenceDir, 'finding.json');
     writeFileSync(
       findingPath,
@@ -5212,7 +5268,7 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       assertScratchPath(clientConfigPath);
       scratchConfigPaths.push(clientConfigPath);
       // The relay asks every socket for a bearer, so the attaching app signs in too.
-      await signIn(clientConfigPath, clientUserDataDir);
+      await signIn(clientConfigPath, clientUserDataDir, 'client');
       writeFileSync(
         clientConfigPath,
         JSON.stringify(
