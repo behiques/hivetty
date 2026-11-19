@@ -108,8 +108,10 @@ import { isThisMachineAction } from './notification-contract';
  * 47 → 48 (HIVE-284): the nine `sync:*` channels, all this machine's own and never carried on the socket.
  * 48 → 49 (HIVE-441): `swarms:list`, `swarms:install` and `swarms:remove`, all this machine's own and never
  *   carried on the socket.
+ * 49 → 50 (HIVE-442): `swarms:set-auto-update` and `swarms:check` (call, process-local) and `swarms:changed`
+ *   (event, local only).
  */
-export const REMOTE_PROTOCOL_VERSION = 49;
+export const REMOTE_PROTOCOL_VERSION = 50;
 
 /**
  * What a frame is for.
@@ -325,6 +327,9 @@ export const FRAME_KIND = {
   [CH.swarmsList]: 'call',
   [CH.swarmsInstall]: 'call',
   [CH.swarmsRemove]: 'call',
+  [CH.swarmsSetAutoUpdate]: 'call',
+  [CH.swarmsCheck]: 'call',
+  [CH.swarmsChanged]: 'event',
   [CH.accountOrgs]: 'call',
   [CH.accountSwitchOrg]: 'call',
   [CH.accountBilling]: 'call',
@@ -690,6 +695,10 @@ export const CHANNEL_AUTHORIZATION = {
   // Installing writes agents and skills that then run with the person's permissions.
   [CH.swarmsInstall]: 'execute',
   [CH.swarmsRemove]: 'execute',
+  [CH.swarmsSetAutoUpdate]: 'execute',
+  // A check may install a newer version.
+  [CH.swarmsCheck]: 'execute',
+  [CH.swarmsChanged]: 'read',
   [CH.accountOrgs]: 'read',
   [CH.accountSwitchOrg]: 'execute',
   [CH.accountBilling]: 'read',
@@ -1108,6 +1117,10 @@ const PROCESS_LOCAL_REFUSALS = {
     "swarms:install installs a swarm on the machine you are sitting at with that machine's own Git access, so it is answered there and never by a server.",
   [CH.swarmsRemove]:
     'swarms:remove removes a swarm from the machine you are sitting at, so it is answered there and never by a server.',
+  [CH.swarmsSetAutoUpdate]:
+    'swarms:set-auto-update changes how a swarm updates on the machine you are sitting at, so it is answered there and never by a server.',
+  [CH.swarmsCheck]:
+    'swarms:check looks for swarm updates for the machine you are sitting at, so it is answered there and never by a server.',
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**
@@ -1152,6 +1165,8 @@ export const LOCAL_ONLY_EVENTS: readonly Channel[] = [
   // HIVE-284: a server's sync status, or its synced appearance, is never this machine's.
   CH.syncStatusChanged,
   CH.syncApplyAppearance,
+  // HIVE-442: a server's installed swarms are never this machine's.
+  CH.swarmsChanged,
 ];
 
 /** Whether `channel` is a push this process raises about itself. */

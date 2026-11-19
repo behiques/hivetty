@@ -202,12 +202,14 @@ describe('install', () => {
         autoUpdate: false,
         lastError: null,
         title: 'Standard',
+        description: 'Ticket to merge.',
         contents: {
           agents: [{ name: 'a1', description: 'Helps out.', tools: ['Read', 'Bash'] }],
           skills: [{ name: 's1', description: 'Does s1.' }],
         },
       },
     ]);
+    expect(result.ok && result.installed.description).toBe('Ticket to merge.');
     expect(cloneToken).not.toHaveBeenCalled();
   });
 
@@ -610,6 +612,32 @@ describe('install', () => {
     expect(installedJson()).toHaveLength(1);
   });
 
+  it('asks installIf with the entry installed inside the queue, and installs nothing when it says no', async () => {
+    const repo = makeRepo([
+      { tag: 'standard/v1.0.0', files: swarmFiles('1.0.0') },
+      { tag: 'standard/v1.1.0', files: swarmFiles('1.1.0', { body: 'new text' }) },
+    ]);
+    const swarms = createSwarms(makeDeps());
+    const at = (version: string) =>
+      entryFor({ repoUrl: repo.bare, version, commit: repo.commitOf(`standard/v${version}`) });
+    const seen: (string | null)[] = [];
+    const answer =
+      (yes: boolean) =>
+      (previous: InstalledSwarm | null): boolean => {
+        seen.push(previous?.version ?? null);
+        return yes;
+      };
+    expect(await swarms.installIf(at('1.0.0'), answer(true))).toMatchObject({ ok: true });
+    const before = readHive('swarms/installed.json');
+
+    const refused = await swarms.installIf(at('1.1.0'), answer(false));
+
+    expect(refused).toBeNull();
+    expect(seen).toEqual([null, '1.0.0']);
+    expect(readHive('swarms/installed.json')).toBe(before);
+    expect(readHive('skills/s1/SKILL.md')).toBe(skillText('s1'));
+  });
+
   it('waits for the boot seed, then runs two installs one after the other', async () => {
     let open: () => void = () => undefined;
     const ready = new Promise<void>((resolve) => {
@@ -630,6 +658,86 @@ describe('install', () => {
     expect((await second).ok).toBe(true);
     expect(installedJson().map((held) => held.swarmId).sort()).toEqual(['swOne', 'swTwo']);
     expect(statSync(hive('skills/one/SKILL.md')).isFile()).toBe(true);
+  });
+});
+
+describe('setAutoUpdate', () => {
+  const heldEntry = (swarmId: string, autoUpdate: boolean): InstalledSwarm => ({
+    swarmId,
+    slug: swarmId,
+    kind: 'native',
+    org: null,
+    repoUrl: 'https://github.com/o/r',
+    folder: 'standard',
+    version: '1.0.0',
+    commit: 'a'.repeat(40),
+    installedAt: '2026-11-19T12:00:00.000Z',
+    autoUpdate,
+    lastError: null,
+    title: swarmId,
+    description: '',
+    contents: { agents: [], skills: [] },
+  });
+  const junk = { nope: 1 };
+  const seedList = (): void => {
+    write(hive('swarms/installed.json'), `${JSON.stringify([heldEntry('a1', true), junk, heldEntry('b1', true)], null, 2)}\n`);
+  };
+
+  it('sets the flag on one swarm, answers the new entry, and writes every other row back as it was', async () => {
+    seedList();
+    const swarms = createSwarms(makeDeps());
+
+    expect(await swarms.setAutoUpdate('a1', false)).toEqual({ ...heldEntry('a1', true), autoUpdate: false });
+    expect(readJson<unknown[]>('swarms/installed.json')).toEqual([
+      { ...heldEntry('a1', true), autoUpdate: false },
+      junk,
+      heldEntry('b1', true),
+    ]);
+  });
+
+  it('answers null and writes nothing for a swarm that is not installed', async () => {
+    seedList();
+    const before = readHive('swarms/installed.json');
+
+    expect(await createSwarms(makeDeps()).setAutoUpdate('zz', true)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe(before);
+  });
+
+  it('answers null for an id that is not a swarm id', async () => {
+    seedList();
+    const before = readHive('swarms/installed.json');
+
+    expect(await createSwarms(makeDeps()).setAutoUpdate('../x', true)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe(before);
+  });
+
+  it('answers null and leaves an unreadable installed.json as it was', async () => {
+    write(hive('swarms/installed.json'), 'not json');
+
+    expect(await createSwarms(makeDeps()).setAutoUpdate('a1', false)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe('not json');
+  });
+
+  it('answers null when installed.json cannot be written', async () => {
+    seedList();
+    mkdirSync(hive('swarms/installed.json.tmp')); // the temp file's path is taken by a folder
+
+    expect(await createSwarms(makeDeps()).setAutoUpdate('a1', false)).toBeNull();
+    expect(readJson<InstalledSwarm[]>('swarms/installed.json')[0]?.autoUpdate).toBe(true);
+  });
+
+  it('takes the install queue, so an install started in the same tick keeps the changed flag', async () => {
+    seedList();
+    const swarms = createSwarms(makeDeps());
+    const { entry } = released('1.0.0', {}, { id: 'c1' });
+
+    const [installed, set] = await Promise.all([swarms.install(entry), swarms.setAutoUpdate('a1', false)]);
+
+    expect(installed.ok).toBe(true);
+    expect(set?.autoUpdate).toBe(false);
+    const rows = readJson<InstalledSwarm[]>('swarms/installed.json');
+    expect(rows.find((row) => row.swarmId === 'a1')?.autoUpdate).toBe(false);
+    expect(rows.map((row) => row.swarmId)).toContain('c1');
   });
 });
 
@@ -848,6 +956,7 @@ describe('mergeListing', () => {
     autoUpdate: false,
     lastError: null,
     title: swarmId,
+    description: '',
     contents: { agents: [], skills: [] },
   });
 
@@ -859,10 +968,25 @@ describe('mergeListing', () => {
     expect(listing).toEqual({
       source: 'cache',
       items: [
-        { entry: a, installed: installedFor('A') },
-        { entry: b, installed: null },
-        { entry: null, installed: installedFor('C') },
+        { entry: a, installed: installedFor('A'), update: null },
+        { entry: b, installed: null, update: null },
+        { entry: null, installed: installedFor('C'), update: null },
       ],
     });
+  });
+
+  it('carries the pending update of each installed swarm, asked for the ones the registry left out too', () => {
+    const a = entryFor({ id: 'a1' });
+    const b = entryFor({ id: 'b1' });
+    const update = { target: '1.1.0', updating: false };
+    const pending = vi.fn((id: string) => (id === 'a1' || id === 'c1' ? update : null));
+    const listing = mergeListing({ source: 'cloud', swarms: [a, b] }, [installedFor('c1'), installedFor('a1')], pending);
+
+    expect(listing.items).toEqual([
+      { entry: a, installed: installedFor('a1'), update },
+      { entry: b, installed: null, update: null },
+      { entry: null, installed: installedFor('c1'), update },
+    ]);
+    expect(pending.mock.calls.map(([id]) => id).sort()).toEqual(['a1', 'c1']);
   });
 });

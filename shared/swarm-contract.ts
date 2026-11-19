@@ -219,12 +219,23 @@ export interface InstalledSwarm {
   /** Set when a later install of an installed swarm failed (HIVE-442's updates). */
   lastError: SwarmFailure | null;
   title: string;
+  /** The manifest's description (HIVE-442). Absent on an entry written before it; read it as `''`. */
+  description: string;
   contents: SwarmContents;
+}
+
+/** A newer version the updater found for an installed swarm (HIVE-442). In memory only. */
+export interface SwarmUpdate {
+  target: string;
+  /** True while the automatic update is being applied. */
+  updating: boolean;
 }
 
 export interface SwarmListItem {
   entry: SwarmEntry | null;
   installed: InstalledSwarm | null;
+  /** Null when up to date, not installed, or not checked yet. */
+  update: SwarmUpdate | null;
 }
 
 export interface SwarmListing {
@@ -351,4 +362,22 @@ export function parseSwarmRequest(payload: unknown): SwarmRequest {
   const swarmId = isRecord(payload) ? payload['swarmId'] : undefined;
   if (!isSwarmId(swarmId)) throw new Error('swarmId is not a swarm id');
   return { swarmId };
+}
+
+export interface SwarmAutoUpdateRequest {
+  swarmId: string;
+  autoUpdate: boolean;
+}
+
+/** `swarms:set-auto-update` carries an id and a boolean and nothing else. */
+export function parseSwarmAutoUpdateRequest(payload: unknown): SwarmAutoUpdateRequest {
+  const { swarmId } = parseSwarmRequest(payload);
+  const autoUpdate = (payload as Record<string, unknown>)['autoUpdate'];
+  if (typeof autoUpdate !== 'boolean') throw new Error('autoUpdate is not a boolean');
+  return { swarmId, autoUpdate };
+}
+
+/** `swarms:changed`: read the list again. `updated` names an install that replaced an older version. */
+export interface SwarmsChanged {
+  updated: { swarmId: string; title: string; version: string } | null;
 }

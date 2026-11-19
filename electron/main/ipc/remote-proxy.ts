@@ -206,6 +206,11 @@ function localAnswerFor(
       return (request: unknown) => swarmCalls().install(request);
     case CH.swarmsRemove:
       return (request: unknown) => swarmCalls().remove(request);
+    /* HIVE-442. How this machine's swarms update is this machine's own too. */
+    case CH.swarmsSetAutoUpdate:
+      return (request: unknown) => swarmCalls().setAutoUpdate(request);
+    case CH.swarmsCheck:
+      return () => swarmCalls().check();
     default:
       return null;
   }

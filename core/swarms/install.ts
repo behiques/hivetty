@@ -23,6 +23,7 @@ import {
   type SwarmInstallResult,
   type SwarmListing,
   type SwarmRemoveResult,
+  type SwarmUpdate,
 } from '@shared/swarm-contract';
 
 import { serial } from '../seed/actions';
@@ -59,7 +60,14 @@ export interface SwarmDeps {
 export interface Swarms {
   installed(): Promise<InstalledSwarm[]>;
   install(entry: SwarmEntry): Promise<SwarmInstallResult>;
+  /**
+   * HIVE-442: `install`, asking `onlyIf` first with the entry installed when the install's turn in the queue comes.
+   * False installs nothing and answers null: a removal or a switch turned off while it waited wins.
+   */
+  installIf(entry: SwarmEntry, onlyIf: (previous: InstalledSwarm | null) => boolean): Promise<SwarmInstallResult | null>;
   remove(swarmId: string): Promise<SwarmRemoveResult>;
+  /** HIVE-442: the row's "Update automatically" switch. Null when the swarm is not installed or the list cannot be written. */
+  setAutoUpdate(swarmId: string, autoUpdate: boolean): Promise<InstalledSwarm | null>;
   /** The shipped set with every swarm-owned folder excluded, and one set per installed swarm. */
   seedSets(shipped: SeedOptions): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }>;
   /** The set that owns `<kind>/<name>`: a swarm's, else the shipped one. */
@@ -240,7 +248,10 @@ export function createSwarms(deps: SwarmDeps): Swarms {
   const seed = deps.seed ?? seedShipped;
   const now = deps.now ?? (() => new Date());
 
-  const installNow = async (entry: SwarmEntry): Promise<SwarmInstallResult> => {
+  const installNow = async (
+    entry: SwarmEntry,
+    onlyIf: (previous: InstalledSwarm | null) => boolean = () => true,
+  ): Promise<SwarmInstallResult | null> => {
     // The id becomes a path, and `swarmPaths` throws on a bad one: refused here, so install never rejects.
     if (!isSwarmId(entry.id)) return { ok: false, failure: { code: 'failed', message: 'Not a swarm id.' } };
     const staging = paths.staging(entry.id);
@@ -252,6 +263,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     }
     const before = raw.filter(isInstalled);
     const previous = before.find((held) => held.swarmId === entry.id) ?? null;
+    if (!onlyIf(previous)) return null;
     // What a first install the app died in the middle of left behind: adopted when untouched, else taken back out.
     const leftover = previous === null ? await readPending(paths.pending(entry.id)) : {};
     // Set once files may have been written for a swarm that was not installed: what takes them back out.
@@ -411,6 +423,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
         autoUpdate: previous?.autoUpdate ?? entry.kind !== 'community',
         lastError: null,
         title: read.manifest.title,
+        description: read.manifest.description,
         contents: read.contents,
       };
       await writeInstalled(paths.installed, [...raw.filter((held) => !isEntryOf(held, entry.id)), installed]);
@@ -438,6 +451,21 @@ export function createSwarms(deps: SwarmDeps): Swarms {
       return { ok: true };
     } catch (cause) {
       return { ok: false, failure: { code: 'failed', message: messageOf(cause) } };
+    }
+  };
+
+  const setAutoUpdateNow = async (swarmId: string, autoUpdate: boolean): Promise<InstalledSwarm | null> => {
+    if (!isSwarmId(swarmId)) return null;
+    try {
+      const raw = await readInstalledRaw(paths.installed); // throws when unreadable: nothing is overwritten
+      const held = raw.find((row) => isEntryOf(row, swarmId));
+      if (!isInstalled(held)) return null;
+      const next: InstalledSwarm = { ...held, autoUpdate };
+      // Every other row, the ones `isInstalled` refuses included, goes back as it was read. Tmp file then rename.
+      await writeInstalled(paths.installed, raw.map((row) => (row === held ? next : row)));
+      return next;
+    } catch {
+      return null;
     }
   };
 
@@ -471,12 +499,24 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     install: (entry) =>
       serial(async () => {
         await deps.ready?.();
-        return installNow(entry);
+        // Without a guard nothing refuses: never null.
+        return (await installNow(entry)) as SwarmInstallResult;
+      }),
+    installIf: (entry, onlyIf) =>
+      serial(async () => {
+        await deps.ready?.();
+        return installNow(entry, onlyIf);
       }),
     remove: (swarmId) =>
       serial(async () => {
         await deps.ready?.();
         return removeNow(swarmId);
+      }),
+    // The same queue: an install writes installed.json too.
+    setAutoUpdate: (swarmId, autoUpdate) =>
+      serial(async () => {
+        await deps.ready?.();
+        return setAutoUpdateNow(swarmId, autoUpdate);
       }),
     seedSets,
     manifestFiles,
@@ -490,15 +530,27 @@ export function createSwarms(deps: SwarmDeps): Swarms {
   };
 }
 
-/** Registry rows first, each with its installed entry; then installed swarms the registry did not return. */
-export function mergeListing(registry: RegistryRead, installed: InstalledSwarm[]): SwarmListing {
+/**
+ * Registry rows first, each with its installed entry; then installed swarms the registry did not return. Each
+ * installed swarm carries the updater's pending update (HIVE-442).
+ */
+export function mergeListing(
+  registry: RegistryRead,
+  installed: InstalledSwarm[],
+  pending: (swarmId: string) => SwarmUpdate | null = () => null,
+): SwarmListing {
   const held = new Map(installed.map((entry) => [entry.swarmId, entry]));
   const listed = new Set(registry.swarms.map((entry) => entry.id));
   return {
     source: registry.source,
     items: [
-      ...registry.swarms.map((entry) => ({ entry, installed: held.get(entry.id) ?? null })),
-      ...installed.filter((entry) => !listed.has(entry.swarmId)).map((entry) => ({ entry: null, installed: entry })),
+      ...registry.swarms.map((entry) => {
+        const mine = held.get(entry.id) ?? null;
+        return { entry, installed: mine, update: mine === null ? null : pending(entry.id) };
+      }),
+      ...installed
+        .filter((entry) => !listed.has(entry.swarmId))
+        .map((entry) => ({ entry: null, installed: entry, update: pending(entry.swarmId) })),
     ],
   };
 }

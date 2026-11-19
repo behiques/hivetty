@@ -335,7 +335,15 @@ import { onShutdown } from '../shutdown';
 import { createSkillsRuntime, type SkillsRuntime } from '../skills';
 import { readCliSkills } from '../skills/cli-skills';
 import { PLUGIN_DIR } from '../skills/paths';
-import { setSwarmHooks, swarmCalls, swarmSeedSetFor, swarmSeedSets } from '../swarms';
+import {
+  setSwarmHooks,
+  startSwarmUpdates,
+  swarmCalls,
+  swarmRunsIdle,
+  swarmSeedSetFor,
+  swarmSeedSets,
+  swarmSessionChanged,
+} from '../swarms';
 import { onSyncAppearance, onSyncStatus, setSyncHooks, syncCalls } from '../sync';
 
 import { createBindings } from './bindings';
@@ -782,6 +790,8 @@ let stopHostLicence: (() => void) | null = null;
 let stopRelayStatus: (() => void) | null = null;
 /** HIVE-284: the `sync:status-changed` and `sync:apply-appearance` pushes' subscriptions. */
 let stopSyncPushes: (() => void) | null = null;
+/** HIVE-442: the six-hour swarm check and the licence subscription that checks when a cloud session appears. */
+let stopSwarmUpdates: (() => void) | null = null;
 /**
  * The session history (HIVE-87), or `null` before registration.
  *
@@ -1980,6 +1990,8 @@ export function registerIpcHandlers(
   handle(CH.swarmsList, () => swarmCalls().list());
   handle(CH.swarmsInstall, (_event, payload: unknown) => swarmCalls().install(payload));
   handle(CH.swarmsRemove, (_event, payload: unknown) => swarmCalls().remove(payload));
+  handle(CH.swarmsSetAutoUpdate, (_event, payload: unknown) => swarmCalls().setAutoUpdate(payload));
+  handle(CH.swarmsCheck, () => swarmCalls().check());
   // HIVE-265: the gate's Quit. window.close() would leave the app running in the dock.
   handle(CH.appQuit, () => platform().lifecycle.quit());
 
@@ -2936,7 +2948,11 @@ export function registerIpcHandlers(
 
   runs = createRunTracker({
     // Keeps the Mac awake while any agent run is live (HIVE-408); the desktop holds the one blocker. Server mode's own blocker is separate.
-    onLive: (live) => platform().desktop?.keepAwake(live),
+    onLive: (live) => {
+      platform().desktop?.keepAwake(live);
+      // HIVE-442: a swarm update that waited for the runs applies when the last one ends.
+      if (!live) swarmRunsIdle();
+    },
     /*
       `spawn` is injected rather than imported by `runs.ts`, which is what lets
       that module's tests drive a recording fake without a real process. The
@@ -3564,7 +3580,28 @@ export function registerIpcHandlers(
     afterAgents,
     env: codexEnv,
     authedFetch: () => cloudSession()?.authedFetch ?? null,
+    // HIVE-442: an automatic swarm update waits for every agent run to end.
+    runsLive: () => (runs?.live().length ?? 0) > 0,
+    // Through `send`; the socket broadcaster holds it back, as a local-only event.
+    changed: (event) => send(CH.swarmsChanged, event),
+    notify: (updated) => {
+      hub.raise({
+        kind: 'swarm.updated',
+        id: `swarm.updated:${updated.swarmId}:${updated.version}`,
+        title: `${updated.title} updated to v${updated.version}`,
+        action: { type: 'none' },
+      });
+    },
   });
+  // HIVE-442: the six-hour check, and a first check each time a cloud session appears.
+  stopSwarmUpdates?.();
+  const stopSwarmTimer = startSwarmUpdates();
+  const stopSwarmSession = onLicenceChange(() => swarmSessionChanged());
+  stopSwarmUpdates = () => {
+    stopSwarmTimer();
+    stopSwarmSession();
+  };
+  swarmSessionChanged();
 
   /*
     A wake, or a display coming back, is when Claude Code loses its size and
@@ -5975,6 +6012,8 @@ export function resetIpcHandlers(options: { flush?: boolean } = {}): void {
   stopRelayStatus = null;
   stopSyncPushes?.();
   stopSyncPushes = null;
+  stopSwarmUpdates?.();
+  stopSwarmUpdates = null;
   installSuspender(null);
   sessions?.dispose();
   sessions = null;

@@ -22,7 +22,7 @@ export const BRIDGE_SHIPPED_KEYS = [
   'status', 'reset', 'takePrompt', 'keepMine',
 ] as const satisfies readonly (keyof HiveBridge['shipped'])[];
 
-export const BRIDGE_SWARMS_KEYS = ['list', 'install', 'remove'] as const satisfies readonly (keyof HiveBridge['swarms'])[];
+export const BRIDGE_SWARMS_KEYS = ['list', 'install', 'remove', 'setAutoUpdate', 'check', 'onChanged'] as const satisfies readonly (keyof HiveBridge['swarms'])[];
 
 export const BRIDGE_AGENTS_KEYS = [
   'list', 'read', 'write', 'remove', 'rename', 'harnessCheck', 'onChanged', 'run', 'kill', 'pause', 'resume',

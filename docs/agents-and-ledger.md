@@ -2802,8 +2802,45 @@ repository up in the registry itself.
 Settings sync reads every seed manifest, so a swarm's untouched files are not
 uploaded as the person's, and it never uploads `~/.hivetty/swarms`.
 `swarms:list`, `swarms:install` and `swarms:remove` are process-local: a window
-attached to a server still installs on its own machine. The screen and updates
-are HIVE-442.
+attached to a server still installs on its own machine. The screen is HIVE-442.
+
+#### Updates (HIVE-442)
+
+`core/swarms/update.ts` looks for newer versions of the installed swarms every
+six hours, once each time a cloud session appears (sign-in, or the licence
+coming back), and when the person clicks Check for updates (`swarms:check`).
+A check only counts when the registry answered from the cloud: offline or
+signed out, it changes nothing.
+
+The target depends on the kind. A native or community swarm targets the
+registry row's version. An organization swarm targets its pinned version when
+the organization pinned one, even a lower one, and otherwise the newest tag
+Git finds in its repository. A repository that cannot be reached leaves what
+was already pending. The pending update rides on each item of `swarms:list` as
+`update`, and is kept in memory only.
+
+Native and organization swarms with "Update automatically" on update
+themselves, and so does any swarm its organization pinned: the pin wins over
+the switch. Community swarms never update on their own. An automatic update
+waits until no agent run is live, and applies when the last one ends; before
+it applies it reads `installed.json` again, so a switch turned off or a swarm
+removed since the check is respected. One that failed is tried again by the
+next check, not by the next idle. Each one raises a `swarm.updated`
+notification. `swarms:set-auto-update` sets the switch and starts a check, so
+turning it on applies an update that was waiting.
+
+Every install, clicked or automatic, goes through one path in
+`core/swarms/index.ts`. It reports to the cloud with
+`POST /api/swarms/:id/installs` (`core/swarms/report.ts`): `installed` with the
+version, and for an organization swarm the installed title, description,
+agents and skills; `no_access` when Git refused; `removed` with the version on
+a removal. A report is never awaited and never fails an install. Then the
+path pushes `swarms:changed`, naming the swarm when the install replaced an
+older version, so the Swarms pane reads the list again.
+
+`swarms:set-auto-update` and `swarms:check` are process-local, like the other
+swarm calls, and `swarms:changed` is a local-only push: a server never sends
+its swarms to an attached window.
 
 ### The agents the app ships (HIVE-168)
 
