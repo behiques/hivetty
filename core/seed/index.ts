@@ -39,8 +39,10 @@ export function shippedOptions(source: string = platform().resources): SeedOptio
  */
 export async function seedShippedIntoHive(
   source?: string,
+  exclude?: ReadonlySet<string>,
 ): Promise<SeedReport | null> {
-  const options = shippedOptions(source);
+  // HIVE-441: `exclude` names the folders an installed swarm owns; the shipped tree never writes over them.
+  const options = { ...shippedOptions(source), exclude };
   const { target } = options;
   try {
     const report = await seedShipped(options);

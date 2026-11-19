@@ -94,6 +94,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     remote: Object.keys(window.hive!.remote).sort(),
     relay: Object.keys(window.hive!.relay).sort(),
     sync: Object.keys(window.hive!.sync).sort(),
+    swarms: Object.keys(window.hive!.swarms).sort(),
     updates: Object.keys(window.hive!.updates).sort(),
     ui: Object.keys(window.hive!.ui).sort(),
     cli: Object.keys(window.hive!.cli).sort(),
@@ -401,6 +402,8 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
       (`shared/ipc-contract.ts`, the comment above `BRIDGE_KEYS`).
     */
     'slack',
+    // HIVE-441 adds `swarms`: installed swarms, this machine's own; every verb is process-local.
+    'swarms',
     // HIVE-284 adds `sync`: settings sync, this machine's own; every verb is process-local, asserted below.
     'sync',
     'ui',
@@ -490,6 +493,8 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
   expect(surface.sync).toEqual([
     'now', 'onApplyAppearance', 'onStatus', 'openConflicts', 'reportAppearance', 'reset', 'setGroup', 'setup', 'status',
   ]);
+  // HIVE-441: install and remove take a swarm id; the app looks the repository up itself, so the page cannot name a URL.
+  expect(surface.swarms).toEqual(['install', 'list', 'remove']);
   // HIVE-367: cliSkills lists the user's own CLI skills by name, read-only.
   expect(surface.skills).toEqual([
     'cliSkills',

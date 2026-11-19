@@ -33,7 +33,7 @@ import { entitled } from '../../core/licence/entitled';
 import { startWhenLicensed } from '../../core/licence/serve-gate';
 import { setPlatform } from '../../core/platform';
 import { startRelay } from '../../core/relay';
-import { resetShipped, shippedOptions } from '../../core/seed';
+import { resetShipped } from '../../core/seed';
 import { bindUntilBound } from '../../core/server/bind-retry';
 import {
   pairDevice,
@@ -46,6 +46,7 @@ import { runOneShot } from '../../core/server/one-shot';
 import { claimServerLock, hiveLockPath } from '../../core/server/server-lock';
 import { isServerMode, setServerMode } from '../../core/server-mode';
 import { onShutdown } from '../../core/shutdown';
+import { swarmManifestFiles, swarmSeedSetFor, swarmSeedSets } from '../../core/swarms';
 import { startSync } from '../../core/sync';
 
 import { applyDevDockIcon } from './app-icon';
@@ -247,11 +248,15 @@ if (!app.requestSingleInstanceLock()) {
       safeStorage,
       userData: app.getPath('userData'),
       hiveDir: dirname(configPath()),
-      manifestFiles: () => Promise.resolve([shippedOptions().manifestFile]),
+      // HIVE-441: the shipped manifest and every swarm's on disk, a first install still seeding included.
+      manifestFiles: async () => {
+        const sets = await swarmSeedSets();
+        return [sets.shipped.manifestFile, ...(await swarmManifestFiles())];
+      },
       readDocument: readConfigDocument,
       writeConfig: (mutate) => writeSyncedKeys(mutate) !== null,
       resetShipped: async (kind, name) => {
-        await resetShipped(shippedOptions(), { kind, name });
+        await resetShipped(await swarmSeedSetFor(kind, name), { kind, name });
       },
       openPath: (path) => shell.openPath(path),
     });

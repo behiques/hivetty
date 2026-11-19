@@ -2766,6 +2766,45 @@ seed writes reaches `knownAgents` through the same `onChange` a hand-written
 one does. Packaged, the two trees ride `extraResources` beside the tray icon;
 `shippedRoot` in `seed/paths.ts` names both locations.
 
+### Installed swarms (HIVE-441)
+
+A swarm is a set of agents and skills from a Git repository, installed by
+`core/swarms/` beside the built-ins. Its own state lives under
+`~/.hivetty/swarms`: `installed.json` (what is installed, at which version and
+commit), `registry.json` (the cloud's last list, for offline use),
+`askpass.sh`, and per swarm `<id>/repo` (the clone, only a source) and
+`<id>/seed.json` (its seed manifest).
+
+An install runs the same seeder as the built-ins, from `<id>/repo/<folder>`
+into `~/.hivetty`, with the swarm's own manifest. So everything the section
+above says holds for a swarm's file: an untouched one upgrades, an edited one
+is merged or kept, and Settings' *edited*, **Keep mine** and **Reset to
+shipped** act on it through the same `shipped:*` channels, on whichever set
+owns the name.
+
+A swarm may not ship a name another swarm owns, or one that is the person's
+own file: either refuses the install before anything is written. A name a
+built-in owns is taken over: its entries move from `.seed.json` to the swarm's
+manifest, and from then on the boot seed passes over that folder, so
+`resources/` never writes over a swarm's file.
+
+Remove deletes the files the swarm wrote that are still byte-identical to what
+it wrote, and keeps the edited ones as the person's. Until HIVE-447, a removed
+swarm's taken-over built-ins come back from `resources/` at the next launch.
+
+A token is asked of the cloud for each install, rides one Git command's
+environment, is answered by `askpass.sh`, and runs with `credential.helper`
+switched off for that command. It is never in a URL, `.git/config` or a file.
+Only `https://`, `ssh://` and `user@host:path` URLs reach Git, and
+`swarms:install` takes a registry id, never a URL: the app looks the
+repository up in the registry itself.
+
+Settings sync reads every seed manifest, so a swarm's untouched files are not
+uploaded as the person's, and it never uploads `~/.hivetty/swarms`.
+`swarms:list`, `swarms:install` and `swarms:remove` are process-local: a window
+attached to a server still installs on its own machine. The screen and updates
+are HIVE-442.
+
 ### The agents the app ships (HIVE-168)
 
 `resources/agents/{builder,shipper,acr,fixer}/AGENT.md`, seeded like the

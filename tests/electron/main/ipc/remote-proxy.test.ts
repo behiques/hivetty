@@ -40,6 +40,18 @@ const readLocalRemote = vi.fn(() => ({
 vi.mock('../../../../core/ipc/get-remote', () => ({ readLocalRemote }));
 
 /**
+ * `core/swarms` (HIVE-441), mocked so the spec can prove a swarm call reached
+ * this machine's own engine rather than `client.call`; what an install does is
+ * `tests/core/swarms`' job.
+ */
+const swarmSpies = {
+  list: vi.fn(() => Promise.resolve('FAKE_SWARM_LIST')),
+  install: vi.fn((_request: unknown) => Promise.resolve('FAKE_SWARM_INSTALL')),
+  remove: vi.fn((_request: unknown) => Promise.resolve('FAKE_SWARM_REMOVE')),
+};
+vi.mock('../../../../core/swarms', () => ({ swarmCalls: () => swarmSpies }));
+
+/**
  * `../notifications/activate-here` is mocked for `../updates`' reason exactly
  * (HIVE-151): it reaches `shell.openExternal` and this process's real updater,
  * and what those branches *do* is that module's own test's job. What this file
@@ -225,7 +237,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(170);
+    expect(callChannels.length).toBe(173);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -544,7 +556,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(176);
+    expect(remoteProxyBindingsSize()).toBe(179);
   });
 
   /**
@@ -558,8 +570,8 @@ describe('registerRemoteProxy', () => {
    * `remote:forget` (HIVE-153).
    */
   describe('PROCESS_LOCAL channels (HIVE-144 Rulings 24 and 28, HIVE-153, HIVE-149, HIVE-151)', () => {
-    it('names exactly thirty-nine channels', () => {
-      expect(PROCESS_LOCAL.length).toBe(39);
+    it('names exactly forty-two channels', () => {
+      expect(PROCESS_LOCAL.length).toBe(42);
       expect([...PROCESS_LOCAL].sort()).toEqual(
         [
           'account:billing',
@@ -592,6 +604,9 @@ describe('registerRemoteProxy', () => {
           'remote:dial-now',
           'remote:forget',
           'remote:pair',
+          'swarms:install',
+          'swarms:list',
+          'swarms:remove',
           'sync:now',
           'sync:open-conflicts',
           'sync:report-appearance',
@@ -648,6 +663,18 @@ describe('registerRemoteProxy', () => {
       for (const channel of ['sync:now', 'sync:reset', 'sync:open-conflicts']) await invoke(channel, trustedEvent, undefined);
       await invoke('sync:set-group', trustedEvent, { group: 'automation', on: false });
       await invoke('sync:report-appearance', trustedEvent, { density: 'compact' });
+      expect(client.call).not.toHaveBeenCalled();
+    });
+
+    it('answers every swarm call on this machine with its payload, never client.call (HIVE-441)', async () => {
+      const client = fakeClient();
+      registerRemoteProxy({ client, broadcaster: fakeBroadcaster() });
+
+      await expect(invoke('swarms:list', trustedEvent, undefined)).resolves.toBe('FAKE_SWARM_LIST');
+      await expect(invoke('swarms:install', trustedEvent, { swarmId: 'a1' })).resolves.toBe('FAKE_SWARM_INSTALL');
+      await expect(invoke('swarms:remove', trustedEvent, { swarmId: 'a1' })).resolves.toBe('FAKE_SWARM_REMOVE');
+      expect(swarmSpies.install).toHaveBeenCalledWith({ swarmId: 'a1' });
+      expect(swarmSpies.remove).toHaveBeenCalledWith({ swarmId: 'a1' });
       expect(client.call).not.toHaveBeenCalled();
     });
 
@@ -1279,8 +1306,8 @@ describe('registerRemoteProxy', () => {
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(176);
-    expect(removeAllListeners).toHaveBeenCalledTimes(176);
+    expect(removeHandler).toHaveBeenCalledTimes(179);
+    expect(removeAllListeners).toHaveBeenCalledTimes(179);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });

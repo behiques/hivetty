@@ -125,6 +125,22 @@ describe('seedShippedIntoHive', () => {
   });
 });
 
+describe('seedShippedIntoHive with folders to pass over (HIVE-441)', () => {
+  it('seeds every folder but the excluded ones, which an installed swarm owns', async () => {
+    const source = join(base, 'resources');
+    for (const name of ['a', 'b']) {
+      await mkdir(join(source, 'skills', name), { recursive: true });
+      await writeFile(join(source, 'skills', name, 'SKILL.md'), `# ${name}\n`, 'utf8');
+    }
+
+    const report = await seedShippedIntoHive(source, new Set(['skills/b']));
+
+    expect(report?.created).toEqual(['skills/a/SKILL.md']);
+    await expect(readFile(join(base, 'hive', 'skills', 'a', 'SKILL.md'), 'utf8')).resolves.toBe('# a\n');
+    await expect(readFile(join(base, 'hive', 'skills', 'b', 'SKILL.md'), 'utf8')).rejects.toThrow();
+  });
+});
+
 describe('shippedOptions (HIVE-422)', () => {
   afterEach(() => {
     resetPlatform();

@@ -211,6 +211,7 @@ import type {
   SlackStatus,
   SlackTokensState,
 } from '@shared/slack-contract';
+import type { SwarmInstallResult, SwarmListing, SwarmRemoveResult, SwarmRequest } from '@shared/swarm-contract';
 import type { SetSyncGroupRequest, SyncedAppearance, SyncSetupResult, SyncStatus } from '@shared/sync-contract';
 import type { UpdateStatus } from '@shared/update-contract';
 
@@ -461,6 +462,14 @@ const bridge: HiveBridge = {
       ipcRenderer.invoke(CH.syncReportAppearance, fields) as Promise<void>,
     onApplyAppearance: (callback: (fields: SyncedAppearance) => void) =>
       subscribe<SyncedAppearance>(CH.syncApplyAppearance, callback),
+  },
+  // HIVE-441. Installed swarms, this machine's own. Install takes an id; the app looks the repository up itself.
+  swarms: {
+    list: (): Promise<SwarmListing> => ipcRenderer.invoke(CH.swarmsList) as Promise<SwarmListing>,
+    install: (request: SwarmRequest): Promise<SwarmInstallResult> =>
+      ipcRenderer.invoke(CH.swarmsInstall, request) as Promise<SwarmInstallResult>,
+    remove: (request: SwarmRequest): Promise<SwarmRemoveResult> =>
+      ipcRenderer.invoke(CH.swarmsRemove, request) as Promise<SwarmRemoveResult>,
   },
   // HIVE-144. Storing and forgetting the credential this machine was handed
   // to attach outward, as a client, to someone else's server. Its own

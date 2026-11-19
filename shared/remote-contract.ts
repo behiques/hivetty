@@ -106,8 +106,10 @@ import { isThisMachineAction } from './notification-contract';
  * 46 → 47 (HIVE-429): `relay:hosts` (call, process-local); `RemoteConfig` and `SetRemoteRequest` gained `via` and
  *   `relayServerId`.
  * 47 → 48 (HIVE-284): the nine `sync:*` channels, all this machine's own and never carried on the socket.
+ * 48 → 49 (HIVE-441): `swarms:list`, `swarms:install` and `swarms:remove`, all this machine's own and never
+ *   carried on the socket.
  */
-export const REMOTE_PROTOCOL_VERSION = 48;
+export const REMOTE_PROTOCOL_VERSION = 49;
 
 /**
  * What a frame is for.
@@ -320,6 +322,9 @@ export const FRAME_KIND = {
   [CH.syncOpenConflicts]: 'call',
   [CH.syncReportAppearance]: 'call',
   [CH.syncApplyAppearance]: 'event',
+  [CH.swarmsList]: 'call',
+  [CH.swarmsInstall]: 'call',
+  [CH.swarmsRemove]: 'call',
   [CH.accountOrgs]: 'call',
   [CH.accountSwitchOrg]: 'call',
   [CH.accountBilling]: 'call',
@@ -681,6 +686,10 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.syncReset]: 'execute',
   [CH.syncOpenConflicts]: 'execute',
   [CH.syncReportAppearance]: 'execute',
+  [CH.swarmsList]: 'read',
+  // Installing writes agents and skills that then run with the person's permissions.
+  [CH.swarmsInstall]: 'execute',
+  [CH.swarmsRemove]: 'execute',
   [CH.accountOrgs]: 'read',
   [CH.accountSwitchOrg]: 'execute',
   [CH.accountBilling]: 'read',
@@ -1093,6 +1102,12 @@ const PROCESS_LOCAL_REFUSALS = {
     'sync:open-conflicts opens a folder on the machine you are sitting at, so it is answered there and never by a server.',
   [CH.syncReportAppearance]:
     "sync:report-appearance carries this window's own appearance to its own machine's sync, so it is answered there and never by a server.",
+  [CH.swarmsList]:
+    'swarms:list lists the swarms of the account signed in on the machine you are sitting at and what is installed there, so it is answered there and never by a server.',
+  [CH.swarmsInstall]:
+    "swarms:install installs a swarm on the machine you are sitting at with that machine's own Git access, so it is answered there and never by a server.",
+  [CH.swarmsRemove]:
+    'swarms:remove removes a swarm from the machine you are sitting at, so it is answered there and never by a server.',
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**

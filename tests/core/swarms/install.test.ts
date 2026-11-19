@@ -22,6 +22,7 @@ import type { InstalledSwarm, SwarmEntry } from '@shared/swarm-contract';
 
 import { baseOf } from '../../../core/seed/merge';
 import { seedShipped } from '../../../core/seed/seed';
+import { collectFiles } from '../../../core/sync/bundle';
 import { createSwarmGit } from '../../../core/swarms/git';
 import { createSwarms, mergeListing, readInstalled, type SwarmDeps } from '../../../core/swarms/install';
 
@@ -508,6 +509,16 @@ describe('install', () => {
       ]);
     });
 
+    it('adopts the files an older build listed in a bare pending map', async () => {
+      const { entry } = released('1.0.0');
+      await dieMidSeed(entry);
+      const pending = readJson<{ files: Record<string, string> }>('swarms/sw1/pending.json');
+      write(hive('swarms/sw1/pending.json'), JSON.stringify(pending.files));
+
+      expect((await createSwarms(makeDeps()).install(entry)).ok).toBe(true);
+      expect(existsSync(hive('swarms/sw1/pending.json'))).toBe(false);
+    });
+
     it('still refuses a file the person edited since', async () => {
       const { entry } = released('1.0.0');
       await dieMidSeed(entry);
@@ -754,6 +765,14 @@ describe('the seed sets', () => {
     expect(sets.swarms).toEqual([]);
   });
 
+  it('still excludes every swarm-owned folder when installed.json cannot be read', async () => {
+    const swarms = await installTwo();
+    write(hive('swarms/installed.json'), 'not json');
+
+    const sets = await swarms.seedSets(shippedOptions());
+    expect([...(sets.shipped.exclude ?? [])].sort()).toEqual(['agents/a1', 'skills/one', 'skills/two']);
+  });
+
   it('answers the owning swarm’s set for its folder, and the shipped set for any other', async () => {
     const swarms = await installTwo();
 
@@ -762,6 +781,56 @@ describe('the seed sets', () => {
     const other = await swarms.seedSetFor(shippedOptions(), 'skills/tdd');
     expect(other.source).toBe(shippedOptions().source);
     expect(other.exclude?.has('skills/one')).toBe(true);
+  });
+});
+
+describe('the manifest files', () => {
+  /** What settings sync would upload as the person's own, read through every manifest the swarms answer. */
+  const synced = async (): Promise<string[]> =>
+    Object.keys(await collectFiles(hiveDir, await createSwarms(makeDeps()).manifestFiles())).sort();
+
+  it('names every installed swarm’s seed manifest', async () => {
+    expect((await createSwarms(makeDeps()).install(released('1.0.0').entry)).ok).toBe(true);
+    write(hive('skills/mine/SKILL.md'), 'mine\n');
+
+    expect(await synced()).toEqual(['automation:f:skills/mine/SKILL.md']);
+  });
+
+  it('keeps a first install’s files out of sync while it seeds, before installed.json names it', async () => {
+    let during: string[] = [];
+    const seed = vi.fn<NonNullable<SwarmDeps['seed']>>(async (options) => {
+      const report = await seedShipped(options);
+      expect(installedJson()).toEqual([]);
+      during = await synced();
+      return report;
+    });
+
+    expect((await createSwarms(makeDeps({ seed })).install(released('1.0.0').entry)).ok).toBe(true);
+    expect(seed).toHaveBeenCalledOnce();
+    expect(during).toEqual([]);
+  });
+
+  it('keeps the files a first install the app died in left out of sync', async () => {
+    const crashed = join(root, 'crashed');
+    const seed = vi.fn<NonNullable<SwarmDeps['seed']>>(async (options) => {
+      write(join(options.target, 'skills/s1/SKILL.md'), readFileSync(join(options.source, 'skills/s1/SKILL.md'), 'utf8'));
+      cpSync(hiveDir, crashed, { recursive: true });
+      throw new Error('killed');
+    });
+    await createSwarms(makeDeps({ seed })).install(released('1.0.0').entry);
+    rmSync(hiveDir, { recursive: true, force: true });
+    cpSync(crashed, hiveDir, { recursive: true });
+
+    expect(await synced()).toEqual([]);
+    // The retry still adopts what it left.
+    expect((await createSwarms(makeDeps()).install(released('1.0.0').entry)).ok).toBe(true);
+  });
+
+  it('names every swarm’s manifest when installed.json cannot be read', async () => {
+    expect((await createSwarms(makeDeps()).install(released('1.0.0').entry)).ok).toBe(true);
+    write(hive('swarms/installed.json'), 'not json');
+
+    expect(await synced()).toEqual([]);
   });
 });
 
