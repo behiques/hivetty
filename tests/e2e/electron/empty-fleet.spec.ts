@@ -175,10 +175,11 @@ test.describe('with the shipped agents deleted', () => {
 
     await goToPlace(page, 'Agents');
 
-    // The stage offers New agent itself (HIVE-204).
+    // The stage offers New agent itself (HIVE-204), after the two swarm starters (HIVE-447).
     await expect(page.getByRole('heading', { name: 'No agents yet' })).toBeVisible();
-    await expect(
-      page.getByRole('main').getByRole('button', { name: 'New agent', exact: true }),
-    ).toBeVisible();
+    const main = page.getByRole('main');
+    await expect(main.getByRole('button', { name: 'Install Standard' })).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Browse swarms' })).toBeVisible();
+    await expect(main.getByRole('button', { name: 'New agent', exact: true })).toBeVisible();
   });
 });

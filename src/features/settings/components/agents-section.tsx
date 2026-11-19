@@ -15,6 +15,7 @@ import { SwarmCreature } from '@components/ui/swarm-creature';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { AgentDefinition } from '@features/shared/components/agent-definition';
 import { ShippedDot } from '@features/shared/components/shipped-marker';
+import { SwarmStarters } from '@features/shared/components/swarm-starters';
 import { useAgents } from '@hooks/use-agents';
 import { useLicenceLocks } from '@hooks/use-licence-locks';
 import { useProjectConfig } from '@hooks/use-project-config';
@@ -171,16 +172,15 @@ export function AgentsSection() {
           <SwarmCreature creature="mutalisk" size={120} className="mb-9" />
           <span className="text-ui-sm text-muted">{phrase}</span>
           <span className="text-ui-sm text-subtle">
-            Write one and it will be listed here, asleep until the waker lands.
+            Agents come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.
           </span>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            <SwarmStarters size="sm" />
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="primary"
-            onClick={newAgent}
-            className="w-fit"
-          >
+          <Button onClick={newAgent} className="w-fit">
             + New agent
           </Button>
 

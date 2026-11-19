@@ -1,8 +1,11 @@
 # Working a ticket
 
 From a Jira ticket to Done, with HiveTTY's own skills and agents doing the repetitive
-parts. Everything here ships with the app: the skills under `~/.hivetty/skills`, the agents
-under `~/.hivetty/agents`. Nothing depends on a plugin from outside.
+parts. Everything here comes in the **Standard** swarm, which an existing install already has:
+the skills under `~/.hivetty/skills`, the agents under `~/.hivetty/agents`. Settings › Automation ›
+Swarms installs, updates and removes swarms ([Swarms](swarms.md)); with no agent or skill
+installed, the Agents place, Settings and Home offer **Install Standard**. Nothing depends on a
+plugin from outside.
 
 **On this page:** [The shape](#the-shape) · [Start](#start) · [Plan and build](#plan-and-build) ·
 [Ship](#ship) · [What you see](#what-you-see) · [Without the agents](#without-the-agents) ·

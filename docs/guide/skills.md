@@ -87,23 +87,28 @@ understands, such as `mcp__hive__ledger_ask` or `hive:plan`, Settings › Skills
 editor with its neutral form, and **Fix all** rewrites the file for you (unsaved, so you see the
 change first). Saving is never blocked.
 
-## Skills the app ships
+## Skills from swarms
 
-Some skills come with HiveTTY: the app's own `resources/skills/` is copied into
-`~/.hivetty/skills` when the app starts: the implementation workflow, `/work-on` and
-`/goal-on` at the front, `/brainstorm`, `/plan`, `/execute`, `/tdd`, `/debug`, `/verify`
-and `/worktree` behind them, and the PR tail: `/ship`, `/review-pr-findings`, `/merge-pr`,
-`/spec-deviation` and `/pr-review`, the multi-agent review the reviewer agent runs. They are ordinary skills once they are there. Edit one in Settings and
-your edits stay, while an update still reaches what you did not touch: in `SKILL.md`, each
-frontmatter key and the body update on their own, so changing one key does not stop the
-body from updating. If you rewrote the body and a newer one ships, Settings marks the skill
-amber and holds the new body back until you choose to **Compare**, **Take shipped prompt** or
+Skills come in swarms: sets of agents and skills that install together and update when their
+publisher releases a new version ([Swarms](swarms.md)). An existing install already has the
+**Standard** swarm, which carries the ticket-to-merge workflow: `/work-on` and `/goal-on` at the
+front, `/brainstorm`, `/plan`, `/execute`, `/tdd`, `/debug`, `/verify` and `/worktree` behind
+them, and the PR tail: `/ship`, `/review-pr-findings`, `/merge-pr`, `/spec-deviation` and
+`/pr-review`, the multi-agent review the reviewer agent runs. Settings › Automation › Swarms
+installs, updates and removes swarms. With no skill installed at all, Settings › Skills says so
+and offers **Install Standard** and **Browse swarms**, as the Agents place and Home do for agents.
+
+A swarm's skills live in `~/.hivetty/skills` and are ordinary skills once they are there. Edit one
+in Settings and your edits stay, while an update still reaches what you did not touch: in
+`SKILL.md`, each frontmatter key and the body update on their own, so changing one key does not
+stop the body from updating. If you rewrote the body and a newer one arrives, Settings marks the
+skill amber and holds the new body back until you choose to **Compare**, **Take shipped prompt** or
 **Keep mine**. A blue dot means you changed something, and **Reset to shipped** puts the
-shipped files back. Other files in a skill update only if you never edited them. Delete a
-skill and it stays deleted. A skill the app stops shipping is never removed from your folder.
+swarm's files back. Other files in a skill update only if you never edited them. Delete a
+skill and it stays deleted.
 
-The record of what was seeded is `~/.hivetty/.seed.json`. To get a deleted shipped skill back,
-remove its lines from that file and relaunch.
+To get a deleted skill back, reinstall Standard (or the swarm it came from) in Settings ›
+Automation › Swarms; for a skill you edited, **Reset to shipped** puts its files back.
 
 ## Rules
 

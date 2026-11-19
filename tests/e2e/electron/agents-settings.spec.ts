@@ -105,7 +105,7 @@ test('authors an agent through the pane and writes it to disk', async ({}, testI
     await openAgents(page);
 
     await expect(
-      page.getByText(/write one and it will be listed here/i),
+      page.getByText(/agents come in swarms/i),
     ).toBeVisible();
 
     await page.getByRole('button', { name: '+ New agent', exact: true }).click();

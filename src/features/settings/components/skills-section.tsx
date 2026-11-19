@@ -42,6 +42,7 @@ import {
   ShippedDot,
   ShippedStrip,
 } from '@features/shared/components/shipped-marker';
+import { SwarmStarters } from '@features/shared/components/swarm-starters';
 import { useRemoteCapabilities } from '@hooks/use-project-config';
 import { useShipped } from '@hooks/use-shipped';
 import { useSkills } from '@hooks/use-skills';
@@ -869,8 +870,11 @@ export function SkillsSection() {
           <SwarmCreature creature="spire" size={120} className="mb-9" />
           <span className="text-ui-sm text-muted">{phrase}</span>
           <span className="text-ui-sm text-subtle">
-            Write one and every session you start will have it.
+            Skills come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.
           </span>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            <SwarmStarters size="sm" />
+          </div>
         </div>
 
         {error === null ? null : (
@@ -883,11 +887,7 @@ export function SkillsSection() {
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="primary"
-            onClick={newSkill}
-            className="w-fit"
-          >
+          <Button onClick={newSkill} className="w-fit">
             + New skill
           </Button>
           {importButton(
