@@ -127,6 +127,19 @@ describe('classifyGit', () => {
       'ssh: Could not resolve hostname github.com\nfatal: Could not read from remote repository.',
       'offline',
     ],
+    [
+      'ssh: connect to host github.com port 22: No route to host\nfatal: Could not read from remote repository.',
+      'offline',
+    ],
+    [
+      'kex_exchange_identification: read: Connection reset by peer\nfatal: Could not read from remote repository.',
+      'offline',
+    ],
+    [
+      "fatal: '/tmp/no-such-repo' does not appear to be a git repository\nfatal: Could not read from remote repository.",
+      'no_access',
+    ],
+    ['fatal: Could not read from remote repository.', 'failed'],
     ['fatal: couldn\'t find remote ref refs/tags/x', 'failed'],
   ])('%j is %s', (stderr, kind) => {
     expect(classifyGit(stderr)).toBe(kind);

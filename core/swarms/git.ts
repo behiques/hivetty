@@ -61,9 +61,10 @@ esac
 `;
 
 const NO_ACCESS =
-  /authentication failed|permission denied|repository not found|could not read username|terminal prompts disabled|returned error: 40[13]|access denied|host key verification failed|could not read from remote repository/i;
+  /authentication failed|permission denied|repository not found|could not read username|terminal prompts disabled|returned error: 40[13]|access denied|host key verification failed|does not appear to be a git repository/i;
+// Not "could not read from remote repository": Git prints it after any ssh transport failure, network faults included.
 const OFFLINE =
-  /could not resolve host|failed to connect|network is unreachable|connection timed out|connection refused|operation timed out/i;
+  /could not resolve host|failed to connect|network is unreachable|connection timed out|connection refused|operation timed out|no route to host|connection reset/i;
 
 export function classifyGit(stderr: string): GitFailureKind {
   // Offline first: ssh prints "Could not resolve hostname" and then "Could not read from remote repository".
