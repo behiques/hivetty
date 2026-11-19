@@ -49,7 +49,10 @@ const stub = (agents: AgentSummary[], over: Record<string, unknown> = {}) => {
     ...over,
   };
 
-  (window as unknown as { hive?: unknown }).hive = { agents: bridge };
+  (window as unknown as { hive?: unknown }).hive = {
+    agents: bridge,
+    swarms: { list: vi.fn(async () => ({ source: 'cloud', items: [] })), onChanged: vi.fn(() => () => {}) },
+  };
 
   return bridge;
 };
@@ -106,6 +109,23 @@ describe('AgentsSection', () => {
     expect(creature).toHaveAttribute('data-creature', 'mutalisk');
     expect(creature).toHaveStyle({ height: '120px' });
     expect(creature).toHaveClass('mb-9');
+  });
+
+  it('says agents come in swarms and offers both starters inside the card (HIVE-447)', async () => {
+    stub([]);
+    render(<AgentsSection />);
+
+    const sentence = await screen.findByText(
+      'Agents come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.',
+    );
+    expect(screen.queryByText(/asleep until the waker lands/)).toBeNull();
+    const card = sentence.closest('.border-dashed') as HTMLElement;
+    expect(within(card).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Install Standard',
+      'Browse swarms',
+    ]);
+    await userEvent.click(within(card).getByRole('button', { name: 'Browse swarms' }));
+    expect(useUiStore.getState().swarmsBrowseRequest).toBe(true);
   });
 
   it('lists an agent with its state', async () => {

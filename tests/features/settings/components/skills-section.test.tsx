@@ -20,6 +20,7 @@ import { emptySnapshot } from '@shared/config-contract';
 import type { SkillsSnapshot } from '@shared/skills-contract';
 
 import { resetShippedState } from '@/lib/shipped';
+import { useUiStore } from '@stores/ui-store';
 
 import { shippedStatus } from '../../../support/shipped';
 
@@ -148,6 +149,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  useUiStore.getState().reset();
   resetSkills();
   resetShippedState();
   delete (window as unknown as { hive?: unknown }).hive;
@@ -183,17 +185,26 @@ describe('SkillsSection', () => {
     }
   });
 
-  it('shows the empty state and the CTA with no skills', () => {
+  it('shows the empty state and the CTA with no skills', async () => {
     setSkillsForTest(snapshot());
 
     render(<SkillsSection />);
 
-    expect(
-      screen.getByText('Write one and every session you start will have it.'),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: '+ New skill' }),
-    ).toBeInTheDocument();
+    const sentence = screen.getByText(
+      'Skills come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.',
+    );
+    expect(screen.queryByText('Write one and every session you start will have it.')).toBeNull();
+    // HIVE-447: both starters sit inside the dashed card, beside the sentence.
+    const card = sentence.closest('.border-dashed') as HTMLElement;
+    expect(within(card).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Install Standard',
+      'Browse swarms',
+    ]);
+    await userEvent.click(within(card).getByRole('button', { name: 'Browse swarms' }));
+    expect(useUiStore.getState().swarmsBrowseRequest).toBe(true);
+
+    await userEvent.click(screen.getByRole('button', { name: '+ New skill' }));
+    expect(surfaceText('Skill source')).toMatch(/^---\n/);
   });
 
   it('holds the spire at 120px in the empty state', () => {
