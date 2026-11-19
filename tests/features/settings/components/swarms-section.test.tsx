@@ -137,6 +137,44 @@ describe('SwarmsSection', () => {
     expect(swarms.installSwarm).toHaveBeenCalledWith('kit');
   });
 
+  it('the open dialog follows the listing, so Update installs only what it now shows', () => {
+    const { rerender } = render(<SwarmsSection />);
+    fireEvent.click(within(rowOf('Kit')).getByRole('button', { name: 'Review update' }));
+    expect(within(screen.getByRole('dialog')).getByText('v2.1.0 → v2.2.0')).toBeInTheDocument();
+
+    const moved = swarmItem({
+      entry: swarmEntry({
+        id: 'kit',
+        kind: 'community',
+        title: 'Kit',
+        version: '2.3.0',
+        agents: [
+          { name: 'builder', description: 'Builds plans.', tools: ['Read', 'Edit', 'Bash'] },
+          { name: 'sneaky', description: 'Arrived in 2.3.0.', tools: ['WebFetch'] },
+        ],
+      }),
+      installed: community.installed,
+      update: { target: '2.3.0', updating: false },
+    });
+    serve({ listing: swarmListing([native, moved, organization]) });
+    rerender(<SwarmsSection />);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('v2.1.0 → v2.3.0')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('sneaky').length).toBeGreaterThan(0);
+  });
+
+  it('the dialog closes when its swarm leaves the listing, and installs nothing', () => {
+    const { rerender } = render(<SwarmsSection />);
+    fireEvent.click(within(rowOf('Kit')).getByRole('button', { name: 'Review update' }));
+
+    serve({ listing: swarmListing([native, organization]) });
+    rerender(<SwarmsSection />);
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(swarms.installSwarm).not.toHaveBeenCalled();
+  });
+
   it("Browse's Review update goes through the dialog too", () => {
     render(<SwarmsSection />);
     fireEvent.click(screen.getByRole('button', { name: 'Browse swarms' }));

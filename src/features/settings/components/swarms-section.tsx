@@ -32,7 +32,13 @@ export function SwarmsSection() {
   const skills = useShipped('skills');
   const [browsing, setBrowsing] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [consent, setConsent] = useState<SwarmListItem | null>(null);
+  /*
+    The id, not a copy of the item: the dialog draws the swarm as the listing has it now, so a
+    `swarms:changed` that moves the version while it is open redraws it, and Install never sends main
+    a version the person did not see. A swarm that left the listing closes it.
+  */
+  const [consentId, setConsentId] = useState<string | null>(null);
+  const consent = consentId === null ? null : (listing?.items.find((item) => item.entry?.id === consentId) ?? null);
   const [notices, setNotices] = useState<ReadonlyMap<string, string>>(new Map());
 
   // Kept files are read from the shipped status; ask again whenever the list moves.
@@ -43,13 +49,13 @@ export function SwarmsSection() {
   /** Every path to `swarms:install` (HIVE-442). Consent first, unless the rule says this one was already given. */
   const request = (item: SwarmListItem, retry = false): void => {
     if (item.entry === null) return; // no registry row: nothing can be installed
-    if (needsConsent(item, retry)) setConsent(item);
+    if (needsConsent(item, retry)) setConsentId(item.entry.id);
     else void installSwarm(item.entry.id);
   };
 
   const confirm = (): void => {
     const item = consent;
-    setConsent(null);
+    setConsentId(null);
     if (item?.entry) void installSwarm(item.entry.id);
   };
 
@@ -143,7 +149,7 @@ export function SwarmsSection() {
           installed={consent.installed}
           target={consent.update?.target ?? null}
           onConfirm={confirm}
-          onCancel={() => setConsent(null)}
+          onCancel={() => setConsentId(null)}
         />
       ) : null}
     </div>
