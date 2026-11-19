@@ -32,7 +32,8 @@ vi.mock('../../../core/swarms/report', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../core/swarms/report')>()),
   reportInstall,
 }));
-vi.mock('../../../core/config/paths', () => ({ configPath: () => '/h/config.json' }));
+const config = vi.hoisted(() => ({ path: '/h/config.json' }));
+vi.mock('../../../core/config/paths', () => ({ configPath: () => config.path }));
 vi.mock('../../../core/seed', () => ({
   shippedOptions: () => ({ source: '/r', target: '/h', manifestFile: '/h/.seed.json' }),
 }));
@@ -110,6 +111,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetSwarms();
+  config.path = '/h/config.json';
 });
 
 describe('swarmCalls().install', () => {
@@ -230,6 +232,7 @@ describe('the engine', () => {
 
     await expect(deps.cloneToken('a1')).resolves.toEqual({ token: 't', repoUrl: a1.repoUrl });
     expect(registry.cloneToken).toHaveBeenCalledWith(authedFetch, 'a1');
+    h.ready.mockClear(); // the list's registry read waits for it too (HIVE-447)
 
     await deps.ready?.();
     expect(h.ready).toHaveBeenCalledTimes(1);
@@ -238,6 +241,7 @@ describe('the engine', () => {
   it('reads the hooks at call time, so hooks set after the engine was made are the ones used', async () => {
     await swarmCalls().list();
     const deps = createSwarms.mock.calls[0]?.[0] as SwarmDeps;
+    h.ready.mockClear(); // the list's registry read waits for it too (HIVE-447)
     const later = hooks();
     setSwarmHooks(later);
 
@@ -318,8 +322,13 @@ const heldAt = (swarmId: string, version: string, patch: Partial<InstalledSwarm>
   ...patch,
 });
 
+// A registry read re-keys the adopted Standard (HIVE-447), which reads installed.json from disk: a few turns of the
+// event loop, not only microtasks.
 const flush = async (): Promise<void> => {
-  for (let i = 0; i < 30; i += 1) await Promise.resolve();
+  for (let i = 0; i < 5; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+    for (let j = 0; j < 30; j += 1) await Promise.resolve();
+  }
 };
 
 describe('the one install path (HIVE-442)', () => {
@@ -612,5 +621,63 @@ describe('the install link request (HIVE-442)', () => {
     requestSwarmInstall('a1');
     resetSwarms();
     expect(takeSwarmInstallRequest()).toBeNull();
+  });
+});
+
+describe('the adopted Standard and the registry (HIVE-447)', () => {
+  const REAL = 'cmwn22bge000001jtss3qlz4i';
+  let home: string;
+
+  beforeEach(async () => {
+    const { mkdtemp } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    home = await mkdtemp(join(tmpdir(), 'hive-swarm-rekey-'));
+    config.path = join(home, 'config.json');
+    const { readInstalled } = await vi.importActual<typeof import('../../../core/swarms/install')>(
+      '../../../core/swarms/install',
+    );
+    engine.installed.mockImplementation(() => readInstalled(join(home, 'swarms/installed.json')));
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    await mkdir(join(home, 'swarms/bundled-standard'), { recursive: true });
+    await writeFile(join(home, 'swarms/bundled-standard/seed.json'), JSON.stringify({ files: {}, parts: {} }));
+    await writeFile(
+      join(home, 'swarms/installed.json'),
+      JSON.stringify([{ ...heldAt('bundled-standard', 'bundled'), autoUpdate: true }]),
+    );
+    registry.readRegistry.mockResolvedValue({ source: 'cloud', swarms: [entry(REAL, { version: '1.0.1' })] });
+  });
+
+  afterEach(async () => {
+    const { rm } = await import('node:fs/promises');
+    await rm(home, { recursive: true, force: true });
+  });
+
+  it('lists the adopted entry under the registry row, re-keyed to its id', async () => {
+    const listing = await swarmCalls().list();
+
+    expect(listing.items).toHaveLength(1);
+    expect(listing.items[0]?.entry?.id).toBe(REAL);
+    expect(listing.items[0]?.installed?.swarmId).toBe(REAL);
+  });
+
+  it('holds a pending update from bundled to the registry’s version', async () => {
+    h.runsLive.mockReturnValue(true); // a live run holds the automatic update, so it stays pending
+
+    const listing = await swarmCalls().check();
+
+    expect(listing.items[0]?.update).toEqual({ target: '1.0.1', updating: false });
+  });
+
+  it('never fails the read when the re-key throws', async () => {
+    const { writeFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    // A file where the new id's folder must go: the mkdir rejects.
+    await writeFile(join(home, 'swarms', REAL), 'in the way');
+
+    const listing = await swarmCalls().list();
+
+    expect(listing.items[0]?.entry?.id).toBe(REAL);
+    expect(listing.items.map((item) => item.installed?.swarmId ?? null)).toEqual([null, 'bundled-standard']);
   });
 });

@@ -6,10 +6,10 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { InstalledSwarm } from '@shared/swarm-contract';
+import type { InstalledSwarm, SwarmEntry } from '@shared/swarm-contract';
 
 import { baseOf } from '../../../core/seed/merge';
-import { ADOPTED_SWARM_ID, STANDARD, adoptBuiltIns } from '../../../core/swarms/adopt';
+import { ADOPTED_SWARM_ID, STANDARD, adoptBuiltIns, rekeyAdopted } from '../../../core/swarms/adopt';
 
 /**
  * Adoption (HIVE-447): the built-ins a home holds become the installed Standard swarm, offline, once. Every case
@@ -234,5 +234,126 @@ describe('adoptBuiltIns', () => {
       { name: 'builder', description: '', tools: [] },
       { name: 'shipper', description: 'Helps with shipper.', tools: ['Read', 'Bash'] },
     ]);
+  });
+});
+
+describe('rekeyAdopted', () => {
+  const REAL = 'cmwn22bge000001jtss3qlz4i';
+  const row = (patch: Partial<SwarmEntry> = {}): SwarmEntry => ({
+    id: REAL,
+    slug: 'standard',
+    kind: 'native',
+    title: 'Standard',
+    description: STANDARD.description,
+    publisher: 'HiveTTY',
+    tags: [],
+    version: '1.0.1',
+    updatedAt: '2026-11-19T00:00:00Z',
+    installs: 0,
+    agents: [],
+    skills: [],
+    repoUrl: STANDARD.repoUrl,
+    folder: 'standard',
+    commit: 'c'.repeat(40),
+    access: 'token',
+    policy: 'latest',
+    pinnedVersion: null,
+    org: null,
+    ...patch,
+  });
+  const other = {
+    swarmId: 'swOther',
+    slug: 'kit',
+    kind: 'community',
+    org: null,
+    repoUrl: '/kit',
+    folder: '',
+    version: '2.0.0',
+    commit: 'd'.repeat(40),
+    installedAt: '2026-11-01T00:00:00Z',
+    autoUpdate: false,
+    lastError: null,
+    title: 'Kit',
+    description: '',
+    contents: { agents: [], skills: [] },
+  };
+
+  /** An adopted home with one other swarm installed beside Standard. */
+  async function adoptedHome(): Promise<void> {
+    seededHome();
+    write('swarms/installed.json', JSON.stringify([other]));
+    await adopt();
+  }
+
+  it('moves the adopted entry and its manifest to the registry’s id, touching nothing else', async () => {
+    await adoptedHome();
+    const [, adopted] = installedJson();
+    const manifest = readHive('swarms/bundled-standard/seed.json');
+
+    await expect(rekeyAdopted(hiveDir, [row({ slug: 'kit', kind: 'community', id: 'swKit' }), row()])).resolves.toBe(true);
+
+    expect(installedJson()).toEqual([other, { ...adopted, swarmId: REAL }]);
+    expect(readHive(`swarms/${REAL}/seed.json`)).toBe(manifest);
+    expect(existsSync(hive('swarms/bundled-standard'))).toBe(false);
+  });
+
+  it.each<[string, SwarmEntry[]]>([
+    ['no Standard row', [row({ slug: 'kit', kind: 'community' })]],
+    ['a Standard row of another kind', [row({ kind: 'community' })]],
+    ['a row whose id is not a swarm id', [row({ id: '../x' })]],
+    ['a row carrying the local id', [row({ id: ADOPTED_SWARM_ID })]],
+  ])('changes nothing for %s', async (_name, rows) => {
+    await adoptedHome();
+    const before = readHive('swarms/installed.json');
+
+    await expect(rekeyAdopted(hiveDir, rows)).resolves.toBe(false);
+
+    expect(readHive('swarms/installed.json')).toBe(before);
+    expect(existsSync(hive('swarms/bundled-standard/seed.json'))).toBe(true);
+  });
+
+  it('changes nothing without an adopted entry', async () => {
+    write('swarms/installed.json', JSON.stringify([other]));
+
+    await expect(rekeyAdopted(hiveDir, [row()])).resolves.toBe(false);
+
+    expect(installedJson()).toEqual([other]);
+    expect(existsSync(hive(`swarms/${REAL}`))).toBe(false);
+  });
+
+  it('changes nothing when an entry under the registry’s id is already there', async () => {
+    await adoptedHome();
+    const held = installedJson();
+    write('swarms/installed.json', JSON.stringify([...held, { ...held[1], swarmId: REAL }]));
+    const before = readHive('swarms/installed.json');
+
+    await expect(rekeyAdopted(hiveDir, [row()])).resolves.toBe(false);
+
+    expect(readHive('swarms/installed.json')).toBe(before);
+    expect(existsSync(hive('swarms/bundled-standard/seed.json'))).toBe(true);
+  });
+
+  it('finishes a re-key that died after moving the manifest', async () => {
+    await adoptedHome();
+    const manifest = readHive('swarms/bundled-standard/seed.json');
+    mkdirSync(hive(`swarms/${REAL}`), { recursive: true });
+    writeFileSync(hive(`swarms/${REAL}/seed.json`), manifest);
+    rmSync(hive('swarms/bundled-standard'), { recursive: true });
+
+    await expect(rekeyAdopted(hiveDir, [row()])).resolves.toBe(true);
+
+    expect(installedJson().map((held) => held.swarmId)).toEqual(['swOther', REAL]);
+    expect(readHive(`swarms/${REAL}/seed.json`)).toBe(manifest);
+  });
+
+  it('answers false and writes nothing when installed.json cannot be read', async () => {
+    await adoptedHome();
+    write('swarms/installed.json', 'not json');
+
+    await expect(rekeyAdopted(hiveDir, [row()])).resolves.toBe(false);
+
+    expect(readHive('swarms/installed.json')).toBe('not json');
+    expect(existsSync(hive('swarms/bundled-standard/seed.json'))).toBe(true);
+    expect(existsSync(hive(`swarms/${REAL}`))).toBe(false);
   });
 });

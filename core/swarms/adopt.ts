@@ -3,10 +3,16 @@
  * "bundled", with no network. The marker it leaves stops the boot seed for that home for good, so removing
  * Standard does not bring the built-ins back. It stays after HIVE-448 for installs that skipped a release.
  */
-import { lstat, mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { BUNDLED_VERSION, type InstalledSwarm, type SwarmContents } from '@shared/swarm-contract';
+import {
+  BUNDLED_VERSION,
+  isSwarmId,
+  type InstalledSwarm,
+  type SwarmContents,
+  type SwarmEntry,
+} from '@shared/swarm-contract';
 
 import { readManifest, writeManifest } from '../seed/seed';
 
@@ -105,4 +111,36 @@ export async function adoptBuiltIns(deps: AdoptDeps): Promise<void> {
 
   await mkdir(paths.root, { recursive: true });
   await writeFile(paths.adopted, ''); // last: only a finished adoption stops the boot seed
+}
+
+/**
+ * The registry named Standard: the adopted entry takes the registry's id, so install, update and the listing
+ * match it by id like any other swarm. Each step tolerates having already run.
+ */
+export async function rekeyAdopted(hiveDir: string, rows: readonly SwarmEntry[]): Promise<boolean> {
+  const row = rows.find((one) => one.kind === STANDARD.kind && one.slug === STANDARD.slug);
+  if (row === undefined || !isSwarmId(row.id) || row.id === ADOPTED_SWARM_ID) return false;
+  const paths = swarmPaths(hiveDir);
+  let raw: unknown[];
+  try {
+    raw = await readInstalledRaw(paths.installed);
+  } catch {
+    return false; // unreadable: a writer refuses, and the next read tries again
+  }
+  const held = raw.filter(isInstalled);
+  if (!held.some((one) => one.swarmId === ADOPTED_SWARM_ID) || held.some((one) => one.swarmId === row.id)) {
+    return false;
+  }
+  await mkdir(paths.dir(row.id), { recursive: true });
+  // The manifest first. If only it moves, the entry still says `bundled-standard`: the boot seed reads every
+  // folder's manifest whatever installed.json says, and the next call finds nothing to move and finishes.
+  await rename(paths.seed(ADOPTED_SWARM_ID), paths.seed(row.id)).catch((cause: unknown) => {
+    if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;
+  });
+  await rm(paths.dir(ADOPTED_SWARM_ID), { recursive: true, force: true });
+  await writeInstalled(
+    paths.installed,
+    raw.map((one) => (isInstalled(one) && one.swarmId === ADOPTED_SWARM_ID ? { ...one, swarmId: row.id } : one)),
+  );
+  return true;
 }

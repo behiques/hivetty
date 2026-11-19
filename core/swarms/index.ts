@@ -23,8 +23,10 @@ import {
 import { configPath } from '../config/paths';
 import { platform } from '../platform';
 import { shippedOptions } from '../seed';
+import { serial } from '../seed/actions';
 import type { SeedOptions } from '../seed/seed';
 
+import { rekeyAdopted } from './adopt';
 import { createSwarmGit, type SwarmGit } from './git';
 import { createSwarms, mergeListing, type Swarms } from './install';
 import { swarmPaths } from './paths';
@@ -92,7 +94,16 @@ function swarms(): Swarms {
   return engine;
 }
 
-const registry = (): Promise<RegistryRead> => readRegistry(hooks.authedFetch(), swarmPaths(hiveDir()).registry);
+const registry = async (): Promise<RegistryRead> => {
+  const read = await readRegistry(hooks.authedFetch(), swarmPaths(hiveDir()).registry);
+  // HIVE-447: the adopted Standard takes the registry's id, in the install queue and after the boot seed. Never the
+  // reason a read fails. No caller reads the registry from inside the queue, so this never waits on itself.
+  await serial(async () => {
+    await hooks.ready();
+    await rekeyAdopted(hiveDir(), read.swarms);
+  }).catch(() => undefined);
+  return read;
+};
 
 // Whether it worked or not: a failed update may have changed files before it failed.
 const refresh = (): void => {
