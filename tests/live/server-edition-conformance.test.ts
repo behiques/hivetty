@@ -25,6 +25,14 @@ import { REMOTE_PROTOCOL_VERSION, type ServerFrame } from '../../shared/remote-c
 import { STUB_USER, startStubCloud, USER_CODE, type StubCloud } from '../e2e/electron/fixtures/stub-cloud';
 import { claimsFor, makeSigner } from '../support/lease';
 import { SecureTestSocket } from '../support/secure-test-socket';
+import {
+  SERVER_BIN,
+  SERVER_ENTRY,
+  SERVER_NODE,
+  SERVER_OUT,
+  serverCommand,
+  writeKeyFile,
+} from '../support/server-edition';
 
 /**
  * The server edition, booted for real (HIVE-422): `node out/server/index.js`, built by `pnpm server:build` (which
@@ -50,15 +58,11 @@ import { SecureTestSocket } from '../support/secure-test-socket';
  * and `release.yml` against the image it pushed.
  */
 const RUN = process.env['HIVE_LIVE_SERVER_EDITION_PROOF'] === '1';
-const NODE = process.env['HIVE_SERVER_NODE'] ?? process.execPath;
+const NODE = SERVER_NODE;
 const ROOT = join(import.meta.dirname, '../..');
-const ENTRY = join(ROOT, 'out/server/index.js');
+const ENTRY = SERVER_ENTRY;
 const RELEASE_ENTRY = join(ROOT, 'out/server-release/index.js');
-/** An unpacked tarball's `bin/hivetty-server` (HIVE-425); its tree is the folder above `bin/`. */
-const BIN = process.env['HIVE_SERVER_BIN'] || undefined;
-const BIN_ROOT = BIN === undefined ? undefined : join(BIN, '../..');
-/** The built server under test: the repo's `out/server`, or the tarball's `app/server`. */
-const SERVER_OUT = BIN_ROOT === undefined ? join(ROOT, 'out/server') : join(BIN_ROOT, 'app/server');
+const BIN = SERVER_BIN;
 /** The server under test is a release build, which ignores every developer escape hatch. */
 const RELEASE = process.env['HIVE_SERVER_RELEASE'] === '1';
 /** The base image under test (HIVE-426); set, only the image cases run. */
@@ -69,11 +73,6 @@ const LOG_LINE = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z \[[a-z-]+\] /;
 const REFUSAL = "This edition isn't part of your plan";
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** What to spawn for `args`: the tarball's wrapper when `HIVE_SERVER_BIN` is set, else `NODE entry`. */
-function command(args: string[], entry = ENTRY): [file: string, argv: string[]] {
-  return BIN === undefined ? [NODE, [entry, ...args]] : [BIN, args];
-}
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -165,10 +164,8 @@ async function makeHome(serverRoot?: string): Promise<Home> {
 
 /** A key file in its own folder, outside the home, named by HIVETTY_SECRET_KEY_FILE; the environment key goes. */
 function useKeyFile(home: Home, key = randomBytes(32).toString('base64')): string {
-  const dir = mkdtempSync(join(tmpdir(), 'hive-server-key-'));
+  const { dir, file } = writeKeyFile(key);
   homes.push(dir);
-  const file = join(dir, 'key');
-  writeFileSync(file, `${key}\n`, { mode: 0o600 });
   home.env['HIVETTY_SECRET_KEY_FILE'] = file;
   delete home.env['HIVETTY_SECRET_KEY'];
   return file;
@@ -176,7 +173,7 @@ function useKeyFile(home: Home, key = randomBytes(32).toString('base64')): strin
 
 /** `--login` against the stub cloud: answered mid-run, when the user code is printed. */
 async function signIn(home: Home, cloud: StubCloud): Promise<void> {
-  const child = spawn(...command(['--login']), { env: home.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(...serverCommand(['--login']), { env: home.env, stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(child);
   let out = '';
   child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString()));
@@ -206,7 +203,7 @@ function runOnce(
   args: string[],
   entry = ENTRY,
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return promisify(execFile)(...command(args, entry), { env: home.env, timeout: 20_000 })
+  return promisify(execFile)(...serverCommand(args, entry), { env: home.env, timeout: 20_000 })
     .then(({ stdout, stderr }) => ({ code: 0, stdout, stderr }))
     .catch((cause: { code?: number | null; stdout?: string; stderr?: string }) => ({
       code: typeof cause.code === 'number' ? cause.code : null,
@@ -239,7 +236,7 @@ interface Served {
 }
 
 function serve(home: Home, entry = ENTRY): Served {
-  const child = spawn(...command([], entry), { env: home.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(...serverCommand([], entry), { env: home.env, stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(child);
   let out = '';
   let err = '';
