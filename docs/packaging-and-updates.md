@@ -533,6 +533,26 @@ xattr -dr com.apple.quarantine "/Applications/HiveTTY Pro.app"
 An update the app fetches itself is never quarantined, which was a real argument
 for the in-app path even back when the swap was refused.
 
+## The server tarballs
+
+`.github/workflows/server.yml` builds `hivetty-server` for `linux-arm64`
+(`ubuntu-24.04-arm`) and `linux-x64` (`ubuntu-latest`) on every pull request and
+every push to main (HIVE-425). Each job runs `pnpm server:build`, then
+`pnpm server:pack`, which wraps `out/server/`, `node-pty`'s runtime files, the
+resources and a pinned Node 26 into
+`dist/server/hivetty-server-<version>-linux-<arch>.tar.gz` with a one-line
+`SHA256SUMS`. The Node archive is checked against the SHA-256 pinned in
+`scripts/pack-server.mjs` before it is unpacked. `node-pty` compiles inside
+`node:26-bookworm`, so the tarball runs on glibc 2.36 and newer. The job then
+unpacks the tarball read-only and runs the `server-edition` live suite against
+it.
+
+`release.yml` calls the same workflow with `release: true`, which builds with
+`HIVETTY_RELEASE=1` and runs the reduced smoke. Every run uploads its tarballs
+as workflow artifacts with `retention-days: 7`, and only after the smoke
+passed. A release never carries them: no job downloads Electron, and none
+attaches a tarball to a GitHub release.
+
 ## Where the code lives
 
 | File | Owns |
