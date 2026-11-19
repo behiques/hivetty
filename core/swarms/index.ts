@@ -9,6 +9,7 @@
 import { dirname } from 'node:path';
 
 import {
+  isBundled,
   parseSwarmAutoUpdateRequest,
   parseSwarmRequest,
   type InstalledSwarm,
@@ -188,7 +189,8 @@ export function swarmCalls(): SwarmCalls {
       const result = await swarms().remove(swarmId); // never rejects
       if (result.ok) {
         updater().clear(swarmId);
-        if (before !== null) {
+        // A bundled Standard was never reported as installed (HIVE-447).
+        if (before !== null && !isBundled(before.version)) {
           void reportInstall(hooks.authedFetch(), swarmId, { state: 'removed', version: before.version });
         }
       }

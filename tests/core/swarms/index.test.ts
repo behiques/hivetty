@@ -402,6 +402,16 @@ describe('a removal (HIVE-442)', () => {
     expect(h.changed).toHaveBeenCalledWith({ updated: null });
   });
 
+  it('reports nothing for a bundled Standard, which was never reported as installed (HIVE-447)', async () => {
+    engine.installed.mockResolvedValue([heldAt('bundled-standard', 'bundled')]);
+    engine.remove.mockResolvedValue({ ok: true });
+
+    await swarmCalls().remove({ swarmId: 'bundled-standard' });
+
+    expect(reportInstall).not.toHaveBeenCalled();
+    expect(h.changed).toHaveBeenCalledWith({ updated: null });
+  });
+
   it('reports nothing when the removal failed', async () => {
     engine.installed.mockResolvedValue([heldAt('a1', '1.0.0')]);
     engine.remove.mockResolvedValue({ ok: false, failure: { code: 'failed', message: 'no' } });

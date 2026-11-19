@@ -14,6 +14,7 @@ import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from 'n
 import { basename, dirname, join, sep } from 'node:path';
 
 import {
+  isBundled,
   isSwarmFolder,
   isSwarmId,
   swarmTag,
@@ -510,11 +511,14 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     for (const file of await manifestFiles()) {
       for (const folder of ownedFolders(await readManifest(file))) exclude.add(folder);
     }
-    const swarms = (await readInstalled(paths.installed)).map((held) => ({
-      source: join(paths.repo(held.swarmId), held.folder),
-      target: deps.hiveDir,
-      manifestFile: paths.seed(held.swarmId),
-    }));
+    const swarms = (await readInstalled(paths.installed)).map((held): SeedOptions => {
+      const manifestFile = paths.seed(held.swarmId);
+      // HIVE-447: an adopted Standard has no clone until its first update: its files read against the shipped tree.
+      if (isBundled(held.version)) {
+        return { source: shipped.source, history: shipped.history, target: deps.hiveDir, manifestFile };
+      }
+      return { source: join(paths.repo(held.swarmId), held.folder), target: deps.hiveDir, manifestFile };
+    });
     return { shipped: { ...shipped, exclude }, swarms };
   };
 

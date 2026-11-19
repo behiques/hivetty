@@ -131,6 +131,28 @@ describe('check', () => {
     expect(updater.pending('a1')).toBeNull();
   });
 
+  it('updates a bundled Standard like any other version: pending, then applied (HIVE-447)', async () => {
+    const row = rowFor({ version: '1.0.1' });
+    const deps = harness([row], [heldFor({ version: 'bundled' })]);
+    const updater = createSwarmUpdater(deps);
+
+    await updater.check();
+
+    expect(deps.apply).toHaveBeenCalledWith(row, expect.any(Function));
+    expect(deps.notify).toHaveBeenCalledWith({ swarmId: 'a1', title: 'Standard', version: '1.0.1' });
+  });
+
+  it('holds a bundled Standard pending at the registry version while a run is live (HIVE-447)', async () => {
+    const deps = harness([rowFor({ version: '1.0.1' })], [heldFor({ version: 'bundled' })]);
+    deps.runsLive.mockReturnValue(true);
+    const updater = createSwarmUpdater(deps);
+
+    await updater.check();
+
+    expect(updater.pending('a1')).toEqual({ target: '1.0.1', updating: false });
+    expect(deps.apply).not.toHaveBeenCalled();
+  });
+
   it('waits for agent runs, then the idle signal applies it without reading the registry again', async () => {
     const deps = harness([rowFor()], [heldFor()]);
     deps.runsLive.mockReturnValue(true);

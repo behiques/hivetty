@@ -960,6 +960,34 @@ describe('the seed sets', () => {
     expect(sets.swarms).toEqual([setOf('swOne'), setOf('swTwo')]);
   });
 
+  it('reads a bundled entry against the shipped tree and history, with its own manifest (HIVE-447)', async () => {
+    const held = (swarmId: string, version: string) => ({
+      swarmId,
+      slug: swarmId,
+      kind: 'native',
+      org: null,
+      repoUrl: '/r',
+      folder: 'standard',
+      version,
+      commit: 'c'.repeat(40),
+      installedAt: '2026-11-19T00:00:00Z',
+      autoUpdate: true,
+      lastError: null,
+      title: 'T',
+      description: '',
+      contents: { agents: [], skills: [] },
+    });
+    write(hive('swarms/installed.json'), JSON.stringify([held('bundled-standard', 'bundled'), held('swOne', '1.0.0')]));
+    const shipped = { ...shippedOptions(), history: join(root, 'resources/shipped-history.json') };
+
+    const sets = await createSwarms(makeDeps()).seedSets(shipped);
+
+    expect(sets.swarms).toEqual([
+      { source: shipped.source, history: shipped.history, target: hiveDir, manifestFile: hive('swarms/bundled-standard/seed.json') },
+      setOf('swOne'),
+    ]);
+  });
+
   it('excludes nothing with nothing installed', async () => {
     const sets = await createSwarms(makeDeps()).seedSets(shippedOptions());
     expect([...(sets.shipped.exclude ?? [])]).toEqual([]);
