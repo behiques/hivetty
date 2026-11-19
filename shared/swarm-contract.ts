@@ -158,3 +158,197 @@ export function compareVersions(a: string, b: string): number {
 
   return 0;
 }
+
+export type SwarmKind = 'native' | 'community' | 'organization';
+export type SwarmAccess = 'token' | 'anonymous' | 'user';
+export type SwarmPolicy = 'latest' | 'pinned';
+
+/** One row of `GET /api/swarms` (HIVE-440), field for field. */
+export interface SwarmEntry {
+  id: string;
+  slug: string;
+  kind: SwarmKind;
+  title: string;
+  description: string;
+  publisher: string;
+  tags: string[];
+  /** Null for an organization swarm the cloud has not seen a version of. */
+  version: string | null;
+  updatedAt: string;
+  installs: number;
+  agents: SwarmContents['agents'];
+  skills: SwarmContents['skills'];
+  repoUrl: string;
+  folder: string;
+  commit: string | null;
+  access: SwarmAccess;
+  policy: SwarmPolicy;
+  pinnedVersion: string | null;
+  org: { id: string; name: string } | null;
+}
+
+export type SwarmFailureCode =
+  | 'invalid'
+  | 'needs-newer-app'
+  | 'collision'
+  | 'no_access'
+  | 'offline'
+  | 'unavailable'
+  | 'failed';
+
+export interface SwarmFailure {
+  code: SwarmFailureCode;
+  /** The sentence a person reads. */
+  message: string;
+  /** The reader's problems, on `invalid` and `needs-newer-app`. */
+  problems?: SwarmProblem[];
+}
+
+export interface InstalledSwarm {
+  swarmId: string;
+  slug: string;
+  kind: SwarmKind;
+  org: { id: string; name: string } | null;
+  repoUrl: string;
+  folder: string;
+  version: string;
+  commit: string;
+  /** ISO 8601. */
+  installedAt: string;
+  autoUpdate: boolean;
+  /** Set when a later install of an installed swarm failed (HIVE-442's updates). */
+  lastError: SwarmFailure | null;
+  title: string;
+  contents: SwarmContents;
+}
+
+export interface SwarmListItem {
+  entry: SwarmEntry | null;
+  installed: InstalledSwarm | null;
+}
+
+export interface SwarmListing {
+  /** `cloud`: fresh. `cache`: the last list, offline. `none`: signed out or never listed. */
+  source: 'cloud' | 'cache' | 'none';
+  items: SwarmListItem[];
+}
+
+export type SwarmInstallResult = { ok: true; installed: InstalledSwarm } | { ok: false; failure: SwarmFailure };
+export type SwarmRemoveResult = { ok: true } | { ok: false; failure: SwarmFailure };
+
+export interface SwarmRequest {
+  swarmId: string;
+}
+
+const SWARM_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const COMMIT = /^[0-9a-f]{40}$/;
+const FOLDER = /^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/;
+const REPO_URL_MAX = 512;
+/** `https://…` and `ssh://…`: the host starts with a letter or digit, and no `?`, `#` or space follows. */
+const SCHEME_URL = /^(?:https|ssh):\/\/[A-Za-z0-9][A-Za-z0-9._~/:@%+-]*$/;
+/** `git@github.com:acme/tools.git`. */
+const SCP_URL = /^[A-Za-z0-9][A-Za-z0-9._-]*@[A-Za-z0-9][A-Za-z0-9.-]*:[A-Za-z0-9._~/-]+$/;
+/** A host, user or path segment that starts with `-` reads as an option to ssh or git. */
+const OPTION_SHAPED = /[@:/]-/;
+
+/** A swarm's id is a folder name under `~/.hivetty/swarms`, so it is one path segment. */
+export const isSwarmId = (value: unknown): value is string => typeof value === 'string' && SWARM_ID.test(value);
+
+/** Empty for a swarm at its repository's root, else slug segments: the tag rule's folder. */
+export const isSwarmFolder = (value: unknown): value is string =>
+  typeof value === 'string' && (value === '' || FOLDER.test(value));
+
+/**
+ * The only URLs handed to Git. Git also speaks `ext::` (runs a command) and
+ * `file://`, and reads a leading `-` as an option; an organization's admin
+ * types this URL, so none of those may pass.
+ */
+export const isSwarmRepoUrl = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  value.length <= REPO_URL_MAX &&
+  (SCHEME_URL.test(value) || SCP_URL.test(value)) &&
+  !OPTION_SHAPED.test(value);
+
+const isString = (value: unknown): value is string => typeof value === 'string';
+const oneOf = <T extends string>(values: readonly T[], value: unknown): value is T =>
+  typeof value === 'string' && (values as readonly string[]).includes(value);
+
+function agentsOf(value: unknown): SwarmContents['agents'] | null {
+  if (!Array.isArray(value)) return null;
+  const agents: SwarmContents['agents'] = [];
+  for (const row of value) {
+    if (!isRecord(row) || !isString(row['name']) || !isString(row['description'])) return null;
+    const tools = row['tools'];
+    if (!Array.isArray(tools) || !tools.every(isString)) return null;
+    agents.push({ name: row['name'], description: row['description'], tools });
+  }
+  return agents;
+}
+
+function skillsOf(value: unknown): SwarmContents['skills'] | null {
+  if (!Array.isArray(value)) return null;
+  const skills: SwarmContents['skills'] = [];
+  for (const row of value) {
+    if (!isRecord(row) || !isString(row['name']) || !isString(row['description'])) return null;
+    skills.push({ name: row['name'], description: row['description'] });
+  }
+  return skills;
+}
+
+function orgOf(value: unknown): SwarmEntry['org'] | undefined {
+  if (value === null) return null;
+  if (!isRecord(value) || !isString(value['id']) || !isString(value['name'])) return undefined;
+  return { id: value['id'], name: value['name'] };
+}
+
+/** A registry row, checked field by field at the trust boundary. `null` drops the row. */
+export function parseSwarmEntry(row: unknown): SwarmEntry | null {
+  if (!isRecord(row)) return null;
+  const { id, slug, kind, title, description, publisher, tags, version, updatedAt, installs } = row;
+  const { repoUrl, folder, commit, access, policy, pinnedVersion } = row;
+  const agents = agentsOf(row['agents']);
+  const skills = skillsOf(row['skills']);
+  const org = orgOf(row['org']);
+
+  if (!isSwarmId(id) || !isString(slug) || !SLUG.test(slug)) return null;
+  if (!oneOf(['native', 'community', 'organization'] as const, kind)) return null;
+  if (!isString(title) || !isString(description) || !isString(publisher)) return null;
+  if (!Array.isArray(tags) || !tags.every(isString)) return null;
+  if (version !== null && !(isString(version) && VERSION.test(version))) return null;
+  if (!isString(updatedAt) || typeof installs !== 'number') return null;
+  if (agents === null || skills === null || org === undefined) return null;
+  if (!isSwarmRepoUrl(repoUrl) || !isSwarmFolder(folder)) return null;
+  if (commit !== null && !(isString(commit) && COMMIT.test(commit))) return null;
+  if (!oneOf(['token', 'anonymous', 'user'] as const, access)) return null;
+  if (!oneOf(['latest', 'pinned'] as const, policy)) return null;
+  if (pinnedVersion !== null && !(isString(pinnedVersion) && VERSION.test(pinnedVersion))) return null;
+
+  return {
+    id,
+    slug,
+    kind,
+    title,
+    description,
+    publisher,
+    tags,
+    version,
+    updatedAt,
+    installs,
+    agents,
+    skills,
+    repoUrl,
+    folder,
+    commit,
+    access,
+    policy,
+    pinnedVersion,
+    org,
+  };
+}
+
+/** `swarms:install` and `swarms:remove` carry an id and nothing else. */
+export function parseSwarmRequest(payload: unknown): SwarmRequest {
+  const swarmId = isRecord(payload) ? payload['swarmId'] : undefined;
+  if (!isSwarmId(swarmId)) throw new Error('swarmId is not a swarm id');
+  return { swarmId };
+}

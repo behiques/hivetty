@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   compareVersions,
+  isSwarmFolder,
+  isSwarmId,
+  isSwarmRepoUrl,
+  parseSwarmEntry,
   parseSwarmManifest,
+  parseSwarmRequest,
   parseSwarmTag,
   swarmTag,
 } from '@shared/swarm-contract';
@@ -133,5 +138,149 @@ describe('compareVersions', () => {
   it('ignores a pre-release suffix', () => {
     expect(compareVersions('1.0.0-rc.12', '1.0.0')).toBe(0);
     expect(compareVersions('1.1.0', '1.0.0-rc.12')).toBeGreaterThan(0);
+  });
+});
+
+describe('isSwarmId', () => {
+  it.each(['cmabc123', 'a-b_C9'])('accepts %j', (value) => {
+    expect(isSwarmId(value)).toBe(true);
+  });
+
+  it.each<unknown>(['', '..', 'a/b', 'a.b', 'a'.repeat(65), 42])('rejects %j', (value) => {
+    expect(isSwarmId(value)).toBe(false);
+  });
+});
+
+describe('isSwarmFolder', () => {
+  it.each(['', 'standard', 'team/standard'])('accepts %j', (value) => {
+    expect(isSwarmFolder(value)).toBe(true);
+  });
+
+  it.each<unknown>(['..', '/a', 'a//b', 'a/', 'A'])('rejects %j', (value) => {
+    expect(isSwarmFolder(value)).toBe(false);
+  });
+});
+
+describe('isSwarmRepoUrl', () => {
+  it.each([
+    'https://github.com/behiques/hivetty-swarms.git',
+    'ssh://git@github.com/acme/tools.git',
+    'git@github.com:acme/tools.git',
+  ])('accepts %j', (value) => {
+    expect(isSwarmRepoUrl(value)).toBe(true);
+  });
+
+  it.each<unknown>([
+    'ext::sh -c id',
+    'file:///tmp/x',
+    '/tmp/x',
+    'http://github.com/a/b',
+    '--upload-pack=x',
+    '-x@host:path',
+    'https://-evil/x',
+    'ssh://git@-oProxyCommand=x/y',
+    'https://github.com/a b',
+    'https://github.com/a/b?x=1',
+    `https://github.com/${'a'.repeat(494)}`,
+    42,
+  ])('rejects %j', (value) => {
+    expect(isSwarmRepoUrl(value)).toBe(false);
+  });
+
+  it('measures the over-long case at 513 characters', () => {
+    expect(`https://github.com/${'a'.repeat(494)}`).toHaveLength(513);
+    expect(isSwarmRepoUrl(`https://github.com/${'a'.repeat(493)}`)).toBe(true);
+  });
+});
+
+const nativeRow = {
+  id: 'cmabc123',
+  slug: 'standard',
+  kind: 'native',
+  title: 'Standard',
+  description: 'Ticket to merge.',
+  publisher: 'HiveTTY',
+  tags: ['workflow'],
+  version: '1.0.0',
+  updatedAt: '2026-11-19T00:00:00.000Z',
+  installs: 3,
+  agents: [{ name: 'builder', description: 'Builds.', tools: ['Bash'] }],
+  skills: [{ name: 'tdd', description: 'Test first.' }],
+  repoUrl: 'https://github.com/behiques/hivetty-swarms.git',
+  folder: 'standard',
+  commit: 'a'.repeat(40),
+  access: 'token',
+  policy: 'latest',
+  pinnedVersion: null,
+  org: null,
+};
+
+describe('parseSwarmEntry', () => {
+  it('round-trips a full native row', () => {
+    expect(parseSwarmEntry(nativeRow)).toEqual(nativeRow);
+  });
+
+  it('parses an organization row with no version, no commit and nothing listed', () => {
+    const row = {
+      ...nativeRow,
+      kind: 'organization',
+      version: null,
+      commit: null,
+      agents: [],
+      skills: [],
+      repoUrl: 'git@github.com:acme/tools.git',
+      folder: '',
+      access: 'user',
+      policy: 'pinned',
+      pinnedVersion: '2.1.0',
+      org: { id: 'org1', name: 'Acme' },
+    };
+    expect(parseSwarmEntry(row)).toEqual(row);
+  });
+
+  it('drops an unknown key', () => {
+    expect(parseSwarmEntry({ ...nativeRow, extra: 'x' })).toEqual(nativeRow);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['a bad id', { id: '../x' }],
+    ['a bad slug', { slug: 'Standard' }],
+    ['kind Native', { kind: 'Native' }],
+    ['a non-string title', { title: 1 }],
+    ['a non-string description', { description: null }],
+    ['a non-string publisher', { publisher: 2 }],
+    ['tags not an array of strings', { tags: ['a', 1] }],
+    ['tags not an array', { tags: 'a' }],
+    ['version 1.0', { version: '1.0' }],
+    ['a non-string updatedAt', { updatedAt: 5 }],
+    ['commit of 39 hex', { commit: 'a'.repeat(39) }],
+    ['folder ../x', { folder: '../x' }],
+    ['repoUrl ext::sh', { repoUrl: 'ext::sh' }],
+    ['access key', { access: 'key' }],
+    ['policy newest', { policy: 'newest' }],
+    ['pinnedVersion x', { pinnedVersion: 'x' }],
+    ['org with a numeric id', { org: { id: 1 } }],
+    ['an agent without tools', { agents: [{ name: 'a', description: 'b' }] }],
+    ['an agent with a non-string tool', { agents: [{ name: 'a', description: 'b', tools: [1] }] }],
+    ['agents not an array', { agents: {} }],
+    ['a skill without description', { skills: [{ name: 'tdd' }] }],
+    ['skills not an array', { skills: null }],
+    ['installs as a string', { installs: '3' }],
+  ])('returns null for %s', (_label, patch) => {
+    expect(parseSwarmEntry({ ...nativeRow, ...patch })).toBeNull();
+  });
+
+  it.each<unknown>([null, 'row', [], 42])('returns null for the non-object row %j', (row) => {
+    expect(parseSwarmEntry(row)).toBeNull();
+  });
+});
+
+describe('parseSwarmRequest', () => {
+  it('returns the id', () => {
+    expect(parseSwarmRequest({ swarmId: 'cmabc' })).toEqual({ swarmId: 'cmabc' });
+  });
+
+  it.each<unknown>([{}, null, { swarmId: '../x' }])('throws for %j', (payload) => {
+    expect(() => parseSwarmRequest(payload)).toThrow('swarmId is not a swarm id');
   });
 });
