@@ -63,6 +63,8 @@ export function audit(input: AuditInput): void {
     // A trail that cannot be written never refuses a call. Said once per failure streak.
     if (!failing) console.error(`[hive] the audit trail could not be written: ${describe(cause)}`);
     failing = true;
+    // The folder may have gone mid-day: the next write makes it again rather than waiting for midnight.
+    lastFile = '';
   }
   for (const listener of listeners) {
     try {

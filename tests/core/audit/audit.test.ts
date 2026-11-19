@@ -80,6 +80,16 @@ describe('the file sink', () => {
     expect(error).toHaveBeenCalledTimes(2);
     off();
   });
+
+  it('recreates the folder when it disappears mid-day', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    audit(attach);
+    rmSync(dir(), { recursive: true });
+    audit(attach);
+    audit(attach);
+    expect(lines('2026-11-18')).toHaveLength(1);
+    expect(statSync(dir()).mode & 0o777).toBe(0o700);
+  });
 });
 
 describe('the stdout sink', () => {
