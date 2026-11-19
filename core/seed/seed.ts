@@ -106,6 +106,8 @@ export interface SeedOptions {
   manifestFile: string;
   /** `shipped-history.json`, for files seeded before the part manifest. */
   history?: string;
+  /** Folders (`skills/tdd`, `agents/builder`) an installed swarm owns: passed over as if not shipped (HIVE-441). */
+  exclude?: ReadonlySet<string>;
 }
 
 /** The files merged part by part rather than whole. */
@@ -116,7 +118,7 @@ export const isMerged = (rel: string): boolean => MERGED.test(rel);
 /** An agent's definition, whose `tools:` a card once wrote into (HIVE-409). */
 const AGENT_DEFINITION = new RegExp(`^${AGENTS_DIR}/[^/]+/${AGENT_FILE}$`);
 
-const sha256 = (bytes: Uint8Array): string =>
+export const sha256 = (bytes: Uint8Array): string =>
   createHash('sha256').update(bytes).digest('hex');
 
 const isPartBase = (value: unknown): value is PartBase =>
@@ -217,7 +219,7 @@ export async function throughLink(root: string, rel: string): Promise<boolean> {
  * both as a folder: it is the folder that may be a symlink, and it is the
  * folder that a person recognises as "the thing I edited".
  */
-export async function shippedFolders(source: string): Promise<string[]> {
+export async function shippedFolders(source: string, exclude?: ReadonlySet<string>): Promise<string[]> {
   const folders: string[] = [];
   for (const kind of ['skills', AGENTS_DIR]) {
     let names: string[];
@@ -231,6 +233,7 @@ export async function shippedFolders(source: string): Promise<string[]> {
     }
     for (const name of names) {
       if (kind === 'skills' && name === RESERVED_SKILL_NAME) continue;
+      if (exclude?.has(`${kind}/${name}`) === true) continue;
       folders.push(`${kind}/${name}`);
     }
   }
@@ -244,7 +247,7 @@ export async function seedShipped(options: SeedOptions): Promise<SeedReport> {
   const parts: Record<string, PartBase> = { ...manifest.parts };
   let history: History | null = null;
 
-  for (const folder of await shippedFolders(options.source)) {
+  for (const folder of await shippedFolders(options.source, options.exclude)) {
     const destinationDir = join(options.target, folder);
     if (await throughLink(options.target, folder)) {
       report.skipped.push(folder);

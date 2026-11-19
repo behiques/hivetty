@@ -123,7 +123,7 @@ export async function shippedStatus(options: SeedOptions): Promise<ShippedStatus
   const history = historyLoader(options);
   const statuses: ShippedStatus[] = [];
 
-  for (const folder of await shippedFolders(options.source)) {
+  for (const folder of await shippedFolders(options.source, options.exclude)) {
     const located = await locate(options, folder, manifest, history);
 
     if (located === null) continue;
@@ -153,7 +153,7 @@ export async function shippedStatus(options: SeedOptions): Promise<ShippedStatus
  */
 let queue: Promise<unknown> = Promise.resolve();
 
-function serial<T>(run: () => Promise<T>): Promise<T> {
+export function serial<T>(run: () => Promise<T>): Promise<T> {
   const next = queue.then(run, run);
 
   queue = next.catch(() => undefined);
@@ -165,7 +165,7 @@ function serial<T>(run: () => Promise<T>): Promise<T> {
 async function shippedFolder(options: SeedOptions, request: ShippedRequest): Promise<string> {
   const folder = `${request.kind}/${request.name}`;
 
-  if (!(await shippedFolders(options.source)).includes(folder)) {
+  if (!(await shippedFolders(options.source, options.exclude)).includes(folder)) {
     throw new Error(`HiveTTY does not ship ${folder}.`);
   }
   if (await throughLink(options.target, folder)) {

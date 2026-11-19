@@ -54,7 +54,7 @@ describe('collectFiles', () => {
     write('skills/mine/SKILL.md', 'mine');
     write('agents/scout/AGENT.md', 'scout');
     utimesSync(join(dir, 'skills/mine/SKILL.md'), 1_700_000_000, 1_700_000_000);
-    const view = await collectFiles(dir, manifest);
+    const view = await collectFiles(dir, [manifest]);
     expect(view).toEqual({
       'automation:f:agents/scout/AGENT.md': {
         hash: sha256('scout'),
@@ -73,9 +73,9 @@ describe('collectFiles', () => {
     write('skills/work-on/SKILL.md', 'shipped');
     write('skills/mine/SKILL.md', 'mine');
     writeManifest({ files: { 'skills/work-on/SKILL.md': sha256('shipped') }, parts: {} });
-    expect(Object.keys(await collectFiles(dir, manifest))).toEqual(['automation:f:skills/mine/SKILL.md']);
+    expect(Object.keys(await collectFiles(dir, [manifest]))).toEqual(['automation:f:skills/mine/SKILL.md']);
     write('skills/work-on/SKILL.md', 'edited');
-    expect(Object.keys(await collectFiles(dir, manifest)).sort()).toEqual([
+    expect(Object.keys(await collectFiles(dir, [manifest])).sort()).toEqual([
       'automation:f:skills/mine/SKILL.md',
       'automation:f:skills/work-on/SKILL.md',
     ]);
@@ -89,7 +89,7 @@ describe('collectFiles', () => {
     symlinkSync('/etc/hosts', join(dir, 'skills/a/hosts'));
     symlinkSync(join(dir, 'outside/b'), join(dir, 'skills/b'));
     symlinkSync('/etc', join(dir, 'agents'));
-    expect(Object.keys(await collectFiles(dir, manifest))).toEqual(['automation:f:skills/a/SKILL.md']);
+    expect(Object.keys(await collectFiles(dir, [manifest]))).toEqual(['automation:f:skills/a/SKILL.md']);
   });
 
   it('never reads anything outside skills and agents', async () => {
@@ -98,7 +98,56 @@ describe('collectFiles', () => {
     write('work/x', 'x');
     write('cli/hive', 'x');
     write('sync-conflicts/2026/skills/a/SKILL.md', 'x');
-    expect(await collectFiles(dir, manifest)).toEqual({});
+    expect(await collectFiles(dir, [manifest])).toEqual({});
+  });
+});
+
+describe('collectFiles over every seed manifest (HIVE-441)', () => {
+  const writeAt = (file: string, content: unknown): void => writeFileSync(join(dir, file), JSON.stringify(content));
+
+  beforeEach(() => {
+    write('skills/a/SKILL.md', 'built-in');
+    write('skills/s/SKILL.md', 'swarm');
+    write('skills/mine/SKILL.md', 'mine');
+    writeManifest({ files: { 'skills/a/SKILL.md': sha256('built-in') }, parts: {} });
+    writeAt('swarm-1.json', { files: { 'skills/s/SKILL.md': sha256('swarm') }, parts: {} });
+  });
+
+  it('leaves out a file one swarm manifest lists', async () => {
+    expect(Object.keys(await collectFiles(dir, [manifest, join(dir, 'swarm-1.json')]))).toEqual([
+      'automation:f:skills/mine/SKILL.md',
+    ]);
+  });
+
+  it('leaves out files two swarm manifests list', async () => {
+    write('agents/x/AGENT.md', 'agent');
+    writeAt('swarm-2.json', { files: { 'agents/x/AGENT.md': sha256('agent') }, parts: {} });
+    expect(
+      Object.keys(await collectFiles(dir, [manifest, join(dir, 'swarm-1.json'), join(dir, 'swarm-2.json')])),
+    ).toEqual(['automation:f:skills/mine/SKILL.md']);
+  });
+
+  it('includes a swarm file edited after the seed', async () => {
+    write('skills/s/SKILL.md', 'edited');
+    expect(Object.keys(await collectFiles(dir, [manifest, join(dir, 'swarm-1.json')])).sort()).toEqual([
+      'automation:f:skills/mine/SKILL.md',
+      'automation:f:skills/s/SKILL.md',
+    ]);
+  });
+
+  it('leaves out a path two manifests list with different hashes when the file matches the second', async () => {
+    writeAt('swarm-2.json', { files: { 'skills/s/SKILL.md': sha256('other') }, parts: {} });
+    write('skills/s/SKILL.md', 'other');
+    expect(
+      Object.keys(await collectFiles(dir, [manifest, join(dir, 'swarm-1.json'), join(dir, 'swarm-2.json')])),
+    ).toEqual(['automation:f:skills/mine/SKILL.md']);
+  });
+
+  it('reads a missing manifest as empty', async () => {
+    expect(Object.keys(await collectFiles(dir, [manifest, join(dir, 'absent.json')])).sort()).toEqual([
+      'automation:f:skills/mine/SKILL.md',
+      'automation:f:skills/s/SKILL.md',
+    ]);
   });
 });
 
