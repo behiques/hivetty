@@ -1,14 +1,19 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { expect, test } from '@playwright/test';
 
 import { launchHive, mainWindow } from './fixtures/hive-app';
 import { licenceConfig, signedIn } from './fixtures/licence';
 import { openPane, settingsNav } from './fixtures/settings';
 import { startStubCloud, type StubCloud } from './fixtures/stub-cloud';
+import { createSwarmRepo, FIXTURE_SWARM, type SwarmRelease, type SwarmRepo } from './fixtures/swarm-repo';
 
 /**
- * Settings › Automation › Swarms (HIVE-442 PR 2): the pane, Browse, search and the consent dialog, against the
- * stub cloud's registry. Nothing is installed here: installing clones a Git repository, which PR 3's fixture
- * repository brings. Each row's `repoUrl` is `https://` and never fetched.
+ * Settings › Automation › Swarms (HIVE-442): the pane, Browse, search and the consent dialog, against the
+ * stub cloud's registry. The `ROWS` below are never fetched. Installing clones a Git repository: the install,
+ * update and remove case reaches a local one through `createSwarmRepo`'s Git config (PR 3).
  */
 
 const row = (over: Record<string, unknown>): Record<string, unknown> => ({
@@ -149,4 +154,79 @@ test('signed out: Browse asks to sign in', async ({}, testInfo) => {
   } finally {
     await app.close();
   }
+});
+
+/** The stub's registry row for the fixture repository at one of its releases. */
+const fixtureRow = (repo: SwarmRepo, release: SwarmRelease): Record<string, unknown> =>
+  row({
+    id: 'fixture-swarm',
+    slug: FIXTURE_SWARM.slug,
+    kind: 'native',
+    title: FIXTURE_SWARM.title,
+    description: FIXTURE_SWARM.description,
+    publisher: FIXTURE_SWARM.publisher,
+    version: release.version,
+    commit: release.commit,
+    repoUrl: repo.url,
+    folder: '',
+    agents: [FIXTURE_SWARM.agent],
+    skills: [FIXTURE_SWARM.skill],
+  });
+
+test.describe('a swarm from a fixture repository', () => {
+  let dir: string;
+  let repo: SwarmRepo;
+  test.beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'hive-swarm-repo-'));
+    repo = await createSwarmRepo(dir);
+  });
+  test.afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('installs, updates and removes', async ({}, testInfo) => {
+    stub.controls.setSwarms([fixtureRow(repo, repo.releases[0])]);
+    const { app, page } = await signedIn({ stub, testInfo, env: repo.env });
+    try {
+      await openPane(page, 'swarms');
+      await page.getByRole('button', { name: 'Browse swarms' }).first().click();
+      await page.getByRole('region', { name: 'Native' }).getByRole('button', { name: 'Install' }).click();
+      const dialog = page.getByRole('dialog', { name: `Install ${FIXTURE_SWARM.title}` });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole('button', { name: 'Install' }).click();
+      await expect(dialog).toBeHidden();
+
+      await page.getByRole('button', { name: 'Installed swarms' }).click();
+      const installed = page.getByRole('listitem').filter({ hasText: FIXTURE_SWARM.title });
+      await expect(installed.getByText('v1.0.0 · up to date')).toBeVisible({ timeout: 30_000 });
+      await expect
+        .poll(() => stub.installs.map((report) => ({ id: report.id, ...report.body })))
+        .toEqual([expect.objectContaining({ id: 'fixture-swarm', state: 'installed', version: '1.0.0' })]);
+
+      // The registry moves to v1.1.0; a check updates a native swarm with no further click.
+      stub.controls.setSwarms([fixtureRow(repo, repo.releases[1])]);
+      await page.getByRole('button', { name: 'Check for updates' }).click();
+      await expect(installed.getByText('v1.1.0 · up to date')).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(`${FIXTURE_SWARM.title} updated to v1.1.0`)).toBeVisible();
+      await expect
+        .poll(() => stub.installs.map((report) => ({ id: report.id, ...report.body })))
+        .toEqual([
+          expect.objectContaining({ state: 'installed', version: '1.0.0' }),
+          expect.objectContaining({ id: 'fixture-swarm', state: 'installed', version: '1.1.0' }),
+        ]);
+
+      await installed.getByRole('button', { name: 'Remove' }).click();
+      await page.getByRole('button', { name: 'Remove', exact: true }).last().click();
+      await expect(page.getByText('No swarms installed.')).toBeVisible({ timeout: 30_000 });
+      await expect
+        .poll(() => stub.installs.map((report) => ({ id: report.id, ...report.body })))
+        .toEqual([
+          expect.objectContaining({ version: '1.0.0' }),
+          expect.objectContaining({ version: '1.1.0' }),
+          expect.objectContaining({ id: 'fixture-swarm', state: 'removed', version: '1.1.0' }),
+        ]);
+    } finally {
+      await app.close();
+    }
+  });
 });
