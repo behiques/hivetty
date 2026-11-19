@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SwarmEntry } from '@shared/swarm-contract';
 
 import type { SwarmDeps } from '../../../core/swarms/install';
+import type { GitDeps } from '../../../core/swarms/git';
 import type { AuthedFetch, RegistryRead } from '../../../core/swarms/registry';
 
 const engine = vi.hoisted(() => ({
@@ -15,12 +16,14 @@ const engine = vi.hoisted(() => ({
 }));
 const createSwarms = vi.hoisted(() => vi.fn((_deps: unknown) => engine));
 const registry = vi.hoisted(() => ({ readRegistry: vi.fn(), cloneToken: vi.fn() }));
+const createSwarmGit = vi.hoisted(() => vi.fn((_deps: unknown) => ({ fetch: vi.fn(), newestVersion: vi.fn() })));
 
 vi.mock('../../../core/swarms/install', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../core/swarms/install')>()),
   createSwarms,
 }));
 vi.mock('../../../core/swarms/registry', () => registry);
+vi.mock('../../../core/swarms/git', () => ({ createSwarmGit }));
 vi.mock('../../../core/config/paths', () => ({ configPath: () => '/h/config.json' }));
 vi.mock('../../../core/seed', () => ({
   shippedOptions: () => ({ source: '/r', target: '/h', manifestFile: '/h/.seed.json' }),
@@ -135,6 +138,15 @@ describe('swarmCalls().remove', () => {
     expect(h.afterAgents).toHaveBeenCalledTimes(1);
   });
 
+  it('runs both hooks after a failed remove too', async () => {
+    engine.remove.mockResolvedValue({ ok: false, failure: { code: 'failed', message: 'no' } });
+
+    await swarmCalls().remove({ swarmId: 'a1' });
+
+    expect(h.afterSkills).toHaveBeenCalledTimes(1);
+    expect(h.afterAgents).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects a payload with no id', async () => {
     await expect(swarmCalls().remove({})).rejects.toThrow();
     expect(engine.remove).not.toHaveBeenCalled();
@@ -206,6 +218,17 @@ describe('the engine', () => {
     expect(later.ready).toHaveBeenCalledTimes(1);
     expect(later.authedFetch).toHaveBeenCalled();
     expect(h.ready).not.toHaveBeenCalled();
+  });
+
+  it("runs Git in the later hooks' environment, with the askpass under ~/.hivetty/swarms", async () => {
+    await swarmCalls().list();
+    const deps = createSwarmGit.mock.calls[0]?.[0] as GitDeps;
+    const later = hooks();
+    later.env.mockReturnValue({ LATER: '1' });
+    setSwarmHooks(later);
+
+    expect(deps.env()).toEqual({ LATER: '1' });
+    expect(deps.askpass).toMatch(/^\/h\/swarms\//);
   });
 });
 
