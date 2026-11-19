@@ -38,7 +38,9 @@ const appFor = (dataDir: string) => ({
  * Boot the server edition (HIVE-422). One function, no side effect at import, so the runner role (HIVE-300) can call
  * it with `listen: false` and dial out instead. Settings sync is not started.
  */
-export function bootServer(options: { dataDir: string; listen: boolean }): { quit(code?: number): Promise<never> } {
+export function bootServer(options: { dataDir: string; listen: boolean; key: Buffer }): {
+  quit(code?: number): Promise<never>;
+} {
   const { dataDir } = options;
   setServerMode(true);
 
@@ -68,6 +70,7 @@ export function bootServer(options: { dataDir: string; listen: boolean }): { qui
     release: IS_RELEASE,
     version: VERSION,
     quit: (code) => void quit(code),
+    key: options.key,
   });
   setPlatform(serverPlatform);
 
@@ -125,14 +128,21 @@ export function bootServer(options: { dataDir: string; listen: boolean }): { qui
   return { quit };
 }
 
-/** `--login` and `--logout`, through the desktop's own command. It refuses in its own words until HIVE-424. */
+/** `--login` and `--logout`, through the desktop's own command, sealed with the server's key (HIVE-424). */
 export function runServerAccount(
   invocation: Extract<Invocation, { kind: 'login' | 'logout' }>,
   dataDir: string,
+  key: Buffer,
 ): Promise<number> {
   const controller = new AbortController();
   process.once('SIGINT', () => controller.abort());
-  const { secrets } = createServerPlatform({ dataDir, release: IS_RELEASE, version: VERSION, quit: () => undefined });
+  const { secrets } = createServerPlatform({
+    dataDir,
+    release: IS_RELEASE,
+    version: VERSION,
+    quit: () => undefined,
+    key,
+  });
   return runAccountCommand(invocation, {
     app: appFor(dataDir),
     safeStorage: secrets,
