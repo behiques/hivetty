@@ -388,6 +388,9 @@ export function createSwarms(deps: SwarmDeps): Swarms {
       );
       const clashes: string[] = [];
       const claimed = new Set<string>();
+      // Files already on disk under a claimed folder: a failed first install never takes them out, even when they
+      // hold the swarm's exact bytes.
+      const theirs = new Set<string>();
       for (const folder of folders) {
         const [kind = '', name = ''] = folder.split('/');
         const noun = kind === 'agents' ? 'agent' : 'skill';
@@ -403,7 +406,10 @@ export function createSwarms(deps: SwarmDeps): Swarms {
           () => false,
         );
         // The person's own: kept, and recorded as an edited file of this swarm when the seed runs (HIVE-447).
-        if (exists) claimed.add(folder);
+        if (exists) {
+          claimed.add(folder);
+          for (const file of await walk(join(deps.hiveDir, folder))) theirs.add(`${folder}/${file}`);
+        }
       }
       if (clashes.length > 0) return await fail({ code: 'collision', message: clashes.join(' ') });
 
@@ -417,7 +423,9 @@ export function createSwarms(deps: SwarmDeps): Swarms {
 
       // 6. Seed. From here a first install that fails takes its own files back out.
       if (previous === null) {
-        const hashes = { ...leftover, ...(await hashFolders(source, folders)) };
+        const hashes = Object.fromEntries(
+          Object.entries({ ...leftover, ...(await hashFolders(source, folders)) }).filter(([rel]) => !theirs.has(rel)),
+        );
         await mkdir(paths.dir(entry.id), { recursive: true });
         await writeFile(paths.pending(entry.id), `${JSON.stringify({ files: hashes, parts: {} })}\n`);
         undo = () => deleteMatching(deps.hiveDir, hashes);

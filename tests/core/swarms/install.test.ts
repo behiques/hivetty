@@ -384,6 +384,26 @@ describe('install', () => {
       expect(existsSync(hive('agents/a1/AGENT.md'))).toBe(false);
       expect(existsSync(hive('swarms/sw1'))).toBe(false);
     });
+
+    it.each<[string, NonNullable<SwarmDeps['seed']>]>([
+      ['before the seed writes', () => Promise.reject(new Error('ENOSPC'))],
+      [
+        'after the seed wrote',
+        async (options) => {
+          await seedShipped(options);
+          throw new Error('ENOSPC');
+        },
+      ],
+    ])('keeps their file when it holds the swarm’s exact bytes and a first install fails %s', async (_when, fails) => {
+      write(hive('skills/tdd/SKILL.md'), skillText('tdd'));
+      const { entry } = released('1.0.0', { skills: ['tdd'], agents: ['a1'] });
+
+      expect(await createSwarms(makeDeps({ seed: vi.fn(fails) })).install(entry)).toMatchObject({ ok: false });
+      expect(readHive('skills/tdd/SKILL.md')).toBe(skillText('tdd'));
+      expect(existsSync(hive('agents/a1/AGENT.md'))).toBe(false);
+    });
+
+    it.todo('a claimed file that holds the swarm’s exact bytes is recorded as seeded, so remove deletes it (ruling: spec scopes claim to files that differ)');
   });
 
   describe('a built-in the swarm ships', () => {
@@ -576,9 +596,9 @@ describe('install', () => {
       const result = await createSwarms(makeDeps({ hiveDir: devHive, shippedManifest: join(devHive, '.seed.json') })).install(entry);
 
       expect(result).toMatchObject({ ok: false, failure: { code: 'failed' } });
-      expect(!result.ok && result.failure.message.startsWith("~/.hivetty-dev/swarms/installed.json can't be read")).toBe(
-        true,
-      );
+      expect(result).toMatchObject({
+        failure: { message: expect.stringMatching(/^~\/\.hivetty-dev\/swarms\/installed\.json can't be read/) as unknown },
+      });
     });
 
     it('refuses to install, and leaves the file as it was', async () => {
