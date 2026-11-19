@@ -6,6 +6,7 @@
  * arrive through `setSwarmHooks`, as settings sync's do, so this folder
  * depends on neither the licence client nor the IPC layer.
  */
+import { lstat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import {
@@ -27,7 +28,7 @@ import { shippedOptions } from '../seed';
 import { serial } from '../seed/actions';
 import type { SeedOptions } from '../seed/seed';
 
-import { rekeyAdopted, rekeyTarget } from './adopt';
+import { adoptBuiltIns, rekeyAdopted, rekeyTarget } from './adopt';
 import { createSwarmGit, type SwarmGit } from './git';
 import { createSwarms, mergeListing, type Swarms } from './install';
 import { swarmPaths } from './paths';
@@ -232,6 +233,31 @@ export function swarmSessionChanged(): void {
 /** The shipped seed options, minus the folders swarms own, and one set per installed swarm. */
 export const swarmSeedSets = (): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }> =>
   swarms().seedSets(shippedOptions());
+
+/**
+ * The boot seed, then adoption (HIVE-447). Once a home is adopted the seed from `resources/` never runs there
+ * again. This is the promise every install, removal and seed action waits for (`hooks.ready`), so adoption runs
+ * here and never in their queue: queued behind them it would wait on itself. Never rejects.
+ */
+export async function seedAndAdopt(seed: (exclude: ReadonlySet<string> | undefined) => Promise<unknown>): Promise<void> {
+  const dir = hiveDir();
+  const adopted = await lstat(swarmPaths(dir).adopted).then(
+    () => true,
+    () => false,
+  );
+  if (adopted) return;
+  // A failed read of the swarm-owned folders never stops the seed (HIVE-441).
+  const exclude = await swarmSeedSets().then(
+    (sets) => sets.shipped.exclude,
+    () => undefined,
+  );
+  try {
+    await seed(exclude);
+    await adoptBuiltIns({ hiveDir: dir, shippedManifest: shippedOptions().manifestFile });
+  } catch (cause) {
+    console.info(`[hive] the built-in agents and skills could not be adopted as the Standard swarm (${String(cause)})`);
+  }
+}
 
 /** Every swarm's seed manifest on disk, installed.json or not (HIVE-441): what settings sync reads beside the shipped one. */
 export const swarmManifestFiles = (): Promise<string[]> => swarms().manifestFiles();

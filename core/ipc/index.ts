@@ -336,6 +336,7 @@ import { createSkillsRuntime, type SkillsRuntime } from '../skills';
 import { readCliSkills } from '../skills/cli-skills';
 import { PLUGIN_DIR } from '../skills/paths';
 import {
+  seedAndAdopt,
   setSwarmHooks,
   startSwarmUpdates,
   swarmCalls,
@@ -2671,13 +2672,9 @@ export function registerIpcHandlers(
     after `refreshKnownAgents()` ran reaches the party set through the same
     `onChange` a hand-written one does.
   */
-  // HIVE-441: folders an installed swarm owns are the swarm's to write. A failed read of them never stops the seed.
-  const seeded = swarmSeedSets()
-    .then(
-      (sets) => sets.shipped.exclude,
-      () => undefined,
-    )
-    .then((exclude) => seedShippedIntoHive(undefined, exclude));
+  // HIVE-441: folders an installed swarm owns are the swarm's to write. HIVE-447: seeded from `resources/` until this
+  // home is adopted as the Standard swarm, then never again.
+  const seeded = seedAndAdopt((exclude) => seedShippedIntoHive(undefined, exclude));
 
   /*
     HIVE-372. The opt-in `codex plugin add hive@hivetty`. Codex runs in the env its sessions get (the top-level
