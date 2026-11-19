@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetAgents } from '@/lib/agents';
 import { resetShippedState } from '@/lib/shipped';
+import { resetSwarmsState } from '@/lib/swarms';
 
 import { AgentsStage } from '@features/agents/components/agents-stage';
 import { useEditorStore } from '@stores/editor-store';
@@ -19,7 +20,9 @@ beforeEach(() => {
   useEditorStore.getState().reset();
   resetAgents();
   resetShippedState();
+  resetSwarmsState();
   vi.stubGlobal('hive', {
+    swarms: { list: vi.fn(async () => ({ source: 'cloud', items: [] })), onChanged: vi.fn(() => () => {}) },
     agents: {
       list: vi.fn(async () => ({ agents: [], agentsRoot: '/root/agents' })),
       read: vi.fn(async () => null),
@@ -87,13 +90,24 @@ describe('AgentsStage', () => {
 });
 
 describe('AgentsStage with no agent (HIVE-211)', () => {
-  it('says what an agent is, and New agent opens a blank definition', async () => {
+  it('says agents come in swarms, offers Install Standard and Browse, and New agent opens a blank definition (HIVE-447)', async () => {
     render(<AgentsStage />);
 
     expect(screen.getByRole('heading', { name: 'No agents yet' })).toBeInTheDocument();
     expect(document.querySelector('[data-glyph="comb"]')).not.toBeNull();
-    expect(screen.getByText(/An agent is a headless Claude that HiveTTY wakes on the ledger or a schedule\./)).toBeInTheDocument();
+    expect(
+      screen.getByText('Agents come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/An agent is a headless Claude/)).toBeNull();
     expect(screen.queryByText('Pick an agent')).toBeNull();
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Install Standard',
+      'Browse swarms',
+      'New agent',
+    ]);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Browse swarms' }));
+    expect(useUiStore.getState().swarmsBrowseRequest).toBe(true);
 
     await userEvent.click(screen.getByRole('button', { name: 'New agent' }));
     expect(useUiStore.getState().agentPage).toEqual({ name: null, view: 'definition' });
