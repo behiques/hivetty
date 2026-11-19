@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { SegmentedControl } from '@components/ui/segmented-control';
 import { SelectField, type SelectFieldOption } from '@components/ui/select-field';
 import { TextField } from '@components/ui/text-field';
+import { MissingSwarm } from '@features/shared/components/missing-swarm';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useAgents } from '@hooks/use-agents';
 import { useCliSkills, useSkills } from '@hooks/use-skills';
@@ -56,12 +57,20 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
   const cliOf = (skill: string) => cliSkills.filter((entry) => entry.names.includes(skill)).map((entry) => entry.cli);
 
   const [mode, setMode] = useState<Mode>(workflow?.kind ?? 'none');
-  const savedSkill = workflow?.kind === 'skill' ? workflow.skill : FIRST_SKILL;
+  const savedSkill = workflow?.kind === 'skill' ? workflow.skill : null;
   // By namespace, not by the list: the skills snapshot may not have arrived on the first render.
-  const [skillChoice, setSkillChoice] = useState(
-    savedSkill.startsWith('hive:') || cliOf(savedSkill).length > 0 ? savedSkill : TYPED,
+  const [pickedSkill, setSkillChoice] = useState<string | null>(
+    savedSkill === null ? null : savedSkill.startsWith('hive:') || cliOf(savedSkill).length > 0 ? savedSkill : TYPED,
   );
-  const [typed, setTyped] = useState(skillChoice === TYPED ? savedSkill : '');
+  /*
+    HIVE-447: with nothing saved, `hive:work-on` when it is installed, else the first installed `hive:` skill, else
+    the typed field, empty, so a skill that is not installed is never saved as a default. Before the snapshot
+    arrives nothing counts as missing, and `hive:work-on` is offered as it always was.
+  */
+  const workOnOffered = skills === null || skillNames.includes(FIRST_SKILL);
+  const defaultSkill = workOnOffered ? FIRST_SKILL : (skillNames[0] ?? TYPED);
+  const skillChoice = pickedSkill ?? defaultSkill;
+  const [typed, setTyped] = useState(pickedSkill === TYPED ? (savedSkill ?? '') : '');
   // The CLI list arrives after the first render (reading it spawns CLIs): when
   // it does, a typed skill one of them lists moves into the select. Only on
   // the list's arrival, so typing a listed name never yanks the field away, and
@@ -89,7 +98,14 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
   };
 
   const current = build({});
-  const problem = typeof current === 'string' ? current : null;
+  // An empty typed field is a skill not yet named, not a mistake to flag (HIVE-447: where no skill is installed).
+  const unnamed = mode === 'skill' && skillChoice === TYPED && typed.trim() === '';
+  const problem = typeof current === 'string' && !unnamed ? current : null;
+  const missingSkill =
+    mode === 'skill' && skills !== null && skillChoice.startsWith('hive:') && !skillNames.includes(skillChoice)
+      ? skillChoice.slice('hive:'.length)
+      : null;
+  const missingAgent = mode === 'agent' && agents !== null && agent !== '' && !agentNames.includes(agent) ? agent : null;
 
   const save = (next: Parameters<typeof build>[0]) => {
     const built = build(next);
@@ -105,7 +121,14 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
   const listedByCli = skillChoice !== TYPED && cliOf(skillChoice).length > 0;
   const skillOptions: SelectFieldOption[] = [
     // A saved hive skill stays listed even when its folder has gone, so the select never shows a value it lacks.
-    ...[...new Set([FIRST_SKILL, ...skillNames, ...(skillChoice.startsWith('hive:') ? [skillChoice] : [])])].map((name) => ({
+    // `hive:work-on` leads only when it is installed or saved (HIVE-447).
+    ...[
+      ...new Set([
+        ...(workOnOffered || skillChoice === FIRST_SKILL ? [FIRST_SKILL] : []),
+        ...skillNames,
+        ...(skillChoice.startsWith('hive:') ? [skillChoice] : []),
+      ]),
+    ].map((name) => ({
       value: name,
       label: name,
       group: HIVE_GROUP,
@@ -128,6 +151,8 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
           wrap
           onChange={(next) => {
             setMode(next);
+            // The default is fixed when the mode is chosen, so a snapshot that lands later does not move it.
+            if (next === 'skill' && pickedSkill === null) setSkillChoice(defaultSkill);
             save({ mode: next });
           }}
         />
@@ -155,6 +180,8 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
           </div>
         ) : null}
 
+        {missingSkill === null ? null : <MissingSwarm kind="skill" name={missingSkill} />}
+
         {mode === 'skill' && only.length > 0 ? (
           <p className="rounded-md border border-amber px-2.5 py-1.5 text-ui-sm text-amber-text">
             {`A ${onlyNames} skill: it runs only in ${onlyNames} sessions. A session on another CLI started from a ticket will not find it.`}
@@ -166,12 +193,17 @@ export function TicketWorkflowGroup({ workflow }: { workflow: TicketWorkflow | n
             <SelectField
               label="Agent"
               value={agent}
-              options={agentNames.map((name) => ({ value: name, label: name }))}
+              // A saved agent stays listed when it is not installed, so the select never shows a value it lacks.
+              options={[...new Set([...agentNames, ...(agent === '' ? [] : [agent])])].map((name) => ({
+                value: name,
+                label: name,
+              }))}
               onChange={(next) => {
                 setAgent(next);
                 save({ agent: next });
               }}
             />
+            {missingAgent === null ? null : <MissingSwarm kind="agent" name={missingAgent} />}
             <SegmentedControl
               label="How the agent gets the ticket"
               options={VIAS}
