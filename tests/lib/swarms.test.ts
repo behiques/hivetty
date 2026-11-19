@@ -5,11 +5,13 @@ import {
   dismissSwarmFailure,
   installSwarm,
   loadSwarms,
+  onSwarmInstallRequested,
   removeSwarm,
   resetSwarmsState,
   setSwarmAutoUpdate,
   subscribeSwarms,
   swarmsSnapshot,
+  takeSwarmInstallRequest,
 } from '@/lib/swarms';
 
 import type { SwarmListing, SwarmsChanged } from '@shared/swarm-contract';
@@ -295,5 +297,35 @@ describe('setSwarmAutoUpdate and checkSwarms', () => {
     await checkSwarms();
 
     expect(swarmsSnapshot().listing).toBe(NOT_INSTALLED);
+  });
+});
+
+describe('the install link wrappers (HIVE-442)', () => {
+  it('takeSwarmInstallRequest answers what the bridge holds', async () => {
+    const takeInstallRequest = vi.fn(() => Promise.resolve('a1'));
+    setBridge({ takeInstallRequest });
+
+    await expect(takeSwarmInstallRequest()).resolves.toBe('a1');
+    expect(takeInstallRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('onSwarmInstallRequested subscribes through the bridge and hands back its disposer', () => {
+    const dispose = vi.fn();
+    const onInstallRequested = vi.fn(() => dispose);
+    setBridge({ onInstallRequested });
+    const callback = vi.fn();
+
+    const unsubscribe = onSwarmInstallRequested(callback);
+
+    expect(onInstallRequested).toHaveBeenCalledWith(callback);
+    unsubscribe();
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers null and a no-op with no bridge', async () => {
+    setBridge(undefined);
+
+    await expect(takeSwarmInstallRequest()).resolves.toBeNull();
+    expect(() => onSwarmInstallRequested(vi.fn())()).not.toThrow();
   });
 });

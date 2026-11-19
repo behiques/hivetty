@@ -39,6 +39,7 @@ vi.mock('../../../core/seed', () => ({
 vi.mock('../../../core/platform', () => ({ platform: () => ({ lifecycle: { version: '1.0.0' } }) }));
 
 const {
+  requestSwarmInstall,
   resetSwarms,
   setSwarmHooks,
   startSwarmUpdates,
@@ -48,6 +49,7 @@ const {
   swarmSeedSetFor,
   swarmSeedSets,
   swarmSessionChanged,
+  takeSwarmInstallRequest,
 } = await import('../../../core/swarms');
 
 const entry = (id: string, patch: Partial<SwarmEntry> = {}): SwarmEntry => ({
@@ -86,6 +88,7 @@ const hooks = () => ({
   runsLive: vi.fn(() => false),
   changed: vi.fn(),
   notify: vi.fn(),
+  installRequested: vi.fn(),
 });
 
 let h: ReturnType<typeof hooks>;
@@ -572,5 +575,42 @@ describe('resetSwarms (HIVE-442)', () => {
     swarmSessionChanged();
     await vi.advanceTimersByTimeAsync(0);
     expect(registry.readRegistry).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the install link request (HIVE-442)', () => {
+  it('holds the id, tells the renderer once, and answers it once', () => {
+    requestSwarmInstall('a1');
+    expect(h.installRequested).toHaveBeenCalledTimes(1);
+    expect(takeSwarmInstallRequest()).toBe('a1');
+    expect(takeSwarmInstallRequest()).toBeNull();
+  });
+
+  it('keeps only the latest of two requests', () => {
+    requestSwarmInstall('a1');
+    requestSwarmInstall('b2');
+    expect(h.installRequested).toHaveBeenCalledTimes(2);
+    expect(takeSwarmInstallRequest()).toBe('b2');
+    expect(takeSwarmInstallRequest()).toBeNull();
+  });
+
+  it('ignores an id that is not a swarm id', () => {
+    requestSwarmInstall('../x');
+    expect(h.installRequested).not.toHaveBeenCalled();
+    expect(takeSwarmInstallRequest()).toBeNull();
+  });
+
+  it('keeps a request made before the hooks are set', () => {
+    resetSwarms();
+    requestSwarmInstall('a1');
+    setSwarmHooks(h);
+    expect(h.installRequested).not.toHaveBeenCalled();
+    expect(takeSwarmInstallRequest()).toBe('a1');
+  });
+
+  it('forgets the request on reset', () => {
+    requestSwarmInstall('a1');
+    resetSwarms();
+    expect(takeSwarmInstallRequest()).toBeNull();
   });
 });

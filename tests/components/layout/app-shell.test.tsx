@@ -9,6 +9,8 @@ import { useUiStore } from '@stores/ui-store';
 import { resetProjectConfig } from '@lib/project-config';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
 
+const installLink = vi.hoisted(() => ({ useSwarmInstallLink: vi.fn() }));
+vi.mock('@hooks/use-swarm-install-link', () => installLink);
 vi.mock('@xterm/xterm');
 vi.mock('@xterm/addon-fit');
 
@@ -62,6 +64,11 @@ describe('AppShell', () => {
     expect(row).toHaveClass('min-h-0', 'flex-1');
     // An explicit floor, not `auto`: content cannot widen the stage, and the rails yield to it (HIVE-223).
     expect(screen.getByRole('main').style.minWidth).toBe(`${String(STAGE_MIN)}px`);
+  });
+
+  it('takes an install link once, at the shell (HIVE-442)', () => {
+    renderShell();
+    expect(installLink.useSwarmInstallLink).toHaveBeenCalled();
   });
 
   it('mounts the session panel for a session on stage (HIVE-201)', () => {

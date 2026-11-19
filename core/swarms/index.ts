@@ -17,6 +17,7 @@ import {
   type SwarmListing,
   type SwarmRemoveResult,
   type SwarmsChanged,
+  isSwarmId,
 } from '@shared/swarm-contract';
 
 import { configPath } from '../config/paths';
@@ -46,6 +47,8 @@ export interface SwarmHooks {
   changed: (event: SwarmsChanged) => void;
   /** HIVE-442: an update was applied with nobody asking. */
   notify: (updated: { swarmId: string; title: string; version: string }) => void;
+  /** HIVE-442: an install link arrived; tell the renderer to take it. */
+  installRequested: () => void;
 }
 
 const NO_HOOKS: SwarmHooks = {
@@ -57,6 +60,7 @@ const NO_HOOKS: SwarmHooks = {
   runsLive: () => false,
   changed: () => undefined,
   notify: () => undefined,
+  installRequested: () => undefined,
 };
 
 let hooks: SwarmHooks = NO_HOOKS;
@@ -64,6 +68,7 @@ let engine: Swarms | null = null;
 let updates: SwarmUpdater | null = null;
 let gitClient: SwarmGit | null = null;
 let hadSession = false;
+let installRequest: string | null = null;
 
 export function setSwarmHooks(next: SwarmHooks): void {
   hooks = next;
@@ -220,8 +225,23 @@ export const swarmManifestFiles = (): Promise<string[]> => swarms().manifestFile
 export const swarmSeedSetFor = (kind: 'skills' | 'agents', name: string): Promise<SeedOptions> =>
   swarms().seedSetFor(shippedOptions(), `${kind}/${name}`);
 
+/** An install link named this swarm (HIVE-442). Held until the renderer takes it: the window may not have loaded. */
+export function requestSwarmInstall(swarmId: string): void {
+  if (!isSwarmId(swarmId)) return;
+  installRequest = swarmId;
+  hooks.installRequested();
+}
+
+/** The swarm an install link named, once. It opens the consent screen and installs nothing. */
+export function takeSwarmInstallRequest(): string | null {
+  const taken = installRequest;
+  installRequest = null;
+  return taken;
+}
+
 /** For tests. */
 export function resetSwarms(): void {
+  installRequest = null;
   updates?.stop();
   updates = null;
   gitClient = null;

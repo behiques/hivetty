@@ -81,11 +81,13 @@ export function launchLicensed(input: {
   userDataDir: string;
   configPath: string;
   args?: string[];
+  /** Extra environment for the app, merged last (HIVE-442: the fixture swarm repository's Git config). */
+  env?: Record<string, string>;
 }): Promise<ElectronApplication> {
   return launchHive({
     userDataDir: input.userDataDir,
     configPath: input.configPath,
-    env: { ...input.stub.env, HIVE_E2E_GATE: '1' },
+    env: { ...input.stub.env, HIVE_E2E_GATE: '1', ...input.env },
     args: ['--use-mock-keychain', ...(input.args ?? [])],
   });
 }
@@ -144,6 +146,7 @@ export async function signedIn(input: {
   testInfo: TestInfo;
   trial?: boolean;
   claudeCommand?: string;
+  env?: Record<string, string>;
 }): Promise<{
   app: ElectronApplication;
   page: Page;
@@ -154,7 +157,12 @@ export async function signedIn(input: {
   const { configPath, userDataDir } = licenceConfig(input.testInfo, {
     ...(input.claudeCommand === undefined ? {} : { claudeCommand: input.claudeCommand }),
   });
-  const app = await launchLicensed({ stub: input.stub, configPath, userDataDir });
+  const app = await launchLicensed({
+    stub: input.stub,
+    configPath,
+    userDataDir,
+    ...(input.env === undefined ? {} : { env: input.env }),
+  });
   // The caller's try/finally opens only after this returns, so a failed step closes the app here.
   try {
     const page = await mainWindow(app);

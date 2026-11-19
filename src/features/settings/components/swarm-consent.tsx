@@ -70,13 +70,13 @@ function WhatChanges({ installed, entry }: { installed: InstalledSwarm; entry: S
         <ul className="flex flex-col gap-1.5">
           {diff.agentsAdded.map((name) => (
             <ChangeLine key={`agent+${name}`} label="New agent">
-              <span className="font-mono text-ink">{name}</span>
+              <span className="font-medium text-ink">{name}</span>
               <Tools tools={toolsOf(name)} />
             </ChangeLine>
           ))}
           {diff.toolsChanged.map((change) => (
             <ChangeLine key={`tools ${change.name}`} label="Tools changed">
-              <span className="font-mono text-ink">{change.name}</span>
+              <span className="font-medium text-ink">{change.name}</span>
               {change.added.map((tool) => (
                 <span key={`+${tool}`} className="text-green">{`+${tool}`}</span>
               ))}
@@ -89,17 +89,17 @@ function WhatChanges({ installed, entry }: { installed: InstalledSwarm; entry: S
           ))}
           {diff.agentsRemoved.map((name) => (
             <ChangeLine key={`agent-${name}`} label="Removed agent">
-              <span className="font-mono text-ink">{name}</span>
+              <span className="font-medium text-ink">{name}</span>
             </ChangeLine>
           ))}
           {diff.skillsAdded.map((name) => (
             <ChangeLine key={`skill+${name}`} label="New skill">
-              <span className="font-mono text-ink">{`/${name}`}</span>
+              <span className="font-medium text-ink">{`/${name}`}</span>
             </ChangeLine>
           ))}
           {diff.skillsRemoved.map((name) => (
             <ChangeLine key={`skill-${name}`} label="Removed skill">
-              <span className="font-mono text-ink">{`/${name}`}</span>
+              <span className="font-medium text-ink">{`/${name}`}</span>
             </ChangeLine>
           ))}
         </ul>
@@ -159,7 +159,7 @@ export function SwarmConsent({ entry, installed, target, onConfirm, onCancel }: 
             <ul className="flex flex-col gap-2.5">
               {entry.agents.map((agent) => (
                 <li key={agent.name} className="flex flex-col gap-1">
-                  <span className="font-mono text-ui text-ink">{agent.name}</span>
+                  <span className="text-ui font-medium text-ink">{agent.name}</span>
                   {agent.description === '' ? null : <span className="text-ui-sm text-muted">{agent.description}</span>}
                   <Tools tools={agent.tools} />
                 </li>
@@ -172,7 +172,7 @@ export function SwarmConsent({ entry, installed, target, onConfirm, onCancel }: 
             <ul className="flex flex-col gap-2">
               {entry.skills.map((skill) => (
                 <li key={skill.name} className="flex flex-col gap-0.5">
-                  <span className="font-mono text-ui text-ink">{`/${skill.name}`}</span>
+                  <span className="text-ui font-medium text-ink">{`/${skill.name}`}</span>
                   {skill.description === '' ? null : <span className="text-ui-sm text-muted">{skill.description}</span>}
                 </li>
               ))}

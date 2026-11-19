@@ -181,27 +181,37 @@ export function installVersionOf(entry: SwarmEntry): string | null {
 }
 
 /**
- * What the consent dialog showed for a first install, as one comparable string: everything that decides what
- * lands on disk (version, commit, pin, every agent with its tools, every skill), and nothing cosmetic.
+ * Whether the consent dialog comes before `swarms:install` (HIVE-442): before every install of a swarm that is
+ * not installed, a retry included (the registry row may have moved since the failure), and before every
+ * community update.
  */
-export function consentFingerprint(entry: SwarmEntry): string {
-  return JSON.stringify([
-    entry.version,
-    entry.commit,
-    entry.policy,
-    entry.pinnedVersion,
-    entry.agents.map((agent) => [agent.name, [...agent.tools].sort()]),
-    entry.skills.map((skill) => skill.name),
-  ]);
-}
-
-/**
- * Whether the consent dialog comes before `swarms:install` (HIVE-442): before every first install, and before
- * every community update. `consented` is the {@link consentFingerprint} the person already said yes to for this
- * swarm in this run (Try again on a failed install); it skips the dialog only while the row still matches it.
- */
-export function needsConsent(item: SwarmListItem, consented: string | null = null): boolean {
-  if (item.installed === null) return item.entry === null || consented !== consentFingerprint(item.entry);
+export function needsConsent(item: SwarmListItem): boolean {
+  if (item.installed === null) return true;
   // Either kind: a registry that relabels a community swarm must not let its next update through unseen.
   return item.entry?.kind === 'community' || item.installed.kind === 'community';
+}
+
+export type InstallLinkResolution =
+  | { kind: 'sign-in' }
+  | { kind: 'wait' }
+  | { kind: 'consent'; item: SwarmListItem }
+  | { kind: 'installed' }
+  | { kind: 'unavailable' };
+
+/**
+ * What an install link's swarm id leads to (HIVE-442). Never an install: the furthest it goes is the consent
+ * dialog, whose Install button is the person's.
+ */
+export function resolveInstallLink(
+  swarmId: string,
+  signedIn: boolean,
+  listing: SwarmListing | null,
+): InstallLinkResolution {
+  if (!signedIn) return { kind: 'sign-in' };
+  if (listing === null) return { kind: 'wait' };
+  const item = listing.items.find((row) => (row.entry?.id ?? row.installed?.swarmId) === swarmId);
+  if (item?.installed != null) return { kind: 'installed' };
+  if (item !== undefined) return { kind: 'consent', item };
+  // Only a fresh list can say the account has no such swarm.
+  return listing.source === 'cloud' ? { kind: 'unavailable' } : { kind: 'wait' };
 }

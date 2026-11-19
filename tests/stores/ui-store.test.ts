@@ -317,6 +317,30 @@ describe('the explorer tree', () => {
   });
 });
 
+describe('the swarm install link request (HIVE-442)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+  });
+
+  it('starts with no request', () => {
+    expect(useUiStore.getState().swarmInstallRequest).toBeNull();
+  });
+
+  it('sets and clears the request', () => {
+    useUiStore.getState().setSwarmInstallRequest('a1');
+    expect(useUiStore.getState().swarmInstallRequest).toBe('a1');
+
+    useUiStore.getState().setSwarmInstallRequest(null);
+    expect(useUiStore.getState().swarmInstallRequest).toBeNull();
+  });
+
+  it('forgets the request on reset', () => {
+    useUiStore.getState().setSwarmInstallRequest('a1');
+    useUiStore.getState().reset();
+    expect(useUiStore.getState().swarmInstallRequest).toBeNull();
+  });
+});
+
 /**
  * Which pane settings opens on (HIVE-116).
  *

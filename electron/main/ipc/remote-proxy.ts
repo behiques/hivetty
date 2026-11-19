@@ -20,7 +20,7 @@ import { assertSender } from '../../../core/ipc/sender';
 import { ACCOUNT_CALLS, cloudSession, LICENCE_CALLS } from '../../../core/licence';
 import { relayStatus } from '../../../core/relay';
 import { relayHostsFor } from '../../../core/relay/hosts';
-import { swarmCalls } from '../../../core/swarms';
+import { swarmCalls, takeSwarmInstallRequest } from '../../../core/swarms';
 import { syncCalls } from '../../../core/sync';
 import { RemoteCallError, type RemoteClient } from '../../remote-client/socket';
 import { activateOnThisMachine } from '../notifications/activate-here';
@@ -211,6 +211,9 @@ function localAnswerFor(
       return (request: unknown) => swarmCalls().setAutoUpdate(request);
     case CH.swarmsCheck:
       return () => swarmCalls().check();
+    /* HIVE-442. An install link is opened on this machine, and only this machine takes it. */
+    case CH.swarmsTakeInstallRequest:
+      return () => takeSwarmInstallRequest();
     default:
       return null;
   }

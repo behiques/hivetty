@@ -194,6 +194,24 @@ export function dismissSwarmFailure(swarmId: string): void {
   setFailure(swarmId, null);
 }
 
+/** HIVE-442: the swarm an install link named, once; null when there is none or no bridge. */
+export async function takeSwarmInstallRequest(): Promise<string | null> {
+  const bridge = window.hive;
+
+  if (!bridge) return null;
+
+  return bridge.swarms.takeInstallRequest();
+}
+
+/** HIVE-442: an install link arrived; take it with {@link takeSwarmInstallRequest}. */
+export function onSwarmInstallRequested(callback: () => void): () => void {
+  const bridge = window.hive;
+
+  if (!bridge) return () => undefined;
+
+  return bridge.swarms.onInstallRequested(callback);
+}
+
 /** Test-only: drop the snapshot, the change subscription and every subscriber. */
 export function resetSwarmsState(): void {
   unsubscribeChanged?.();

@@ -40,7 +40,7 @@ vi.mock('electron', () => ({
   Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn((t) => t) },
 }));
 
-const { registerLifecycle, resetQuitting } = await import(
+const { focusPrimaryWindow, registerLifecycle, resetQuitting } = await import(
   '../../../electron/main/lifecycle'
 );
 const { onShutdown, resetShutdownHooks } = await import(
@@ -416,5 +416,38 @@ describe('menu installation', () => {
     await vi.waitFor(() => expect(Menu.setApplicationMenu).toHaveBeenCalled());
     const [template] = vi.mocked(Menu.setApplicationMenu).mock.lastCall! as unknown as [{ label?: string }[]];
     expect(template[0]?.label).toBe('HiveTTY Pro');
+  });
+});
+
+describe('focusPrimaryWindow (HIVE-442)', () => {
+  it('creates a window when none is open', () => {
+    const createWindow = vi.fn();
+    focusPrimaryWindow(createWindow);
+    expect(createWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores a minimised window, then brings it forward', () => {
+    const createWindow = vi.fn();
+    const calls: string[] = [];
+    windows.push({
+      isMinimized: () => true,
+      restore: vi.fn(() => calls.push('restore')),
+      focus: vi.fn(() => calls.push('focus')),
+      isDestroyed: () => false,
+    });
+    focusPrimaryWindow(createWindow);
+    expect(calls).toEqual(['restore', 'focus']);
+    expect(createWindow).not.toHaveBeenCalled();
+  });
+
+  it('only brings an open window forward', () => {
+    const createWindow = vi.fn();
+    const restore = vi.fn();
+    const focus = vi.fn();
+    windows.push({ isMinimized: () => false, restore, focus, isDestroyed: () => false });
+    focusPrimaryWindow(createWindow);
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(restore).not.toHaveBeenCalled();
+    expect(createWindow).not.toHaveBeenCalled();
   });
 });

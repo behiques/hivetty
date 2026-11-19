@@ -47,6 +47,15 @@ describe('SwarmConsent, install mode', () => {
     expect(within(dialog).queryByText('What changes')).toBeNull();
   });
 
+  it('sets agent and skill names in sans, not mono (DESIGN-SYSTEM: mono is for code)', () => {
+    const { dialog } = renderConsent(ENTRY);
+
+    expect(within(dialog).getByText('builder')).not.toHaveClass('font-mono');
+    expect(within(dialog).getByText('builder')).toHaveClass('font-medium');
+    expect(within(dialog).getByText('/tdd')).not.toHaveClass('font-mono');
+    expect(within(dialog).getByText('/tdd')).toHaveClass('font-medium');
+  });
+
   it('singular headings for one agent and one skill', () => {
     const { dialog } = renderConsent(swarmEntry());
 
@@ -147,6 +156,10 @@ describe('SwarmConsent, update mode', () => {
 
     const whole = dialog.textContent ?? '';
     expect(whole.indexOf('What changes')).toBeLessThan(whole.indexOf('2 agents'));
+
+    for (const name of ['fresh', 'old', '/added', '/gone']) {
+      expect(within(changes).getByText(name)).not.toHaveClass('font-mono');
+    }
   });
 
   it('says nothing changes for identical contents', () => {

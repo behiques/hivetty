@@ -110,8 +110,10 @@ import { isThisMachineAction } from './notification-contract';
  *   carried on the socket.
  * 49 → 50 (HIVE-442): `swarms:set-auto-update` and `swarms:check` (call, process-local) and `swarms:changed`
  *   (event, local only).
+ * 50 → 51 (HIVE-442): `swarms:take-install-request` (call, process-local) and `swarms:install-requested`
+ *   (event, local only).
  */
-export const REMOTE_PROTOCOL_VERSION = 50;
+export const REMOTE_PROTOCOL_VERSION = 51;
 
 /**
  * What a frame is for.
@@ -330,6 +332,8 @@ export const FRAME_KIND = {
   [CH.swarmsSetAutoUpdate]: 'call',
   [CH.swarmsCheck]: 'call',
   [CH.swarmsChanged]: 'event',
+  [CH.swarmsTakeInstallRequest]: 'call',
+  [CH.swarmsInstallRequested]: 'event',
   [CH.accountOrgs]: 'call',
   [CH.accountSwitchOrg]: 'call',
   [CH.accountBilling]: 'call',
@@ -699,6 +703,9 @@ export const CHANNEL_AUTHORIZATION = {
   // A check may install a newer version.
   [CH.swarmsCheck]: 'execute',
   [CH.swarmsChanged]: 'read',
+  // Taking the request consumes it.
+  [CH.swarmsTakeInstallRequest]: 'execute',
+  [CH.swarmsInstallRequested]: 'read',
   [CH.accountOrgs]: 'read',
   [CH.accountSwitchOrg]: 'execute',
   [CH.accountBilling]: 'read',
@@ -1121,6 +1128,8 @@ const PROCESS_LOCAL_REFUSALS = {
     'swarms:set-auto-update changes how a swarm updates on the machine you are sitting at, so it is answered there and never by a server.',
   [CH.swarmsCheck]:
     'swarms:check looks for swarm updates for the machine you are sitting at, so it is answered there and never by a server.',
+  [CH.swarmsTakeInstallRequest]:
+    'swarms:take-install-request answers the install link opened on the machine you are sitting at, so it is answered there and never by a server.',
 } as const satisfies Partial<Record<Channel, string>>;
 
 /**
@@ -1167,6 +1176,8 @@ export const LOCAL_ONLY_EVENTS: readonly Channel[] = [
   CH.syncApplyAppearance,
   // HIVE-442: a server's installed swarms are never this machine's.
   CH.swarmsChanged,
+  // HIVE-442: nor is an install link opened on it.
+  CH.swarmsInstallRequested,
 ];
 
 /** Whether `channel` is a push this process raises about itself. */

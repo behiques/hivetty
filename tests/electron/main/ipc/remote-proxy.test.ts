@@ -51,7 +51,11 @@ const swarmSpies = {
   setAutoUpdate: vi.fn((_request: unknown) => Promise.resolve('FAKE_SWARM_SET_AUTO_UPDATE')),
   check: vi.fn(() => Promise.resolve('FAKE_SWARM_CHECK')),
 };
-vi.mock('../../../../core/swarms', () => ({ swarmCalls: () => swarmSpies }));
+const takeSwarmInstallRequest = vi.fn(() => 'a1');
+vi.mock('../../../../core/swarms', () => ({
+  swarmCalls: () => swarmSpies,
+  takeSwarmInstallRequest: () => takeSwarmInstallRequest(),
+}));
 
 /**
  * `../notifications/activate-here` is mocked for `../updates`' reason exactly
@@ -239,7 +243,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(175);
+    expect(callChannels.length).toBe(176);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -256,7 +260,7 @@ describe('registerRemoteProxy', () => {
   });
 
   it('binds no handler for an event channel', () => {
-    expect(eventChannels.length).toBe(38);
+    expect(eventChannels.length).toBe(39);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -371,7 +375,7 @@ describe('registerRemoteProxy', () => {
    * the very first one that isn't `pty:data`.
    */
   it('pumps a client event into the broadcaster on the same channel', () => {
-    expect(eventChannels.length).toBe(38);
+    expect(eventChannels.length).toBe(39);
 
     const client = fakeClient();
     const broadcaster = fakeBroadcaster();
@@ -558,7 +562,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(181);
+    expect(remoteProxyBindingsSize()).toBe(182);
   });
 
   /**
@@ -572,8 +576,8 @@ describe('registerRemoteProxy', () => {
    * `remote:forget` (HIVE-153).
    */
   describe('PROCESS_LOCAL channels (HIVE-144 Rulings 24 and 28, HIVE-153, HIVE-149, HIVE-151)', () => {
-    it('names exactly forty-four channels', () => {
-      expect(PROCESS_LOCAL.length).toBe(44);
+    it('names exactly forty-five channels', () => {
+      expect(PROCESS_LOCAL.length).toBe(45);
       expect([...PROCESS_LOCAL].sort()).toEqual(
         [
           'account:billing',
@@ -611,6 +615,7 @@ describe('registerRemoteProxy', () => {
           'swarms:list',
           'swarms:remove',
           'swarms:set-auto-update',
+          'swarms:take-install-request',
           'sync:now',
           'sync:open-conflicts',
           'sync:report-appearance',
@@ -692,6 +697,15 @@ describe('registerRemoteProxy', () => {
       await expect(invoke('swarms:check', trustedEvent, undefined)).resolves.toBe('FAKE_SWARM_CHECK');
       expect(swarmSpies.setAutoUpdate).toHaveBeenCalledWith({ swarmId: 'a1', autoUpdate: false });
       expect(swarmSpies.check).toHaveBeenCalledTimes(1);
+      expect(client.call).not.toHaveBeenCalled();
+    });
+
+    it('answers swarms:take-install-request on this machine, never client.call (HIVE-442)', async () => {
+      const client = fakeClient();
+      registerRemoteProxy({ client, broadcaster: fakeBroadcaster() });
+
+      await expect(invoke('swarms:take-install-request', trustedEvent, undefined)).resolves.toBe('a1');
+      expect(takeSwarmInstallRequest).toHaveBeenCalledTimes(1);
       expect(client.call).not.toHaveBeenCalled();
     });
 
@@ -1323,8 +1337,8 @@ describe('registerRemoteProxy', () => {
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(181);
-    expect(removeAllListeners).toHaveBeenCalledTimes(181);
+    expect(removeHandler).toHaveBeenCalledTimes(182);
+    expect(removeAllListeners).toHaveBeenCalledTimes(182);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });

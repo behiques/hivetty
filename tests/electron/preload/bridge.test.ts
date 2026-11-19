@@ -1137,6 +1137,21 @@ describe('the swarm verbs (HIVE-441)', () => {
     dispose();
     expect(listeners.get(CH.swarmsChanged) ?? []).toHaveLength(0);
   });
+
+  it('swarms.takeInstallRequest invokes swarms:take-install-request with no argument (HIVE-442)', async () => {
+    await (swarms().takeInstallRequest as () => Promise<unknown>)();
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.swarmsTakeInstallRequest);
+  });
+
+  it('swarms.onInstallRequested calls back on the push, and its disposer unsubscribes (HIVE-442)', () => {
+    const callback = vi.fn();
+    const dispose = (swarms().onInstallRequested as (cb: unknown) => () => void)(callback);
+    listeners.get(CH.swarmsInstallRequested)?.[0]?.({}, undefined);
+    expect(callback).toHaveBeenCalledTimes(1);
+
+    dispose();
+    expect(listeners.get(CH.swarmsInstallRequested) ?? []).toHaveLength(0);
+  });
 });
 
 describe('the relay status verbs (HIVE-429)', () => {

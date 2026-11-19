@@ -42,6 +42,12 @@ the picker from re-rendering thirteen live terminals.
   The licence gate adds (HIVE-265), neither persisted: `gated` (a gate is up over the
   shell, so window keydown listeners stand down) and `dismissedTrialThreshold` (`3`, `1` or
   `null`, the trial banner's threshold last dismissed; a relaunch shows the banner again).
+  The swarm install link adds (HIVE-442), not persisted: `swarmInstallRequest`, the swarm id a
+  `hivetty://swarms/install?id=…` link named, set by `setSwarmInstallRequest(id)` from
+  `useSwarmInstallLink` (mounted once in the shell, which also opens Settings › Swarms) and read with
+  `useSwarmInstallRequest()`; components set it with `useSetSwarmInstallRequest()`. Settings › Swarms
+  clears it once `resolveInstallLink` answers consent, installed or unavailable; sign-in and wait keep it.
+  It never installs: the furthest a link goes is the consent dialog.
   The Sessions place adds (HIVE-197), none persisted: `sessionsProject`
   (the overmind's project filter, `null` for all), `sessionsFilter`
   (`'all' | 'live' | 'ended'`), `endedExpanded` ("N more ›" pressed) and
@@ -483,6 +489,8 @@ Components never read a store object directly and never call `getState()`.
 | `useTicketCriteria(key)` | the acceptance-criteria list under its heading, else the description, else nothing |
 | `useLatestComment(key)` | the newest comment read |
 | `useEpicLabel(key)` | the ring's label, `KEY · title · done/total` (`+` when capped), only for an epic |
+| `useSwarmInstallRequest()` | the swarm id an install link named, until Settings › Swarms resolves it (HIVE-442) |
+| `useSetSwarmInstallRequest()` | `ui-store`'s `setSwarmInstallRequest`; the pane clears the request with it (HIVE-442) |
 
 Derived values are computed in selectors and **never stored** — one source of
 truth for every number on screen.

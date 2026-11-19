@@ -167,6 +167,11 @@ interface UiState {
   /** Where in the requested pane to scroll (`LEGACY_SETTINGS_ANCHORS`), consumed with `settingsSection`. */
   settingsAnchor: string | null;
   /**
+   * The swarm an install link named (HIVE-442), until Settings › Swarms resolves it to sign-in, the consent
+   * dialog or a sentence. Never an install. Not persisted.
+   */
+  swarmInstallRequest: string | null;
+  /**
    * The CLI picked this run, and what was last picked on each (HIVE-279). Not persisted. `newCli` is `null`
    * until one is picked, so the configured default leads (HIVE-375 D1); `useNewSessionPick` resolves it.
    */
@@ -404,6 +409,7 @@ interface UiState {
   /** When this window last lost focus, else when it launched (HIVE-200's "since"). View state, not persisted. */
   awaySince: number;
   markAway: (at: number) => void;
+  setSwarmInstallRequest: (swarmId: string | null) => void;
   reset: () => void;
 }
 
@@ -436,6 +442,7 @@ const initialUiState = {
   settingsSection: null as SettingsSection | null,
   settingsLast: 'projects' as SettingsSection,
   settingsAnchor: null as string | null,
+  swarmInstallRequest: null as string | null,
   newCli: null as HarnessId | null,
   newPicks: {} as Picks,
   place: 'home' as Place,
@@ -687,6 +694,7 @@ export const useUiStore = create<UiState>()((set) => ({
   closeSettings: () => set({ settings: false, settingsSection: null, settingsAnchor: null }),
   clearSettingsSection: () => set({ settingsSection: null, settingsAnchor: null }),
   rememberSettingsSection: (section) => set({ settingsLast: section }),
+  setSwarmInstallRequest: (swarmId) => set({ swarmInstallRequest: swarmId }),
   setPickerQuery: (query) => set({ pickerQuery: query }),
 
   setNewCli: (cli) => set({ newCli: cli }),
@@ -1049,6 +1057,10 @@ export const useMarkAnsweredHere = () => useUiStore((state) => state.markAnswere
 
 /** Inbox arrival and drawer actions, referentially stable. */
 export const useInboxActions = () => useUiStore(useShallow(inboxActionsSelector));
+
+/** HIVE-442: the swarm an install link named, until Settings › Swarms resolves it. */
+export const useSwarmInstallRequest = () => useUiStore((state) => state.swarmInstallRequest);
+export const useSetSwarmInstallRequest = () => useUiStore((state) => state.setSwarmInstallRequest);
 
 /** Settings actions, referentially stable across unrelated state changes. */
 export const useSettingsActions = () =>

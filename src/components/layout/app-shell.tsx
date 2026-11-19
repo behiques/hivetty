@@ -20,6 +20,7 @@ import { useNarrowWindow } from '@hooks/use-narrow-window';
 import { useNotificationStream } from '@hooks/use-notification-stream';
 import { useRemoteLinkStream } from '@hooks/use-remote-link';
 import { useSessionNames } from '@hooks/use-session-names';
+import { useSwarmInstallLink } from '@hooks/use-swarm-install-link';
 import { useListPanelWidth, useSessionPanelWidth, watchSystemTheme } from '@stores/appearance-store';
 import { useSetNarrow } from '@stores/ui-store';
 
@@ -113,6 +114,12 @@ export function AppShell() {
     component.
   */
   useSessionNames();
+
+  /*
+    An install link's swarm (HIVE-442): taken once here, so a link opens Settings › Swarms whatever is on
+    stage. The pane resolves it; nothing installs from a link.
+  */
+  useSwarmInstallLink();
 
   /**
    * Watch the visible project's files.
