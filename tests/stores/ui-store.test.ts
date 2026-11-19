@@ -325,6 +325,30 @@ describe('the explorer tree', () => {
  * *names* a pane is answering a question the user just asked, and the rule has
  * to make room for it without losing the default.
  */
+describe('the swarm install link request (HIVE-442)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+  });
+
+  it('starts with no request', () => {
+    expect(useUiStore.getState().swarmInstallRequest).toBeNull();
+  });
+
+  it('sets and clears the request', () => {
+    useUiStore.getState().setSwarmInstallRequest('a1');
+    expect(useUiStore.getState().swarmInstallRequest).toBe('a1');
+
+    useUiStore.getState().setSwarmInstallRequest(null);
+    expect(useUiStore.getState().swarmInstallRequest).toBeNull();
+  });
+
+  it('forgets the request on reset', () => {
+    useUiStore.getState().setSwarmInstallRequest('a1');
+    useUiStore.getState().reset();
+    expect(useUiStore.getState().swarmInstallRequest).toBeNull();
+  });
+});
+
 describe('openSettings and its pane', () => {
   beforeEach(() => {
     useUiStore.getState().reset();

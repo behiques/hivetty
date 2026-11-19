@@ -205,3 +205,28 @@ export function needsConsent(item: SwarmListItem, consented: string | null = nul
   // Either kind: a registry that relabels a community swarm must not let its next update through unseen.
   return item.entry?.kind === 'community' || item.installed.kind === 'community';
 }
+
+export type InstallLinkResolution =
+  | { kind: 'sign-in' }
+  | { kind: 'wait' }
+  | { kind: 'consent'; item: SwarmListItem }
+  | { kind: 'installed' }
+  | { kind: 'unavailable' };
+
+/**
+ * What an install link's swarm id leads to (HIVE-442). Never an install: the furthest it goes is the consent
+ * dialog, whose Install button is the person's.
+ */
+export function resolveInstallLink(
+  swarmId: string,
+  signedIn: boolean,
+  listing: SwarmListing | null,
+): InstallLinkResolution {
+  if (!signedIn) return { kind: 'sign-in' };
+  if (listing === null) return { kind: 'wait' };
+  const item = listing.items.find((row) => (row.entry?.id ?? row.installed?.swarmId) === swarmId);
+  if (item?.installed != null) return { kind: 'installed' };
+  if (item !== undefined) return { kind: 'consent', item };
+  // Only a fresh list can say the account has no such swarm.
+  return listing.source === 'cloud' ? { kind: 'unavailable' } : { kind: 'wait' };
+}

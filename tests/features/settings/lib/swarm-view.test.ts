@@ -12,6 +12,7 @@ import {
   matches,
   needsConsent,
   publisherOf,
+  resolveInstallLink,
   rowState,
   stateText,
   type SwarmRowState,
@@ -321,5 +322,32 @@ describe('rowState while removing', () => {
   it('reads removing, not updating', () => {
     expect(rowState(current, 'cloud', true, true)).toBe('removing');
     expect(stateText('removing', current)).toBe('Removing…');
+  });
+});
+
+describe('resolveInstallLink (HIVE-442)', () => {
+  const available = swarmItem({ entry: swarmEntry({ id: 'a1' }) });
+  const installed = swarmItem({ entry: swarmEntry({ id: 'a1' }), installed: installedSwarm({ swarmId: 'a1' }) });
+  const orphan = swarmItem({ entry: null, installed: installedSwarm({ swarmId: 'a1' }) });
+  const other = swarmItem({ entry: swarmEntry({ id: 'other' }) });
+
+  it.each([
+    ['signed out, whatever the listing', 'sign-in', false, swarmListing([available])],
+    ['signed out with no listing', 'sign-in', false, null],
+    ['signed in, the listing still loading', 'wait', true, null],
+    ['a row not installed, from the cloud', 'consent', true, swarmListing([available], 'cloud')],
+    ['a row not installed, from the cache', 'consent', true, swarmListing([available], 'cache')],
+    ['a row installed', 'installed', true, swarmListing([installed])],
+    ['installed with no row', 'installed', true, swarmListing([orphan], 'cache')],
+    ['no row, from the cloud', 'unavailable', true, swarmListing([other], 'cloud')],
+    ['no row, from the cache', 'wait', true, swarmListing([other], 'cache')],
+    ['no row, and no cloud', 'wait', true, swarmListing([], 'none')],
+  ] as const)('%s → %s', (_name, kind, signedIn, listing) => {
+    expect(resolveInstallLink('a1', signedIn, listing).kind).toBe(kind);
+  });
+
+  it('hands the row to the consent dialog', () => {
+    const resolution = resolveInstallLink('a1', true, swarmListing([other, available]));
+    expect(resolution).toEqual({ kind: 'consent', item: available });
   });
 });

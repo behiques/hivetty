@@ -1,8 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SwarmsSection } from '@/features/settings/components/swarms-section';
 import type { SwarmsSnapshot } from '@/lib/swarms';
+import { useUiStore } from '@/stores/ui-store';
+
+import type { AccountState } from '@shared/account-contract';
 
 import type { ShippedStatus } from '@shared/shipped-contract';
 import type { SwarmFailure } from '@shared/swarm-contract';
@@ -14,6 +17,7 @@ const h = vi.hoisted(() => ({
   snapshot: null as unknown as SwarmsSnapshot,
   agents: new Map() as ReadonlyMap<string, ShippedStatus>,
   skills: new Map() as ReadonlyMap<string, ShippedStatus>,
+  account: null as AccountState | null,
 }));
 
 const swarms = vi.hoisted(() => ({
@@ -36,9 +40,11 @@ vi.mock('@/lib/shipped', () => shipped);
 vi.mock('@/hooks/use-shipped', () => ({
   useShipped: (kind: 'agents' | 'skills') => (kind === 'agents' ? h.agents : h.skills),
 }));
-vi.mock('@/hooks/use-account', () => ({
-  useAccount: () => ({ kind: 'signed-in', email: 'a@b.c', name: 'A', deviceId: 'd' }),
-}));
+vi.mock('@/hooks/use-account', () => ({ useAccount: () => h.account }));
+const account = vi.hoisted(() => ({ signIn: vi.fn(() => Promise.resolve(null)) }));
+vi.mock('@/lib/account', () => account);
+
+const SIGNED_IN: AccountState = { kind: 'signed-in', email: 'a@b.c', name: 'A', deviceId: 'd' };
 
 const ACME = { id: 'org-acme', name: 'Acme' };
 const FAILED: SwarmFailure = { code: 'failed', message: 'Git could not reach the repository.' };
@@ -76,6 +82,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.agents = new Map();
   h.skills = new Map();
+  h.account = SIGNED_IN;
+  useUiStore.getState().reset();
   serve();
 });
 
@@ -337,5 +345,86 @@ describe('SwarmsSection', () => {
     render(<SwarmsSection />);
 
     expect(within(rowOf('Kit')).getByText('Updating…')).toBeInTheDocument();
+  });
+});
+
+describe('an install link (HIVE-442)', () => {
+  it('opens the consent dialog for a listed swarm, installs nothing, and clears the request; Cancel installs nothing', () => {
+    useUiStore.getState().setSwarmInstallRequest('standard');
+    render(<SwarmsSection />);
+
+    expect(screen.getByRole('dialog', { name: 'Install Standard' })).toBeInTheDocument();
+    expect(swarms.installSwarm).not.toHaveBeenCalled();
+    expect(useUiStore.getState().swarmInstallRequest).toBeNull();
+
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(swarms.installSwarm).not.toHaveBeenCalled();
+  });
+
+  it('clears the request for a swarm already installed, and opens no dialog', () => {
+    useUiStore.getState().setSwarmInstallRequest('kit');
+    render(<SwarmsSection />);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(useUiStore.getState().swarmInstallRequest).toBeNull();
+  });
+
+  it('signed out: asks to sign in and keeps the request; signing in reads the list again', () => {
+    h.account = { kind: 'signed-out' };
+    serve({ listing: swarmListing([], 'none') });
+    useUiStore.getState().setSwarmInstallRequest('standard');
+    const { rerender } = render(<SwarmsSection />);
+
+    expect(screen.getByText('Sign in to install this swarm.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(account.signIn).toHaveBeenCalledTimes(1);
+    expect(useUiStore.getState().swarmInstallRequest).toBe('standard');
+    expect(swarms.loadSwarms).not.toHaveBeenCalled();
+
+    h.account = SIGNED_IN;
+    rerender(<SwarmsSection />);
+
+    expect(swarms.loadSwarms).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Sign in to install this swarm.')).not.toBeInTheDocument();
+  });
+
+  it('waits while the account is unknown or the list is loading', () => {
+    h.account = null;
+    useUiStore.getState().setSwarmInstallRequest('standard');
+    const { rerender } = render(<SwarmsSection />);
+    expect(useUiStore.getState().swarmInstallRequest).toBe('standard');
+
+    h.account = SIGNED_IN;
+    serve({ listing: null });
+    rerender(<SwarmsSection />);
+    expect(useUiStore.getState().swarmInstallRequest).toBe('standard');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    serve();
+    rerender(<SwarmsSection />);
+    expect(screen.getByRole('dialog', { name: 'Install Standard' })).toBeInTheDocument();
+  });
+
+  it('an id the cloud does not list: a dismissible sentence, and the request is cleared', () => {
+    useUiStore.getState().setSwarmInstallRequest('nope123');
+    render(<SwarmsSection />);
+
+    expect(screen.getByText("This swarm isn't available to your account.")).toBeInTheDocument();
+    expect(useUiStore.getState().swarmInstallRequest).toBeNull();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByText("This swarm isn't available to your account.")).not.toBeInTheDocument();
+  });
+
+  it('a request that arrives while the pane is open is resolved too', () => {
+    render(<SwarmsSection />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    act(() => useUiStore.getState().setSwarmInstallRequest('standard'));
+
+    expect(screen.getByRole('dialog', { name: 'Install Standard' })).toBeInTheDocument();
+    expect(swarms.installSwarm).not.toHaveBeenCalled();
   });
 });

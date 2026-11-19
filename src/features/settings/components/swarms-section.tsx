@@ -1,13 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { SettingsSectionHeader } from '@/features/settings/components/settings-section-header';
 import { SwarmConsent } from '@/features/settings/components/swarm-consent';
 import { SwarmRow } from '@/features/settings/components/swarm-row';
 import { SwarmsBrowse } from '@/features/settings/components/swarms-browse';
-import { consentFingerprint, installedRows, keptFiles, needsConsent } from '@/features/settings/lib/swarm-view';
+import {
+  consentFingerprint,
+  installedRows,
+  keptFiles,
+  needsConsent,
+  resolveInstallLink,
+} from '@/features/settings/lib/swarm-view';
+import { useAccount } from '@/hooks/use-account';
 import { useShipped } from '@/hooks/use-shipped';
 import { useSwarms } from '@/hooks/use-swarms';
+import { signIn } from '@/lib/account';
 import { keepShippedMine, loadShipped, takeShippedPrompt } from '@/lib/shipped';
 import {
   checkSwarms,
@@ -17,6 +25,7 @@ import {
   removeSwarm,
   setSwarmAutoUpdate,
 } from '@/lib/swarms';
+import { useSetSwarmInstallRequest, useSwarmInstallRequest } from '@/stores/ui-store';
 
 import type { SwarmListItem } from '@shared/swarm-contract';
 
@@ -24,6 +33,18 @@ const LEDE =
   'Sets of agents and skills that install together and update when their publisher releases a new version. Saved under ~/.hivetty.';
 
 const idOf = (item: SwarmListItem): string => item.entry?.id ?? item.installed?.swarmId ?? '';
+
+/** What an install link could not do yet, or at all (HIVE-442), above the list. */
+function LinkNotice({ text, action, onAction }: { text: string; action: string; onAction: () => void }) {
+  return (
+    <div role="status" className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5">
+      <p className="flex-1 text-ui-sm text-muted">{text}</p>
+      <Button size="sm" onClick={onAction}>
+        {action}
+      </Button>
+    </div>
+  );
+}
 
 /** Settings › Automation › Swarms (HIVE-442): the installed list, Browse in place, and consent before installing. */
 export function SwarmsSection() {
@@ -45,6 +66,41 @@ export function SwarmsSection() {
     install skips the dialog only while the row still matches; a row that moved asks again.
   */
   const [consented, setConsented] = useState<ReadonlyMap<string, string>>(new Map());
+  const account = useAccount();
+  const signedIn = account?.kind === 'signed-in';
+  const linkRequest = useSwarmInstallRequest();
+  const setLinkRequest = useSetSwarmInstallRequest();
+  const [linkUnavailable, setLinkUnavailable] = useState(false);
+  const wasSignedIn = useRef(signedIn);
+  const linkResolution =
+    linkRequest === null || account === null ? null : resolveInstallLink(linkRequest, signedIn, listing);
+  const linkKind = linkResolution?.kind ?? null;
+  const linkConsentId = linkResolution?.kind === 'consent' ? (linkResolution.item.entry?.id ?? null) : null;
+
+  /*
+    An install link (HIVE-442) goes no further than the consent dialog: `setConsentId`, never `request` and
+    never `installSwarm`. Sign-in and wait keep the request; the other three answer it and clear it.
+  */
+  useEffect(() => {
+    if (linkKind === 'consent') {
+      setConsentId(linkConsentId);
+      setLinkUnavailable(false);
+      setLinkRequest(null);
+    } else if (linkKind === 'installed') {
+      setLinkUnavailable(false);
+      setLinkRequest(null);
+    } else if (linkKind === 'unavailable') {
+      setLinkUnavailable(true);
+      setLinkRequest(null);
+    }
+  }, [linkKind, linkConsentId, setLinkRequest]);
+
+  // Signed in with a link waiting: the list read signed out has no rows for this account, so read it again.
+  useEffect(() => {
+    const was = wasSignedIn.current;
+    wasSignedIn.current = signedIn;
+    if (signedIn && !was && linkRequest !== null) void loadSwarms();
+  }, [signedIn, linkRequest]);
 
   // Kept files are read from the shipped status; ask again whenever the list moves.
   useEffect(() => {
@@ -87,6 +143,17 @@ export function SwarmsSection() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 py-4">
+      {linkKind === 'sign-in' ? (
+        <LinkNotice text="Sign in to install this swarm." action="Sign in" onAction={() => void signIn()} />
+      ) : null}
+      {linkUnavailable ? (
+        <LinkNotice
+          text="This swarm isn't available to your account."
+          action="Dismiss"
+          onAction={() => setLinkUnavailable(false)}
+        />
+      ) : null}
+
       {browsing ? (
         <SwarmsBrowse
           listing={listing}
