@@ -1,0 +1,5 @@
+#!/bin/sh
+# hivetty-server: run the bundled server under the Node shipped beside it (HIVE-425).
+self=$(readlink -f "$0") || exit 1
+root=$(dirname "$(dirname "$self")")
+exec "$root/node/bin/node" "$root/app/server/index.js" "$@"
