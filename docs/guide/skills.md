@@ -107,8 +107,8 @@ skill amber and holds the new body back until you choose to **Compare**, **Take 
 swarm's files back. Other files in a skill update only if you never edited them. Delete a
 skill and it stays deleted.
 
-The record of what was seeded is `~/.hivetty/.seed.json`. To get a deleted shipped skill back,
-remove its lines from that file and relaunch.
+To get a deleted skill back, reinstall Standard (or the swarm it came from) in Settings ›
+Automation › Swarms; for a skill you edited, **Reset to shipped** puts its files back.
 
 ## Rules
 

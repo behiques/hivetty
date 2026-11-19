@@ -12,6 +12,9 @@ import { useAgentsByGroup, useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
 
+// HIVE-447: SwarmStarters reads the account; these stubs carry no account bridge.
+vi.mock('@hooks/use-account', () => ({ useAccount: () => null }));
+
 /** The Agents place's stage (HIVE-204): the shown agent's page — the last, else the next, else the first. */
 
 beforeEach(() => {

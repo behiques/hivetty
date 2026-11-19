@@ -7,6 +7,9 @@ import type { Agent } from '@/types/entity';
 import { ComingUp } from '@features/home/components/coming-up';
 import { useHiveStore } from '@stores/hive-store';
 
+// HIVE-447: SwarmStarters reads the account; these stubs carry no account bridge.
+vi.mock('@hooks/use-account', () => ({ useAccount: () => null }));
+
 describe('ComingUp', () => {
   beforeEach(() => useHiveStore.getState().reset());
 

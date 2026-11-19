@@ -17,6 +17,9 @@ import type { LicenceState } from '@shared/licence-contract';
 import { shippedStatus } from '../../../support/shipped';
 import { getByHint } from '@tests/support/hint';
 
+// HIVE-447: SwarmStarters reads the account; these stubs carry no account bridge.
+vi.mock('@hooks/use-account', () => ({ useAccount: () => null }));
+
 const GOOD = `---
 name: slack-watcher
 description: Watches things.
@@ -126,6 +129,16 @@ describe('AgentsSection', () => {
     ]);
     await userEvent.click(within(card).getByRole('button', { name: 'Browse swarms' }));
     expect(useUiStore.getState().swarmsBrowseRequest).toBe(true);
+  });
+
+  it('while empty, Install Standard is the one primary; + New agent uses the default variant (HIVE-447)', async () => {
+    stub([]);
+    render(<AgentsSection />);
+
+    const create = await screen.findByRole('button', { name: '+ New agent' });
+    expect(create).not.toHaveClass('bg-brand-fill');
+    expect(create).toHaveClass('border-edge');
+    expect(screen.getByRole('button', { name: 'Install Standard' })).toHaveClass('bg-brand-fill');
   });
 
   it('lists an agent with its state', async () => {

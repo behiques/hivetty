@@ -185,6 +185,16 @@ describe('SkillsSection', () => {
     }
   });
 
+  it('while empty, Install Standard is the one primary; + New skill uses the default variant (HIVE-447)', async () => {
+    setSkillsForTest(snapshot());
+    render(<SkillsSection />);
+
+    const create = await screen.findByRole('button', { name: '+ New skill' });
+    expect(create).not.toHaveClass('bg-brand-fill');
+    expect(create).toHaveClass('border-edge');
+    expect(screen.getByRole('button', { name: 'Install Standard' })).toHaveClass('bg-brand-fill');
+  });
+
   it('shows the empty state and the CTA with no skills', async () => {
     setSkillsForTest(snapshot());
 

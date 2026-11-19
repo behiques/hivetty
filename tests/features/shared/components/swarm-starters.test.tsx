@@ -3,14 +3,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SwarmStarters } from '@features/shared/components/swarm-starters';
 import type { SwarmsSnapshot } from '@lib/swarms';
+import type { AccountState } from '@shared/account-contract';
 
 import { installedSwarm, swarmEntry, swarmItem, swarmListing } from '../../../support/swarms';
 
 const h = vi.hoisted(() => ({ snapshot: null as unknown as SwarmsSnapshot }));
 const actions = vi.hoisted(() => ({ install: vi.fn(), browse: vi.fn() }));
+const account = vi.hoisted(() => ({ state: null as AccountState | null }));
 
 vi.mock('@hooks/use-swarms', () => ({ useSwarms: () => h.snapshot }));
 vi.mock('@hooks/use-swarm-actions', () => ({ useSwarmActions: () => actions }));
+vi.mock('@hooks/use-account', () => ({ useAccount: () => account.state }));
 
 const serve = (listing: SwarmsSnapshot['listing']): void => {
   h.snapshot = { listing, busy: new Set(), removing: new Set(), failures: new Map(), lastUpdate: null };
@@ -18,6 +21,7 @@ const serve = (listing: SwarmsSnapshot['listing']): void => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  account.state = { kind: 'signed-out' };
   serve(swarmListing([swarmItem({ entry: swarmEntry({ id: 'std1' }) })]));
 });
 
@@ -37,6 +41,16 @@ describe('SwarmStarters (HIVE-447)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Install Standard' }));
     expect(actions.install).toHaveBeenCalledWith(null);
+  });
+
+  it('signed in with no Standard row yet (listing loading or failed), Install Standard browses, never signs in', () => {
+    account.state = { kind: 'signed-in', email: 'a@b.c', name: 'A', deviceId: 'd1' };
+    serve(null);
+    render(<SwarmStarters />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Install Standard' }));
+    expect(actions.install).not.toHaveBeenCalled();
+    expect(actions.browse).toHaveBeenCalledTimes(1);
   });
 
   it('with Standard installed, only Browse swarms is offered', () => {

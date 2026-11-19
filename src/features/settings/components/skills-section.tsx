@@ -887,11 +887,7 @@ export function SkillsSection() {
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="primary"
-            onClick={newSkill}
-            className="w-fit"
-          >
+          <Button onClick={newSkill} className="w-fit">
             + New skill
           </Button>
           {importButton(

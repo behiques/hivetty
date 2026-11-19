@@ -180,11 +180,7 @@ export function AgentsSection() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="primary"
-            onClick={newAgent}
-            className="w-fit"
-          >
+          <Button onClick={newAgent} className="w-fit">
             + New agent
           </Button>
 
