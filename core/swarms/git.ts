@@ -98,7 +98,7 @@ export function createSwarmGit(deps: GitDeps): SwarmGit {
         timedOut = true;
         child.kill();
       }, options.timeoutMs);
-      const child = exec('git', full, { cwd: options.cwd, env }, (error, stdout, stderr) => {
+      const done = (error: Error | null, stdout: string, stderr: string): void => {
         clearTimeout(timer);
         if (error === null) {
           resolve(stdout.trim());
@@ -109,7 +109,15 @@ export function createSwarmGit(deps: GitDeps): SwarmGit {
           return;
         }
         reject(new GitError(classifyGit(stderr), clean(tail(stderr) || error.message)));
-      });
+      };
+      let child: { kill(): unknown };
+      try {
+        child = exec('git', full, { cwd: options.cwd, env }, done);
+      } catch (cause) {
+        // `execFile` throws at once on a bad argument or env value, and its message quotes the value.
+        clearTimeout(timer);
+        reject(new GitError('failed', clean(cause instanceof Error ? cause.message : String(cause))));
+      }
     });
   };
 

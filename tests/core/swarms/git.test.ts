@@ -251,6 +251,27 @@ describe('failures from the runner', () => {
     expect(kill).toHaveBeenCalledTimes(1);
   });
 
+  it('turns an exec that throws into a masked GitError and leaves no timer behind', async () => {
+    vi.useFakeTimers();
+    // Only the fetch carries the token, so only the fetch can quote it.
+    const exec: Exec = (_file, args, _options, done) => {
+      if (!args.includes('fetch')) {
+        done(null, '', '');
+        return { kill: () => undefined };
+      }
+      throw new TypeError("The property 'options.env['HIVE_SWARM_TOKEN']' must be a string. Received 'ghs_secret\\x00'");
+    };
+    const swarmGit = createSwarmGit({ env: () => ({}), askpass: join(root, 'swarms', 'askpass.sh'), exec });
+
+    const error = await rejection(
+      swarmGit.fetch({ dir: join(root, 'out'), url: 'https://github.com/a/b.git', ref: first, token: 'ghs_secret' }),
+    );
+    expect(error.kind).toBe('failed');
+    expect(error.message).not.toContain('ghs_secret');
+    expect(error.detail).toContain('***');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('falls back to the error message when stderr is empty', async () => {
     const { exec } = recording({ when: () => true, stderr: '', error: new Error('spawn git ENOENT') });
     const swarmGit = createSwarmGit({ env: () => ({}), askpass: join(root, 'askpass.sh'), exec });
