@@ -2601,19 +2601,6 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
     }, 30_000);
 
     /**
-     * 29. A process-local channel, refused where it lands (HIVE-155).
-     *
-     * `client.call` builds the frame by hand and writes it to the socket, which
-     * is the one sender `PROCESS_LOCAL`'s fence cannot see: the proxy answers
-     * `remote:forget` on the machine that asked, so no shipped client sends it.
-     *
-     * The server's credential file is seeded first, with known bytes. A server
-     * that only serves has no credential of its own, and "absent before and
-     * after" passes with the defect present. `applyRemoteForget` is an
-     * `rmSync`, so the file surviving byte for byte is the observation that
-     * tells the fix from the bug.
-     */
-    /**
      * The audit trail, read back from the served process (HIVE-427). The file is beside the config on both
      * sides. This block's devices are shared with every other case, so only lines written since this case
      * began are counted; cases run one at a time.
@@ -2657,11 +2644,25 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
       expect(readFileSync(auditFile, 'utf8')).not.toContain(marker);
     }, 30_000);
 
+    /**
+     * 29. A process-local channel, refused where it lands (HIVE-155).
+     *
+     * `client.call` builds the frame by hand and writes it to the socket, which
+     * is the one sender `PROCESS_LOCAL`'s fence cannot see: the proxy answers
+     * `remote:forget` on the machine that asked, so no shipped client sends it.
+     *
+     * The server's credential file is seeded first, with known bytes. A server
+     * that only serves has no credential of its own, and "absent before and
+     * after" passes with the defect present. `applyRemoteForget` is an
+     * `rmSync`, so the file surviving byte for byte is the observation that
+     * tells the fix from the bug.
+     */
     it('29. refuses a hand-built remote:forget and leaves the server’s credential alone', async () => {
-      // On the edition nothing stores a remote credential (it is the desktop shell's); the refusal is what is proved.
+      // On the edition nothing stores a remote credential (`platform().desktop` is absent, so forget has no
+      // file to remove): a seeded file surviving would prove nothing, so only the refusal is checked there.
       const credentialFile = join(dataDir(configPath, userDataDir), 'remote-credential.bin');
       const seeded = Buffer.from('live proof: the server’s own credential\n', 'utf8');
-      writeFileSync(credentialFile, seeded);
+      if (!EDITION) writeFileSync(credentialFile, seeded);
 
       try {
         const client = await attached();
@@ -2669,10 +2670,12 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
 
         expect(result).toMatchObject({ kind: 'error', code: 'remote-refused' });
         expect((result as ErrorFrame).message).toMatch(/own credential/);
-        expect(existsSync(credentialFile)).toBe(true);
-        expect(readFileSync(credentialFile).equals(seeded)).toBe(true);
+        if (!EDITION) {
+          expect(existsSync(credentialFile)).toBe(true);
+          expect(readFileSync(credentialFile).equals(seeded)).toBe(true);
+        }
       } finally {
-        rmSync(credentialFile, { force: true });
+        if (!EDITION) rmSync(credentialFile, { force: true });
       }
     }, 30_000);
 
