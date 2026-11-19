@@ -159,6 +159,17 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+/**
+ * The version of a Standard adopted from the built-ins (HIVE-447) until its first update. Compared by name through
+ * `isBundled`, never through `compareVersions`.
+ */
+export const BUNDLED_VERSION = 'bundled';
+
+export const isBundled = (version: string): boolean => version === BUNDLED_VERSION;
+
+/** How a person reads an installed version: "Bundled" for the bundled one, `v1.0.1` otherwise. */
+export const versionLabel = (version: string): string => (isBundled(version) ? 'Bundled' : `v${version}`);
+
 export type SwarmKind = 'native' | 'community' | 'organization';
 export type SwarmAccess = 'token' | 'anonymous' | 'user';
 export type SwarmPolicy = 'latest' | 'pinned';

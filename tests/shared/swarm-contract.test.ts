@@ -2,7 +2,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BUNDLED_VERSION,
   compareVersions,
+  isBundled,
   isSwarmFolder,
   isSwarmId,
   isSwarmRepoUrl,
@@ -12,6 +14,7 @@ import {
   parseSwarmRequest,
   parseSwarmTag,
   swarmTag,
+  versionLabel,
 } from '@shared/swarm-contract';
 
 const valid = {
@@ -139,6 +142,19 @@ describe('compareVersions', () => {
   it('ignores a pre-release suffix', () => {
     expect(compareVersions('1.0.0-rc.12', '1.0.0')).toBe(0);
     expect(compareVersions('1.1.0', '1.0.0-rc.12')).toBeGreaterThan(0);
+  });
+});
+
+describe('isBundled and versionLabel', () => {
+  it('names the bundled version by name, not by comparison', () => {
+    expect(BUNDLED_VERSION).toBe('bundled');
+    expect(isBundled('bundled')).toBe(true);
+    expect(isBundled('1.0.0')).toBe(false);
+  });
+
+  it('labels the bundled version "Bundled" and every other one with a v', () => {
+    expect(versionLabel('bundled')).toBe('Bundled');
+    expect(versionLabel('1.0.1')).toBe('v1.0.1');
   });
 });
 
