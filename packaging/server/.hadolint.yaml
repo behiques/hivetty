@@ -1,0 +1,5 @@
+# DL3008 (pin versions in apt-get install): the base is pinned by digest, and only tini is
+# version-pinned. ca-certificates and libatomic1 float inside bookworm on purpose, so their
+# security updates land on a rebuild.
+ignored:
+  - DL3008
