@@ -73,6 +73,10 @@ test('opens every panel on an empty state, not on sample data', async ({ page })
   await expect(page.getByRole('heading', { name: 'An empty hive' })).toBeVisible();
   await goToPlace(page, 'Agents');
   await expect(page.getByRole('heading', { name: 'No agents yet' })).toBeVisible();
+  // HIVE-447: agents come in swarms, so the empty stage points at them.
+  await expect(page.getByRole('button', { name: 'Install Standard' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Browse swarms' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New agent', exact: true })).toBeVisible();
 });
 
 /**
