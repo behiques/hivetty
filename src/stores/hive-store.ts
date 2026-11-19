@@ -68,6 +68,7 @@ import {
   searchJiraIssues,
 } from '@lib/jira';
 import { buildTicketSearchJql } from '@lib/jira-search';
+import { buildJobFlow, type JobFlow, type Party, partiesOf } from '@lib/job-flow';
 import { ledgerRows } from '@lib/ledger/console-rows';
 import { FLAP_RANK, flapTone, hatchStatus, sortHatchery } from '@lib/pr-hatch';
 import { buildTimeline, type TimelineModel } from '@lib/pr-timeline';
@@ -153,10 +154,13 @@ import {
   type JiraIssue,
   type JiraTransition,
 } from '@shared/jira-contract';
+import { jobEntries } from '@shared/job-derive';
 import {
   LEDGER_MEMORY_CAP,
   OVERMIND,
   type LedgerEntry,
+  type LedgerJobQuery,
+  type LedgerJobResult,
   type LedgerKind,
   type LedgerReadQuery,
   type LedgerResult,
@@ -495,6 +499,8 @@ interface HiveState {
   prChecks: Record<string, PrChecksEntry>;
   /** The Timeline tab's reads per PR, keyed by {@link prKey} (HIVE-208). At most PR_DETAIL_CAP, the newest last. */
   prTimelines: Record<string, PrTimelineEntry>;
+  /** One job's ledger history per Flow tab opened, keyed by {@link jobKey} (Job Flow). At most JOB_CAP, the newest last. */
+  jobs: Record<string, JobEntry>;
   /** Where {@link HiveState.tickets} came from (HIVE-69). */
   ticketSource: TicketSource;
   /**
@@ -602,6 +608,8 @@ interface HiveState {
   loadPrDetail: (owner: string, repo: string, n: number) => Promise<void>;
   /** Read one PR's Timeline: GitHub's history every call, the ledger's once (HIVE-208). */
   loadPrTimeline: (owner: string, repo: string, n: number) => Promise<void>;
+  /** Read one job's ledger history, thirty days of it, for its Flow tab (Job Flow). */
+  loadJob: (query: LedgerJobQuery) => Promise<void>;
   /** Comment on a PR, then re-read it; the answer says why a post failed (HIVE-205). */
   commentOnPr: (owner: string, repo: string, n: number, body: string) => Promise<GhResult<true>>;
   /** Read one PR's diff at a head sha: once per sha, again when it moves (HIVE-207). */
@@ -2097,6 +2105,24 @@ export interface PrTimelineEntry {
   readAt?: number;
 }
 
+/** The job reads kept (Job Flow), as PR_DETAIL_CAP keeps the Timeline's. */
+export const JOB_CAP = 8;
+
+/** One job read's state (Job Flow): its history from `ledger:job`, the days that failed, or why it failed. */
+export interface JobEntry {
+  key: string;
+  state: 'loading' | 'ok' | 'failed';
+  history?: LedgerEntry[];
+  warnings?: string[];
+  problem?: string;
+}
+
+/** `ticket:HIVE-401`, or `pr:owner/name#281[,…]`: one key per job read (Job Flow). */
+export const jobKey = (query: LedgerJobQuery): string =>
+  query.ticket !== undefined && query.ticket !== ''
+    ? `ticket:${query.ticket.toUpperCase()}`
+    : `pr:${query.prs.map((pr) => `${pr.repo.toLowerCase()}#${String(pr.n)}`).join(',')}`;
+
 /** `20261003-090507`: a ledger id's leading two segments, local time, as `core/ledger/store.ts` writes them (HIVE-208). */
 export const ledgerIdAt = (ms: number): string => {
   const at = new Date(ms);
@@ -2306,6 +2332,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   prDiffs: {} as Record<string, PrDiffEntry>,
   prChecks: {} as Record<string, PrChecksEntry>,
   prTimelines: {} as Record<string, PrTimelineEntry>,
+  jobs: {} as Record<string, JobEntry>,
 
   /** Loading until the first sweep answers, for the same reason as above. */
   prSource: { kind: 'loading' } as PrSource,
@@ -5505,6 +5532,29 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
   },
 
   /**
+   * One job's history (Job Flow): `ledger:job` reads thirty days of files,
+   * which the store's two in-memory days cannot. No bridge (the browser
+   * target) is an empty history, not a failure: the live tail still draws.
+   */
+  loadJob: async (query) => {
+    const key = jobKey(query);
+    set((state) => ({ jobs: touchDetail(state.jobs, key, state.jobs[key] ?? { key, state: 'loading' as const }, JOB_CAP) }));
+    const read = window.hive?.ledger.job(query);
+    const result: LedgerJobResult | Error | undefined = await (read ?? Promise.resolve(undefined)).catch((cause: unknown) =>
+      cause instanceof Error ? cause : new Error(String(cause)),
+    );
+    set((state) => {
+      const entry = state.jobs[key];
+      if (entry === undefined) return state;
+      const next: JobEntry =
+        result instanceof Error
+          ? { ...entry, state: 'failed', problem: result.message }
+          : { key, state: 'ok', history: result?.entries ?? [], warnings: result?.warnings ?? [] };
+      return { jobs: { ...state.jobs, [key]: next } };
+    });
+  },
+
+  /**
    * One PR's Timeline (HIVE-208): GitHub's history every call, and the ledger
    * from a day before the PR opened, once — the renderer's tail is capped at
    * 500, and a long PR's early holds fall out of it. A day of slack covers a
@@ -6360,6 +6410,8 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       prDiffs: {},
       prChecks: {},
       prTimelines: {},
+      // The departed machine's ledger, for the same reason as the timelines (Job Flow).
+      jobs: {},
       /*
         Not "an orphan quietly wasting memory" the way it first read — session
         ids are **not unique across machines**. `nextSpawnId`/`rememberSpawnId`
@@ -6463,6 +6515,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       prDiffs: {},
       prChecks: {},
       prTimelines: {},
+      jobs: {},
       prSource: { kind: 'loading' },
       prsReadAt: null,
       prSearch: NO_PR_SEARCH,
@@ -8357,6 +8410,12 @@ export const usePrTimelineEntry = (key: string): PrTimelineEntry | undefined => 
 export const useLoadPrTimeline = (): ((owner: string, repo: string, n: number) => Promise<void>) =>
   useHiveStore((state) => state.loadPrTimeline);
 
+/** One job read's state (Job Flow). `key` is {@link jobKey}'s. */
+export const useJobEntry = (key: string): JobEntry | undefined => useHiveStore((state) => state.jobs[key]);
+
+/** Read, or re-read, one job's history (Job Flow). */
+export const useLoadJob = (): ((query: LedgerJobQuery) => Promise<void>) => useHiveStore((state) => state.loadJob);
+
 /** One PR's diff, parsed: once per text, never stored (HIVE-207). `null` before the first text. */
 export const useParsedPrDiff = (key: string): DiffFile[] | null => {
   const text = useHiveStore((state) => state.prDiffs[key]?.text);
@@ -9463,6 +9522,41 @@ export const useShipTrack = (slug: string, n: number): ShipTrack => {
 export const useShipAsked = (slug: string, n: number): boolean => {
   const entries = useHiveStore((state) => state.ledger);
   return useMemo(() => shipAsked(entries, slug, n, Date.now()), [entries, slug, n]);
+};
+
+/** `kind\tname` for one party: a string, so `useShallow` can compare a list of them (Job Flow). */
+const partyLabel = (state: HiveState, id: string): string => {
+  if (id === OVERMIND) return 'overmind\tYou';
+  const entity = state.entities[id];
+  if (entity === undefined) return `session\t${id}`;
+  // An agent's id is its name; only a session carries one of its own.
+  if (isAgent(entity)) return `agent\t${id}`;
+  return `session\t${isSession(entity) ? (entity.name ?? id) : id}`;
+};
+
+/**
+ * The Flow tab's model (Job Flow): derived, never stored; `null` until anyone
+ * has said anything about the job. The history read on open is merged with
+ * the live tail by id, then `jobEntries` decides what belongs, so a live entry
+ * joins the moment it lands. `query` must be stable: memoise it.
+ */
+export const useJobFlow = (query: LedgerJobQuery, now: number): JobFlow | null => {
+  const history = useHiveStore((state) => state.jobs[jobKey(query)]?.history);
+  const ledger = useHiveStore((state) => state.ledger);
+  const entries = useMemo(() => {
+    const byId = new Map<string, LedgerEntry>();
+    for (const e of [...(history ?? []), ...ledger]) byId.set(e.id, e);
+    return jobEntries([...byId.values()], query);
+  }, [history, ledger, query]);
+  const ids = useMemo(() => partiesOf(entries), [entries]);
+  const labels = useHiveStore(useShallow((state) => ids.map((id) => partyLabel(state, id))));
+  return useMemo(() => {
+    const party = (id: string): Party => {
+      const [kind, name] = (labels[ids.indexOf(id)] ?? `session\t${id}`).split('\t') as [Party['kind'], string];
+      return { id, name, kind };
+    };
+    return buildJobFlow({ entries, party, now });
+  }, [entries, ids, labels, now]);
 };
 
 /**

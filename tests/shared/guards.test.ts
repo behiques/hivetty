@@ -14,6 +14,7 @@ import {
   parseKillRequest,
   parseLedgerAnswerRequest,
   parseLedgerPostBody,
+  parseLedgerJobQuery,
   parseLedgerReadQuery,
   parsePromptReport,
   parseRemoveProjectRequest,
@@ -2337,5 +2338,27 @@ describe('parseHarnessSignInRequest (HIVE-376)', () => {
     expect(() => parseHarnessSignInRequest({})).toThrow();
     expect(() => parseHarnessSignInRequest({ cli: 'gemini' })).toThrow();
     expect(() => parseHarnessSignInRequest({ cli: 'codex', command: 'x' })).toThrow();
+  });
+});
+
+describe('parseLedgerJobQuery (Job Flow)', () => {
+  it('accepts a ticket, PRs, or both, and defaults prs to []', () => {
+    expect(parseLedgerJobQuery({ ticket: 'HIVE-401' })).toEqual({ ticket: 'HIVE-401', prs: [] });
+    expect(parseLedgerJobQuery({ prs: [{ repo: 'behiques/hivetty', n: 281 }] })).toEqual({ prs: [{ repo: 'behiques/hivetty', n: 281 }] });
+    expect(parseLedgerJobQuery({ ticket: 'HIVE-401', prs: [{ repo: 'a/b', n: 1 }] })).toEqual({ ticket: 'HIVE-401', prs: [{ repo: 'a/b', n: 1 }] });
+  });
+
+  it('refuses no seeds, a bad repo, a bad number, too many PRs and a long ticket', () => {
+    expect(() => parseLedgerJobQuery({})).toThrow('ledger job needs a ticket or a PR');
+    expect(() => parseLedgerJobQuery({ prs: [{ repo: 'hivetty', n: 1 }] })).toThrow('owner/name');
+    expect(() => parseLedgerJobQuery({ prs: [{ repo: '../x/y', n: 1 }] })).toThrow('owner/name');
+    expect(() => parseLedgerJobQuery({ prs: [{ repo: 'a/b', n: 0 }] })).toThrow('positive integer');
+    expect(() => parseLedgerJobQuery({ prs: [{ repo: 'a/b', n: 1.5 }] })).toThrow('positive integer');
+    expect(() => parseLedgerJobQuery({ prs: 'a/b#1' })).toThrow('at most 20');
+    expect(() => parseLedgerJobQuery({ prs: Array.from({ length: 21 }, (_, i) => ({ repo: 'a/b', n: i + 1 })) })).toThrow('at most 20');
+    expect(() => parseLedgerJobQuery({ prs: [null] })).toThrow(TypeError);
+    expect(() => parseLedgerJobQuery({ ticket: 'X'.repeat(65) })).toThrow('at most 64');
+    expect(() => parseLedgerJobQuery({ ticket: 7 })).toThrow(TypeError);
+    expect(() => parseLedgerJobQuery('HIVE-401')).toThrow(TypeError);
   });
 });

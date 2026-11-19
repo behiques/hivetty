@@ -477,6 +477,30 @@ export function seedShipTrack(configPath: string, now = Date.now()): void {
 }
 
 /**
+ * A two-day job on the stub PR (Job Flow): a session's ask to the shipper
+ * three days ago, in **that day's** file, which the store never loads; the
+ * shipper's ask to acr and acr's answer today. Only `ledger:job`, which reads
+ * thirty days of files, can draw the first half.
+ */
+export function seedJobAcrossDays(configPath: string, now = Date.now()): void {
+  const HOUR = 3_600_000;
+  const pr = { repo: STUB_REPO, pr: STUB_PR };
+  const write = (day: number, lines: Record<string, unknown>[]) => {
+    const file = join(dirname(configPath), 'ledger', `${ledgerDay(new Date(day))}.jsonl`);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, lines.map((line) => `${JSON.stringify(line)}\n`).join(''), { flag: 'a' });
+  };
+  const old = now - 3 * 24 * HOUR;
+  write(old, [{ id: ledgerId(old), ts: old, from: 'sess-flow', to: 'shipper', kind: 'ask', ref: 'a90', body: 'Ship it.', meta: { ...pr, ticket: 'FLOW-1' } }]);
+  // Today's file under today's date, whatever the hour: the reply lands ten minutes after the ask.
+  const review = now - 20 * 60_000;
+  write(now, [
+    { id: ledgerId(review), ts: review, from: 'shipper', to: 'acr', kind: 'ask', ref: 'a91', body: 'Self review.', meta: { ...pr, stage: 'self-review' } },
+    { id: ledgerId(review + 600_000), ts: review + 600_000, from: 'acr', to: 'shipper', kind: 'answer', thread: ledgerId(review), body: 'Clean.' },
+  ]);
+}
+
+/**
  * Start a real session on a mapped project, through the picker, and answer with
  * its id.
  *

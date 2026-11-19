@@ -65,6 +65,7 @@ import {
   parseJiraUsersRequest,
   parseKillRequest,
   parseLedgerAnswerRequest,
+  parseLedgerJobQuery,
   parseLedgerPostBody,
   parseLedgerReadQuery,
   parseMarkReadRequest,
@@ -2375,6 +2376,8 @@ export function registerIpcHandlers(
   });
 
   handle(CH.ledgerList, (_event, payload) => ledger.read(parseLedgerReadQuery(payload)));
+  // One job across thirty days of files (Job Flow). A read: no `from`, nothing written.
+  handle(CH.ledgerJob, (_event, payload) => ledger.job(parseLedgerJobQuery(payload)));
   // Every live plan (HIVE-179). Before `createSessions` there are none to list.
   handle(CH.plansList, () => sessions?.plans() ?? { plans: [] });
   // Every session's changed files (HIVE-201). Before `createSessions` there are none.

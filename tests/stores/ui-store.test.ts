@@ -1171,3 +1171,36 @@ describe('the PR pick', () => {
     expect(useUiStore.getState().prPick).toEqual({});
   });
 });
+
+describe('Flow tab state (Job Flow)', () => {
+  beforeEach(() => {
+    useUiStore.getState().reset();
+  });
+
+  it('switches the ticket page between Ticket and Flow', () => {
+    expect(useUiStore.getState().ticketTab).toBe('ticket');
+    useUiStore.getState().setTicketTab('flow');
+    expect(useUiStore.getState().ticketTab).toBe('flow');
+  });
+
+  it('opens the PR page on its Flow tab', () => {
+    useUiStore.getState().setPrTab('flow');
+    expect(useUiStore.getState().prTab).toBe('flow');
+  });
+
+  it('holds one selected handoff, for one job, and clears it', () => {
+    expect(useUiStore.getState().flowFocus).toBeNull();
+    useUiStore.getState().setFlowFocus('ticket:HIVE-401', 'e1');
+    expect(useUiStore.getState().flowFocus).toEqual({ job: 'ticket:HIVE-401', edge: 'e1' });
+    useUiStore.getState().setFlowFocus('ticket:HIVE-401', null);
+    expect(useUiStore.getState().flowFocus).toBeNull();
+  });
+
+  it('forgets the tab and the selection on reset', () => {
+    useUiStore.getState().setTicketTab('flow');
+    useUiStore.getState().setFlowFocus('ticket:HIVE-401', 'e1');
+    useUiStore.getState().reset();
+    expect(useUiStore.getState().ticketTab).toBe('ticket');
+    expect(useUiStore.getState().flowFocus).toBeNull();
+  });
+});

@@ -153,6 +153,8 @@ import type {
 import type {
   LedgerAnswerRequest,
   LedgerEntry,
+  LedgerJobQuery,
+  LedgerJobResult,
   LedgerPostRequest,
   LedgerReadQuery,
   LedgerResult,
@@ -884,6 +886,8 @@ export const CH = {
   ledgerPost: 'ledger:post',
   /** Close a thread, by canonical id or by short ref. */
   ledgerAnswer: 'ledger:answer',
+  /** One job's entries across the last 30 days of files (Job Flow). Read-only. */
+  ledgerJob: 'ledger:job',
   /** Push: one entry landed, from any party. main → renderer. */
   ledgerChanged: 'ledger:changed',
   /** Every live plan (HIVE-179). Boot hydration and the attach snapshot. */
@@ -3080,6 +3084,8 @@ export interface HiveBridge {
     list: (query?: LedgerReadQuery) => Promise<LedgerSnapshot>;
     post: (request: Omit<LedgerPostRequest, 'from'>) => Promise<LedgerResult>;
     answer: (request: LedgerAnswerRequest) => Promise<LedgerResult>;
+    /** One job across the last 30 days of files (Job Flow). Read-only. */
+    job: (query: LedgerJobQuery) => Promise<LedgerJobResult>;
     onChanged: (callback: (entry: LedgerEntry) => void) => () => void;
   };
   /**

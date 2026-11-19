@@ -446,7 +446,8 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'run',
     'write',
   ]);
-  expect(surface.ledger).toEqual(['answer', 'list', 'onChanged', 'post']);
+  // Job Flow added `job`: a read of the ledger's own day files, parsed by `parseLedgerJobQuery`; it writes nothing.
+  expect(surface.ledger).toEqual(['answer', 'job', 'list', 'onChanged', 'post']);
   /**
    * HIVE-142. Two verbs, and neither is an ordinary settings write: `pair`
    * mints a device credential and answers its plaintext once; `revoke`

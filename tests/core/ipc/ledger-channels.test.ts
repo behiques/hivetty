@@ -168,6 +168,7 @@ const ledgerRead = vi.fn(() => ({ entries: [], openAsks: [], claims: {} }));
 const ledgerAppend = vi.fn(
   (_request: unknown): LedgerResult => ({ ok: true, id: 'entry-1' }),
 );
+const ledgerJob = vi.fn(async (_query: unknown) => ({ entries: [], warnings: [] }));
 const ledgerAnswer = vi.fn(
   (_request: unknown, _from: string): LedgerResult => ({ ok: true, id: 'entry-2' }),
 );
@@ -184,6 +185,7 @@ vi.mock('../../../core/ledger', () => ({
       read: ledgerRead,
       append: ledgerAppend,
       answer: ledgerAnswer,
+      job: ledgerJob,
       onChange: (listener: (entry: unknown) => void) => {
         capturedOnChangeListener = listener;
         return () => {
@@ -592,5 +594,21 @@ describe('notifications:act — an ask focuses the window and reveals the card (
 
     expect(isMinimized).not.toHaveBeenCalled();
     expect(focus).not.toHaveBeenCalled();
+  });
+});
+
+describe('ledger:job (Job Flow)', () => {
+  it('parses the payload and forwards it to the ledger', async () => {
+    ledgerJob.mockClear();
+    const handler = handlers.get(CH.ledgerJob);
+    expect(handler).toBeDefined();
+    await handler?.(trustedEvent, { ticket: 'HIVE-401' });
+    expect(ledgerJob).toHaveBeenCalledWith({ ticket: 'HIVE-401', prs: [] });
+  });
+
+  it('refuses a payload with no seeds before the ledger sees it', () => {
+    ledgerJob.mockClear();
+    expect(() => handlers.get(CH.ledgerJob)?.(trustedEvent, {})).toThrow('ledger job needs a ticket or a PR');
+    expect(ledgerJob).not.toHaveBeenCalled();
   });
 });
