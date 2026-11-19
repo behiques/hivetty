@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
@@ -81,6 +81,7 @@ import { EXIT_COMMAND } from './exit-command';
 import { createBranchReader, resolveGit, type BranchReaderOptions } from './git';
 import { archiveStaleBriefs } from './goal-briefs';
 import type { SessionHistory } from './history';
+import { launchLinePath, typedLaunchLine } from './launch-line';
 import { livePick } from './live-pick';
 import { meterExportPath, sweepMeterExports } from './meter-exports';
 import { createRecordAborts } from './record-aborts';
@@ -800,6 +801,39 @@ export function createSessions(options: SessionsOptions): Sessions {
     harnessStateDir !== undefined && harnesses.adapterFor(harness).meterExport === true
       ? meterExportPath(harnessStateDir(harness), entityId)
       : null;
+
+  /** A session's launch file, when its line was too long to type; gone with the process that read it. */
+  const launchFiles = new Map<string, string>();
+  const removeLaunchFile = (entityId: string): void => {
+    const file = launchFiles.get(entityId);
+    if (file === undefined) return;
+    launchFiles.delete(entityId);
+    // Synchronous: a restart writes the same path again, and a late removal would take the new file.
+    rmSync(file, { force: true });
+  };
+
+  /**
+   * What to type for a launch plan's command: the command, or `. '<file>'` when it is longer than
+   * a tty keeps of a line typed before the shell reads (`MAX_TYPED_LINE_BYTES`). The file holds
+   * the task, so it is the user's alone. A file that cannot be written is not a session that
+   * cannot start: the line is typed whole, which is what every session did before.
+   */
+  function launchLine(harness: HarnessId, entityId: string, command: string): string {
+    const file = harnessStateDir === undefined ? null : launchLinePath(harnessStateDir(harness), entityId);
+    const typed = typedLaunchLine(command, file);
+    if (file === null || typed.text === undefined) return command;
+    try {
+      mkdirSync(dirname(file), { recursive: true });
+      // Removed first: `mode` applies only to a file this call creates.
+      rmSync(file, { force: true });
+      writeFileSync(file, typed.text, { mode: 0o600 });
+    } catch (error) {
+      console.warn(`[hive] ${entityId}: could not write ${file}, typing the launch line whole (${String(error)})`);
+      return command;
+    }
+    launchFiles.set(entityId, file);
+    return typed.line;
+  }
 
   function settleCommand(entityId: string, result: CommandExit): void {
     const onExit = commandExit.get(entityId);
@@ -2064,6 +2098,7 @@ export function createSessions(options: SessionsOptions): Sessions {
   function settleExit(entityId: string): void {
     appKilled.delete(entityId);
     bootstrap.cancel(entityId);
+    removeLaunchFile(entityId);
     heldInput.delete(entityId);
     /**
      * Both are per-*generation* state, and a restart reuses the entity id.
@@ -3014,7 +3049,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       );
     }
 
-    bootstrap.arm(request.entityId, plan.command, plan.submitDelayMs);
+    bootstrap.arm(request.entityId, launchLine(harness, request.entityId, plan.command), plan.submitDelayMs);
 
     /**
      * The branch this session opens on (HIVE-78).
@@ -3312,6 +3347,8 @@ export function createSessions(options: SessionsOptions): Sessions {
 
     dispose() {
       bootstrap.dispose();
+      // shortcut: a crash leaves its launch files (private, a few KB each); sweep at boot if that ever matters.
+      for (const entityId of [...launchFiles.keys()]) removeLaunchFile(entityId);
       activity.dispose();
       ptyIpc.dispose();
       disposeErrors();

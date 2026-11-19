@@ -208,6 +208,36 @@ describe('bootstrap', () => {
     );
   });
 
+  /**
+   * A launch line longer than a tty keeps (`MAX_TYPED_LINE_BYTES`).
+   *
+   * Until the shell's line editor is up the tty is canonical, and the kernel keeps one line of at
+   * most `MAX_CANON` bytes (1,024 on macOS): a 3 KB line typed into that window is cut, and the
+   * shell sits on a half-typed command with an open quote. Codex's line carries the skills
+   * catalog and is always that long. So `core/sessions` writes a long line to a file and types
+   * `. '<file>'`, which fits. Typed directly, this same task never reaches the stub on macOS.
+   *
+   * The profile here prints, then sleeps: the first output starts the bootstrap's clock, and the
+   * line lands a second before anything reads it.
+   */
+  it('a launch line over the tty’s limit runs when sourced, typed while the profile still runs', async (context) => {
+    // `$#` and the first argument's length: one argument, all 3,000 bytes of it.
+    writeStub(context.scratch, 'claude', `printf 'ARGC=%s LEN=%s\\n' "$#" "\${#1}"`);
+    const file = join(context.scratch, 'launch.sh');
+    writeFileSync(file, `claude '${'a'.repeat(3000)}'\n`, { mode: 0o600 });
+
+    const session = context.open({
+      shell: '/bin/sh',
+      args: ['-c', `printf 'PROFILE-STARTED\\n'; sleep 1; exec /bin/sh -l`],
+      env: { PATH: `${context.scratch}:${process.env.PATH ?? ''}` },
+    });
+
+    await session.waitForOutput('PROFILE-STARTED', { timeout: 8_000 });
+    session.send(`. '${file}'`);
+
+    await session.waitForOutput('ARGC=1 LEN=3000', { timeout: 15_000 });
+  });
+
   it('a missing command reports itself and leaves the shell alive', async (context) => {
     const session = context.open({
       shell: '/bin/sh',

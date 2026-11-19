@@ -1,6 +1,16 @@
 // @vitest-environment node
 import type { PlanUpdate } from '../../../shared/plan-contract';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -4742,6 +4752,107 @@ describe('copilot sessions (HIVE-280)', () => {
 
     expect(() => instance!.open(copilotOpen)).toThrow(/Copilot: could not write .*plugin\.json/);
     expect(spawned).toHaveLength(0);
+  });
+
+  /**
+   * Any CLI's, tested here because this block's `build` takes a real state folder. A tty keeps
+   * 1,024 bytes of a line typed before the shell reads, so a longer line is sourced from a file.
+   */
+  describe('a launch line too long to type', () => {
+    const LONG_TASK = 'word '.repeat(300).trim();
+    const launchFile = (state: string) => join(state, 'launch', 'hero-refresh.sh');
+
+    it('writes the line to a private file and types a line that sources it', () => {
+      const state = stateDir();
+      instance = build([], { harnessStateDir: () => state });
+      instance.open({ ...OPEN, task: LONG_TASK });
+      bootTo(mintedFor('hero-refresh'));
+
+      expect(typed()).toContain(`. '${launchFile(state)}'`);
+      expect(typed().some((line) => line.includes('claude'))).toBe(false);
+      const text = readFileSync(launchFile(state), 'utf8');
+      expect(text).toMatch(/^(unset [A-Z_ ]+; )?claude .* && exit\n$/);
+      expect(text).toContain(`'${LONG_TASK}'`);
+      expect(statSync(launchFile(state)).mode & 0o777).toBe(0o600);
+    });
+
+    it('sources a Codex line, which carries the skills catalog and never fits', () => {
+      const state = stateDir();
+      const plugin = mkdtempSync(join(tmpdir(), 'codex-plugin-'));
+      writeFileSync(join(plugin, 'catalog.md'), `### HiveTTY skills\n- done: ${'CODEX-FOLDER-MARK '.repeat(80)}\n`);
+      const previous = process.env['CODEX_HOME'];
+      process.env['CODEX_HOME'] = mkdtempSync(join(tmpdir(), 'codex-home-'));
+      try {
+        instance = build([], { harnessStateDir: () => state });
+        instance.open({
+          ...OPEN,
+          harness: 'codex' as const,
+          model: 'gpt-6-luna',
+          files: { pluginDirs: { 'claude-code': '/c', codex: plugin } },
+        });
+        bootTo(mintedFor('hero-refresh'));
+
+        expect(typed()).toContain(`. '${launchFile(state)}'`);
+        expect(typed().some((line) => line.includes('codex -m'))).toBe(false);
+        const text = readFileSync(launchFile(state), 'utf8');
+        expect(text).toMatch(/^(unset [A-Z_ ]+; )?codex -m gpt-6-luna .* && exit\n$/);
+        expect(text).toContain('CODEX-FOLDER-MARK');
+      } finally {
+        if (previous === undefined) delete process.env['CODEX_HOME'];
+        else process.env['CODEX_HOME'] = previous;
+        rmSync(plugin, { recursive: true, force: true });
+      }
+    });
+
+    it('types a line that fits as it always was, and writes nothing', () => {
+      const state = stateDir();
+      instance = build([], { harnessStateDir: () => state });
+      instance.open({ ...OPEN, task: 'fix the bug' });
+      bootTo(mintedFor('hero-refresh'));
+
+      expect(typed().some((line) => /claude .*'fix the bug' && exit$/.test(line))).toBe(true);
+      expect(existsSync(join(state, 'launch'))).toBe(false);
+    });
+
+    it('removes the file when the session’s process exits', () => {
+      const state = stateDir();
+      instance = build([], { harnessStateDir: () => state });
+      instance.open({ ...OPEN, task: LONG_TASK });
+      bootTo(mintedFor('hero-refresh'));
+      expect(existsSync(launchFile(state))).toBe(true);
+
+      emitExit({ sessionId: mintedFor('hero-refresh'), exitCode: 0 });
+
+      expect(existsSync(launchFile(state))).toBe(false);
+    });
+
+    it('removes the file of a session still running at shutdown', () => {
+      const state = stateDir();
+      instance = build([], { harnessStateDir: () => state });
+      instance.open({ ...OPEN, task: LONG_TASK });
+      bootTo(mintedFor('hero-refresh'));
+
+      instance.dispose();
+      instance = undefined;
+
+      expect(existsSync(launchFile(state))).toBe(false);
+    });
+
+    it('types the line whole, and says so, when the file cannot be written', () => {
+      const file = join(stateDir(), 'a-file');
+      writeFileSync(file, '');
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        instance = build([], { harnessStateDir: () => file });
+        instance.open({ ...OPEN, task: LONG_TASK });
+        bootTo(mintedFor('hero-refresh'));
+
+        expect(typed().some((line) => line.includes(`'${LONG_TASK}' && exit`))).toBe(true);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('typing the launch line whole'));
+      } finally {
+        warn.mockRestore();
+      }
+    });
   });
 
   it('restarts into the same pinned id, with no task', async () => {
