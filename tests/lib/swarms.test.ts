@@ -6,9 +6,11 @@ import {
   installSwarm,
   loadSwarms,
   onSwarmInstallRequested,
+  providerOf,
   removeSwarm,
   resetSwarmsState,
   setSwarmAutoUpdate,
+  standardOf,
   subscribeSwarms,
   swarmsSnapshot,
   takeSwarmInstallRequest,
@@ -16,7 +18,7 @@ import {
 
 import type { SwarmListing, SwarmsChanged } from '@shared/swarm-contract';
 
-import { installedSwarm, swarmItem, swarmListing } from '../support/swarms';
+import { installedSwarm, swarmEntry, swarmItem, swarmListing } from '../support/swarms';
 
 const setBridge = (swarms: Record<string, unknown> | undefined): void => {
   (window as unknown as { hive?: unknown }).hive = swarms === undefined ? undefined : { swarms };
@@ -327,5 +329,77 @@ describe('the install link wrappers (HIVE-442)', () => {
 
     await expect(takeSwarmInstallRequest()).resolves.toBeNull();
     expect(() => onSwarmInstallRequested(vi.fn())()).not.toThrow();
+  });
+});
+
+describe('providerOf', () => {
+  const workOn = { name: 'work-on', description: 'Work a ticket.' };
+  const community = swarmEntry({ id: 'cmty1', slug: 'extras', kind: 'community', title: 'Extras', skills: [workOn] });
+  const standard = swarmEntry({ id: 'std1', skills: [workOn] });
+
+  it('names the native row that provides a skill', () => {
+    expect(providerOf(swarmListing([swarmItem({ entry: standard })]), 'skill', 'work-on')).toEqual({
+      id: 'std1',
+      title: 'Standard',
+    });
+  });
+
+  it('names the row that provides an agent', () => {
+    expect(providerOf(swarmListing([swarmItem({ entry: standard })]), 'agent', 'builder')).toEqual({
+      id: 'std1',
+      title: 'Standard',
+    });
+  });
+
+  it('does not match a skill name against agents', () => {
+    expect(providerOf(swarmListing([swarmItem({ entry: standard })]), 'agent', 'work-on')).toBeNull();
+  });
+
+  it('prefers a native row over an earlier community row', () => {
+    const listing = swarmListing([swarmItem({ entry: community }), swarmItem({ entry: standard })]);
+    expect(providerOf(listing, 'skill', 'work-on')).toEqual({ id: 'std1', title: 'Standard' });
+  });
+
+  it('takes the listing order among non-native rows', () => {
+    const other = swarmEntry({ id: 'cmty2', slug: 'more', kind: 'community', title: 'More', skills: [workOn] });
+    const listing = swarmListing([swarmItem({ entry: community }), swarmItem({ entry: other })]);
+    expect(providerOf(listing, 'skill', 'work-on')).toEqual({ id: 'cmty1', title: 'Extras' });
+  });
+
+  it('is null when the only provider is installed', () => {
+    const listing = swarmListing([swarmItem({ entry: standard, installed: installedSwarm({ swarmId: 'std1' }) })]);
+    expect(providerOf(listing, 'skill', 'work-on')).toBeNull();
+  });
+
+  it('skips rows with no registry entry', () => {
+    expect(providerOf(swarmListing([swarmItem({ entry: null, installed: installedSwarm() })]), 'skill', 'tdd')).toBeNull();
+  });
+
+  it('is null for a null listing or no match', () => {
+    expect(providerOf(null, 'skill', 'work-on')).toBeNull();
+    expect(providerOf(swarmListing([swarmItem({ entry: standard })]), 'skill', 'nope')).toBeNull();
+  });
+});
+
+describe('standardOf', () => {
+  it('answers the native standard row, not installed', () => {
+    const listing = swarmListing([
+      swarmItem({ entry: swarmEntry({ id: 'cmty1', slug: 'standard', kind: 'community' }) }),
+      swarmItem({ entry: swarmEntry({ id: 'std1' }) }),
+    ]);
+    expect(standardOf(listing)).toEqual({ id: 'std1', installed: false });
+  });
+
+  it('answers the native standard row, installed', () => {
+    const listing = swarmListing([
+      swarmItem({ entry: swarmEntry({ id: 'std1' }), installed: installedSwarm({ swarmId: 'std1' }) }),
+    ]);
+    expect(standardOf(listing)).toEqual({ id: 'std1', installed: true });
+  });
+
+  it('is null with no native standard row or no listing', () => {
+    expect(standardOf(swarmListing([swarmItem({ entry: swarmEntry({ slug: 'other' }) })]))).toBeNull();
+    expect(standardOf(swarmListing([]))).toBeNull();
+    expect(standardOf(null)).toBeNull();
   });
 });

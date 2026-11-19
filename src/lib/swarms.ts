@@ -1,4 +1,4 @@
-import type { SwarmFailure, SwarmListing } from '@shared/swarm-contract';
+import type { SwarmFailure, SwarmListItem, SwarmListing } from '@shared/swarm-contract';
 
 /**
  * The renderer's view of the installed swarms and the registry (HIVE-442).
@@ -210,6 +210,34 @@ export function onSwarmInstallRequested(callback: () => void): () => void {
   if (!bridge) return () => undefined;
 
   return bridge.swarms.onInstallRequested(callback);
+}
+
+/**
+ * HIVE-447: the registry swarm, not installed, that provides an agent or a skill of this name. Native rows come
+ * first, then listing order. Null for a null listing, no match, or a match already installed.
+ */
+export function providerOf(
+  listing: SwarmListing | null,
+  kind: 'agent' | 'skill',
+  name: string,
+): { id: string; title: string } | null {
+  if (listing === null) return null;
+
+  const provides = (item: SwarmListItem): boolean =>
+    item.entry !== null &&
+    item.installed === null &&
+    (kind === 'agent' ? item.entry.agents : item.entry.skills).some((element) => element.name === name);
+  const match =
+    listing.items.find((item) => item.entry?.kind === 'native' && provides(item)) ?? listing.items.find(provides);
+
+  return match?.entry ? { id: match.entry.id, title: match.entry.title } : null;
+}
+
+/** HIVE-447: the registry's native Standard row, and whether it is installed; null when the listing has none. */
+export function standardOf(listing: SwarmListing | null): { id: string; installed: boolean } | null {
+  const row = listing?.items.find((item) => item.entry?.kind === 'native' && item.entry.slug === 'standard');
+
+  return row?.entry ? { id: row.entry.id, installed: row.installed !== null } : null;
 }
 
 /** Test-only: drop the snapshot, the change subscription and every subscriber. */
