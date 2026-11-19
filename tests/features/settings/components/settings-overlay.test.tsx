@@ -77,6 +77,7 @@ describe('SettingsOverlay', () => {
       'Claude Code',
       'Codex',
       'Copilot',
+      'Swarms',
       'Skills',
       'Agents',
       'Ticket workflow',
@@ -129,7 +130,7 @@ describe('SettingsOverlay', () => {
       ['Projects', 'Integrations', 'Ticket workflow'],
       ['Overview', 'Claude Code', 'Codex', 'Copilot'],
       ['Runtime', 'Server mode'],
-      ['Agents', 'Skills'],
+      ['Swarms', 'Agents', 'Skills'],
     ]);
     expect(within(nav).queryByRole('button', { name: 'Harnesses' })).not.toBeInTheDocument();
   });
@@ -140,6 +141,7 @@ describe('SettingsOverlay', () => {
     ['codex', 'Codex'],
     ['copilot', 'Copilot'],
     ['shell', 'Runtime'],
+    ['swarms', 'Swarms'],
     ['agents', 'Agents'],
     ['skills', 'Skills'],
     ['ticket-workflow', 'Ticket workflow'],

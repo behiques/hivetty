@@ -28,6 +28,7 @@ import { SettingsProfileCard } from '@features/settings/components/settings-prof
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
 import { ShellSection } from '@features/settings/components/shell-section';
 import { SkillsSection } from '@features/settings/components/skills-section';
+import { SwarmsSection } from '@features/settings/components/swarms-section';
 import { TicketWorkflowSection } from '@features/settings/components/ticket-workflow-section';
 import { UpdatesAboutSection } from '@features/settings/components/updates-about-section';
 import { useLicenceLocks } from '@hooks/use-licence-locks';
@@ -120,6 +121,7 @@ export const SETTINGS_GROUPS: SettingsGroups = [
   {
     group: 'Automation',
     panes: [
+      { id: 'swarms', label: 'Swarms' },
       { id: 'agents', label: 'Agents' },
       { id: 'skills', label: 'Skills' },
     ],
@@ -192,6 +194,7 @@ const PANES: Record<SectionId, ComponentType> = {
   'claude-code': ClaudeCodePage,
   codex: CodexPage,
   copilot: CopilotPage,
+  swarms: SwarmsSection,
   skills: SkillsSection,
   agents: AgentsSection,
   'ticket-workflow': TicketWorkflowSection,

@@ -1,0 +1,166 @@
+import { useEffect, useState } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { SettingsSectionHeader } from '@/features/settings/components/settings-section-header';
+import { SwarmConsent } from '@/features/settings/components/swarm-consent';
+import { SwarmRow } from '@/features/settings/components/swarm-row';
+import { SwarmsBrowse } from '@/features/settings/components/swarms-browse';
+import { consentFingerprint, installedRows, keptFiles, needsConsent } from '@/features/settings/lib/swarm-view';
+import { useShipped } from '@/hooks/use-shipped';
+import { useSwarms } from '@/hooks/use-swarms';
+import { keepShippedMine, loadShipped, takeShippedPrompt } from '@/lib/shipped';
+import {
+  checkSwarms,
+  dismissSwarmFailure,
+  installSwarm,
+  loadSwarms,
+  removeSwarm,
+  setSwarmAutoUpdate,
+} from '@/lib/swarms';
+
+import type { SwarmListItem } from '@shared/swarm-contract';
+
+const LEDE =
+  'Sets of agents and skills that install together and update when their publisher releases a new version. Saved under ~/.hivetty.';
+
+const idOf = (item: SwarmListItem): string => item.entry?.id ?? item.installed?.swarmId ?? '';
+
+/** Settings › Automation › Swarms (HIVE-442): the installed list, Browse in place, and consent before installing. */
+export function SwarmsSection() {
+  const { listing, busy, removing, failures, lastUpdate } = useSwarms();
+  const agents = useShipped('agents');
+  const skills = useShipped('skills');
+  const [browsing, setBrowsing] = useState(false);
+  const [checking, setChecking] = useState(false);
+  /*
+    The id, not a copy of the item: the dialog draws the swarm as the listing has it now, so a
+    `swarms:changed` that moves the version while it is open redraws it, and Install never sends main
+    a version the person did not see. A swarm that left the listing closes it.
+  */
+  const [consentId, setConsentId] = useState<string | null>(null);
+  const consent = consentId === null ? null : (listing?.items.find((item) => item.entry?.id === consentId) ?? null);
+  const [notices, setNotices] = useState<ReadonlyMap<string, string>>(new Map());
+  /*
+    What the person said yes to for each first install, as `consentFingerprint`s. Try again on a failed
+    install skips the dialog only while the row still matches; a row that moved asks again.
+  */
+  const [consented, setConsented] = useState<ReadonlyMap<string, string>>(new Map());
+
+  // Kept files are read from the shipped status; ask again whenever the list moves.
+  useEffect(() => {
+    void loadShipped();
+  }, [listing]);
+
+  /** Every path to `swarms:install` (HIVE-442). Consent first, unless this very row was already consented to. */
+  const request = (item: SwarmListItem): void => {
+    if (item.entry === null) return; // no registry row: nothing can be installed
+    if (needsConsent(item, consented.get(item.entry.id) ?? null)) setConsentId(item.entry.id);
+    else void installSwarm(item.entry.id);
+  };
+
+  const confirm = (): void => {
+    const item = consent;
+    setConsentId(null);
+    if (!item?.entry) return;
+    const { entry } = item;
+    if (item.installed === null) setConsented((was) => new Map(was).set(entry.id, consentFingerprint(entry)));
+    void installSwarm(entry.id);
+  };
+
+  const check = (): void => {
+    setChecking(true);
+    void checkSwarms().finally(() => setChecking(false));
+  };
+
+  const remove = (swarmId: string): void => {
+    void removeSwarm(swarmId).then((message) => {
+      setNotices((was) => {
+        const next = new Map(was);
+        if (message === null) next.delete(swarmId);
+        else next.set(swarmId, message);
+        return next;
+      });
+    });
+  };
+
+  const rows = listing === null ? [] : installedRows(listing, failures);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 py-4">
+      {browsing ? (
+        <SwarmsBrowse
+          listing={listing}
+          busy={busy}
+          failures={failures}
+          onBack={() => setBrowsing(false)}
+          onInstall={(item) => request(item)}
+          onReview={(item) => request(item)}
+          onRetry={() => void loadSwarms()}
+        />
+      ) : (
+        <>
+          <SettingsSectionHeader title="Swarms" description={LEDE} />
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={check} disabled={checking}>
+              Check for updates
+            </Button>
+            <Button size="sm" onClick={() => setBrowsing(true)}>
+              Browse swarms
+            </Button>
+            {lastUpdate === null ? null : (
+              <span className="ml-auto flex items-center gap-1.5 text-ui-sm text-muted">
+                <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-green" />
+                {`${lastUpdate.title} updated to v${lastUpdate.version}`}
+              </span>
+            )}
+          </div>
+
+          {listing === null ? null : rows.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border px-4 py-6 text-center">
+              <p className="text-ui-sm text-muted">No swarms installed.</p>
+              <Button size="sm" variant="primary" onClick={() => setBrowsing(true)}>
+                Browse swarms
+              </Button>
+            </div>
+          ) : (
+            <ul className="flex flex-col rounded-lg border border-border">
+              {rows.map((item) => {
+                const id = idOf(item);
+                const isBusy = busy.has(id);
+                return (
+                  <SwarmRow
+                    key={id}
+                    item={item}
+                    source={listing.source}
+                    busy={isBusy}
+                    removing={removing.has(id)}
+                    failure={failures.get(id)}
+                    kept={item.installed === null ? [] : keptFiles(item.installed, agents, skills)}
+                    notice={notices.get(id) ?? null}
+                    onAction={() => request(item)}
+                    onDismiss={() => dismissSwarmFailure(id)}
+                    onAutoUpdate={(next) => void setSwarmAutoUpdate(id, next)}
+                    onRemove={() => remove(id)}
+                    onTake={(file) => void takeShippedPrompt({ kind: file.kind, name: file.name })}
+                    onKeep={(file) => void keepShippedMine({ kind: file.kind, name: file.name })}
+                  />
+                );
+              })}
+            </ul>
+          )}
+        </>
+      )}
+
+      {consent?.entry ? (
+        <SwarmConsent
+          entry={consent.entry}
+          installed={consent.installed}
+          target={consent.update?.target ?? null}
+          onConfirm={confirm}
+          onCancel={() => setConsentId(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
