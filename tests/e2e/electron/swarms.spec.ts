@@ -2,11 +2,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type ElectronApplication } from '@playwright/test';
 
 import { launchHive, mainWindow } from './fixtures/hive-app';
 import { licenceConfig, signedIn } from './fixtures/licence';
-import { openPane, settingsNav } from './fixtures/settings';
+import { expectPane, openPane, settingsNav } from './fixtures/settings';
 import { startStubCloud, type StubCloud } from './fixtures/stub-cloud';
 import { createSwarmRepo, FIXTURE_SWARM, type SwarmRelease, type SwarmRepo } from './fixtures/swarm-repo';
 
@@ -76,6 +76,13 @@ const ROWS = [
     skills: [{ name: 'style-guide', description: 'The house style for prose.' }],
   }),
 ];
+
+/** A link delivered the way macOS delivers one, with no OS registration involved. */
+async function openLink(app: ElectronApplication, link: string): Promise<void> {
+  await app.evaluate(({ app: electronApp }, url) => {
+    electronApp.emit('open-url', { preventDefault: () => undefined }, url);
+  }, link);
+}
 
 let stub: StubCloud;
 test.beforeEach(async () => {
@@ -216,7 +223,10 @@ test.describe('a swarm from a fixture repository', () => {
         ]);
 
       await installed.getByRole('button', { name: 'Remove' }).click();
-      await page.getByRole('button', { name: 'Remove', exact: true }).last().click();
+      await page
+        .getByRole('alertdialog', { name: `Remove ${FIXTURE_SWARM.title}` })
+        .getByRole('button', { name: 'Remove' })
+        .click();
       await expect(page.getByText('No swarms installed.')).toBeVisible({ timeout: 30_000 });
       await expect
         .poll(() => stub.installs.map((report) => ({ id: report.id, ...report.body })))
@@ -229,4 +239,59 @@ test.describe('a swarm from a fixture repository', () => {
       await app.close();
     }
   });
+
+  test('an install link opens the consent dialog and installs nothing until Install', async ({}, testInfo) => {
+    stub.controls.setSwarms([fixtureRow(repo, repo.releases[0])]);
+    const { app, page } = await signedIn({ stub, testInfo, env: repo.env });
+    try {
+      // Refused links: a malformed id, and the packaged scheme in this unpackaged build. Settings stays shut.
+      await openLink(app, 'hivetty-dev://swarms/install?id=../x');
+      await openLink(app, 'hivetty://swarms/install?id=fixture-swarm');
+      await page.waitForTimeout(1_000);
+      await expect(settingsNav(page)).toBeHidden();
+
+      await openLink(app, 'hivetty-dev://swarms/install?id=nope123');
+      await expect(page.getByText("This swarm isn't available to your account.")).toBeVisible({ timeout: 15_000 });
+      await expectPane(page, 'swarms');
+      await page.getByRole('button', { name: 'Dismiss' }).click();
+      await expect(page.getByText("This swarm isn't available to your account.")).toBeHidden();
+
+      await openLink(app, 'hivetty-dev://swarms/install?id=fixture-swarm');
+      const dialog = page.getByRole('dialog', { name: `Install ${FIXTURE_SWARM.title}` });
+      await expect(dialog).toBeVisible({ timeout: 15_000 });
+      await page.waitForTimeout(500);
+      expect(stub.installs).toEqual([]);
+
+      await dialog.getByRole('button', { name: 'Install' }).click();
+      await expect(dialog).toBeHidden();
+      // The modal dialog hides the rest from the accessibility tree; with it closed, Swarms is the open pane.
+      await expectPane(page, 'swarms');
+      const installed = page.getByRole('listitem').filter({ hasText: FIXTURE_SWARM.title });
+      await expect(installed.getByText('v1.0.0 · up to date')).toBeVisible({ timeout: 30_000 });
+      await expect
+        .poll(() => stub.installs.map((report) => ({ id: report.id, ...report.body })))
+        .toEqual([expect.objectContaining({ id: 'fixture-swarm', state: 'installed', version: '1.0.0' })]);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+test('signed out: an install link opens Swarms and asks to sign in', async ({}, testInfo) => {
+  const { configPath, userDataDir } = licenceConfig(testInfo);
+  const app = await launchHive({ userDataDir, configPath, env: stub.env, args: ['--use-mock-keychain'] });
+  try {
+    const page = await mainWindow(app);
+    await expect(
+      page.getByRole('navigation', { name: 'Places' }).getByRole('button', { name: 'Settings', exact: true }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    await openLink(app, 'hivetty-dev://swarms/install?id=standard');
+
+    await expect(page.getByText('Sign in to install this swarm.')).toBeVisible({ timeout: 15_000 });
+    await expectPane(page, 'swarms');
+    expect(stub.installs).toEqual([]);
+  } finally {
+    await app.close();
+  }
 });
