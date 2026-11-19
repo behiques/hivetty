@@ -365,6 +365,10 @@ describe.skipIf(!RUN)(`the server edition under ${BIN ?? NODE} (HIVE-422)`, () =
       });
       expect(spawned.kind, JSON.stringify(spawned)).toBe('error');
       expect((spawned as { message: string }).message).toBe(LICENCE_LAPSED);
+      // Case 12's plain shell takes the same gate, so its success there is the licence's doing.
+      const shell = await client.call(CH.ptySpawnTerminal, { sessionId: 'sess-shell', projectId: 'scratch', cols: 80, rows: 24 });
+      expect(shell.kind, JSON.stringify(shell)).toBe('error');
+      expect((shell as { message: string }).message).toBe(LICENCE_LAPSED);
       const again = await client.call(CH.sessionHistory, undefined);
       expect(again.kind, JSON.stringify(again)).toBe('result');
       expect((again as { payload: unknown }).payload).toEqual([]);
@@ -439,7 +443,7 @@ describe.skipIf(!RUN)(`the server edition under ${BIN ?? NODE} (HIVE-422)`, () =
 
       const client = await attach(home.port, device);
       try {
-        // A plain shell: the same licence gate and fork host as `pty:spawn`, without starting an agent CLI the runner
+        // A plain shell: the same lapse gate (case 6) and fork host as `pty:spawn`, without starting an agent CLI the runner
         // may lack (or this machine may start for real), so what is typed reaches a shell.
         const spawned = await client.call(CH.ptySpawnTerminal, {
           sessionId: 'sess-marker',
