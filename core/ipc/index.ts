@@ -334,6 +334,7 @@ import { onShutdown } from '../shutdown';
 import { createSkillsRuntime, type SkillsRuntime } from '../skills';
 import { readCliSkills } from '../skills/cli-skills';
 import { PLUGIN_DIR } from '../skills/paths';
+import { setSwarmHooks, swarmCalls } from '../swarms';
 import { onSyncAppearance, onSyncStatus, setSyncHooks, syncCalls } from '../sync';
 
 import { createBindings } from './bindings';
@@ -1971,6 +1972,13 @@ export function registerIpcHandlers(
   handle(CH.syncReportAppearance, (_event, fields: unknown) =>
     syncCalls()[CH.syncReportAppearance](fields as SyncedAppearance),
   );
+  /*
+    HIVE-441: installed swarms, this machine's own; bound local only, answered locally when attached.
+    Each payload is validated inside `swarmCalls`: an id, and never a URL.
+  */
+  handle(CH.swarmsList, () => swarmCalls().list());
+  handle(CH.swarmsInstall, (_event, payload: unknown) => swarmCalls().install(payload));
+  handle(CH.swarmsRemove, (_event, payload: unknown) => swarmCalls().remove(payload));
   // HIVE-265: the gate's Quit. window.close() would leave the app running in the dock.
   handle(CH.appQuit, () => platform().lifecycle.quit());
 
@@ -3531,13 +3539,24 @@ export function registerIpcHandlers(
     stopSyncStatus();
     stopSyncAppearance();
   };
-  // HIVE-284: what sync runs after it writes synced skills, agents or config keys, as Reload does.
+  // What runs after skills or agents change on disk, as Reload does: one pair, so sync and swarms cannot drift.
+  const afterSkills = (): void => void skills?.sync();
+  const afterAgents = (): void => {
+    void refreshKnownAgents().then(() => fanOut.emit(CH.agentsChanged, undefined));
+  };
+  // HIVE-284: what sync runs after it writes synced skills, agents or config keys.
   setSyncHooks({
-    afterSkills: () => void skills?.sync(),
-    afterAgents: () => {
-      void refreshKnownAgents().then(() => fanOut.emit(CH.agentsChanged, undefined));
-    },
+    afterSkills,
+    afterAgents,
     afterConfig: () => send(CH.configChanged, getConfig()),
+  });
+  // HIVE-441: an install or a remove writes skills and agents too; Git runs in the environment sessions get.
+  setSwarmHooks({
+    ready: () => seeded,
+    afterSkills,
+    afterAgents,
+    env: codexEnv,
+    authedFetch: () => cloudSession()?.authedFetch ?? null,
   });
 
   /*

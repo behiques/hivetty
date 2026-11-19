@@ -204,6 +204,7 @@ import type {
   SlackStatus,
   SlackTokensState,
 } from './slack-contract';
+import type { SwarmInstallResult, SwarmListing, SwarmRemoveResult, SwarmRequest } from './swarm-contract';
 import type { SetSyncGroupRequest, SyncedAppearance, SyncSetupResult, SyncStatus } from './sync-contract';
 import type { UpdateStatus } from './update-contract';
 
@@ -952,6 +953,12 @@ export const CH = {
   syncReportAppearance: 'sync:report-appearance',
   /** HIVE-284: push, synced appearance fields for the windows to apply. Local-only. */
   syncApplyAppearance: 'sync:apply-appearance',
+  /** HIVE-441: the cloud's swarms merged with what is installed on this machine. Process-local, like every `swarms:*` channel. */
+  swarmsList: 'swarms:list',
+  /** HIVE-441: install a swarm on this machine, by its registry id. Process-local. */
+  swarmsInstall: 'swarms:install',
+  /** HIVE-441: remove a swarm from this machine. Edited files stay. Process-local. */
+  swarmsRemove: 'swarms:remove',
   /** HIVE-291: this account's orgs, from the cloud; `[]` when it cannot say. Process-local. */
   accountOrgs: 'account:orgs',
   /** HIVE-291: lease from this org from now on; resolves to the licence after the renewal. Process-local. */
@@ -2490,6 +2497,13 @@ export interface HiveBridge {
     openConflicts(): Promise<void>;
     reportAppearance(fields: SyncedAppearance): Promise<void>;
     onApplyAppearance(callback: (fields: SyncedAppearance) => void): () => void;
+  };
+  /** Installed swarms (HIVE-441). The screen is HIVE-442. */
+  swarms: {
+    list(): Promise<SwarmListing>;
+    /** By registry id. The app looks the repository up itself; a caller cannot name one. */
+    install(request: SwarmRequest): Promise<SwarmInstallResult>;
+    remove(request: SwarmRequest): Promise<SwarmRemoveResult>;
   };
   remote: {
     /**

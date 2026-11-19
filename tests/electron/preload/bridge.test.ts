@@ -19,6 +19,7 @@ import {
   BRIDGE_PTY_KEYS,
   BRIDGE_REMOTE_KEYS,
   BRIDGE_RELAY_KEYS,
+  BRIDGE_SWARMS_KEYS,
   BRIDGE_SYNC_KEYS,
   BRIDGE_SERVER_KEYS,
   BRIDGE_SESSION_KEYS,
@@ -123,6 +124,8 @@ const relay = () =>
   exposed.relay as Record<string, (...args: unknown[]) => unknown>;
 const sync = () =>
   exposed.sync as Record<string, (...args: unknown[]) => unknown>;
+const swarms = () =>
+  exposed.swarms as Record<string, (...args: unknown[]) => unknown>;
 const session = () =>
   exposed.session as Record<string, (...args: unknown[]) => unknown>;
 const ledger = () =>
@@ -161,6 +164,8 @@ describe('exposed surface', () => {
     expect(Object.keys(relay()).sort()).toEqual([...BRIDGE_RELAY_KEYS].sort());
     // HIVE-284: settings sync, this machine's own.
     expect(Object.keys(sync()).sort()).toEqual([...BRIDGE_SYNC_KEYS].sort());
+    // HIVE-441: installed swarms, this machine's own; install takes an id, never a URL.
+    expect(Object.keys(swarms()).sort()).toEqual([...BRIDGE_SWARMS_KEYS].sort());
     expect(Object.keys(shipped()).sort()).toEqual([...BRIDGE_SHIPPED_KEYS].sort());
     expect(Object.keys(integrations()).sort()).toEqual([
       ...BRIDGE_INTEGRATIONS_KEYS,
@@ -1095,6 +1100,21 @@ describe('the settings sync verbs (HIVE-284)', () => {
     (sync()[verb] as (cb: unknown) => () => void)(callback);
     listeners.get(channel)?.[0]?.({}, payload);
     expect(callback).toHaveBeenCalledWith(payload);
+  });
+});
+
+describe('the swarm verbs (HIVE-441)', () => {
+  it('swarms.list invokes swarms:list with no argument', async () => {
+    await (swarms().list as () => Promise<unknown>)();
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.swarmsList);
+  });
+
+  it.each([
+    ['install', CH.swarmsInstall],
+    ['remove', CH.swarmsRemove],
+  ] as const)('swarms.%s invokes its channel with the request', async (verb, channel) => {
+    await (swarms()[verb] as (request: unknown) => Promise<unknown>)({ swarmId: 'a1' });
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(channel, { swarmId: 'a1' });
   });
 });
 

@@ -20,6 +20,7 @@ import { assertSender } from '../../../core/ipc/sender';
 import { ACCOUNT_CALLS, cloudSession, LICENCE_CALLS } from '../../../core/licence';
 import { relayStatus } from '../../../core/relay';
 import { relayHostsFor } from '../../../core/relay/hosts';
+import { swarmCalls } from '../../../core/swarms';
 import { syncCalls } from '../../../core/sync';
 import { RemoteCallError, type RemoteClient } from '../../remote-client/socket';
 import { activateOnThisMachine } from '../notifications/activate-here';
@@ -198,6 +199,13 @@ function localAnswerFor(
       return (request: unknown) => syncCalls()[CH.syncSetGroup](request as SetSyncGroupRequest);
     case CH.syncReportAppearance:
       return (fields: unknown) => syncCalls()[CH.syncReportAppearance](fields as SyncedAppearance);
+    /* HIVE-441. Swarms install on this machine: an attached window still reaches its own. */
+    case CH.swarmsList:
+      return () => swarmCalls().list();
+    case CH.swarmsInstall:
+      return (request: unknown) => swarmCalls().install(request);
+    case CH.swarmsRemove:
+      return (request: unknown) => swarmCalls().remove(request);
     default:
       return null;
   }
