@@ -61,6 +61,8 @@ export interface Swarms {
   installed(): Promise<InstalledSwarm[]>;
   install(entry: SwarmEntry): Promise<SwarmInstallResult>;
   remove(swarmId: string): Promise<SwarmRemoveResult>;
+  /** HIVE-442: the row's "Update automatically" switch. Null when the swarm is not installed or the list cannot be written. */
+  setAutoUpdate(swarmId: string, autoUpdate: boolean): Promise<InstalledSwarm | null>;
   /** The shipped set with every swarm-owned folder excluded, and one set per installed swarm. */
   seedSets(shipped: SeedOptions): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }>;
   /** The set that owns `<kind>/<name>`: a swarm's, else the shipped one. */
@@ -443,6 +445,21 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     }
   };
 
+  const setAutoUpdateNow = async (swarmId: string, autoUpdate: boolean): Promise<InstalledSwarm | null> => {
+    if (!isSwarmId(swarmId)) return null;
+    try {
+      const raw = await readInstalledRaw(paths.installed); // throws when unreadable: nothing is overwritten
+      const held = raw.find((row) => isEntryOf(row, swarmId));
+      if (!isInstalled(held)) return null;
+      const next: InstalledSwarm = { ...held, autoUpdate };
+      // Every other row, the ones `isInstalled` refuses included, goes back as it was read. Tmp file then rename.
+      await writeInstalled(paths.installed, raw.map((row) => (row === held ? next : row)));
+      return next;
+    } catch {
+      return null;
+    }
+  };
+
   // Read from the folders, not installed.json: a first install seeds before its entry is written, and an unreadable
   // installed.json must not turn a swarm's files into the person's own.
   const manifestFiles = async (): Promise<string[]> => {
@@ -479,6 +496,12 @@ export function createSwarms(deps: SwarmDeps): Swarms {
       serial(async () => {
         await deps.ready?.();
         return removeNow(swarmId);
+      }),
+    // The same queue: an install writes installed.json too.
+    setAutoUpdate: (swarmId, autoUpdate) =>
+      serial(async () => {
+        await deps.ready?.();
+        return setAutoUpdateNow(swarmId, autoUpdate);
       }),
     seedSets,
     manifestFiles,

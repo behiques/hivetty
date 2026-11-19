@@ -11,6 +11,7 @@ const engine = vi.hoisted(() => ({
   installed: vi.fn(),
   install: vi.fn(),
   remove: vi.fn(),
+  setAutoUpdate: vi.fn(),
   seedSets: vi.fn(),
   seedSetFor: vi.fn(),
   manifestFiles: vi.fn(),

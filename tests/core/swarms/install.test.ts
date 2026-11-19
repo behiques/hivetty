@@ -635,6 +635,86 @@ describe('install', () => {
   });
 });
 
+describe('setAutoUpdate', () => {
+  const heldEntry = (swarmId: string, autoUpdate: boolean): InstalledSwarm => ({
+    swarmId,
+    slug: swarmId,
+    kind: 'native',
+    org: null,
+    repoUrl: 'https://github.com/o/r',
+    folder: 'standard',
+    version: '1.0.0',
+    commit: 'a'.repeat(40),
+    installedAt: '2026-11-19T12:00:00.000Z',
+    autoUpdate,
+    lastError: null,
+    title: swarmId,
+    description: '',
+    contents: { agents: [], skills: [] },
+  });
+  const junk = { nope: 1 };
+  const seedList = (): void => {
+    write(hive('swarms/installed.json'), `${JSON.stringify([heldEntry('a1', true), junk, heldEntry('b1', true)], null, 2)}\n`);
+  };
+
+  it('sets the flag on one swarm, answers the new entry, and writes every other row back as it was', async () => {
+    seedList();
+    const swarms = createSwarms(makeDeps());
+
+    expect(await swarms.setAutoUpdate('a1', false)).toEqual({ ...heldEntry('a1', true), autoUpdate: false });
+    expect(readJson<unknown[]>('swarms/installed.json')).toEqual([
+      { ...heldEntry('a1', true), autoUpdate: false },
+      junk,
+      heldEntry('b1', true),
+    ]);
+  });
+
+  it('answers null and writes nothing for a swarm that is not installed', async () => {
+    seedList();
+    const before = readHive('swarms/installed.json');
+
+    expect(await createSwarms(makeDeps()).setAutoUpdate('zz', true)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe(before);
+  });
+
+  it('answers null for an id that is not a swarm id', async () => {
+    seedList();
+    const before = readHive('swarms/installed.json');
+
+    expect(await createSwarms(makeDeps()).setAutoUpdate('../x', true)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe(before);
+  });
+
+  it('answers null and leaves an unreadable installed.json as it was', async () => {
+    write(hive('swarms/installed.json'), 'not json');
+
+    expect(await createSwarms(makeDeps()).setAutoUpdate('a1', false)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe('not json');
+  });
+
+  it('answers null when installed.json cannot be written', async () => {
+    seedList();
+    mkdirSync(hive('swarms/installed.json.tmp')); // the temp file's path is taken by a folder
+
+    expect(await createSwarms(makeDeps()).setAutoUpdate('a1', false)).toBeNull();
+    expect(readJson<InstalledSwarm[]>('swarms/installed.json')[0]?.autoUpdate).toBe(true);
+  });
+
+  it('takes the install queue, so an install started in the same tick keeps the changed flag', async () => {
+    seedList();
+    const swarms = createSwarms(makeDeps());
+    const { entry } = released('1.0.0', {}, { id: 'c1' });
+
+    const [installed, set] = await Promise.all([swarms.install(entry), swarms.setAutoUpdate('a1', false)]);
+
+    expect(installed.ok).toBe(true);
+    expect(set?.autoUpdate).toBe(false);
+    const rows = readJson<InstalledSwarm[]>('swarms/installed.json');
+    expect(rows.find((row) => row.swarmId === 'a1')?.autoUpdate).toBe(false);
+    expect(rows.map((row) => row.swarmId)).toContain('c1');
+  });
+});
+
 describe('readInstalled', () => {
   it.each([
     ['not json', 'not json'],
