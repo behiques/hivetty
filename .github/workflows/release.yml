@@ -12,7 +12,8 @@
 # `server-tarballs` in parallel, then `server-image` (pushes
 # `ghcr.io/behiques/hivetty-server:<version>`), then `publish` (checks every
 # image is private, flips the draft, then moves `:next` or `:latest`), then
-# `tidy`. A dispatch from a branch builds and pushes nothing past the tarballs.
+# `tidy`. A dispatch from a branch runs `desktop` and the tarballs as before,
+# pushes no image and publishes nothing.
 
 name: Release
 
