@@ -232,6 +232,20 @@ describe('the engine', () => {
   });
 });
 
+describe('before the hooks are set', () => {
+  it("runs the defaults: no session, the process's environment, nothing to wait for or refresh", async () => {
+    resetSwarms();
+    engine.install.mockResolvedValue({ ok: true, installed: { id: 'a1' } });
+
+    await expect(swarmCalls().install({ swarmId: 'a1' })).resolves.toEqual({ ok: true, installed: { id: 'a1' } });
+    const deps = createSwarms.mock.calls[0]?.[0] as SwarmDeps;
+    await expect(deps.ready?.()).resolves.toBeUndefined();
+    expect((createSwarmGit.mock.calls[0]?.[0] as GitDeps).env()).toBe(process.env);
+    await deps.cloneToken('a1');
+    expect(registry.cloneToken).toHaveBeenCalledWith(null, 'a1');
+  });
+});
+
 describe('the seed sets', () => {
   const shipped = { source: '/r', target: '/h', manifestFile: '/h/.seed.json' };
 
