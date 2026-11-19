@@ -9,6 +9,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -2612,6 +2613,50 @@ describe.skipIf(!RUN)('server mode, against a real built app (HIVE-142)', () => 
      * `rmSync`, so the file surviving byte for byte is the observation that
      * tells the fix from the bug.
      */
+    /**
+     * The audit trail, read back from the served process (HIVE-427). The file is beside the config on both
+     * sides. This block's devices are shared with every other case, so only lines written since this case
+     * began are counted; cases run one at a time.
+     */
+    it('writes the audit trail: the attach, an execute call and one input, never the keystrokes (HIVE-427)', async () => {
+      const startedAt = new Date().toISOString();
+      const now = new Date();
+      const pad = (value: number): string => String(value).padStart(2, '0');
+      const today = `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      const auditFile = join(dirname(configPath), 'audit', `${today}.jsonl`);
+      const marker = `AUDIT-MARKER-${randomUUID()}`;
+      const sessionId = `audit-${randomUUID()}`;
+      type Line = { at: string; event: string; deviceId: string; deviceName?: string; via: string; channel?: string; sessionId?: string };
+      const ours = (): Line[] =>
+        existsSync(auditFile)
+          ? readFileSync(auditFile, 'utf8')
+              .split('\n')
+              .filter((text) => text.length > 0)
+              .map((text) => JSON.parse(text) as Line)
+              .filter((line) => line.deviceId === device.device.id && line.at >= startedAt)
+          : [];
+
+      const client = await attached();
+      const spawned = await client.call(CH.ptySpawnTerminal, { sessionId, projectId: seededProjectId, cols: 80, rows: 24 });
+      expect(spawned.kind, JSON.stringify(spawned)).toBe('result');
+      for (let i = 0; i < 5; i += 1) client.notify(CH.ptyWrite, { sessionId, data: `echo ${marker}-${String(i)}\r` });
+      await client.collectPtyUntil(sessionId, new RegExp(`${marker}-4`));
+      client.close();
+      await waitFor(() => ours().some((line) => line.event === 'detach'), 'a detach line in the audit trail', 5_000);
+
+      const lines = ours();
+      const attaches = lines.filter((line) => line.event === 'attach');
+      expect(attaches, JSON.stringify(lines)).toHaveLength(1);
+      expect(attaches[0]).toMatchObject({ via: 'direct', deviceName: device.device.name });
+      expect(lines.some((line) => line.event === 'call' && line.channel === CH.ptySpawnTerminal)).toBe(true);
+      const inputs = lines.filter((line) => line.event === 'input');
+      expect(inputs, JSON.stringify(lines)).toHaveLength(1);
+      expect(inputs[0]).toMatchObject({ channel: CH.ptyWrite, sessionId });
+      expect(lines.filter((line) => line.event === 'detach')).toHaveLength(1);
+      expect(statSync(auditFile).mode & 0o777).toBe(0o600);
+      expect(readFileSync(auditFile, 'utf8')).not.toContain(marker);
+    }, 30_000);
+
     it('29. refuses a hand-built remote:forget and leaves the server’s credential alone', async () => {
       // On the edition nothing stores a remote credential (it is the desktop shell's); the refusal is what is proved.
       const credentialFile = join(dataDir(configPath, userDataDir), 'remote-credential.bin');
