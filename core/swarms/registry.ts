@@ -109,7 +109,9 @@ export async function cloneToken(
     case 'not_found':
       return { code: 'unavailable', message: "This swarm isn't available to your account." };
     case 'rate_limited': {
-      const minutes = Math.max(1, Math.ceil(Number(response.headers.get('retry-after') ?? 0) / 60));
+      // Retry-After may also be an HTTP date; anything but seconds reads as a minute.
+      const seconds = Number(response.headers.get('retry-after') ?? 0);
+      const minutes = Number.isFinite(seconds) ? Math.max(1, Math.ceil(seconds / 60)) : 1;
       return {
         code: 'failed',
         message: `Too many installs. Try again in ${String(minutes)} minute${minutes === 1 ? '' : 's'}.`,

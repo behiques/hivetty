@@ -193,6 +193,12 @@ describe('cloneToken', () => {
       'Too many installs. Try again in 1 minute.',
     ],
     [
+      '429 with a date to wait for',
+      () => json({ error: 'rate_limited' }, 429, { 'retry-after': 'Wed, 19 Nov 2026 10:00:00 GMT' }),
+      'failed',
+      'Too many installs. Try again in 1 minute.',
+    ],
+    [
       '503 swarms_not_configured',
       () => json({ error: 'swarms_not_configured' }, 503),
       'failed',
