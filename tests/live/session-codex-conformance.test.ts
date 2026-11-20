@@ -46,6 +46,7 @@ import { CH } from '../../shared/ipc-contract';
 import type { HiveNotification } from '../../shared/notification-contract';
 import type { PlanUpdate } from '../../shared/plan-contract';
 import { ticketStart } from '../../shared/ticket-workflow';
+import { HAS_SWARM, SWARM_DIR } from '../support/swarm-tree';
 
 /**
  * What only a real interactive `codex` can prove about a Codex session (HIVE-279).
@@ -212,7 +213,7 @@ const flat = (path: string): string =>
     .replace(/\x1b\[[0-9;?<>=]*[a-zA-Z~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[()][A-Z0-9]/g, '')
     .replace(/\s+/g, '');
 
-describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
+describe.skipIf(!READY || !HAS_SWARM)('a real interactive codex session (HIVE-279)', () => {
   let receiver: Receiver;
   let url: string;
   let statuses: Array<{ status: string; signal?: HookStatusEvent['signal']; sessionUuid?: string }>;
@@ -620,7 +621,7 @@ describe.skipIf(!READY)('a real interactive codex session (HIVE-279)', () => {
       );
       // The suite renders the user's installed skills (`~/.hivetty/skills`); this case needs the branch's verifier.
       copyFileSync(
-        join(process.cwd(), 'resources', 'skills', 'goal-on', 'scripts', 'verify-goal.mjs'),
+        join(SWARM_DIR, 'skills', 'goal-on', 'scripts', 'verify-goal.mjs'),
         join(codexPlugin!, 'skills', 'goal-on', 'scripts', 'verify-goal.mjs'),
       );
       await run('goal', {}, 'Reply with the word hi and nothing else.');
