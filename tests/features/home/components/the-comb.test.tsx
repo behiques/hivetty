@@ -223,11 +223,11 @@ describe('TheComb — hover, click and the hidden list', () => {
   });
 });
 
-describe('TheComb — the cells that fold others (decision D6)', () => {
-  const agentSummary = (name: string): AgentSummary => ({
-    name, description: '', icon: 'Robot', status: 'working', wake: { on: [] }, mcp: [], tools: [], skills: [], rotateAfter: 50, runs: [],
-  });
+const agentSummary = (name: string): AgentSummary => ({
+  name, description: '', icon: 'Robot', status: 'working', wake: { on: [] }, mcp: [], tools: [], skills: [], rotateAfter: 50, runs: [],
+});
 
+describe('TheComb — the cells that fold others (decision D6)', () => {
   beforeEach(() => {
     useUiStore.getState().reset();
     vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue(
@@ -240,12 +240,12 @@ describe('TheComb — the cells that fold others (decision D6)', () => {
     delete (window as unknown as { hive?: unknown }).hive;
   });
 
-  it('opens Agents from the swarm\'s "+N" cell', () => {
+  it('opens Agents at the swarm\'s section from its "+N" cell (HIVE-454)', () => {
     useHiveStore.setState({ entities: {}, order: [], agentOrder: [] });
     act(() => useHiveStore.getState().hydrateAgents(Array.from({ length: 16 }, (_, i) => agentSummary(`agent-${i}`))));
     render(<TheComb label="x" />);
     fireEvent.click(screen.getByRole('button', { name: /^10 more in The swarm/ }));
-    expect(useUiStore.getState().place).toBe('agents');
+    expect(useUiStore.getState()).toMatchObject({ place: 'agents', agentsFocus: 'swarm' });
   });
 
   it('draws one patch per installed swarm, and none called THE SWARM, once the listing loads (HIVE-454)', async () => {
@@ -273,7 +273,7 @@ describe('TheComb — the cells that fold others (decision D6)', () => {
     expect(texts).toContain('DEV SQUAD');
     expect(texts).not.toContain('THE SWARM');
     fireEvent.click(rest);
-    expect(useUiStore.getState().place).toBe('agents');
+    expect(useUiStore.getState()).toMatchObject({ place: 'agents', agentsFocus: 'sq1' });
   });
 
   it('opens Sessions on every project from the "+N projects" cell', () => {
@@ -392,6 +392,33 @@ describe('TheComb — the stage width (HIVE-454)', () => {
     // The pending relayout never runs: nothing measures the unmounted wrapper.
     expect(measured).not.toHaveBeenCalled();
     expect(errors).not.toHaveBeenCalled();
+  });
+
+  it('opens Agents with no section in focus from the "N more swarms" fold (HIVE-454)', async () => {
+    stage = 640;
+    const ids = ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9'];
+    const namesOf = (id: string) => [`${id}-a`, `${id}-b`, `${id}-c`];
+    const listing = swarmListing(
+      ids.map((id) =>
+        swarmItem({
+          installed: installedSwarm({
+            swarmId: id, title: id.toUpperCase(),
+            contents: { agents: namesOf(id).map((name) => ({ name, description: '', tools: [] })), skills: [] },
+          }),
+        }),
+      ),
+    );
+    (window as unknown as { hive?: unknown }).hive = {
+      swarms: { list: vi.fn(() => Promise.resolve(listing)), onChanged: vi.fn(() => () => undefined) },
+    };
+    useUiStore.getState().reset();
+    useHiveStore.setState({ entities: {}, order: [], agentOrder: [] });
+    act(() => useHiveStore.getState().hydrateAgents(ids.flatMap(namesOf).map(agentSummary)));
+    render(<TheComb label="x" />);
+    fireEvent.click(await screen.findByRole('button', { name: /^\d+ more swarms/ }));
+    expect(useUiStore.getState()).toMatchObject({ place: 'agents', agentsFocus: null });
+    resetSwarmsState();
+    delete (window as unknown as { hive?: unknown }).hive;
   });
 
   it('measures once without a ResizeObserver', () => {

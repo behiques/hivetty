@@ -1,7 +1,7 @@
 import { Pause, Play } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 
-import { swarmOwnerOf } from '@/lib/swarms';
+import { MY_SWARM, swarmOwnerOf } from '@/lib/swarms';
 import { cn } from '@/lib/utils';
 import { isAgent } from '@/types/entity';
 
@@ -23,6 +23,8 @@ import { useAgentPage, useStallsShown } from '@stores/ui-store';
 
 interface AgentRowProps {
   id: string;
+  /** Tag the row with its swarm's title, as the Summons lane does (HIVE-454). */
+  showSwarm?: boolean;
 }
 
 /** Line 2's keyword, in the colour of what the entry was. */
@@ -66,12 +68,19 @@ const messageOf = (cause: unknown) => (cause instanceof Error ? cause.message : 
  * the name never moves. An answer that is not a start (a refusal, a queued
  * wake, a rejected pause) takes line 2 for five seconds, as a status.
  *
+ * ## The swarm tag
+ *
+ * In the Summons lane, which gathers agents from every swarm, the name line
+ * ends with the swarm's title as a small tag (HIVE-454): `My swarm` for an
+ * agent no swarm ships, and nothing before the listing loads. The swarm
+ * sections below need none.
+ *
  * ## The state in words
  *
  * The tile is decoration. The accessible name says the state, the live-run
  * count and the last word, so the colour is never the only carrier.
  */
-export function AgentRow({ id }: AgentRowProps) {
+export function AgentRow({ id, showSwarm = false }: AgentRowProps) {
   const entity = useEntity(id);
   const page = useAgentPage();
   // While the stall panel is shown no agent row is (HIVE-411).
@@ -84,7 +93,10 @@ export function AgentRow({ id }: AgentRowProps) {
   const age = useAge(last?.ts ?? 0);
   const [notice, setNotice] = useState<string | null>(null);
   // HIVE-453: a swarm agent turned off in Settings. Pause means nothing for it, and its state reads "off".
-  const off = swarmOwnerOf(useSwarms().listing, 'agents', id)?.on === false;
+  const { listing } = useSwarms();
+  const owner = swarmOwnerOf(listing, 'agents', id);
+  const off = owner?.on === false;
+  const swarm = !showSwarm || listing === null ? null : (owner?.title ?? MY_SWARM.title);
 
   // Re-armed by each new notice, and cleared on unmount.
   useEffect(() => {
@@ -151,7 +163,7 @@ export function AgentRow({ id }: AgentRowProps) {
 
   const state = broken ? 'invalid' : off ? 'off' : STATUS_LABEL[entity.status];
   const name =
-    [`${id}, ${state}`, live > 1 ? `${String(live)} runs live` : null].filter(Boolean).join(', ') +
+    [`${id}, ${state}`, swarm, live > 1 ? `${String(live)} runs live` : null].filter(Boolean).join(', ') +
     (last === undefined ? '' : `. Last: ${last.kind}, ${last.line}, ${age}`);
 
   return (
@@ -172,6 +184,8 @@ export function AgentRow({ id }: AgentRowProps) {
           <span className="flex items-center gap-2">
             <b className="truncate text-ui font-semibold text-ink">{id}</b>
             <span className="flex-1" />
+            {/* On the right, before the age: the swarm the Summons row came from (HIVE-454). */}
+            {swarm === null ? null : <span className="min-w-0 truncate text-micro text-subtle">{swarm}</span>}
             <span className="w-[44px] shrink-0 text-right text-ui-sm text-subtle group-focus-within:invisible group-hover:invisible">
               {last === undefined ? '' : age}
             </span>

@@ -8,12 +8,12 @@ import { type CanvasPaint, useCanvasLoop } from '@hooks/use-canvas-loop';
 import { useReducedMotion } from '@hooks/use-reduced-motion';
 import { useSwarms } from '@hooks/use-swarms';
 import {
-  ALL_PROJECTS, type CellState, type CombCell, COMB_H, COMB_W, type CombInput, drawComb,
+  ALL_PROJECTS, ALL_SWARMS, type CellState, type CombCell, COMB_H, COMB_W, type CombInput, drawComb,
   type Flyer, flyerCount, hitTest, isCalm, layoutComb, layoutWidth, stepFlyers, stillFlyers, SWARM, syncFlyers,
 } from '@lib/swarm/comb';
 import { useSwarmPalette } from '@stores/appearance-store';
 import { type CombEntity, useCombEntities, useOpenEntity, useProjects } from '@stores/hive-store';
-import { useSelectPlace, useSetSessionsProject } from '@stores/ui-store';
+import { useOpenAgentsAt, useSelectPlace, useSetSessionsProject } from '@stores/ui-store';
 
 export const toCombInput = (e: CombEntity): CombInput => ({
   id: e.id, name: e.name, project: e.project, state: e.state,
@@ -120,6 +120,7 @@ export function TheComb({ label }: { label: string }) {
 
   const openEntity = useOpenEntity();
   const selectPlace = useSelectPlace();
+  const openAgentsAt = useOpenAgentsAt();
   const setSessionsProject = useSetSessionsProject();
   const [hover, setHover] = useState<{ cell: CombCell; k: number } | null>(null);
   /**
@@ -149,8 +150,9 @@ export function TheComb({ label }: { label: string }) {
     if (cell.kind === 'entity') {
       openEntity(cell.id);
     } else if (cell.agent) {
-      // An agent group's "+N", or the "+N" SWARMS fold.
-      selectPlace('agents');
+      // A swarm's "+N" opens Agents at its section (HIVE-454); the SWARMS fold opens the list from the top.
+      if (cell.project === ALL_SWARMS) selectPlace('agents');
+      else openAgentsAt(cell.project);
     } else {
       // A project's cell is its list, so the Overmind rather than the last session.
       setSessionsProject(cell.project === ALL_PROJECTS ? null : cell.project);

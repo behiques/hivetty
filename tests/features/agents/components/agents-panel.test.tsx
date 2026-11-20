@@ -1,12 +1,15 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentsPanel } from '@features/agents/components/agents-panel';
 import type { AgentSummary } from '@shared/agent-contract';
 import { useHiveStore } from '@stores/hive-store';
-import { type AgentGroupKey, useUiStore } from '@stores/ui-store';
+import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet } from '@tests/support/demo-fleet';
+import { installedSwarm, swarmEntry, swarmItem, swarmListing } from '@tests/support/swarms';
+
+import { resetSwarmsState } from '@/lib/swarms';
 
 /** The three fixture agents, in `agentOrder`. */
 const FIXTURE_AGENTS = [['slack-agent'], ['pr-reviewer'], ['standup-agent']] as const;
@@ -211,14 +214,19 @@ describe('AgentsPanel', () => {
   });
 
   /**
-   * Grouping by state (HIVE-116).
+   * Grouping (HIVE-116, HIVE-454).
    *
    * A rail is read to answer "what needs me", not "what do I have", which is
-   * what the groups put first. The ordering rules themselves are
-   * `useAgentsByGroup`'s and are tested there; these are about the panel
-   * drawing what it is handed.
+   * what Summons puts first; below it, one folding section per swarm. The
+   * ordering rules themselves are `useAgentsByGroup`'s and `agentGroups`'s and
+   * are tested there; these are about the panel drawing what it is handed.
    */
-  describe('grouped by state', () => {
+  describe('grouped by swarm under a Summons lane', () => {
+    afterEach(() => {
+      resetSwarmsState();
+      delete (window as unknown as { hive?: unknown }).hive;
+    });
+
     const summary = (name: string, status: AgentSummary['status']) => ({
       name,
       description: `${name} watches things`,
@@ -238,39 +246,208 @@ describe('AgentsPanel', () => {
       });
     };
 
-    const laneHeader = (label: string) =>
-      within(screen.getByRole('region', { name: label })).getByRole('button', {
-        expanded: !useUiStore.getState().agentsFolded[
-          label.toLowerCase() as AgentGroupKey
-        ],
+    const swarm = (swarmId: string, title: string, agents: string[]) =>
+      swarmItem({
+        entry: swarmEntry({ id: swarmId, slug: swarmId, title }),
+        installed: installedSwarm({
+          swarmId,
+          slug: swarmId,
+          title,
+          contents: { agents: agents.map((name) => ({ name, description: '', tools: [] })), skills: [] },
+        }),
       });
 
-    it('draws the lanes in order, each with its count (HIVE-204)', () => {
+    /** Installs swarm A (asker, worker) then swarm B (sleeper), and waits for the panel to read them. */
+    const installAB = async () => {
+      const listing = swarmListing([swarm('A', 'Alpha', ['asker', 'worker']), swarm('B', 'Beta', ['sleeper'])]);
+      (window as unknown as { hive?: unknown }).hive = {
+        swarms: { list: vi.fn(() => Promise.resolve(listing)), onChanged: vi.fn(() => () => undefined) },
+      };
       seed(
         summary('asker', 'asking'),
-        summary('broke', 'failed'),
-        summary('busy', 'working'),
-        summary('held', 'paused'),
+        summary('worker', 'working'),
+        summary('sleeper', 'sleeping'),
+        summary('mine', 'sleeping'),
       );
-
       render(<AgentsPanel />);
+      await screen.findByRole('region', { name: 'Alpha' });
+    };
 
-      expect(
-        screen.getAllByRole('region').map((region) => region.getAttribute('aria-label')),
-      ).toEqual(['Summons', 'Morphing', 'Burrowed']);
-      expect(laneHeader('Summons')).toHaveTextContent('Summons2');
-      expect(laneHeader('Morphing')).toHaveTextContent('Morphing1');
-      expect(laneHeader('Burrowed')).toHaveTextContent('Burrowed1');
+    const regions = () => screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'));
+
+    /** A region's caret header, found by its fold key so a folded one is found too. */
+    const laneHeader = (label: string) => {
+      const region = screen.getByRole('region', { name: label });
+      const key = region.getAttribute('data-group') ?? '';
+      return within(region).getByRole('button', { expanded: !useUiStore.getState().agentsFolded[key] });
+    };
+
+    it('draws Summons, then one section per swarm in Settings order, then My swarm (HIVE-454)', async () => {
+      await installAB();
+
+      expect(regions()).toEqual(['Summons', 'Alpha', 'Beta', 'My swarm']);
+
+      const summons = screen.getByRole('region', { name: 'Summons' });
+      expect(within(summons).getByRole('button', { name: /^asker, asking, Alpha/ })).toBeInTheDocument();
+      expect(within(summons).getByText('Alpha')).toHaveClass('text-micro');
+
+      const alpha = screen.getByRole('region', { name: 'Alpha' });
+      expect(within(alpha).getByRole('button', { name: /^worker, working/ })).toBeInTheDocument();
+      expect(within(alpha).queryByRole('button', { name: /^asker/ })).not.toBeInTheDocument();
+      // No swarm tag outside Summons: the section already says it.
+      expect(within(alpha).getByRole('button', { name: /^worker, working/ })).not.toHaveAccessibleName(/Alpha/);
+      expect(laneHeader('Alpha')).toHaveTextContent(/^Alpha1 · 1$/);
+      expect(within(laneHeader('Alpha')).getByText('1', { selector: '.text-green' })).toBeInTheDocument();
+
+      expect(within(screen.getByRole('region', { name: 'Beta' })).getByRole('button', { name: /^sleeper/ })).toBeInTheDocument();
+      expect(within(screen.getByRole('region', { name: 'My swarm' })).getByRole('button', { name: /^mine/ })).toBeInTheDocument();
     });
 
-    it('omits a lane with nothing in it, rather than a header reading zero', () => {
+    it('draws a section with nothing working with its total alone', async () => {
+      await installAB();
+
+      expect(laneHeader('Beta')).toHaveTextContent(/^Beta1$/);
+      expect(laneHeader('Summons')).toHaveTextContent('Summons1');
+    });
+
+    it('folds one section, keeps it folded across a re-render, and leaves the others open (HIVE-454)', async () => {
+      await installAB();
+
+      await userEvent.click(laneHeader('Beta'));
+
+      expect(laneHeader('Beta')).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('button', { name: /^sleeper/ })).not.toBeInTheDocument();
+      expect(useUiStore.getState().agentsFolded).toEqual({ B: true });
+
+      seed(
+        summary('asker', 'asking'),
+        summary('worker', 'working'),
+        summary('sleeper', 'sleeping'),
+        summary('mine', 'sleeping'),
+        summary('extra', 'sleeping'),
+      );
+
+      expect(laneHeader('Beta')).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('button', { name: /^sleeper/ })).not.toBeInTheDocument();
+      expect(laneHeader('Alpha')).toHaveAttribute('aria-expanded', 'true');
+      expect(agentRow('worker')).toBeInTheDocument();
+    });
+
+    it('still draws a single section’s header', () => {
       seed(summary('sleeper', 'sleeping'));
 
       render(<AgentsPanel />);
 
-      expect(screen.getByRole('region', { name: 'Burrowed' })).toBeInTheDocument();
+      expect(regions()).toEqual(['The swarm']);
+      expect(laneHeader('The swarm')).toHaveTextContent(/^The swarm1$/);
+    });
+
+    it('puts every agent in one section named The swarm before the listing loads', () => {
+      seed(summary('asker', 'asking'), summary('busy', 'working'), summary('held', 'paused'));
+
+      render(<AgentsPanel />);
+
+      expect(regions()).toEqual(['Summons', 'The swarm']);
+      // No tag before the listing loads: which swarm is not known yet.
+      expect(agentRow('asker')).toHaveAccessibleName(/^asker, asking(\.|$)/);
+      const rows = within(screen.getByRole('region', { name: 'The swarm' })).getAllByRole('button', {
+        name: /^(busy|held),/,
+      });
+      expect(rows.map((row) => row.getAttribute('aria-label')?.split(',')[0])).toEqual(['busy', 'held']);
+    });
+
+    it('omits Summons with nothing in it, rather than a header reading zero', () => {
+      seed(summary('sleeper', 'sleeping'));
+
+      render(<AgentsPanel />);
+
       expect(screen.queryByRole('region', { name: 'Summons' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'Morphing' })).not.toBeInTheDocument();
+    });
+
+    it('scrolls the section openAgentsAt names into view, then clears the focus (HIVE-454)', async () => {
+      const scrolled: Element[] = [];
+      const original = Element.prototype.scrollIntoView;
+      const scrollIntoView = vi.fn(function (this: Element) {
+        scrolled.push(this);
+      });
+      Element.prototype.scrollIntoView = scrollIntoView;
+
+      try {
+        await installAB();
+        await userEvent.click(laneHeader('Beta'));
+
+        act(() => useUiStore.getState().openAgentsAt('B'));
+
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+        expect(scrolled).toEqual([screen.getByRole('region', { name: 'Beta' })]);
+        expect(useUiStore.getState().agentsFocus).toBeNull();
+        expect(agentRow('sleeper')).toBeInTheDocument();
+      } finally {
+        Element.prototype.scrollIntoView = original;
+      }
+    });
+
+    it('scrolls to Summons, unfolded, when every agent of the focused swarm sits there (HIVE-454)', async () => {
+      const scrolled: Element[] = [];
+      const original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+        scrolled.push(this);
+      });
+
+      try {
+        await installAB();
+        // Alpha's working agent fails too: both of Alpha's agents are in Summons, so Alpha has no section.
+        seed(
+          summary('asker', 'asking'),
+          summary('worker', 'failed'),
+          summary('sleeper', 'sleeping'),
+          summary('mine', 'sleeping'),
+        );
+        expect(screen.queryByRole('region', { name: 'Alpha' })).not.toBeInTheDocument();
+        await userEvent.click(laneHeader('Summons'));
+
+        act(() => useUiStore.getState().openAgentsAt('A'));
+
+        expect(scrolled).toEqual([screen.getByRole('region', { name: 'Summons' })]);
+        expect(laneHeader('Summons')).toHaveAttribute('aria-expanded', 'true');
+        expect(agentRow('asker')).toBeInTheDocument();
+        expect(useUiStore.getState().agentsFocus).toBeNull();
+      } finally {
+        Element.prototype.scrollIntoView = original;
+      }
+    });
+
+    it('clears a focus with no such section, and scrolls nothing', async () => {
+      const scrollIntoView = vi.fn();
+      const original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = scrollIntoView;
+
+      try {
+        await installAB();
+
+        act(() => useUiStore.getState().openAgentsAt('gone'));
+
+        expect(scrollIntoView).not.toHaveBeenCalled();
+        expect(useUiStore.getState().agentsFocus).toBeNull();
+      } finally {
+        Element.prototype.scrollIntoView = original;
+      }
+    });
+
+    it('clears the focus where the DOM has no scrollIntoView', async () => {
+      const original = Element.prototype.scrollIntoView;
+      // happy-dom may lack it; the panel must not throw.
+      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+
+      try {
+        await installAB();
+
+        act(() => useUiStore.getState().openAgentsAt('B'));
+
+        expect(useUiStore.getState().agentsFocus).toBeNull();
+      } finally {
+        Element.prototype.scrollIntoView = original;
+      }
     });
 
     it('counts summons in amber and morphing in green in the header', () => {
@@ -300,26 +477,6 @@ describe('AgentsPanel', () => {
         .nextElementSibling as HTMLElement;
 
       expect(counts).toHaveTextContent(/^1 morphing$/);
-    });
-
-    it('folds a lane from its header, and unfolds it again', async () => {
-      seed(summary('busy', 'working'), summary('sleeper', 'sleeping'));
-
-      render(<AgentsPanel />);
-
-      const header = laneHeader('Burrowed');
-      expect(header).toHaveAttribute('aria-expanded', 'true');
-
-      await userEvent.click(header);
-
-      expect(header).toHaveAttribute('aria-expanded', 'false');
-      expect(agentRows()).toHaveLength(1);
-      expect(agentRow('busy')).toBeInTheDocument();
-
-      await userEvent.click(header);
-
-      expect(header).toHaveAttribute('aria-expanded', 'true');
-      expect(agentRows()).toHaveLength(2);
     });
   });
 

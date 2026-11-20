@@ -163,7 +163,7 @@ test('tells the author what the body below the frontmatter does', async ({}, tes
   await app.close();
 });
 
-test('lists an authored agent in its lane, and folds the lane', async ({}, testInfo) => {
+test('lists an authored agent in its swarm section, and folds the section', async ({}, testInfo) => {
   const { app, page } = await launchWithConfig((name) => testInfo.outputPath(name));
 
   try {
@@ -174,15 +174,15 @@ test('lists an authored agent in its lane, and folds the lane', async ({}, testI
     const panel = page.locator('[data-panel="agents"]');
 
     /*
-      A definition that has never run rests, so it files under Burrowed
-      (HIVE-204), and its row says the state in words in its name — the tile's
+      No swarm ships an agent the person wrote, so it files under My swarm
+      (HIVE-454), and its row says the state in words in its name — the tile's
       colour is never the only carrier.
     */
-    const lane = panel.getByRole('region', { name: 'Burrowed' });
+    const lane = panel.getByRole('region', { name: 'My swarm' });
 
     await expect(lane.getByRole('button', { name: /^slack-watcher, sleeping/ })).toBeVisible();
 
-    // The lane folds from its header, and unfolds again.
+    // The section folds from its header, and unfolds again.
     const header = lane.getByRole('button', { expanded: true });
 
     await header.click();
@@ -592,7 +592,10 @@ test('runs from the row, and the run table selects the newest run', async ({}, t
 
     await row.hover();
     await panel.getByRole('button', { name: 'Run sweeper now' }).click();
-    await expect(panel.getByRole('region', { name: 'Morphing' })).toBeVisible();
+    // Working, it stays in its swarm section, its row saying so (HIVE-454).
+    await expect(
+      panel.getByRole('region', { name: 'My swarm' }).getByRole('button', { name: /^sweeper, working/ }),
+    ).toBeVisible();
 
     /*
       A second press while it works is answered in line 2 — queued behind the
