@@ -390,6 +390,36 @@ test('writes check and a daily cap, and hides check on a schedule', async ({}, t
   }
 });
 
+test('writes check: holding through the form, and the parser accepts it', async ({}, testInfo) => {
+  const { app, page, configPath } = await launchWithConfig((name) =>
+    testInfo.outputPath(name),
+  );
+
+  try {
+    await newAgentInSettings(page);
+
+    await page.getByRole('textbox', { name: 'name' }).fill('pr-watcher');
+    await page
+      .getByRole('textbox', { name: 'description' })
+      .fill('Watches the PRs it holds.');
+
+    const check = page.getByRole('radiogroup', { name: 'Check' });
+    await expect(check).toBeVisible();
+    // A third option on the control: it must still be on screen and clickable.
+    await check.getByRole('radio', { name: 'while holding' }).click();
+    await check.screenshot({ path: testInfo.outputPath('check-control.png') });
+
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expectSavedAs(page, 'pr-watcher');
+
+    const agentMd = join(dirname(configPath), 'agents', 'pr-watcher', 'AGENT.md');
+    expect(readFileSync(agentMd, 'utf8')).toContain('check: holding');
+    await expect(check.getByRole('radio', { name: 'while holding' })).toHaveAttribute('aria-checked', 'true');
+  } finally {
+    await app.close();
+  }
+});
+
 /**
  * The bug the picker exists to make unreachable.
  *

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -8,7 +8,11 @@ import { fillIncludes } from '../../shared/skill-fragments';
 import { HAS_SWARM, SWARM_DIR } from '../support/swarm-tree';
 
 const read = (path: string): string => readFileSync(join(SWARM_DIR, path), 'utf8');
-const ship = () => read('skills/ship/SKILL.md');
+// Dev Squad 1.1.0 folds the ship skill's stage machine into the shipper agent. Read whichever file holds it, so these
+// tests pass on a swarm from either side of that change. Shortcut: drop the skill branch once no swarm ships it.
+const SHIP_SKILL = 'skills/ship/SKILL.md';
+const hasShipSkill = () => existsSync(join(SWARM_DIR, SHIP_SKILL));
+const ship = () => (hasShipSkill() ? read(SHIP_SKILL) : read('agents/shipper/AGENT.md'));
 const mergePr = () => read('skills/merge-pr/SKILL.md');
 const agent = (name: string) => read(`agents/${name}/AGENT.md`);
 const words = (text: string) => text.replace(/^---[\s\S]*?\n---\n/, '').split(/\s+/).filter(Boolean).length;
@@ -21,7 +25,8 @@ describe.skipIf(!HAS_SWARM)('shipped text agrees (HIVE-413)', () => {
     const body = ship().replace(/^---[\s\S]*?\n---\n/, '');
     const steps = body.slice(body.indexOf('| Stage |'), body.indexOf('## A stuck row'));
     expect(words(steps)).toBeLessThanOrEqual(1200);
-    expect(words(ship())).toBeLessThanOrEqual(1450);
+    // The shipper agent holds the stage machine and its own wake rules once the skill is folded in.
+    expect(words(ship())).toBeLessThanOrEqual(hasShipSkill() ? 1450 : 2600);
   });
   it('carries closes-ticket in the intake, the row and the Done rule', () => {
     expect(fillIncludes(ship())).toMatch(/closes-ticket: yes \| no/);

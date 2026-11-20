@@ -42,7 +42,8 @@ describe.skipIf(!HAS_SWARM)('codex: and copilot: blocks in the shipped agents (H
       expect(def.model).toBe(builds ? 'opus' : 'sonnet');
       expect(def.codex).toEqual({
         model: builds ? 'gpt-6.1-sol' : 'gpt-6.1-terra',
-        effort: builds ? 'high' : 'medium',
+        // acr reviews at high effort from Dev Squad 1.1.0: its verifier decides what reaches a PR.
+        effort: builds || (folder.name === 'acr' && def.codex?.effort === 'high') ? 'high' : 'medium',
       });
       expect(def.copilot).toEqual({
         model: builds ? 'claude-opus-5.5' : 'claude-sonnet-5.5',
