@@ -38,6 +38,7 @@ vi.mock('../../../core/swarms/report', async (importOriginal) => ({
 }));
 const config = vi.hoisted(() => ({ path: '/h/config.json' }));
 vi.mock('../../../core/config/paths', () => ({ configPath: () => config.path }));
+vi.unmock('../../../core/swarms'); // tests/setup.ts stubs boot's adoption for every other spec
 vi.mock('../../../core/platform', () => ({ platform: () => ({ lifecycle: { version: '1.0.0' } }) }));
 const resetShipped = vi.hoisted(() => vi.fn((..._args: unknown[]) => Promise.resolve([])));
 vi.mock('../../../core/seed/actions', async (importOriginal) => ({

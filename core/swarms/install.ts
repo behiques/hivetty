@@ -52,7 +52,7 @@ export interface SwarmDeps {
   appVersion: string;
   git: SwarmGit;
   cloneToken: (swarmId: string) => Promise<{ token: string; repoUrl: string } | SwarmFailure>;
-  /** The boot seed: it writes `.seed.json` too, so every write here waits for it. */
+  /** Boot's adoption: it writes `.seed.json` and installed.json too, so every write here waits for it. */
   ready?: () => Promise<unknown>;
   seed?: typeof seedShipped;
   now?: () => Date;
@@ -204,8 +204,8 @@ async function hashFolders(source: string, folders: string[]): Promise<Record<st
 
 /**
  * A first install that failed after its takeover deletes `<id>/`, and the moved entries with it. They go back to
- * `.seed.json`, except for a file the undo deleted: with no entry the boot seed creates it again from `resources/`,
- * where an entry would read as the person having deleted it.
+ * `.seed.json`, except for a file the undo deleted: an entry would read as the person having deleted it, and since
+ * HIVE-448 nothing seeds it back.
  */
 async function giveBackTaken(
   hiveDir: string,

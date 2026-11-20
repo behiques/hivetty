@@ -17,13 +17,12 @@ import { liftGrants } from './lift-grants';
 import { baseOf, mergeParts, ownKey, parseParts, type PartBase } from './merge';
 
 /**
- * Seeding the skills and agents the app ships into `~/.hivetty` (HIVE-162).
+ * Seeding a swarm's skills and agents into `~/.hivetty` (HIVE-162, HIVE-441).
  *
  * `~/.hivetty/skills` and `~/.hivetty/agents` are the **user's** folders: Settings
- * writes them, a text editor writes them, dotfiles back them up. The app
- * ships skills and agent definitions of its own (`resources/skills`,
- * `resources/agents`; the workflow lands there story by story), and they have
- * to land in those same folders — a session gets its skills from the generated plugin
+ * writes them, a text editor writes them, dotfiles back them up. An installed
+ * swarm ships skills and agent definitions (the app itself ships none since
+ * HIVE-448), and they have to land in those same folders — a session gets its skills from the generated plugin
  * that mirrors `~/.hivetty/skills`, and an agent is a file the registry watches
  * there. So the app writes into a folder it does not own, and the whole of
  * this module is the rule that makes that safe: **the user's edits win.**

@@ -14,6 +14,7 @@ import type { InstalledSwarm } from '@shared/swarm-contract';
  */
 const config = vi.hoisted(() => ({ path: '/h/config.json' }));
 vi.mock('../../../core/config/paths', () => ({ configPath: () => config.path }));
+vi.unmock('../../../core/swarms'); // tests/setup.ts stubs boot's adoption for every other spec
 
 const { adopt, resetSwarms } = await import('../../../core/swarms');
 

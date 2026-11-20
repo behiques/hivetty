@@ -11,10 +11,9 @@ import { afterAll, afterEach, vi } from 'vitest';
  * No test reaches the developer's real home folder. `os.homedir()` reads
  * `HOME`, so every `~/.hivetty` path the main process builds lands here instead.
  *
- * `registerIpcHandlers` seeds `~/.hivetty` at start-up, and the ipc specs that
- * never set `HIVE_CONFIG_PATH` wrote the real `~/.hivetty/.seed.json` on every
- * run. An emptied manifest reads every shipped file as the user's edit, so
- * the app stopped upgrading the skills and agents it installs. Per spec rather
+ * `registerIpcHandlers` once seeded `~/.hivetty` at start-up (adoption alone
+ * since HIVE-448), and the ipc specs that never set `HIVE_CONFIG_PATH` wrote
+ * the real `~/.hivetty/.seed.json` on every run. Per spec rather
  * than per `HIVE_CONFIG_PATH` so a spec that deletes that variable in its
  * `afterEach` falls back here, not to the real folder.
  *
@@ -33,6 +32,17 @@ if (
     rmSync(home, { recursive: true, force: true });
   });
 }
+
+/**
+ * No spec adopts `~/.hivetty` behind its own back (HIVE-230, HIVE-448). `registerIpcHandlers` starts boot's adoption
+ * without awaiting it, so a spec could end with it still writing `swarms/adopted` while the `afterAll` above removes
+ * the folder: ENOTEMPTY from `rmSync`. Mocked here, beside the teardown it races; the specs about adoption opt back in
+ * with `vi.unmock`.
+ */
+vi.mock('../core/swarms', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../core/swarms')>()),
+  adopt: () => Promise.resolve(),
+}));
 
 /**
  * happy-dom does not implement ResizeObserver, which the terminal surface uses
