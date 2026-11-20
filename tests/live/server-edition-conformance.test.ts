@@ -394,8 +394,9 @@ describe.skipIf(!RUN || IMAGE !== undefined)(`the server edition under ${BIN ?? 
 
     const stopped = await stopWithin(served, 20_000);
     expect(stopped, served.stderr()).toEqual({ code: 0, signal: null });
+    // Since HIVE-448 a fresh server prints nothing on stdout here: the only line it printed was the boot seed's own.
+    // Whatever it does print keeps the format, which tests/server/log.test.ts pins.
     const lines = served.stdout().split('\n').filter((line) => line !== '');
-    expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) expect(line).toMatch(LOG_LINE);
   }, 90_000);
 
