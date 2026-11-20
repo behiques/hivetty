@@ -59,7 +59,8 @@ A version with a prerelease suffix is a release candidate, and it changes two th
 - **The licence talks to the dev cloud.** `buildAccount` reads `app.getVersion()`, and a packaged
   prerelease resolves `api.dev.hivetty.dev` and trusts `LEASE_KEYS.dev`. `HIVETTY_CLOUD_URL` and
   `HIVETTY_LEASE_KEYS` stay ignored, as in any packaged build, and `account.cloudUrl` still wins. It
-  returns on `hivetty://`, the packaged scheme, so the dev cloud must accept that redirect.
+  signs in on `hivetty-dev://auth/callback`, the release candidate's own scheme (HIVE-452; see the table in
+  [desktop-architecture.md](desktop-architecture.md#the-licence-slice-and-the-deep-link-hive-264)).
 - **The release is a GitHub prerelease, never `latest`.** Stable copies never see it. A copy already on
   a prerelease does: electron-updater turns `allowPrerelease` on from the version, looks for
   `rc-mac.yml`, and falls back to the `latest-mac.yml` the build uploads. An RC updates to the next RC
