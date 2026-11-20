@@ -81,7 +81,6 @@ function headlessPlatform(): import('../../../core/platform').Platform {
       stateDir: mkdtempSync(join(tmpdir(), 'hive-headless-')),
       logsDir: join(tmpdir(), 'hive-headless-logs'),
     },
-    resources: join(tmpdir(), 'hive-headless-resources'),
     notify: () => undefined,
     processHost: () => {
       throw new Error('no pty host in this suite');

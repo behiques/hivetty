@@ -162,14 +162,8 @@ test('the work tab opens on a skeleton, not on data', async ({ page }) => {
   }
 });
 
-test.describe('with the shipped agents deleted', () => {
-  /*
-    Since HIVE-162 every launch seeds the shipped agents, so a fresh profile
-    lists four. The empty tab is what a person sees after deleting them, and
-    the fixture starts there (retro D).
-  */
-  test.use({ unseeded: true });
-
+test.describe('with no agent installed', () => {
+  // A fresh install ships no agents (HIVE-448): the fixture's profile starts here.
   test('the agents tab is empty and says why', async ({ page }) => {
     await page.waitForSelector('nav[aria-label="Places"]');
 

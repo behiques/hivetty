@@ -49,14 +49,6 @@ describe('the server platform (HIVE-422)', () => {
     expect(make().paths).toEqual({ stateDir: '/srv/h/data', logsDir: '/srv/h/data' });
   });
 
-  it('finds resources two folders up from the bundle', () => {
-    expect(make().resources).toBe('/resources');
-    expect(
-      createServerPlatform({ dataDir: '/d', release: false, version: '1', quit: vi.fn(), fromDir: '/repo/out/server', key: Buffer.alloc(32) })
-        .resources,
-    ).toBe('/repo/resources');
-  });
-
   it('notifies with one log line and nothing else', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const onClick = vi.fn();

@@ -13,7 +13,6 @@ import { dirname, join } from 'node:path';
 import { AGENT_FILE, AGENTS_DIR } from '@shared/agent-contract';
 import { RESERVED_SKILL_NAME } from '@shared/skills-contract';
 
-import { legacyBase, readHistory, type History } from './history';
 import { liftGrants } from './lift-grants';
 import { baseOf, mergeParts, ownKey, parseParts, type PartBase } from './merge';
 
@@ -43,9 +42,10 @@ import { baseOf, mergeParts, ownKey, parseParts, type PartBase } from './merge';
  * edited key used to freeze an agent's whole prompt for good. Each
  * frontmatter key and the body now merge on their own, from a base per part
  * recorded under `parts` in the manifest. A file seeded before `parts`
- * existed takes its base from the shipped history (`history.ts`). `files`
- * keeps its meaning, so an older build reading this manifest still refuses
- * to overwrite a file the user changed.
+ * existed has no base and is left alone as the person's (HIVE-448 deleted the
+ * shipped history that once supplied one). `files` keeps its meaning, so an
+ * older build reading this manifest still refuses to overwrite a file the
+ * user changed.
  *
  * "What the last seed wrote" is a hash per file in `~/.hivetty/.seed.json`. It
  * is what tells an untouched copy from an edited one, and a deleted copy from
@@ -104,10 +104,6 @@ export interface SeedOptions {
   target: string;
   /** The manifest path, normally `<target>/.seed.json`. */
   manifestFile: string;
-  /** `shipped-history.json`, for files seeded before the part manifest. */
-  history?: string;
-  /** Folders (`skills/tdd`, `agents/builder`) an installed swarm owns: passed over as if not shipped (HIVE-441). */
-  exclude?: ReadonlySet<string>;
   /** Folders a swarm install found already on disk, owned by nobody (HIVE-447): their files stay, recorded as edited. */
   claim?: ReadonlySet<string>;
 }
@@ -221,7 +217,7 @@ export async function throughLink(root: string, rel: string): Promise<boolean> {
  * both as a folder: it is the folder that may be a symlink, and it is the
  * folder that a person recognises as "the thing I edited".
  */
-export async function shippedFolders(source: string, exclude?: ReadonlySet<string>): Promise<string[]> {
+export async function shippedFolders(source: string): Promise<string[]> {
   const folders: string[] = [];
   for (const kind of ['skills', AGENTS_DIR]) {
     let names: string[];
@@ -235,7 +231,6 @@ export async function shippedFolders(source: string, exclude?: ReadonlySet<strin
     }
     for (const name of names) {
       if (kind === 'skills' && name === RESERVED_SKILL_NAME) continue;
-      if (exclude?.has(`${kind}/${name}`) === true) continue;
       folders.push(`${kind}/${name}`);
     }
   }
@@ -247,9 +242,8 @@ export async function seedShipped(options: SeedOptions): Promise<SeedReport> {
   const manifest = await readManifest(options.manifestFile);
   const next: Record<string, string> = { ...manifest.files };
   const parts: Record<string, PartBase> = { ...manifest.parts };
-  let history: History | null = null;
 
-  for (const folder of await shippedFolders(options.source, options.exclude)) {
+  for (const folder of await shippedFolders(options.source)) {
     const destinationDir = join(options.target, folder);
     const claimed = options.claim?.has(folder) === true;
     if (await throughLink(options.target, folder)) {
@@ -322,9 +316,7 @@ export async function seedShipped(options: SeedOptions): Promise<SeedReport> {
       const text = bytes.toString();
 
       if (isMerged(rel) && parseParts(current) !== null && parseParts(text) !== null) {
-        history ??= options.history === undefined ? {} : await readHistory(options.history);
-        const base =
-          manifest.parts[rel] ?? legacyBase(rel, current, manifest.files[rel], history);
+        const base = manifest.parts[rel] ?? null;
 
         // No record and no shipped version to compare against: a file that
         // was there before the app shipped one. Theirs, as it always was.

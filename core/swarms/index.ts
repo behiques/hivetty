@@ -7,7 +7,7 @@
  * depends on neither the licence client nor the IPC layer.
  */
 import { lstat } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import {
   isBundled,
@@ -24,8 +24,8 @@ import {
 
 import { configPath } from '../config/paths';
 import { platform } from '../platform';
-import { shippedOptions } from '../seed';
-import { serial } from '../seed/actions';
+import { resetShipped, serial } from '../seed/actions';
+import { SEED_MANIFEST_FILE } from '../seed/paths';
 import type { SeedOptions } from '../seed/seed';
 
 import { adoptBuiltIns, rekeyAdopted, rekeyTarget } from './adopt';
@@ -37,7 +37,7 @@ import { reportFor, reportInstall } from './report';
 import { createSwarmUpdater, type SwarmUpdater } from './update';
 
 export interface SwarmHooks {
-  /** The boot seed. Never rejects. */
+  /** Boot's adoption (HIVE-447; boot seeds nothing since HIVE-448). Never rejects. */
   ready: () => Promise<unknown>;
   afterSkills: () => void;
   afterAgents: () => void;
@@ -87,7 +87,7 @@ const git = (): SwarmGit =>
 function swarms(): Swarms {
   engine ??= createSwarms({
     hiveDir: hiveDir(),
-    shippedManifest: shippedOptions().manifestFile,
+    shippedManifest: join(hiveDir(), SEED_MANIFEST_FILE),
     appVersion: platform().lifecycle.version,
     git: git(),
     cloneToken: (swarmId) => cloneToken(hooks.authedFetch(), swarmId),
@@ -98,7 +98,7 @@ function swarms(): Swarms {
 
 const registry = async (): Promise<RegistryRead> => {
   const read = await readRegistry(hooks.authedFetch(), swarmPaths(hiveDir()).registry);
-  // HIVE-447: the adopted Dev Squad takes the registry's id, in the install queue and after the boot seed. Never the
+  // HIVE-447: the adopted Dev Squad takes the registry's id, in the install queue and after boot's adoption. Never the
   // reason a read fails. No caller reads the registry from inside the queue, so this never waits on itself. Asked
   // first outside the queue, so a read with nothing to re-key never waits behind an install's clone.
   if (rekeyTarget(read.swarms, await swarms().installed()) === null) return read; // installed() never rejects
@@ -233,19 +233,17 @@ export function swarmSessionChanged(): void {
   hadSession = has;
 }
 
-/** The shipped seed options, minus the folders swarms own, and one set per installed swarm. */
-export const swarmSeedSets = (): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }> =>
-  swarms().seedSets(shippedOptions());
+/** One seed set per installed swarm (HIVE-448: the app ships none of its own). */
+export const swarmSeedSets = (): Promise<SeedOptions[]> => swarms().seedSets();
 
 /**
- * The boot seed, then adoption (HIVE-447). Once a home is adopted the seed from `resources/` never runs there
- * again. This is the promise every install, removal and seed action waits for (`hooks.ready`), so adoption runs
- * here and never in their queue: queued behind them it would wait on itself. Never rejects.
- *
- * `seed` answers null for a seed that failed, as `seedShippedIntoHive` does: no adoption and no marker then, so a
- * home whose seed failed is seeded again at the next launch.
+ * Boot (HIVE-447, HIVE-448): adoption and nothing else, since the app ships no agents and no skills. A home an older
+ * release seeded, never adopted, becomes the installed Dev Squad; a fresh home gets only the marker. This is the
+ * promise every install, removal and seed action waits for (`hooks.ready`), so adoption runs here and never in their
+ * queue: queued behind them it would wait on itself. Never rejects: a failed adoption leaves no marker and the next
+ * launch tries again.
  */
-export async function seedAndAdopt(seed: (exclude: ReadonlySet<string> | undefined) => Promise<unknown>): Promise<void> {
+export async function adopt(): Promise<void> {
   try {
     const dir = hiveDir();
     const adopted = await lstat(swarmPaths(dir).adopted).then(
@@ -253,26 +251,24 @@ export async function seedAndAdopt(seed: (exclude: ReadonlySet<string> | undefin
       () => false,
     );
     if (adopted) return;
-    // A failed read of the swarm-owned folders never stops the seed (HIVE-441), a synchronous throw included.
-    const exclude = await Promise.resolve()
-      .then(swarmSeedSets)
-      .then(
-        (sets) => sets.shipped.exclude,
-        () => undefined,
-      );
-    if ((await seed(exclude)) === null) throw new Error('the shipped seed failed');
-    await adoptBuiltIns({ hiveDir: dir, shippedManifest: shippedOptions().manifestFile });
+    await adoptBuiltIns({ hiveDir: dir, shippedManifest: join(dir, SEED_MANIFEST_FILE) });
   } catch (cause) {
     console.info(`[hive] the built-in agents and skills could not be adopted as the Dev Squad swarm (${String(cause)})`);
   }
 }
 
-/** Every swarm's seed manifest on disk, installed.json or not (HIVE-441): what settings sync reads beside the shipped one. */
+/** Every swarm's seed manifest on disk, installed.json or not (HIVE-441): what settings sync reads. */
 export const swarmManifestFiles = (): Promise<string[]> => swarms().manifestFiles();
 
-/** The set that owns one agent or skill: a swarm's, else the shipped one. */
-export const swarmSeedSetFor = (kind: 'skills' | 'agents', name: string): Promise<SeedOptions> =>
-  swarms().seedSetFor(shippedOptions(), `${kind}/${name}`);
+/** The set of the swarm that owns one agent or skill, or null when no swarm owns it. */
+export const swarmSeedSetFor = (kind: 'skills' | 'agents', name: string): Promise<SeedOptions | null> =>
+  swarms().seedSetFor(`${kind}/${name}`);
+
+/** Settings sync's reset of one file: through the swarm that owns it, and nothing for a name no swarm owns. */
+export async function resetOwnedFile(kind: 'skills' | 'agents', name: string): Promise<void> {
+  const owner = await swarmSeedSetFor(kind, name);
+  if (owner) await resetShipped(owner, { kind, name });
+}
 
 /** An install link named this swarm (HIVE-442). Held until the renderer takes it: the window may not have loaded. */
 export function requestSwarmInstall(swarmId: string): void {

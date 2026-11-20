@@ -69,10 +69,13 @@ export interface Swarms {
   remove(swarmId: string): Promise<SwarmRemoveResult>;
   /** HIVE-442: the row's "Update automatically" switch. Null when the swarm is not installed or the list cannot be written. */
   setAutoUpdate(swarmId: string, autoUpdate: boolean): Promise<InstalledSwarm | null>;
-  /** The shipped set with every swarm-owned folder excluded, and one set per installed swarm. */
-  seedSets(shipped: SeedOptions): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }>;
-  /** The set that owns `<kind>/<name>`: a swarm's, else the shipped one. */
-  seedSetFor(shipped: SeedOptions, folder: string): Promise<SeedOptions>;
+  /**
+   * One set per installed swarm (HIVE-448: the app ships none of its own). An entry still at the version `bundled`
+   * has no clone to read its files against, so it has no set until its first update installs a real version.
+   */
+  seedSets(): Promise<SeedOptions[]>;
+  /** The set of the swarm that owns `<kind>/<name>`, or null: a file no swarm owns is the person's own. */
+  seedSetFor(folder: string): Promise<SeedOptions | null>;
   /**
    * Every swarm's seed manifest and pending first install on disk, whatever installed.json says: a file any of them
    * names was written by a swarm, so settings sync and the shipped seed leave it alone.
@@ -506,21 +509,15 @@ export function createSwarms(deps: SwarmDeps): Swarms {
       .flatMap((id) => [paths.seed(id), paths.pending(id)]);
   };
 
-  const seedSets = async (shipped: SeedOptions): Promise<{ shipped: SeedOptions; swarms: SeedOptions[] }> => {
-    const exclude = new Set<string>();
-    for (const file of await manifestFiles()) {
-      for (const folder of ownedFolders(await readManifest(file))) exclude.add(folder);
-    }
-    const swarms = (await readInstalled(paths.installed)).map((held): SeedOptions => {
-      const manifestFile = paths.seed(held.swarmId);
-      // HIVE-447: an adopted Dev Squad has no clone until its first update: its files read against the shipped tree.
-      if (isBundled(held.version)) {
-        return { source: shipped.source, history: shipped.history, target: deps.hiveDir, manifestFile };
-      }
-      return { source: join(paths.repo(held.swarmId), held.folder), target: deps.hiveDir, manifestFile };
-    });
-    return { shipped: { ...shipped, exclude }, swarms };
-  };
+  const seedSets = async (): Promise<SeedOptions[]> =>
+    (await readInstalled(paths.installed))
+      // HIVE-447: an adopted Dev Squad has no clone until its first update, and HIVE-448 left no shipped tree to read it against.
+      .filter((held) => !isBundled(held.version))
+      .map((held) => ({
+        source: join(paths.repo(held.swarmId), held.folder),
+        target: deps.hiveDir,
+        manifestFile: paths.seed(held.swarmId),
+      }));
 
   return {
     installed: () => readInstalled(paths.installed),
@@ -549,12 +546,11 @@ export function createSwarms(deps: SwarmDeps): Swarms {
       }),
     seedSets,
     manifestFiles,
-    seedSetFor: async (shipped, folder) => {
-      const sets = await seedSets(shipped);
-      for (const set of sets.swarms) {
+    seedSetFor: async (folder) => {
+      for (const set of await seedSets()) {
         if (ownedFolders(await readManifest(set.manifestFile)).has(folder)) return set;
       }
-      return sets.shipped;
+      return null;
     },
   };
 }

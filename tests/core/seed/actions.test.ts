@@ -221,31 +221,3 @@ describe('the actions', () => {
     await expect(resetShipped(opts(), { kind: 'agents', name: 'builder' })).rejects.toThrow(/symlink/);
   });
 });
-
-describe('exclude: folders a swarm owns (HIVE-441)', () => {
-  const skillText = (name: string): string => `---\nname: ${name}\ndescription: does ${name}\n---\nBody.\n`;
-  const excluding = () => ({ ...opts(), exclude: new Set(['skills/b']) });
-
-  beforeEach(async () => {
-    await ship('skills/a/SKILL.md', skillText('a'));
-    await ship('skills/b/SKILL.md', skillText('b'));
-    await seedShipped(opts());
-  });
-
-  it('shippedStatus reports nothing for an excluded folder', async () => {
-    const names = (await shippedStatus(excluding())).map((status) => status.name);
-
-    expect(names).toContain('a');
-    expect(names).not.toContain('b');
-  });
-
-  it('the three actions refuse an excluded folder as one the app does not ship', async () => {
-    await expect(resetShipped(excluding(), { kind: 'skills', name: 'b' })).rejects.toThrow(/does not ship/);
-    await expect(takeShippedPrompt(excluding(), { kind: 'skills', name: 'b' })).rejects.toThrow(/does not ship/);
-    await expect(keepMine(excluding(), { kind: 'skills', name: 'b' })).rejects.toThrow(/does not ship/);
-  });
-
-  it('shippedStatus still names the folder without exclude', async () => {
-    expect((await shippedStatus(opts())).map((status) => status.name)).toContain('b');
-  });
-});

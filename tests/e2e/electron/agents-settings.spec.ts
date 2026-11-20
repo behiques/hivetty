@@ -42,7 +42,6 @@ const EMPTY_CONFIG = JSON.stringify({ version: 2, projects: [] }, null, 2);
 
 async function launchWithConfig(
   outputPath: (name: string) => string,
-  { unseeded = false }: { unseeded?: boolean } = {},
 ): Promise<{
   app: ElectronApplication;
   page: Page;
@@ -55,7 +54,6 @@ async function launchWithConfig(
   const app = await launchHive({
     userDataDir: outputPath('user-data'),
     configPath,
-    unseeded,
     /*
       Point the *skill* roots at scratch too, not only the config.
 
@@ -94,12 +92,8 @@ Read your ledger inbox first.
 `;
 
 test('authors an agent through the pane and writes it to disk', async ({}, testInfo) => {
-  // From the empty pane: the shipped agents deleted, since HIVE-162 seeds
-  // them on every launch (retro D).
-  const { app, page, configPath } = await launchWithConfig(
-    (name) => testInfo.outputPath(name),
-    { unseeded: true },
-  );
+  // From the empty pane: a fresh install ships no agents (HIVE-448).
+  const { app, page, configPath } = await launchWithConfig((name) => testInfo.outputPath(name));
 
   try {
     await openAgents(page);

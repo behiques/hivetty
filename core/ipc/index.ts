@@ -313,7 +313,6 @@ import { relayHostsFor } from '../relay/hosts';
 import {
   keepMine,
   resetShipped,
-  seedShippedIntoHive,
   shippedStatus,
   takeShippedPrompt,
 } from '../seed';
@@ -336,7 +335,7 @@ import { createSkillsRuntime, type SkillsRuntime } from '../skills';
 import { readCliSkills } from '../skills/cli-skills';
 import { PLUGIN_DIR } from '../skills/paths';
 import {
-  seedAndAdopt,
+  adopt,
   setSwarmHooks,
   startSwarmUpdates,
   swarmCalls,
@@ -2665,16 +2664,13 @@ export function registerIpcHandlers(
   onShutdown(() => remoteListener?.stop());
 
   /*
-    The shipped skills and agents land in `~/.hivetty` before anything reads them
-    (HIVE-162). Started here, not awaited here: this function is synchronous.
-    The skills runtime waits for it before its first regeneration, and the
-    agents registry below watches its folder, so a definition the seed writes
-    after `refreshKnownAgents()` ran reaches the party set through the same
-    `onChange` a hand-written one does.
+    Boot's adoption (HIVE-447). Started here, not awaited here: this function is
+    synchronous. The skills runtime waits for it before its first regeneration,
+    and the agents registry below watches its folder.
   */
-  // HIVE-441: folders an installed swarm owns are the swarm's to write. HIVE-447: seeded from `resources/` until this
-  // home is adopted as the Dev Squad swarm, then never again.
-  const seeded = seedAndAdopt((exclude) => seedShippedIntoHive(undefined, exclude));
+  // HIVE-447: a home an older release seeded becomes the installed Dev Squad, once. HIVE-448: the app ships no agents
+  // and no skills, so boot seeds nothing; adoption is all this promise waits for.
+  const adopted = adopt();
 
   /*
     HIVE-372. The opt-in `codex plugin add hive@hivetty`. Codex runs in the env its sessions get (the top-level
@@ -2699,7 +2695,7 @@ export function registerIpcHandlers(
       app. `sync()` happens before every spawn, which is always afterwards.
     */
     doneUrl: () => hooks.doneUrl(),
-    ready: seeded,
+    ready: adopted,
     // HIVE-176. The plugin names the Settings switches list.
     installedPlugins: () => sessionAdapter().installed.pluginNames(),
     // HIVE-372: follow a changed skill or a new version. A read and a stat when current; no codex run when off and clean.
@@ -3575,7 +3571,7 @@ export function registerIpcHandlers(
   });
   // HIVE-441: an install or a remove writes skills and agents too; Git runs in the environment sessions get.
   setSwarmHooks({
-    ready: () => seeded,
+    ready: () => adopted,
     afterSkills,
     afterAgents,
     env: codexEnv,
@@ -5090,25 +5086,24 @@ export function registerIpcHandlers(
   handle(CH.skillsCliSkills, () => readCliSkills((id) => adapterFor(id).installed));
 
   /*
-    What the user changed in the shipped agents and skills. Each waits for the
-    boot seed first: the seed and these all write `.seed.json`, and a reset
-    racing the seed would leave the manifest describing whichever wrote last.
-    A swarm's files answer through the same four channels (HIVE-441): each acts on the set that owns the name.
+    What the user changed in the installed swarms' agents and skills (HIVE-441; HIVE-448: the app ships none of its
+    own, so every set is a swarm's). Each waits for boot's adoption first: adoption and these all write seed
+    manifests, and a reset racing it would leave a manifest describing whichever wrote last.
   */
-  const allShipped = async (): Promise<ShippedStatus[]> => {
-    const sets = await swarmSeedSets();
-    return (await Promise.all([sets.shipped, ...sets.swarms].map((set) => shippedStatus(set)))).flat();
-  };
+  const allShipped = async (): Promise<ShippedStatus[]> =>
+    (await Promise.all((await swarmSeedSets()).map((set) => shippedStatus(set)))).flat();
   const onOwner =
     (act: (options: SeedOptions, request: ShippedRequest) => Promise<unknown>) =>
     async (_event: IpcEvent, payload: unknown): Promise<ShippedStatus[]> => {
       const request = parseShippedRequest(payload);
-      await seeded;
-      await act(await swarmSeedSetFor(request.kind, request.name), request);
+      await adopted;
+      const owner = await swarmSeedSetFor(request.kind, request.name);
+      // No swarm owns it: the file is the person's own, and there is nothing to reset it to.
+      if (owner) await act(owner, request);
       return allShipped();
     };
   handle(CH.shippedStatus, async () => {
-    await seeded;
+    await adopted;
     return allShipped();
   });
   handle(CH.shippedReset, onOwner(resetShipped));

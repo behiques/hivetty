@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
@@ -35,54 +35,6 @@ export const MAIN_ENTRY = join(APP_ROOT, 'out/main/index.js');
 
 /** The Electron binary, resolved the way `tests/live/server-conformance.test.ts` does it. */
 const ELECTRON_BINARY = createRequire(import.meta.url)('electron') as string;
-
-/** What the app ships and seeds beside the config on every launch (HIVE-162). */
-const SHIPPED_ROOT = join(APP_ROOT, 'resources');
-
-const shippedFolders = (kind: 'agents' | 'skills'): string[] =>
-  readdirSync(join(SHIPPED_ROOT, kind), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
-
-/** The agents every launch seeds, by name. A spec that counts rows adds these. */
-export const SHIPPED_AGENTS: readonly string[] = shippedFolders('agents');
-
-/** The skills every launch seeds, by folder name. */
-export const SHIPPED_SKILLS: readonly string[] = shippedFolders('skills');
-
-const filesUnder = (dir: string, rel: string): string[] =>
-  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = `${rel}/${entry.name}`;
-    if (entry.isDirectory()) return filesUnder(join(dir, entry.name), path);
-    return entry.isFile() ? [path] : [];
-  });
-
-/**
- * Make the next launch against `configPath` start with no shipped agents or
- * skills (retro D).
- *
- * Every launch seeds them beside the config (HIVE-162), so an empty Agents or
- * Skills pane is no longer what a fresh profile shows. It is what a person
- * sees after deleting them, and this writes exactly that state: the seed
- * manifest lists every shipped file, and `seed.ts` leaves a file absent when
- * the manifest says it was seeded once. Nothing in the product changes; the
- * spec starts where a person who deleted them would be.
- */
-export function startUnseeded(configPath: string): void {
-  const files: Record<string, string> = {};
-  for (const name of SHIPPED_AGENTS) files[`agents/${name}/AGENT.md`] = 'deleted';
-  for (const name of SHIPPED_SKILLS) {
-    for (const file of filesUnder(join(SHIPPED_ROOT, 'skills', name), `skills/${name}`)) {
-      files[file] = 'deleted';
-    }
-  }
-  mkdirSync(dirname(configPath), { recursive: true });
-  writeFileSync(
-    join(dirname(configPath), '.seed.json'),
-    `${JSON.stringify({ files }, null, 2)}\n`,
-  );
-}
 
 /**
  * The keys a Hive agent or a Claude Code session puts in its own environment:
@@ -130,15 +82,12 @@ export async function launchHive({
   userDataDir,
   configPath,
   env: extraEnv,
-  unseeded = false,
   args: extraArgs = [],
 }: {
   userDataDir: string;
   configPath: string;
   /** Extra switches after `--user-data-dir` (HIVE-270: `--use-mock-keychain`). */
   args?: string[];
-  /** Start with no shipped agents or skills: see {@link startUnseeded}. */
-  unseeded?: boolean;
   /**
    * Extra environment for the launched app (HIVE-67).
    *
@@ -150,7 +99,6 @@ export async function launchHive({
    */
   env?: Record<string, string>;
 }): Promise<ElectronApplication> {
-  if (unseeded) startUnseeded(configPath);
   return electron.launch({
     args: [
       MAIN_ENTRY,
@@ -236,15 +184,11 @@ export function runHiveCli(input: {
 export const test = base.extend<{
   hive: ElectronApplication;
   page: Page;
-  unseeded: boolean;
 }>({
-  // `test.use({ unseeded: true })` for a spec about an empty pane (retro D).
-  unseeded: [false, { option: true }],
-  hive: async ({ unseeded }, use, testInfo) => {
+  hive: async ({}, use, testInfo) => {
     const app = await launchHive({
       userDataDir: testInfo.outputPath('user-data'),
       configPath: testInfo.outputPath('hive-config.json'),
-      unseeded,
     });
 
     await use(app);

@@ -10,7 +10,7 @@ import {
   fillAgentSource,
 } from './fixtures/agent-source';
 import { expectSavedAs, newAgentPage, showSource } from './fixtures/agent-page';
-import { launchHive, SHIPPED_AGENTS } from './fixtures/hive-app';
+import { launchHive } from './fixtures/hive-app';
 
 /**
  * The authored agent's own row in the fleet table. The shipped agents are
@@ -339,7 +339,7 @@ test('lists agents in the fleet table, under a heading, in the same columns', as
 
     // The authored one, plus the shipped agents seeded beside it.
     await expect(
-      table.getByText(`AGENTS · ${SHIPPED_AGENTS.length + 1}`),
+      table.getByText('AGENTS · 1'),
     ).toBeVisible();
 
     const row = watcherRow(page);

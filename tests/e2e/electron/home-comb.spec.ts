@@ -133,7 +133,6 @@ test('Home draws the comb: one cell per session, the headline, a hover, both the
   const app = await launchHive({
     userDataDir: testInfo.outputPath('user-data'),
     configPath,
-    unseeded: true,
   });
   const page = await app.firstWindow();
   let posts = 0;

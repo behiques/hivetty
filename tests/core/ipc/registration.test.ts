@@ -120,7 +120,6 @@ function headlessPlatform(): Platform {
       stateDir: mkdtempSync(join(tmpdir(), 'hive-registration-')),
       logsDir: join(tmpdir(), 'hive-registration-logs'),
     },
-    resources: join(tmpdir(), 'hive-registration-resources'),
     notify: () => undefined,
     processHost: () => {
       throw new Error('no pty host in this suite');

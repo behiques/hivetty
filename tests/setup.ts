@@ -35,19 +35,6 @@ if (
 }
 
 /**
- * No spec seeds `~/.hivetty` behind its own back (HIVE-230). `registerIpcHandlers`
- * starts the seed without awaiting it, so a spec could end with the seed still
- * writing `.seed.json` while the `afterAll` above removed the folder: ENOTEMPTY
- * from `rmSync`, or ENOENT from the seed. Mocked here, beside the teardown it
- * races, so the next spec that registers the handlers cannot bring it back.
- * The seed's own spec opts back in with `vi.unmock`.
- */
-vi.mock('../core/seed', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../core/seed')>()),
-  seedShippedIntoHive: () => Promise.resolve(null),
-}));
-
-/**
  * happy-dom does not implement ResizeObserver, which the terminal surface uses
  * to refit xterm when its container changes size. Stub it so components can
  * mount; observed-size behaviour is asserted in Playwright (story 070).

@@ -6,14 +6,11 @@ import { strToU8, zipSync } from 'fflate';
 
 import { goToOvermind, openProject, overmindNewSession } from '../fixtures/places';
 
-import { launchHive, SHIPPED_SKILLS } from './fixtures/hive-app';
+import { launchHive } from './fixtures/hive-app';
 import { openPane, readConfig, settingsNav } from './fixtures/settings';
 
-/** The skill folders a spec wrote: the shipped ones are seeded beside them (HIVE-162). */
-const authoredSkills = (skillsDir: string): string[] =>
-  readdirSync(skillsDir)
-    .filter((name) => !SHIPPED_SKILLS.includes(name))
-    .sort();
+/** The skill folders a spec wrote: the app seeds none beside them (HIVE-448). */
+const authoredSkills = (skillsDir: string): string[] => readdirSync(skillsDir).sort();
 
 /**
  * Settings: adding a local project folder, driven through the real app
@@ -36,7 +33,6 @@ const authoredSkills = (skillsDir: string): string[] =>
 async function launchWithConfig(
   outputPath: (name: string) => string,
   contents: string,
-  { unseeded = false }: { unseeded?: boolean } = {},
 ): Promise<{
   app: ElectronApplication;
   page: Page;
@@ -53,7 +49,6 @@ async function launchWithConfig(
   const app = await launchHive({
     userDataDir: outputPath('user-data'),
     configPath,
-    unseeded,
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
@@ -226,13 +221,8 @@ test('creates a skill from Settings, beside the config', async ({}, testInfo) =>
    * real `~/.hivetty`. That is the whole reason the root is derived from the
    * config path instead of `homedir()`.
    */
-  // The shipped skills deleted: since HIVE-162 a fresh install seeds them,
-  // so the empty pane is what a person sees after removing them (retro D).
-  const { app, page, configPath } = await launchWithConfig(
-    (name) => testInfo.outputPath(name),
-    EMPTY_CONFIG,
-    { unseeded: true },
-  );
+  // A fresh install ships no skills (HIVE-448): the pane starts empty.
+  const { app, page, configPath } = await launchWithConfig((name) => testInfo.outputPath(name), EMPTY_CONFIG);
 
   try {
     await openSettings(page);
@@ -464,13 +454,8 @@ test('adds a new file inside the folder selected in a skill', async ({}, testInf
 });
 
 test('imports a zip as a new skill, and a delete confirm is the only set of buttons', async ({}, testInfo) => {
-  // From the empty pane, with the shipped skills deleted: the app ships a
-  // `pr-review` of its own since HIVE-162 (retro D).
-  const { app, page, configPath } = await launchWithConfig(
-    (name) => testInfo.outputPath(name),
-    EMPTY_CONFIG,
-    { unseeded: true },
-  );
+  // From the empty pane: a fresh install ships no skills (HIVE-448).
+  const { app, page, configPath } = await launchWithConfig((name) => testInfo.outputPath(name), EMPTY_CONFIG);
   const skillsDir = join(dirname(configPath), 'skills');
   const zipPath = testInfo.outputPath('pr-review.zip');
   writeFileSync(

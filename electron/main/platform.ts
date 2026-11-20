@@ -15,7 +15,6 @@ import {
 
 import type { Platform } from '../../core/platform';
 import type { HostChild } from '../../core/pty-host/supervisor';
-import { shippedRoot } from '../../core/seed/paths';
 
 import { onDisplayWake } from './display-wake';
 import { remoteCredentialStore } from './ipc/remote-credential';
@@ -50,9 +49,6 @@ export function createDesktopPlatform(): Platform {
       get logsDir() {
         return app.getPath('logs');
       },
-    },
-    get resources() {
-      return shippedRoot(app.isPackaged, process.resourcesPath, import.meta.dirname);
     },
     notify: ({ title, body, onClick }) => {
       // False on a Linux box with no notification daemon. Checked per send

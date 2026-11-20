@@ -26,7 +26,6 @@ export function createServerPlatform(input: {
   return {
     secrets: createSecrets(input.key),
     paths: { stateDir: input.dataDir, logsDir: input.dataDir },
-    resources: join(fromDir, '../../resources'),
     notify: ({ title, body }) => console.log(`[notify] ${title}: ${body}`),
     processHost: () => forkPtyHost({ entry: join(fromDir, 'pty-host.js'), user: input.hostUser }),
     mcpLaunch: { command: process.execPath, args: [join(fromDir, 'mcp-host.js')], env: {} },

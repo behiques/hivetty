@@ -464,22 +464,6 @@ describe('install', () => {
       expectMoved();
     });
 
-    it('leaves the swarm’s file alone in the next boot seed, which writes no entry for it', async () => {
-      write(hive('skills/tdd/SKILL.md'), OLD);
-      const { entry } = released('1.0.0', { skills: ['tdd'], agents: [], body: 'New body.' });
-      const swarms = createSwarms(makeDeps());
-      expect((await swarms.install(entry)).ok).toBe(true);
-
-      const resources = join(root, 'resources');
-      write(join(resources, 'skills/tdd/SKILL.md'), OLD);
-      const { shipped } = await swarms.seedSets({ source: resources, target: hiveDir, manifestFile: hive('.seed.json') });
-      await seedShipped(shipped);
-
-      expect(readHive('skills/tdd/SKILL.md')).toBe(skillText('tdd', 'New body.'));
-      const files = Object.keys(readJson<{ files: object }>('.seed.json').files);
-      expect(files.filter((rel) => rel.startsWith('skills/tdd/'))).toEqual([]);
-    });
-
     describe('when the seed throws on a first install', () => {
       const throwingSeed = vi.fn<NonNullable<SwarmDeps['seed']>>(async (options) => {
         await seedShipped(options);
@@ -944,9 +928,7 @@ describe('takeOver', () => {
   });
 });
 
-describe('the seed sets', () => {
-  const shippedOptions = () => ({ source: join(root, 'resources'), target: hiveDir, manifestFile: hive('.seed.json') });
-
+describe('the seed sets (HIVE-448: installed swarms only)', () => {
   const installTwo = async () => {
     const swarms = createSwarms(makeDeps());
     const one = released('1.0.0', { skills: ['one'], agents: ['a1'] }, { id: 'swOne' });
@@ -962,16 +944,13 @@ describe('the seed sets', () => {
     manifestFile: hive(`swarms/${id}/seed.json`),
   });
 
-  it('excludes every folder an installed swarm owns from the shipped set, and gives each swarm its own', async () => {
+  it('gives each installed swarm its own set', async () => {
     const swarms = await installTwo();
-    const sets = await swarms.seedSets(shippedOptions());
 
-    expect(sets.shipped.source).toBe(shippedOptions().source);
-    expect([...(sets.shipped.exclude ?? [])].sort()).toEqual(['agents/a1', 'skills/one', 'skills/two']);
-    expect(sets.swarms).toEqual([setOf('swOne'), setOf('swTwo')]);
+    expect(await swarms.seedSets()).toEqual([setOf('swOne'), setOf('swTwo')]);
   });
 
-  it('reads a bundled entry against the shipped tree and history, with its own manifest (HIVE-447)', async () => {
+  it('gives a bundled entry no set until its first update installs a real version (HIVE-447)', async () => {
     const held = (swarmId: string, version: string) => ({
       swarmId,
       slug: swarmId,
@@ -989,38 +968,23 @@ describe('the seed sets', () => {
       contents: { agents: [], skills: [] },
     });
     write(hive('swarms/installed.json'), JSON.stringify([held('bundled-dev-squad', 'bundled'), held('swOne', '1.0.0')]));
-    const shipped = { ...shippedOptions(), history: join(root, 'resources/shipped-history.json') };
+    write(hive('swarms/bundled-dev-squad/seed.json'), JSON.stringify({ files: { 'skills/tdd/SKILL.md': 'h' }, parts: {} }));
+    const swarms = createSwarms(makeDeps());
 
-    const sets = await createSwarms(makeDeps()).seedSets(shipped);
-
-    expect(sets.swarms).toEqual([
-      { source: shipped.source, history: shipped.history, target: hiveDir, manifestFile: hive('swarms/bundled-dev-squad/seed.json') },
-      setOf('swOne'),
-    ]);
+    expect(await swarms.seedSets()).toEqual([setOf('swOne')]);
+    expect(await swarms.seedSetFor('skills/tdd')).toBeNull();
   });
 
-  it('excludes nothing with nothing installed', async () => {
-    const sets = await createSwarms(makeDeps()).seedSets(shippedOptions());
-    expect([...(sets.shipped.exclude ?? [])]).toEqual([]);
-    expect(sets.swarms).toEqual([]);
+  it('answers no set with nothing installed', async () => {
+    expect(await createSwarms(makeDeps()).seedSets()).toEqual([]);
   });
 
-  it('still excludes every swarm-owned folder when installed.json cannot be read', async () => {
-    const swarms = await installTwo();
-    write(hive('swarms/installed.json'), 'not json');
-
-    const sets = await swarms.seedSets(shippedOptions());
-    expect([...(sets.shipped.exclude ?? [])].sort()).toEqual(['agents/a1', 'skills/one', 'skills/two']);
-  });
-
-  it('answers the owning swarm’s set for its folder, and the shipped set for any other', async () => {
+  it('answers the owning swarm’s set for its folder, and null for a folder no swarm owns', async () => {
     const swarms = await installTwo();
 
-    expect(await swarms.seedSetFor(shippedOptions(), 'skills/two')).toEqual(setOf('swTwo'));
-    expect(await swarms.seedSetFor(shippedOptions(), 'agents/a1')).toEqual(setOf('swOne'));
-    const other = await swarms.seedSetFor(shippedOptions(), 'skills/tdd');
-    expect(other.source).toBe(shippedOptions().source);
-    expect(other.exclude?.has('skills/one')).toBe(true);
+    expect(await swarms.seedSetFor('skills/two')).toEqual(setOf('swTwo'));
+    expect(await swarms.seedSetFor('agents/a1')).toEqual(setOf('swOne'));
+    expect(await swarms.seedSetFor('skills/tdd')).toBeNull();
   });
 });
 
