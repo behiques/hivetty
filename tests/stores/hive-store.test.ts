@@ -6423,6 +6423,12 @@ describe('the cli wait in words (HIVE-399)', () => {
     );
   });
 
+  it('refused disabled says where to turn it on (HIVE-453)', () => {
+    expect(agentRunRefusal('acr', { started: false, refused: 'disabled' })).toBe(
+      'acr is turned off — turn it on in Settings › Agents',
+    );
+  });
+
   it('refused cli with no reason says what to do', () => {
     expect(agentRunRefusal('fixer', { started: false, refused: 'cli' })).toBe(
       'fixer is waiting for its CLI — try again when it can run',

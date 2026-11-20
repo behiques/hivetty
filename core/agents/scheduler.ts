@@ -1131,7 +1131,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   };
 
   /** Refusals the asker is told about: the ones that do not end on their own (HIVE-408). */
-  const TOLD: ReadonlySet<string> = new Set(['budget', 'cli', 'invalid']);
+  const TOLD: ReadonlySet<string> = new Set(['budget', 'cli', 'invalid', 'disabled']);
   /**
    * `<ask id> <reason>[ hold]` told this session, beside the log's own record, so a retry each minute says it once.
    * shortcut: never pruned; one short string per refused ask per reason, cleared by an app restart. Prune on ask close if it ever shows.

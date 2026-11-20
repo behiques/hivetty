@@ -121,7 +121,7 @@ export type RunStart =
   | { started: true; run: string; kind: RunKind }
   | {
       started: false;
-      refused: QueueableRefusal | 'invalid';
+      refused: QueueableRefusal | 'invalid' | 'disabled';
       reason?: string;
       cli?: HarnessId;
       /** A budget refusal that a live run's close ends, not midnight (HIVE-412). */
@@ -287,6 +287,11 @@ export interface RunTrackerDeps {
    * exists. Optional so a host-only spec needs none.
    */
   runToken?: (run: string) => string | null;
+  /**
+   * HIVE-453: whether a swarm's entry has this agent turned off in Settings. Refused at the paused check, before the
+   * command is built. Absent means nothing is off.
+   */
+  isDisabled?: (name: string) => boolean;
   /** HIVE-267: while true, every `run` is refused. Injected; `agents/` never imports `licence/`. */
   lapsed?: () => boolean;
   /** HIVE-267: signal a whole process group. Defaults to `process.kill(-pgid, signal)`; a seam so no test signals a real process. */
@@ -1209,6 +1214,11 @@ export function createRunTracker(deps: RunTrackerDeps): RunTracker {
       */
       if (deps.state.read(name).status === 'paused') {
         return { started: false, refused: 'paused' };
+      }
+
+      // HIVE-453: turned off in Settings. The same choke point as paused, for the same reason: every trigger passes here.
+      if (deps.isDisabled?.(name) === true) {
+        return { started: false, refused: 'disabled' };
       }
 
       /*

@@ -1534,13 +1534,15 @@ export interface AgentRunRequest {
  * `rotate` answers with this type too and a rotation is *not* queued: main
  * leaves `forceRotate` armed through a refusal, so it survives by a different
  * route and must not claim a queue it has no place in.
+ *
+ * `disabled` (HIVE-453): turned off in Settings; not queued.
  */
 export type AgentRunResult =
   | { started: true; run: string; kind: RunKind }
   | { started: false; queued: true; behind: QueueableRefusal; reason?: string; cli?: HarnessId }
   | {
       started: false;
-      refused: QueueableRefusal | 'unknown' | 'invalid';
+      refused: QueueableRefusal | 'unknown' | 'invalid' | 'disabled';
       reason?: string;
       cli?: HarnessId;
     };

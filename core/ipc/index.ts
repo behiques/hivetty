@@ -911,6 +911,12 @@ let prWatchTimer: ReturnType<typeof setInterval> | null = null;
  */
 const knownAgents = new Set<string>();
 /**
+ * HIVE-453: the agents a swarm's entry has turned off in Settings, refilled with {@link knownAgents}. A set for the
+ * same reason: the run tracker and `Ledger.append` ask it synchronously. An unreadable list leaves it empty, which is
+ * the safe direction for a wake.
+ */
+const disabledAgents = new Set<string>();
+/**
  * The subset of {@link knownAgents} whose definitions take ledger wakes.
  *
  * A second set rather than a lookup through the registry, for the reason
@@ -1090,8 +1096,28 @@ function refreshKnownAgents(): Promise<void> {
       // schedules have ever been read. A failed listing must not license the
       // tick to clear the times a previous one established.
     });
-  // Returned for Reload, which answers only once the caches are rebuilt.
-  return listed ?? Promise.resolve();
+  // Returned for Reload, which answers only once the caches are rebuilt, the off set included.
+  return Promise.all([listed, refreshDisabledAgents()]).then(() => undefined);
+}
+
+/** The latest {@link refreshDisabledAgents} call: an older read that lands late is dropped. */
+let disabledRead = 0;
+
+/**
+ * HIVE-453: re-read {@link disabledAgents} from the installed swarms. Beside the listing rather than inside it, so
+ * the party set is rebuilt as soon as the folder is read. Never rejects: an unreadable list reads as nothing off.
+ */
+function refreshDisabledAgents(): Promise<void> {
+  disabledRead += 1;
+  const mine = disabledRead;
+  return swarmDisabledNames().then(
+    (off) => off.agents,
+    () => [],
+  ).then((names) => {
+    if (mine !== disabledRead) return;
+    disabledAgents.clear();
+    for (const name of names) disabledAgents.add(name);
+  });
 }
 /**
  * Who the socket is held open for, as `subscriptions.ts` asks it (HIVE-124).
@@ -2090,6 +2116,8 @@ export function registerIpcHandlers(
       */
       history?.resumable(id) !== undefined,
     isPausedAgent: (id) => knownAgents.has(id) && agentState?.read(id).status === 'paused',
+    // HIVE-453: an agent turned off in Settings; a name that is not an agent is the unknown-party rule's.
+    isDisabledAgent: (id) => knownAgents.has(id) && disabledAgents.has(id),
   });
 
   // HIVE-364. The ledger loads without calling a listener and the hub keeps
@@ -2951,6 +2979,8 @@ export function registerIpcHandlers(
   };
 
   runs = createRunTracker({
+    // HIVE-453: a swarm agent turned off in Settings is refused for every trigger.
+    isDisabled: (name) => disabledAgents.has(name),
     // Keeps the Mac awake while any agent run is live (HIVE-408); the desktop holds the one blocker. Server mode's own blocker is separate.
     onLive: (live) => {
       platform().desktop?.keepAwake(live);
