@@ -130,6 +130,8 @@ export default tseslint.config(
       // The Hive's working folder (specs, plans, scratch scripts): git-ignored by its own
       // `.hive/.gitignore`, so never part of the repo, and its files are not the app's to lint.
       '.hive/**',
+      // CI's hivetty-swarms checkout (HIVE-448): the swarm's content, read by tests/swarm.
+      '.swarms/**',
     ],
   },
   js.configs.recommended,
