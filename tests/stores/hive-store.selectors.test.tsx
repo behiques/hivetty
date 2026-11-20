@@ -1189,6 +1189,7 @@ describe('hive-store selectors', () => {
       wake: { on: [] },
       mcp: [],
       tools: [],
+      skills: [],
       rotateAfter: 50,
       runs: [],
     });
@@ -1258,6 +1259,7 @@ describe('hive-store selectors', () => {
       wake: { on: [] },
       mcp: [],
       tools: [],
+      skills: [],
       rotateAfter: 50,
       runs: [],
       ...over,
@@ -1286,7 +1288,7 @@ describe('hive-store selectors', () => {
     const staleClaim: LedgerEntry = { id: '20261111-000000-0001', ts: NOW - 2 * DAY, from: 'sess-1c', kind: 'claim', body: '', meta: { task: 'HIVE-393' } };
     const card = (id: string, createdAt: number) => ({ ...notif({ id, kind: 'agent.permission', action: { type: 'ask', thread: id } }), createdAt });
     const agent = (name: string, over: Partial<AgentSummary> = {}): AgentSummary => ({
-      name, description: 'x', icon: 'Robot', status: 'sleeping', wake: { on: [] }, mcp: [], tools: [], rotateAfter: 50, runs: [], ...over,
+      name, description: 'x', icon: 'Robot', status: 'sleeping', wake: { on: [] }, mcp: [], tools: [], skills: [], rotateAfter: 50, runs: [], ...over,
     });
 
     beforeEach(() => {
@@ -2103,6 +2105,7 @@ describe('hive-store selectors', () => {
       wake: { on: [] },
       mcp: [],
       tools: [],
+      skills: [],
       rotateAfter: 50,
       runs: [],
       ...over,
@@ -2198,6 +2201,7 @@ describe('hive-store selectors', () => {
       wake: { on: [] },
       mcp: [],
       tools: [],
+      skills: [],
       rotateAfter: 50,
       runs: [],
       ...over,
@@ -2260,6 +2264,7 @@ describe('hive-store selectors', () => {
       wake: { on: [] },
       mcp: [],
       tools: [],
+      skills: [],
       rotateAfter: 50,
       runs: [],
       ...over,
@@ -2643,7 +2648,7 @@ describe('comb selectors (HIVE-199)', () => {
     kind: 'terminal', id, project, cwd: `/repos/${project}`, status: 'prompt', createdAt: 1, lines: [], ...over,
   });
   const summary = (over: Partial<AgentSummary>): AgentSummary => ({
-    name: 'x', description: '', icon: 'Robot', status: 'sleeping', wake: { on: [] }, mcp: [], tools: [], rotateAfter: 50, runs: [], ...over,
+    name: 'x', description: '', icon: 'Robot', status: 'sleeping', wake: { on: [] }, mcp: [], tools: [], skills: [], rotateAfter: 50, runs: [], ...over,
   });
 
   beforeEach(() => {

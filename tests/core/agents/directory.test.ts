@@ -37,6 +37,7 @@ const agent = (over: Partial<AgentSummary> & { name: string }): AgentSummary => 
   wake: { on: [] },
   mcp: [],
   tools: [],
+  skills: [],
   runs: [],
   rotateAfter: 20,
   ...over,

@@ -151,6 +151,7 @@ describe('AgentsPanel', () => {
           wake: { on: [] },
           mcp: [],
           tools: [],
+          skills: [],
           rotateAfter: 50,
           runs: [],
           invalid: 'nope: Unknown key. Remove it or fix the spelling.',
@@ -175,6 +176,7 @@ describe('AgentsPanel', () => {
           wake: { on: [] },
           mcp: [],
           tools: [],
+          skills: [],
           rotateAfter: 50,
           runs: [],
           invalid: 'nope: Unknown key.',
@@ -225,6 +227,7 @@ describe('AgentsPanel', () => {
       wake: { on: [] },
       mcp: [],
       tools: [],
+      skills: [],
       rotateAfter: 50,
       runs: [],
     });

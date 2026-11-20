@@ -35,6 +35,7 @@ const summary = (over: Partial<AgentSummary> = {}): AgentSummary => ({
   wake: { on: ['slack.mention'], everyMs: 300_000 },
   mcp: [],
   tools: [],
+  skills: [],
   rotateAfter: 50,
   runs: [],
   ...over,

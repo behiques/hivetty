@@ -223,7 +223,7 @@ describe('TheComb — hover, click and the hidden list', () => {
 
 describe('TheComb — the cells that fold others (decision D6)', () => {
   const agentSummary = (name: string): AgentSummary => ({
-    name, description: '', icon: 'Robot', status: 'working', wake: { on: [] }, mcp: [], tools: [], rotateAfter: 50, runs: [],
+    name, description: '', icon: 'Robot', status: 'working', wake: { on: [] }, mcp: [], tools: [], skills: [], rotateAfter: 50, runs: [],
   });
 
   beforeEach(() => {

@@ -151,6 +151,7 @@ describe('the working counts (HIVE-196)', () => {
     wake: { on: [] },
     mcp: [],
     tools: [],
+    skills: [],
     rotateAfter: 50,
     runs: [],
     ...over,

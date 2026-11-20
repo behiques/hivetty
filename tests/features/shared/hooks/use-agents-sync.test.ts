@@ -17,6 +17,7 @@ const snapshot = (names: string[]): AgentsSnapshot => ({
     wake: { on: [] },
     mcp: [],
     tools: [],
+    skills: [],
     rotateAfter: 50,
     runs: [],
   })),

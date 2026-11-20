@@ -95,6 +95,18 @@ describe('list', () => {
     expect(agents[0]?.parallel).toBe(1);
   });
 
+  it('carries the definition’s skills, in order, and none for a broken one (HIVE-453)', async () => {
+    seed('builder', GOOD.replace('slack-watcher', 'builder').replace('icon: ChatCircleDots', 'icon: ChatCircleDots\nskills: [verify, tdd]'));
+    seed('broken', '---\nname: broken\n');
+    const made = createAgentRegistry({ root, skillNames: async () => ({ all: ['tdd', 'verify'], hive: ['tdd', 'verify'] }) });
+    open.push(made);
+
+    const { agents } = await made.list();
+
+    expect(agents.find((a) => a.name === 'builder')?.skills).toEqual(['verify', 'tdd']);
+    expect(agents.find((a) => a.name === 'broken')?.skills).toEqual([]);
+  });
+
   it('includes a broken definition rather than hiding it', async () => {
     // A pane that hides a broken file leaves the user with a folder on disk,
     // no agent on screen, and no way to connect the two.

@@ -365,6 +365,7 @@ export function createAgentRegistry({
             // to read `mcp:`/`tools:` from (HIVE-123).
             mcp: [],
             tools: [],
+            skills: [],
             /*
               A definition that never parsed has no limits of its own, so the
               rotation ceiling falls back to the default the form would have
@@ -402,6 +403,7 @@ export function createAgentRegistry({
             // its "Used by" line and the "no slack tools granted" hint.
             mcp: def.mcp,
             tools: def.tools,
+            skills: def.skills,
             rotateAfter: def.limits.rotateAfter,
             // The other definition-side limit the scheduler needs (HIVE-121).
             // Absent stays absent: there is no default daily ceiling.
@@ -444,6 +446,7 @@ export function createAgentRegistry({
           // As above: an unparsed definition has no `mcp:`/`tools:` to read.
           mcp: [],
           tools: [],
+          skills: [],
           // As above: an unparsed definition falls back to the default ceiling.
           rotateAfter: AGENT_LIMIT_DEFAULTS.rotateAfter,
           // As above: no parsed `limits.parallel` either (HIVE-128).

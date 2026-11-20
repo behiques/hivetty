@@ -359,6 +359,7 @@ const definition = (
   wake: { on: [] },
   mcp: [],
   tools: [],
+  skills: [],
   rotateAfter: 50,
   runs: [],
   ...over,

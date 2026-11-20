@@ -46,6 +46,7 @@ const agentSummary = (overrides: Partial<AgentSummary> = {}): AgentSummary => ({
   wake: { on: [] },
   mcp: [],
   tools: [],
+  skills: [],
   rotateAfter: 50,
   runs: [],
   ...overrides,
