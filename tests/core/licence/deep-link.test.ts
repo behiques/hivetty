@@ -165,9 +165,9 @@ describe('installDeepLinks', () => {
   });
 
   it.each([
-    ['a release', '1.0.0', 'hivetty'],
-    ['a release candidate', '1.0.0-rc.13', 'hivetty-dev'],
-  ])('claims its own scheme at launch when packaged: %s takes %s back from any earlier owner', (_name, version, scheme) => {
+    ['a release', 'hivetty', '1.0.0'],
+    ['a release candidate', 'hivetty-dev', '1.0.0-rc.13'],
+  ])('%s claims %s at launch, taking it back from any earlier owner', (_name, scheme, version) => {
     const app = fakeApp(true, version);
     const links = installDeepLinks({ app: app as never, execPath: '/x', argv1: 'out/main/index.js' });
     expect(app.setAsDefaultProtocolClient.mock.calls).toEqual([[scheme]]);
