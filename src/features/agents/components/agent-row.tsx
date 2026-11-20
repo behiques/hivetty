@@ -1,6 +1,7 @@
 import { Pause, Play } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 
+import { swarmOwnerOf } from '@/lib/swarms';
 import { cn } from '@/lib/utils';
 import { isAgent } from '@/types/entity';
 
@@ -8,6 +9,7 @@ import { Hint } from '@components/ui/hint';
 import { STATUS_LABEL } from '@components/ui/status-dot';
 import { AgentTile, type TileTone } from '@features/shared/components/agent-tile';
 import { useAge } from '@hooks/use-relative-time';
+import { useSwarms } from '@hooks/use-swarms';
 import type { LedgerKind } from '@shared/ledger-contract';
 import {
   agentRunQueued,
@@ -81,6 +83,8 @@ export function AgentRow({ id }: AgentRowProps) {
   // effect from re-arming on every render, and the age is not drawn then.
   const age = useAge(last?.ts ?? 0);
   const [notice, setNotice] = useState<string | null>(null);
+  // HIVE-453: a swarm agent turned off in Settings. Pause means nothing for it, and its state reads "off".
+  const off = swarmOwnerOf(useSwarms().listing, 'agents', id)?.on === false;
 
   // Re-armed by each new notice, and cleared on unmount.
   useEffect(() => {
@@ -135,6 +139,7 @@ export function AgentRow({ id }: AgentRowProps) {
 
   let keyword = '';
   if (broken) keyword = 'invalid';
+  else if (off) keyword = 'off';
   else if (entity.status === 'paused') keyword = 'paused';
   else if (last !== undefined) keyword = last.kind === 'ask' && last.ref !== undefined ? `ask ${last.ref}` : last.kind;
 
@@ -142,9 +147,9 @@ export function AgentRow({ id }: AgentRowProps) {
   // The second line is drawn only when it has something to say.
   const twoLines = notice !== null || keyword !== '' || text !== '';
   const keywordTone =
-    broken || paused || last === undefined ? 'text-amber-text' : (KEYWORD_TONE[last.kind] ?? 'text-subtle');
+    broken || paused || off || last === undefined ? 'text-amber-text' : (KEYWORD_TONE[last.kind] ?? 'text-subtle');
 
-  const state = broken ? 'invalid' : STATUS_LABEL[entity.status];
+  const state = broken ? 'invalid' : off ? 'off' : STATUS_LABEL[entity.status];
   const name =
     [`${id}, ${state}`, live > 1 ? `${String(live)} runs live` : null].filter(Boolean).join(', ') +
     (last === undefined ? '' : `. Last: ${last.kind}, ${last.line}, ${age}`);
@@ -205,12 +210,21 @@ export function AgentRow({ id }: AgentRowProps) {
             </button>
           </Hint>
         )}
-        <Hint label={paused ? 'Let this agent wake again' : 'Stop this agent waking. A turn already running finishes.'}>
+        <Hint
+          label={
+            off
+              ? 'Turned off in Settings › Agents'
+              : paused
+                ? 'Let this agent wake again'
+                : 'Stop this agent waking. A turn already running finishes.'
+          }
+        >
           <button
             type="button"
             aria-label={paused ? `Resume ${id}` : `Pause ${id}`}
             onClick={togglePause}
-            className="rounded-full p-0.5 text-muted hover:text-ink"
+            disabled={off}
+            className="rounded-full p-0.5 text-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted"
           >
             {paused ? <Play size={13} aria-hidden="true" /> : <Pause size={13} aria-hidden="true" />}
           </button>

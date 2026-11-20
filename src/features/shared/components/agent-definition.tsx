@@ -16,6 +16,7 @@ import {
   resetShipped,
   takeShippedPrompt,
 } from '@/lib/shipped';
+import { andList, setSwarmItemEnabled, swarmAskers, swarmOwnerOf } from '@/lib/swarms';
 
 import { AgentEditor } from '@features/shared/components/agent-editor';
 import type { RunsOnContext } from '@features/shared/components/agent-form';
@@ -26,6 +27,7 @@ import { useAgents } from '@hooks/use-agents';
 import { useCodexModels } from '@hooks/use-codex-models';
 import { useProjectConfig } from '@hooks/use-project-config';
 import { useShipped } from '@hooks/use-shipped';
+import { useSwarms } from '@hooks/use-swarms';
 import type { AgentProblem } from '@shared/agent-contract';
 import { HARNESS_IDS } from '@shared/harness-contract';
 import { useAgentDraft, useAgentDraftActions } from '@stores/editor-store';
@@ -77,6 +79,8 @@ export function AgentDefinition({ name, notice, onRename, onClose, layout = 'spl
     detail: string;
     confirmLabel: string;
     act: () => void;
+    /** The dismiss button's words; "Keep editing" unless the question is not about the buffer (HIVE-453). */
+    cancelLabel?: string;
   } | null>(null);
   /** What main refused, field by field. Cleared on every fresh attempt. */
   const [problems, setProblems] = useState<AgentProblem[]>([]);
@@ -102,6 +106,9 @@ export function AgentDefinition({ name, notice, onRename, onClose, layout = 'spl
   }, [snapshot]);
 
   const agents = snapshot?.agents ?? [];
+  const swarmListing = useSwarms().listing;
+  /** The swarm that installed this agent, when one did (HIVE-453); never for an agent not yet saved. */
+  const owner = name === null ? null : swarmOwnerOf(swarmListing, 'agents', name);
   /**
    * Names already spoken for, excluding the one being edited.
    *
@@ -279,6 +286,35 @@ export function AgentDefinition({ name, notice, onRename, onClose, layout = 'spl
     });
   };
 
+  /**
+   * Turn this swarm agent on or off (HIVE-453). Off asks first when enabled agents of the same swarm hand off to it
+   * (`asks_from:`), since those asks will be refused; with none, and always for on, it writes at once.
+   */
+  const toggleSwarmAgent = (next: boolean): void => {
+    if (name === null || owner === null) return;
+
+    const swarmId = owner.swarmId;
+    const write = (): void => {
+      setOwnNotice(null);
+      void setSwarmItemEnabled(swarmId, 'agents', name, next).then((written) => {
+        if (!written) setOwnNotice("Couldn't save. Try again.");
+      });
+    };
+    const askers = next ? [] : swarmAskers(swarmListing, agents, name);
+
+    if (askers.length === 0) {
+      write();
+      return;
+    }
+    setPending({
+      question: `Turn off ${name}?`,
+      detail: `${andList(askers)} ${askers.length === 1 ? 'asks' : 'ask'} ${name} as part of ${owner.title}'s flow. With it off, those asks are refused and come back to you.`,
+      confirmLabel: 'Turn off',
+      cancelLabel: 'Cancel',
+      act: write,
+    });
+  };
+
   const revert = (): void => {
     if (draft === undefined) return;
     if (draft.saved !== null) {
@@ -338,6 +374,7 @@ export function AgentDefinition({ name, notice, onRename, onClose, layout = 'spl
         actionsHidden={pending !== null}
         layout={layout}
         runsOn={runsOn}
+        swarm={owner === null ? undefined : { title: owner.title, on: owner.on, onToggle: toggleSwarmAgent }}
       />
 
       {pending === null ? null : (
@@ -346,7 +383,7 @@ export function AgentDefinition({ name, notice, onRename, onClose, layout = 'spl
           title={pending.question}
           confirmLabel={pending.confirmLabel}
           className="border-t border-border-soft"
-          cancelLabel="Keep editing"
+          cancelLabel={pending.cancelLabel ?? 'Keep editing'}
           escape="document"
           onConfirm={() => {
             pending.act();

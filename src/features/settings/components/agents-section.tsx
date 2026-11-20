@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 import { loadAgents } from '@/lib/agents';
 import { loadShipped } from '@/lib/shipped';
+import { swarmOwnerOf } from '@/lib/swarms';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@components/ui/button';
@@ -20,6 +21,7 @@ import { useAgents } from '@hooks/use-agents';
 import { useLicenceLocks } from '@hooks/use-licence-locks';
 import { useProjectConfig } from '@hooks/use-project-config';
 import { useShipped } from '@hooks/use-shipped';
+import { useSwarms } from '@hooks/use-swarms';
 import { CLI_NAMES } from '@lib/harness/cli-names';
 import { cliAvailability, lockedClis } from '@lib/harness/session-cli';
 import { setAgentsDefaultCliConfig } from '@lib/project-config';
@@ -111,6 +113,7 @@ function RunsOn({ clis, locks }: { clis: HarnessId[]; locks: Partial<Record<Harn
  */
 export function AgentsSection() {
   const snapshot = useAgents();
+  const swarmListing = useSwarms().listing;
   const config = useProjectConfig();
   const phrase = useSwarmPhrase('empty.settingsSkills');
 
@@ -203,6 +206,8 @@ export function AgentsSection() {
           {agents.map((agent) => {
             const broken = agent.invalid !== undefined;
             const active = open?.name === agent.name;
+            // HIVE-453: a swarm agent turned off reads "off", not the sleep it is held in.
+            const off = swarmOwnerOf(swarmListing, 'agents', agent.name)?.on === false;
 
             return (
               <Hint key={agent.name} label={broken ? agent.invalid : undefined}>
@@ -240,7 +245,7 @@ export function AgentsSection() {
                     <span
                         className="ml-auto shrink-0 text-micro text-subtle"
                       >
-                        {agent.status}
+                        {off ? 'off' : agent.status}
                       </span>
                   </Hint>
                   )}

@@ -1,8 +1,9 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AGENT_NAME_POOL, resetAgents } from '@/lib/agents';
+import type { SwarmsSnapshot } from '@/lib/swarms';
 import { resetShippedState } from '@/lib/shipped';
 
 import { AgentDefinition } from '@features/shared/components/agent-definition';
@@ -13,6 +14,24 @@ import { setSurfaceText, surfaceText } from '@tests/support/editor-surface';
 import type { AgentSummary } from '@shared/agent-contract';
 
 import { shippedStatus } from '../../../support/shipped';
+import { installedSwarm, swarmItem, swarmListing } from '../../../support/swarms';
+
+const swarmState = vi.hoisted(() => ({
+  snapshot: null as SwarmsSnapshot | null,
+  setEnabled: null as unknown as import('vitest').Mock,
+}));
+swarmState.setEnabled = vi.fn();
+
+vi.mock('@/lib/swarms', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/swarms')>();
+  return {
+    ...actual,
+    // The stub bridge has no `swarms`; the listing comes from `swarmState`.
+    loadSwarms: () => Promise.resolve(),
+    swarmsSnapshot: () => swarmState.snapshot ?? actual.swarmsSnapshot(),
+    setSwarmItemEnabled: (...args: unknown[]) => swarmState.setEnabled(...args),
+  };
+});
 
 /**
  * One agent's definition on its page (HIVE-204). The save, rename, delete,
@@ -476,5 +495,122 @@ describe('the Runs on context (HIVE-396)', () => {
       expect(radio).not.toHaveAttribute('aria-disabled');
     }
     expect(within(dock).getByRole('radio', { checked: true })).toHaveAccessibleName('Claude Code');
+  });
+});
+
+describe('AgentDefinition — a swarm\'s agent is turned off, not deleted (HIVE-453)', () => {
+  const useSquad = (off: string[] = []): void => {
+    swarmState.snapshot = {
+      listing: swarmListing([
+        swarmItem({
+          installed: installedSwarm({
+            swarmId: 'sq1',
+            title: 'Dev Squad',
+            contents: {
+              agents: ['builder', 'fixer', 'shipper', 'acr'].map((name) => ({ name, description: '', tools: [] })),
+              skills: [],
+            },
+            disabled: { agents: off, skills: [] },
+          }),
+        }),
+      ]),
+      busy: new Set(),
+      removing: new Set(),
+      failures: new Map(),
+      lastUpdate: null,
+    };
+  };
+  const squad = [
+    agent('builder'),
+    agent('fixer', { asksFrom: ['shipper'] }),
+    agent('shipper', { asksFrom: ['sess-*', 'builder'] }),
+    agent('acr'),
+    agent('slack-watcher'),
+  ];
+
+  beforeEach(() => {
+    swarmState.setEnabled.mockReset();
+    swarmState.setEnabled.mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    swarmState.snapshot = null;
+  });
+
+  it('an owned agent has the switch and no Delete; the person\'s own keeps Delete', async () => {
+    useSquad();
+    stub(squad);
+    const view = await open('acr');
+
+    expect(screen.getByRole('switch', { name: 'Enabled' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    view.unmount();
+
+    await open('slack-watcher');
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: /^(Enabled|Off)$/ })).toBeNull();
+  });
+
+  it('turning off acr, which nobody asks, writes at once', async () => {
+    useSquad();
+    stub(squad);
+    await open('acr');
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+
+    expect(swarmState.setEnabled).toHaveBeenCalledWith('sq1', 'agents', 'acr', false);
+  });
+
+  it('turning off shipper names builder, and Cancel writes nothing', async () => {
+    useSquad();
+    stub(squad);
+    await open('shipper');
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+
+    expect(
+      screen.getByText(
+        "builder asks shipper as part of Dev Squad's flow. With it off, those asks are refused and come back to you.",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(swarmState.setEnabled).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Turn off' }));
+    expect(swarmState.setEnabled).toHaveBeenCalledWith('sq1', 'agents', 'shipper', false);
+  });
+
+  it('turning off fixer names shipper', async () => {
+    useSquad();
+    stub(squad);
+    await open('fixer');
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+
+    expect(screen.getByText(/^shipper asks fixer as part of Dev Squad's flow/)).toBeInTheDocument();
+  });
+
+  it('an off builder is not named', async () => {
+    useSquad(['builder']);
+    stub(squad);
+    await open('shipper');
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+
+    expect(swarmState.setEnabled).toHaveBeenCalledWith('sq1', 'agents', 'shipper', false);
+  });
+
+  it('turning on never asks, and a failed write says so in the notice', async () => {
+    useSquad(['fixer']);
+    swarmState.setEnabled.mockResolvedValue(false);
+    // A definition whose name is the agent's own, so no name problem outranks the notice.
+    stub(squad, { read: vi.fn(async ({ name }: { name: string }) => GOOD.replace('slack-watcher', name)) });
+    await open('fixer');
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Off' }));
+
+    expect(swarmState.setEnabled).toHaveBeenCalledWith('sq1', 'agents', 'fixer', true);
+    expect(await screen.findByText("Couldn't save. Try again.")).toBeInTheDocument();
   });
 });

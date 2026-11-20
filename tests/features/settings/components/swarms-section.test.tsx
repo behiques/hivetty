@@ -27,6 +27,8 @@ const swarms = vi.hoisted(() => ({
   checkSwarms: vi.fn(() => Promise.resolve()),
   loadSwarms: vi.fn(() => Promise.resolve()),
   dismissSwarmFailure: vi.fn(),
+  setSwarmItemEnabled: vi.fn(() => Promise.resolve(true)),
+  restoreSwarmItem: vi.fn((): Promise<string | null> => Promise.resolve(null)),
 }));
 const shipped = vi.hoisted(() => ({
   takeShippedPrompt: vi.fn(() => Promise.resolve(null)),
@@ -34,7 +36,11 @@ const shipped = vi.hoisted(() => ({
   loadShipped: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock('@/lib/swarms', () => swarms);
+// The pure helpers (onCounts) stay real; every call to main is a spy.
+vi.mock('@/lib/swarms', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/swarms')>()),
+  ...swarms,
+}));
 vi.mock('@/hooks/use-swarms', () => ({ useSwarms: () => h.snapshot }));
 vi.mock('@/lib/shipped', () => shipped);
 vi.mock('@/hooks/use-shipped', () => ({
@@ -428,5 +434,53 @@ describe('a browse request (HIVE-447)', () => {
 
     expect(screen.getByRole('heading', { name: 'Browse swarms' })).toBeInTheDocument();
     expect(useUiStore.getState().swarmsBrowseRequest).toBe(false);
+  });
+});
+
+describe('turning on and restoring from the row (HIVE-453)', () => {
+  const squad = swarmItem({
+    entry: swarmEntry({ id: 'sq1', title: 'Dev Squad' }),
+    installed: installedSwarm({
+      swarmId: 'sq1',
+      title: 'Dev Squad',
+      contents: {
+        agents: [{ name: 'acr', description: '', tools: [] }],
+        skills: [{ name: 'plan', description: '' }],
+      },
+      disabled: { agents: ['acr'], skills: [] },
+    }),
+    missing: { agents: [], skills: ['plan'] },
+  });
+
+  beforeEach(() => {
+    h.account = SIGNED_IN;
+    serve({ listing: swarmListing([squad]) });
+  });
+
+  it('Turn on calls setSwarmItemEnabled with true', () => {
+    render(<SwarmsSection />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on acr' }));
+
+    expect(swarms.setSwarmItemEnabled).toHaveBeenCalledWith('sq1', 'agents', 'acr', true);
+  });
+
+  it('Restore calls restoreSwarmItem, and a refusal shows in the row', async () => {
+    swarms.restoreSwarmItem.mockResolvedValueOnce('Dev Squad does not ship plan');
+    render(<SwarmsSection />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore /plan' }));
+
+    expect(swarms.restoreSwarmItem).toHaveBeenCalledWith('skills', 'plan');
+    expect(await within(rowOf('Dev Squad')).findByText('Dev Squad does not ship plan')).toBeInTheDocument();
+  });
+
+  it('a failed Turn on says so in the row', async () => {
+    swarms.setSwarmItemEnabled.mockResolvedValueOnce(false);
+    render(<SwarmsSection />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on acr' }));
+
+    expect(await within(rowOf('Dev Squad')).findByText("Couldn't save. Try again.")).toBeInTheDocument();
   });
 });

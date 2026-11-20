@@ -105,11 +105,19 @@ in Settings and your edits stay, while an update still reaches what you did not 
 stop the body from updating. If you rewrote the body and a newer one arrives, Settings marks the
 skill amber and holds the new body back until you choose to **Compare**, **Take shipped prompt** or
 **Keep mine**. A blue dot means you changed something, and **Reset to shipped** puts the
-swarm's files back. Other files in a skill update only if you never edited them. Delete a
-skill and it stays deleted.
+swarm's files back. Other files in a skill update only if you never edited them.
 
-To get a deleted skill back, reinstall Dev Squad (or the swarm it came from) in Settings ›
-Automation › Swarms; for a skill you edited, **Reset to shipped** puts its files back.
+A swarm's skill has no **Delete**. It has an **Enabled** switch instead, and Settings › Skills groups
+it under its swarm with a count such as "Dev Squad · 13 of 14 on". Turn a skill **Off** and every new
+session leaves it out of its `/` menu; sessions already running keep it until they end. It still
+updates with the swarm, so turning it back on gives you the current version. If enabled agents list
+the skill in their `skills:`, Settings names them and asks first, since their runs carry on without
+it. There is no Delete because the swarm's record would hold the deletion for good, and no update
+could bring the skill back. Your own skills keep **Delete**.
+
+A skill deleted outside HiveTTY shows as missing on its swarm's row in Settings › Automation ›
+Swarms, with **Restore** ([Swarms](swarms.md)). For a skill you edited, **Reset to shipped** puts
+its files back.
 
 ## Rules
 

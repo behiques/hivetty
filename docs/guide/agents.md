@@ -40,7 +40,22 @@ on their own, so a `limits.parallel` you raised stays raised while a new prompt 
 as `lane:` still land. Settings › Agents marks an agent you changed with a blue dot and names what
 differs, with **Reset to shipped**. If you rewrote the prompt and a newer one arrives, the dot
 turns amber and the new prompt is held until you choose **Compare**, **Take shipped prompt** or
-**Keep mine**. An agent you deleted stays deleted.
+**Keep mine**.
+
+A swarm's agent has no **Delete**; it has an **Enabled** switch. **Pause** and **Off** both stop an
+agent waking, and they differ in how long:
+
+- **Pause** is for now. It is the button on the agent's row, and **Resume** undoes it.
+- **Off** lasts through restarts and updates. An off agent never wakes, not on a schedule, a trigger
+  or the ledger, and an ask to it is refused as `disabled`, so the asker learns at once and can ask
+  someone else. Asks already waiting for it are kept, and their askers are told once. Pause is
+  greyed out while an agent is off, and its row reads *off*.
+
+Turning off an agent that other agents of its swarm hand work to (its `asks_from:`) asks first and
+names them: those asks will be refused and come back to you. The agent still updates with its
+swarm while it is off. There is no Delete because the swarm's record would hold the deletion for
+good. An agent deleted outside HiveTTY shows as missing on its swarm's row, with **Restore**
+([Swarms](swarms.md)).
 
 ## Create an agent
 
@@ -52,8 +67,9 @@ tabs. The bar above them names the file, or says *not saved yet*, and
 reads **unsaved** in amber until you **Save**.
 
 Your edits are kept: go to another agent or another place and come back, and the unsaved
-text is still there. **Revert** puts it back to what is on disk. **Delete** asks first,
-then removes the folder and closes the page.
+text is still there. **Revert** puts it back to what is on disk. For your own agents,
+**Delete** asks first, then removes the folder and closes the page; a swarm's agent has the
+**Enabled** switch instead.
 
 **Settings › Agents** lists your agents and edits them in place: click one, or
 **+ New agent**, and the same editor opens beside the list behind **Form | Source** tabs,

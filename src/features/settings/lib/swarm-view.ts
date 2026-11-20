@@ -1,11 +1,15 @@
+import { onCounts } from '@/lib/swarms';
+
 import type { ShippedStatus } from '@shared/shipped-contract';
 import {
+  disabledOf,
   isBundled,
   versionLabel,
   type InstalledSwarm,
   type SwarmContents,
   type SwarmEntry,
   type SwarmFailure,
+  type SwarmItemKind,
   type SwarmListing,
   type SwarmListItem,
 } from '@shared/swarm-contract';
@@ -77,6 +81,56 @@ const plural = (count: number, noun: string): string => `${count} ${noun}${count
 
 export const countsOf = (contents: SwarmContents): string =>
   `${plural(contents.agents.length, 'agent')} · ${plural(contents.skills.length, 'skill')}`;
+
+/** HIVE-453: "3 of 4 agents and 13 of 14 skills on", for an installed swarm. */
+export function onCountsText(item: SwarmListItem): string {
+  const counts = onCounts(item);
+  return `${String(counts.agentsOn)} of ${plural(counts.agents, 'agent')} and ${String(counts.skillsOn)} of ${plural(counts.skills, 'skill')} on`;
+}
+
+/** One agent or skill a swarm row names by kind (HIVE-453). */
+export interface SwarmItemRow {
+  kind: SwarmItemKind;
+  name: string;
+}
+
+const byName = (left: string, right: string): number => left.localeCompare(right);
+
+const rowsOf = (agents: readonly string[], skills: readonly string[]): SwarmItemRow[] => [
+  ...[...agents].sort(byName).map((name) => ({ kind: 'agents' as const, name })),
+  ...[...skills].sort(byName).map((name) => ({ kind: 'skills' as const, name })),
+];
+
+/**
+ * HIVE-453: what the person turned off, agents first, each sorted. Only names the swarm still ships, as `onCounts`
+ * counts them.
+ */
+export function turnedOff(item: SwarmListItem): SwarmItemRow[] {
+  const installed = item.installed;
+  if (installed === null) return [];
+  const off = disabledOf(installed);
+  const shipped = (kind: SwarmItemKind) =>
+    off[kind].filter((name) => installed.contents[kind].some((element) => element.name === name));
+  return rowsOf(shipped('agents'), shipped('skills'));
+}
+
+/** HIVE-453: what the swarm's record tracks that is gone from disk, agents first, each sorted. */
+export function missingOf(item: SwarmListItem): SwarmItemRow[] {
+  return rowsOf(item.missing.agents, item.missing.skills);
+}
+
+/** HIVE-453: "1 agent and 1 skill turned off", "2 skills missing". */
+export function offHeading(rows: readonly SwarmItemRow[], what: string): string {
+  const agents = rows.filter((row) => row.kind === 'agents').length;
+  const skills = rows.length - agents;
+  const parts = [agents > 0 ? plural(agents, 'agent') : null, skills > 0 ? plural(skills, 'skill') : null].filter(
+    (part): part is string => part !== null,
+  );
+  return `${parts.join(' and ')} ${what}`;
+}
+
+/** A skill reads as its command, an agent as its name. */
+export const itemLabel = (row: SwarmItemRow): string => (row.kind === 'skills' ? `/${row.name}` : row.name);
 
 export function installedRows(
   listing: SwarmListing,
