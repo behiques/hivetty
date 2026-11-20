@@ -1,4 +1,4 @@
-import { CaretRight } from '@phosphor-icons/react';
+import { CaretRight, WarningCircle } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -7,18 +7,24 @@ import { Tag } from '@/components/ui/tag';
 import {
   badgeOf,
   countsOf,
+  itemLabel,
+  missingOf,
   needsConsent,
+  offHeading,
+  onCountsText,
   publisherOf,
   rowState,
   stateText,
+  turnedOff,
   type KeptFile,
+  type SwarmItemRow,
   type SwarmRowState,
 } from '@/features/settings/lib/swarm-view';
 import { InlineConfirm } from '@/features/shared/components/inline-confirm';
 import { HeldBanner } from '@/features/shared/components/shipped-marker';
 import { cn } from '@/lib/utils';
 
-import type { SwarmFailure, SwarmListing, SwarmListItem } from '@shared/swarm-contract';
+import { isBundled, type SwarmFailure, type SwarmItemKind, type SwarmListing, type SwarmListItem } from '@shared/swarm-contract';
 
 interface SwarmRowProps {
   item: SwarmListItem;
@@ -37,6 +43,10 @@ interface SwarmRowProps {
   onRemove: () => void;
   onTake: (file: KeptFile) => void;
   onKeep: (file: KeptFile) => void;
+  /** HIVE-453: turn one of this swarm's items back on. */
+  onTurnOn: (kind: SwarmItemKind, name: string) => void;
+  /** HIVE-453: put a missing item back from the swarm. */
+  onRestore: (kind: SwarmItemKind, name: string) => void;
 }
 
 /** The dot repeats the state text, so it is decoration; its colour is a token. */
@@ -116,6 +126,58 @@ function KeptFiles({
   );
 }
 
+/** A heading and one line per item, each with its action or the reason there is none (HIVE-453). */
+function ItemSection({
+  heading,
+  warning = false,
+  note,
+  rows,
+  action,
+  disabled,
+  waiting,
+  onAction,
+}: {
+  heading: string;
+  warning?: boolean;
+  note?: string;
+  rows: SwarmItemRow[];
+  action: string;
+  disabled: boolean;
+  /** Said in place of the button when the action cannot happen yet. */
+  waiting?: string | null;
+  onAction: (row: SwarmItemRow) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className={cn('flex items-center gap-1 text-ui-sm', warning ? 'text-amber-text' : 'text-muted')}>
+        {warning ? <WarningCircle size={12} className="shrink-0" aria-hidden /> : null}
+        {heading}
+      </p>
+      {rows.map((row) => (
+        <div key={`${row.kind}/${row.name}`} className="flex items-center gap-3 pl-4">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-ui-sm font-semibold text-ink">{itemLabel(row)}</span>
+            {note === undefined ? null : <span className="text-ui-sm text-subtle">{note}</span>}
+          </div>
+          {waiting === null || waiting === undefined ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={`${action} ${itemLabel(row)}`}
+              disabled={disabled}
+              onClick={() => onAction(row)}
+            >
+              {action}
+            </Button>
+          ) : (
+            <span className="shrink-0 text-ui-sm text-subtle">{waiting}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** One swarm in Settings › Swarms (HIVE-442). Presentational: the pane owns every call. */
 export function SwarmRow({
   item,
@@ -131,6 +193,8 @@ export function SwarmRow({
   onRemove,
   onTake,
   onKeep,
+  onTurnOn,
+  onRestore,
 }: SwarmRowProps) {
   const [confirming, setConfirming] = useState(false);
   const state = rowState(item, source, busy, removing);
@@ -141,6 +205,10 @@ export function SwarmRow({
   const publisher = publisherOf(item);
   const updating = state === 'updating' || state === 'removing';
   const org = item.entry?.org ?? item.installed?.org ?? null;
+  const off = turnedOff(item);
+  const missing = missingOf(item);
+  const counts =
+    item.installed === null ? countsOf(contents) : `${countsOf(contents)} · ${onCountsText(item)}`;
   const pinned =
     item.entry?.kind === 'organization' && item.entry.policy === 'pinned' && item.entry.pinnedVersion !== null
       ? `Pinned to v${item.entry.pinnedVersion} by ${org?.name ?? 'your organization'}`
@@ -157,7 +225,7 @@ export function SwarmRow({
             </Tag>
           </div>
           <span className="truncate text-ui-sm text-subtle">
-            {publisher === '' ? countsOf(contents) : `${publisher} · ${countsOf(contents)}`}
+            {publisher === '' ? counts : `${publisher} · ${counts}`}
           </span>
         </div>
 
@@ -184,6 +252,34 @@ export function SwarmRow({
       )}
 
       {notice === null ? null : <p className="text-ui-sm text-red">{notice}</p>}
+
+      {off.length === 0 ? null : (
+        <ItemSection
+          heading={offHeading(off, 'turned off')}
+          rows={off}
+          action="Turn on"
+          disabled={busy || updating}
+          onAction={(row) => onTurnOn(row.kind, row.name)}
+        />
+      )}
+
+      {missing.length === 0 ? null : (
+        <ItemSection
+          heading={offHeading(missing, 'missing')}
+          warning
+          note="Deleted outside HiveTTY. Updates won't bring it back by themselves."
+          rows={missing}
+          action="Restore"
+          disabled={busy || updating}
+          // The bundled Dev Squad has no clone to copy from until its first update.
+          waiting={
+            item.installed !== null && isBundled(item.installed.version)
+              ? `Can be restored after ${title}'s first update.`
+              : null
+          }
+          onAction={(row) => onRestore(row.kind, row.name)}
+        />
+      )}
 
       {kept.length === 0 ? null : <KeptFiles kept={kept} onTake={onTake} onKeep={onKeep} />}
 

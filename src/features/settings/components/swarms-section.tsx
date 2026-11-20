@@ -22,7 +22,9 @@ import {
   installSwarm,
   loadSwarms,
   removeSwarm,
+  restoreSwarmItem,
   setSwarmAutoUpdate,
+  setSwarmItemEnabled,
 } from '@/lib/swarms';
 import {
   useSetSwarmInstallRequest,
@@ -31,7 +33,7 @@ import {
   useSwarmsBrowseRequest,
 } from '@/stores/ui-store';
 
-import type { SwarmListItem } from '@shared/swarm-contract';
+import type { SwarmItemKind, SwarmListItem } from '@shared/swarm-contract';
 
 const LEDE =
   'Sets of agents and skills that install together and update when their publisher releases a new version. Saved under ~/.hivetty.';
@@ -134,15 +136,30 @@ export function SwarmsSection() {
     void checkSwarms().finally(() => setChecking(false));
   };
 
-  const remove = (swarmId: string): void => {
-    void removeSwarm(swarmId).then((message) => {
-      setNotices((was) => {
-        const next = new Map(was);
-        if (message === null) next.delete(swarmId);
-        else next.set(swarmId, message);
-        return next;
-      });
+  /** Hold, or clear, the sentence a row shows for its last call. */
+  const noticeFor = (swarmId: string, message: string | null): void => {
+    setNotices((was) => {
+      const next = new Map(was);
+      if (message === null) next.delete(swarmId);
+      else next.set(swarmId, message);
+      return next;
     });
+  };
+
+  const remove = (swarmId: string): void => {
+    void removeSwarm(swarmId).then((message) => noticeFor(swarmId, message));
+  };
+
+  /** HIVE-453: Turn on, from the row's turned-off list. */
+  const turnOn = (swarmId: string, kind: SwarmItemKind, name: string): void => {
+    void setSwarmItemEnabled(swarmId, kind, name, true).then((written) =>
+      noticeFor(swarmId, written ? null : "Couldn't save. Try again."),
+    );
+  };
+
+  /** HIVE-453: Restore, from the row's missing list; a refusal is main's own sentence. */
+  const restore = (swarmId: string, kind: SwarmItemKind, name: string): void => {
+    void restoreSwarmItem(kind, name).then((message) => noticeFor(swarmId, message));
   };
 
   const rows = listing === null ? [] : installedRows(listing, failures);
@@ -217,6 +234,8 @@ export function SwarmsSection() {
                     onRemove={() => remove(id)}
                     onTake={(file) => void takeShippedPrompt({ kind: file.kind, name: file.name })}
                     onKeep={(file) => void keepShippedMine({ kind: file.kind, name: file.name })}
+                    onTurnOn={(kind, name) => turnOn(id, kind, name)}
+                    onRestore={(kind, name) => restore(id, kind, name)}
                   />
                 );
               })}

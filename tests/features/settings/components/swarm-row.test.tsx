@@ -23,6 +23,8 @@ function renderRow(
   } = {},
 ) {
   const calls = {
+    onTurnOn: vi.fn(),
+    onRestore: vi.fn(),
     onAction: vi.fn(),
     onDismiss: vi.fn(),
     onAutoUpdate: vi.fn(),
@@ -55,7 +57,7 @@ describe('SwarmRow, one case per state', () => {
     expect(screen.getByText('Standard')).toBeInTheDocument();
     expect(screen.getByText('Native')).toBeInTheDocument();
     expect(screen.getByText('v1.4.0 · up to date')).toBeInTheDocument();
-    expect(screen.getByText('HiveTTY · 1 agent · 1 skill')).toBeInTheDocument();
+    expect(screen.getByText('HiveTTY · 1 agent · 1 skill · 1 of 1 agent and 1 of 1 skill on')).toBeInTheDocument();
     expect(actionsShown()).toEqual([]);
     expect(screen.getByRole('switch', { name: 'Update automatically' })).toBeChecked();
     expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
@@ -153,7 +155,7 @@ describe('SwarmRow, one case per state', () => {
 
     expect(screen.getByText('v1.2.0')).toBeInTheDocument();
     expect(screen.getByText("No longer available from Acme. It won't update.")).toBeInTheDocument();
-    expect(screen.getByText('https://github.com/behiques/swarms.git · 1 agent · 1 skill')).toBeInTheDocument();
+    expect(screen.getByText('https://github.com/behiques/swarms.git · 1 agent · 1 skill · 1 of 1 agent and 1 of 1 skill on')).toBeInTheDocument();
     expect(actionsShown()).toEqual([]);
     expect(screen.queryByRole('switch')).toBeNull();
     expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
@@ -179,6 +181,8 @@ describe('SwarmRow, one case per state', () => {
         onRemove={vi.fn()}
         onTake={vi.fn()}
         onKeep={vi.fn()}
+        onTurnOn={vi.fn()}
+        onRestore={vi.fn()}
       />,
     );
 
@@ -206,6 +210,8 @@ describe('SwarmRow, one case per state', () => {
         onRemove={vi.fn()}
         onTake={vi.fn()}
         onKeep={vi.fn()}
+        onTurnOn={vi.fn()}
+        onRestore={vi.fn()}
       />,
     );
 
@@ -312,9 +318,78 @@ describe('SwarmRow notice', () => {
         onRemove={vi.fn()}
         onTake={vi.fn()}
         onKeep={vi.fn()}
+        onTurnOn={vi.fn()}
+        onRestore={vi.fn()}
       />,
     );
 
     expect(screen.getByText('The swarm folder is in use.')).toHaveClass('text-red');
+  });
+});
+
+describe('SwarmRow: on, off and missing (HIVE-453)', () => {
+  const squad = (over: Parameters<typeof installedSwarm>[0] = {}, missing = { agents: [] as string[], skills: ['plan'] }) =>
+    swarmItem({
+      entry: swarmEntry({ title: 'Dev Squad' }),
+      installed: installedSwarm({
+        title: 'Dev Squad',
+        contents: {
+          agents: ['shipper', 'builder', 'fixer', 'acr'].map((name) => ({ name, description: '', tools: [] })),
+          skills: ['spec-deviation', 'plan', 'tdd'].map((name) => ({ name, description: '' })),
+        },
+        disabled: { agents: ['acr'], skills: ['spec-deviation'] },
+        ...over,
+      }),
+      missing,
+    });
+
+  it('appends the on-counts to the counts line', () => {
+    renderRow(squad());
+
+    expect(screen.getByText(/4 agents · 3 skills · 3 of 4 agents and 2 of 3 skills on/)).toBeInTheDocument();
+  });
+
+  it('lists what is turned off with Turn on, and what is missing with Restore', () => {
+    const calls = renderRow(squad());
+
+    expect(screen.getByText('1 agent and 1 skill turned off')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on acr' }));
+    expect(calls.onTurnOn).toHaveBeenCalledWith('agents', 'acr');
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on /spec-deviation' }));
+    expect(calls.onTurnOn).toHaveBeenCalledWith('skills', 'spec-deviation');
+
+    expect(screen.getByText('1 skill missing')).toBeInTheDocument();
+    expect(screen.getByText("Deleted outside HiveTTY. Updates won't bring it back by themselves.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore /plan' }));
+    expect(calls.onRestore).toHaveBeenCalledWith('skills', 'plan');
+  });
+
+  it('a bundled swarm says when a missing item can be restored, with no button', () => {
+    renderRow(squad({ version: 'bundled' }));
+
+    expect(screen.queryByRole('button', { name: /^Restore/ })).toBeNull();
+    expect(screen.getByText("Can be restored after Dev Squad's first update.")).toBeInTheDocument();
+  });
+
+  it('renders neither section when both lists are empty', () => {
+    renderRow(squad({ disabled: { agents: [], skills: [] } }, { agents: [], skills: [] }));
+
+    expect(screen.queryByText(/turned off$/)).toBeNull();
+    expect(screen.queryByText(/missing$/)).toBeNull();
+    expect(screen.getByText(/4 of 4 agents and 3 of 3 skills on/)).toBeInTheDocument();
+  });
+
+  it('a swarm not installed shows no on-counts and no sections', () => {
+    renderRow(swarmItem({ entry: swarmEntry() }), { failure: FAILED });
+
+    expect(screen.queryByText(/ on$/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Turn on/ })).toBeNull();
+  });
+
+  it('Turn on and Restore wait while the row is busy', () => {
+    renderRow(squad(), { busy: true });
+
+    expect(screen.getByRole('button', { name: 'Turn on acr' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Restore /plan' })).toBeDisabled();
   });
 });

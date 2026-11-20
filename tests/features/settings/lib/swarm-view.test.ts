@@ -9,11 +9,15 @@ import {
   installedRows,
   keptFiles,
   matches,
+  missingOf,
   needsConsent,
+  offHeading,
+  onCountsText,
   publisherOf,
   resolveInstallLink,
   rowState,
   stateText,
+  turnedOff,
   type SwarmRowState,
 } from '@/features/settings/lib/swarm-view';
 
@@ -338,5 +342,59 @@ describe('resolveInstallLink (HIVE-442)', () => {
   it('hands the row to the consent dialog', () => {
     const resolution = resolveInstallLink('a1', true, swarmListing([other, available]));
     expect(resolution).toEqual({ kind: 'consent', item: available });
+  });
+});
+
+describe('on, off and missing (HIVE-453)', () => {
+  const squad = (
+    disabled = { agents: ['acr'], skills: ['spec-deviation'] },
+    missing: { agents: string[]; skills: string[] } = { agents: [], skills: ['plan'] },
+  ) =>
+    swarmItem({
+      installed: installedSwarm({
+        contents: {
+          agents: ['shipper', 'builder', 'fixer', 'acr'].map((name) => ({ name, description: '', tools: [] })),
+          skills: Array.from({ length: 14 }, (_, index) => ({ name: index === 0 ? 'spec-deviation' : `skill-${String(index)}`, description: '' })),
+        },
+        disabled,
+      }),
+      missing,
+    });
+
+  it('onCountsText counts what is on', () => {
+    expect(onCountsText(squad())).toBe('3 of 4 agents and 13 of 14 skills on');
+    const one = swarmItem({
+      installed: installedSwarm({
+        contents: { agents: [{ name: 'a', description: '', tools: [] }], skills: [{ name: 's', description: '' }] },
+      }),
+    });
+    expect(onCountsText(one)).toBe('1 of 1 agent and 1 of 1 skill on');
+  });
+
+  it('turnedOff lists agents first, each sorted, and only names the swarm still ships', () => {
+    expect(turnedOff(squad({ agents: ['fixer', 'acr', 'gone'], skills: ['spec-deviation'] }))).toEqual([
+      { kind: 'agents', name: 'acr' },
+      { kind: 'agents', name: 'fixer' },
+      { kind: 'skills', name: 'spec-deviation' },
+    ]);
+    expect(turnedOff(swarmItem())).toEqual([]);
+  });
+
+  it('missingOf lists agents first, each sorted', () => {
+    expect(missingOf(squad(undefined, { agents: ['fixer'], skills: ['plan', 'debug'] }))).toEqual([
+      { kind: 'agents', name: 'fixer' },
+      { kind: 'skills', name: 'debug' },
+      { kind: 'skills', name: 'plan' },
+    ]);
+  });
+
+  it('offHeading says how many of each kind', () => {
+    const rows = (agents: number, skills: number) => [
+      ...Array.from({ length: agents }, () => ({ kind: 'agents' as const, name: 'a' })),
+      ...Array.from({ length: skills }, () => ({ kind: 'skills' as const, name: 's' })),
+    ];
+    expect(offHeading(rows(1, 1), 'turned off')).toBe('1 agent and 1 skill turned off');
+    expect(offHeading(rows(0, 1), 'missing')).toBe('1 skill missing');
+    expect(offHeading(rows(2, 0), 'turned off')).toBe('2 agents turned off');
   });
 });
