@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # Empty on a fork's pull request: secrets are not passed there, and the swarm tests skip.
+      # 'false' on a fork's pull request: secrets are not passed there, and the swarm tests skip.
       HAS_SWARMS_KEY: ${{ secrets.HIVETTY_SWARMS_READ_KEY != '' }}
 
     steps:
