@@ -697,7 +697,8 @@ export function drawComb(
     for (const f of flyers) drawMuta(ctx, f.spine, t, f.k * 3.7, f.turn, scale, ps, tone);
   });
 
-  // Agents carry their names under the cell, and colour and motion carry their state, so only sessions get tags.
+  // At scale nothing is named under its cell. Agents stay unnamed (colour and motion carry their state, the tooltip
+  // names them); only a session that needs you or failed gets a tag.
   if (sc) {
     const urgent = layout.cells.filter((c) => !c.agent && (c.state === 'summons' || c.state === 'failed'));
     for (const cell of urgent) drawTag(ctx, cell, layout.R, palette);
