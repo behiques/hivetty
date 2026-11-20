@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { execFile } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -13,6 +13,7 @@ import {
 } from '../../shared/hook-contract';
 
 import { createReceiver, type Receiver } from '../../core/hooks/receiver';
+import { mcpConfig } from '../../core/harness/claude-code/mcp-config';
 import { writeHookSettings } from '../../core/harness/claude-code/settings';
 import { renderSkills } from '../../core/skills/render';
 import type { SkillsRead } from '../../core/skills/read';
@@ -61,6 +62,13 @@ const noAgents = {
  * authorisation: if `allowed-tools` in a generated skill's frontmatter did not
  * actually grant the command, `onDone` would never fire.
  *
+ * ## The Bash hook it runs under
+ *
+ * rc.14's `/done` was a `curl` reading `$HIVE_RECEIVER_URL`, and a repo whose
+ * own PreToolUse:Bash hook refuses `curl` with a `$` in it blocked it outright.
+ * The project here carries that hook, so this suite fails if `/done` ever goes
+ * back through Bash. It needs the built MCP host (`pnpm desktop:build`).
+ *
  * ## Why it is opt-in
  *
  * It spawns a real `claude`, which costs real tokens and takes tens of seconds.
@@ -72,6 +80,27 @@ const noAgents = {
  * ```
  */
 const enabled = process.env.HIVE_LIVE_DONE_PROOF === '1';
+
+/** The stdio MCP host a real session's `--mcp-config` launches, from `pnpm desktop:build`. */
+const MCP_HOST = join(process.cwd(), 'out', 'main', 'mcp-host.js');
+
+/** The shape of the hook that blocked rc.14's `/done`: any Bash `curl` with a `$` in it, refused with exit 2. */
+const BLOCK_CURL_WITH_VARIABLES = {
+  hooks: {
+    PreToolUse: [
+      {
+        matcher: 'Bash',
+        hooks: [
+          {
+            type: 'command',
+            command:
+              "cmd=$(jq -r '.tool_input.command'); case \"$cmd\" in *curl*'$'*) echo 'Blocked: curl with a shell variable' >&2; exit 2;; esac; exit 0",
+          },
+        ],
+      },
+    ],
+  },
+};
 
 /** The HiveTTY id this run's session answers to, echoed back in the POST's header. */
 const ENTITY = 'sess-live-done';
@@ -103,6 +132,7 @@ describe.skipIf(!enabled)('/done conformance', () => {
   let cwd: string;
   let pluginRoot: string;
   let settingsPath: string;
+  let mcpConfigPath: string;
   let declared: string[];
 
   beforeAll(async () => {
@@ -124,7 +154,11 @@ describe.skipIf(!enabled)('/done conformance', () => {
     const url = await receiver.start();
     expect(url).not.toBeNull();
 
+    expect(existsSync(MCP_HOST), `${MCP_HOST} is missing: run pnpm desktop:build first`).toBe(true);
+
     cwd = mkdtempSync(join(tmpdir(), 'hive-done-cwd-'));
+    mkdirSync(join(cwd, '.claude'));
+    writeFileSync(join(cwd, '.claude', 'settings.json'), JSON.stringify(BLOCK_CURL_WITH_VARIABLES));
     const userData = mkdtempSync(join(tmpdir(), 'hive-done-data-'));
     pluginRoot = join(mkdtempSync(join(tmpdir(), 'hive-done-plugin-')), 'plugin');
 
@@ -135,6 +169,11 @@ describe.skipIf(!enabled)('/done conformance', () => {
     */
     await renderSkills(pluginRoot, 'claude-code', NO_SKILLS, { version: '0.0.0-test', doneUrl: receiver.doneUrl });
     settingsPath = await writeHookSettings(userData, url as string);
+    mcpConfigPath = join(userData, 'hive.mcp.json');
+    writeFileSync(
+      mcpConfigPath,
+      mcpConfig({ launch: { command: process.execPath, args: [MCP_HOST], env: { ELECTRON_RUN_AS_NODE: '1' } } }),
+    );
   });
 
   afterAll(async () => {
@@ -147,7 +186,7 @@ describe.skipIf(!enabled)('/done conformance', () => {
     async () => {
       const { stdout, stderr } = await claude(
         cwd,
-        ['--plugin-dir', pluginRoot, '--settings', settingsPath, '/done'],
+        ['--mcp-config', mcpConfigPath, '--plugin-dir', pluginRoot, '--settings', settingsPath, '/done'],
         {
           [HOOK_ENV_SESSION]: ENTITY,
           [HOOK_ENV_TOKEN]: receiver.tokenFor(ENTITY),
@@ -168,9 +207,10 @@ describe.skipIf(!enabled)('/done conformance', () => {
 
       /*
         The whole chain in one assertion: the frontmatter parsed, `/done`
-        resolved by its bare name, `allowed-tools` authorised the command
-        without anyone to ask, the command ran, and the route accepted it with
-        the session id from the environment.
+        resolved by its bare name, `allowed-tools` authorised `session_done`
+        without anyone to ask, the project's Bash hook had nothing to block, the
+        MCP host posted, and the route accepted it with the session id from the
+        environment.
       */
       expect(
         declared,
@@ -184,7 +224,7 @@ describe.skipIf(!enabled)('/done conformance', () => {
     { timeout: 300_000 },
     async () => {
       /*
-        The same command with a session id the receiver does not know. Proves
+        The same call with a session id the receiver does not know. Proves
         the header is really read and really checked, rather than the route
         answering 204 to anything that reaches it — which would make `/done` a
         way for any process on the machine to close a terminal.
@@ -193,7 +233,7 @@ describe.skipIf(!enabled)('/done conformance', () => {
 
       await claude(
         cwd,
-        ['--plugin-dir', pluginRoot, '--settings', settingsPath, '/done'],
+        ['--mcp-config', mcpConfigPath, '--plugin-dir', pluginRoot, '--settings', settingsPath, '/done'],
         {
           [HOOK_ENV_SESSION]: 'sess-not-ours',
           [HOOK_ENV_TOKEN]: receiver.tokenFor('sess-not-ours'),

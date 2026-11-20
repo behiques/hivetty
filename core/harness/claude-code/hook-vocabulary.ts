@@ -1,7 +1,5 @@
 import type { NoticeReason, StatusSignal } from '@shared/harness-contract';
 import {
-  DONE_PATH,
-  HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
   HOOK_ENV_TOKEN,
   HOOK_HEADER_SESSION,
@@ -279,63 +277,6 @@ export function noticeSignal(notificationType: unknown): StatusSignal | undefine
     ? { kind: 'notice', reason: NOTICE_REASON[notificationType] }
     : undefined;
 }
-
-/**
- * The exact command `/done`'s body runs, and the exact rule its frontmatter
- * grants (HIVE-93).
- *
- * **One builder, two callers, on purpose** — and both of them are
- * `harness/claude-code/done-skill.ts`: `active()` spells the command out in the body, and
- * `frontmatter()` wraps the same string in `allowed-tools`. (An earlier version
- * put the grant in the app-generated settings file instead; that file merges
- * above the user's own scope, so the permission was invisible and unrevokable
- * to them, and it is gone.)
- *
- * If the two ever drifted the symptom would be a permission prompt in the middle
- * of the app's own built-in — a failure the user cannot diagnose and did nothing
- * to cause. Deriving both from one function makes the drift impossible rather
- * than unlikely. The grant is the **whole** command, never a prefix: `curl`
- * takes `-K`, `-o`, `-D` and `--upload-file`, none of which need a shell
- * operator, so a trailing `:*` would be a silent grant of arbitrary file writes.
- *
- * Lives here, in a module that may hold no runtime, because it is neither
- * runtime nor either caller's business: it is the shape of a request on the
- * wire, which is what this file is for. No Node APIs, no imports, pure string.
- *
- * `-sS` rather than the status line's `-s`: this one has no stdout to protect —
- * nothing renders its output — so a failure should say so in the transcript
- * instead of vanishing. `--fail` makes a 4xx a non-zero exit for the same
- * reason, so a session whose token went stale reports it rather than appearing
- * to succeed and never closing.
- *
- * ## Why the URL is a variable and not baked in (HIVE-132)
- *
- * A containerised session cannot reach the loopback origin a host session would
- * bake, and the plugin directory is **one** directory shared by every session —
- * so a baked URL would force a second plugin root and a second copy of
- * `renderSkills`'s regenerate-and-prune machinery, to vary one line of one
- * file. {@link HOOK_ENV_RECEIVER_URL} is already in every pty for the MCP host,
- * so reading it here adds nothing to the environment and lets one directory
- * serve the host and container flavours both.
- *
- * Quoted, because the shell substitutes the value and a URL must stay a single
- * word. The grant and the body still derive from this one builder, so they
- * cannot drift into a permission prompt inside the app's own built-in.
- *
- * **This solves the `exec-env` container and not the `rewrite` one.** Every
- * other generated artifact can bake a resolved identity for a container whose
- * environment has gone stale; this one cannot, because the plugin directory is
- * shared by every session and the body has nowhere per-session to differ. A
- * reattached `rewrite` container therefore runs `/done` against a creation-time
- * origin and token, `--fail` makes that a non-zero exit, and the session does
- * not close. That is a known gap, not an oversight: closing it needs a
- * per-session plugin directory, which is a cost this story declined to pay for
- * one line of one file. See `ContainerFreshness`.
- */
-export const doneCommand = (): string =>
-  `curl -sS --fail -m 5 -X POST "$${HOOK_ENV_RECEIVER_URL}${DONE_PATH}"` +
-  ` -H "${HOOK_HEADER_SESSION}: $${HOOK_ENV_SESSION}"` +
-  ` -H "${HOOK_HEADER_TOKEN}: $${HOOK_ENV_TOKEN}"`;
 
 /**
  * The command the `SessionStart` hook runs to report that Claude is up.

@@ -1,14 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 
-import {
-  DONE_PATH,
-  HOOK_ENV_RECEIVER_URL,
-} from '../../../../shared/hook-contract';
 import { RESERVED_SKILL_NAME } from '../../../../shared/skills-contract';
 
 import { doneSkill } from '../../../../core/harness/claude-code/done-skill';
-import { doneCommand } from '../../../../core/harness/claude-code/hook-vocabulary';
 
 /**
  * The frontmatter's `key: value` lines, with the value exactly as emitted.
@@ -56,9 +51,9 @@ const frontmatterValue = (body: string, key: string): string | undefined => {
  *   it set, a skill cannot hand off to `/done` *and is told not to work around
  *   it* — which silently removes half of what this exists for, with no error
  *   anywhere.
- * - **the command.** The body and the permission in the settings file are two
- *   copies of one string. If they drift, the app's own built-in stops on a
- *   permission prompt the user did not cause and cannot read.
+ * - **the tool.** The body names `session_done` and the frontmatter grants it.
+ *   If they drift, the app's own built-in stops on a permission prompt the user
+ *   did not cause and cannot read.
  */
 describe('doneSkill', () => {
   const DONE_URL = 'http://127.0.0.1:51234/done';
@@ -90,29 +85,20 @@ describe('doneSkill', () => {
       }
     });
 
-    it('authorises exactly the command it runs, in its own frontmatter', () => {
-      const command = doneCommand();
-
+    it('calls session_done instead of a shell command, so a Bash hook cannot block it', () => {
       /*
-        Read back **through** the quoting, so this asserts the value a parser
-        ends up with rather than the bytes on the page. Both sides derive from
-        one builder, which is what makes drift impossible rather than unlikely:
-        if the grant and the command ever disagreed, the symptom would be a
-        permission prompt in the middle of the app's own built-in.
+        rc.14's body was a `curl` reading `$HIVE_RECEIVER_URL` and the token from
+        the environment. A repo's own PreToolUse:Bash hook refusing `curl` with a
+        `$` in it blocked that before `allowed-tools` was read, and `/done` failed
+        in that repo. An MCP call never passes through Bash.
       */
-      expect(frontmatterValue(body, 'allowed-tools')).toBe(`Bash(${command})`);
-      expect(body).toContain(command);
+      expect(body).toContain('`mcp__hive__session_done`');
+      expect(body).not.toContain('curl');
+      expect(body).not.toContain('$');
     });
 
-    it('authorises the exact command, never a prefix', () => {
-      /*
-        `…:*` would let anything be appended to the same `curl` invocation, and
-        `curl` has flags with nothing to do with the URL: `-K` reads a config
-        that redefines the target, `-o`/`-D` write to a chosen path,
-        `--upload-file` sends one. None need a shell operator, so none are
-        caught by Claude Code's `&&`/`;` handling.
-      */
-      expect(frontmatterValue(body, 'allowed-tools')).not.toContain(':*');
+    it('grants exactly that one tool, in its own frontmatter', () => {
+      expect(frontmatterValue(body, 'allowed-tools')).toBe('mcp__hive__session_done');
     });
 
     it('is invocable by a skill handing off, not only by a user typing it', () => {
@@ -151,27 +137,5 @@ describe('doneSkill', () => {
       */
       expect(body).toContain(`name: ${RESERVED_SKILL_NAME}`);
     });
-  });
-});
-
-describe('doneCommand — reaching the receiver from anywhere (HIVE-132)', () => {
-  it('addresses the receiver through the environment, not a baked origin', () => {
-    expect(doneCommand()).toContain(`"$${HOOK_ENV_RECEIVER_URL}${DONE_PATH}"`);
-  });
-
-  it('bakes no host, so the same plugin dir serves a container', () => {
-    expect(doneCommand()).not.toContain('127.0.0.1');
-  });
-
-  it('still grants the exact command it runs, never a prefix', () => {
-    const body = doneSkill('http://127.0.0.1:51234/done');
-
-    expect(body).toContain(`Bash(${doneCommand()})`);
-    expect(body).toContain(doneCommand());
-    expect(body).not.toContain(`Bash(${doneCommand()}:*)`);
-  });
-
-  it('is still inert when there is no receiver', () => {
-    expect(doneSkill(null)).not.toContain('curl');
   });
 });

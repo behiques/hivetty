@@ -325,9 +325,9 @@ export function hookSettings(
     disableAgentView: true,
     theme: CLAUDE_THEME,
     /*
-      No grant, deliberately (HIVE-93). `/done`'s `curl` is authorised by
-      `allowed-tools` in the generated skill's own frontmatter instead — see
-      `harness/claude-code/done-skill.ts`. This file merges above the user's scope, so a
+      No grant, deliberately (HIVE-93). `/done`'s `session_done` call is
+      authorised by `allowed-tools` in the generated skill's own frontmatter
+      instead — see `harness/done-tool-skill.ts`. This file merges above the user's scope, so a
       grant written here is one they can neither see among their own settings
       nor revoke; the skill's frontmatter puts the authorisation three lines
       above the command it authorises, in a file they can read.

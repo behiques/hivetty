@@ -1002,9 +1002,10 @@ names its folder and the files beside `skills/`:
 
 The runtime (`skills/index.ts`) renders all three on every `sync()`, each in its own `try`: one
 CLI's folder failing never drops another's, and `pluginDirPath(cli)` is `null` only for the one
-that failed. Codex and Copilot get `done` from `harness/done-tool-skill.ts`: call
-`{{tool:session_done}}`, then stop, with Codex's `catalog.md` listing it last. Claude's keeps its
-`curl` (HIVE-368).
+that failed. All three get `done` from `harness/done-tool-skill.ts`: call
+`{{tool:session_done}}`, then stop, with Codex's `catalog.md` listing it last (HIVE-368). Claude's
+copy also carries `allowed-tools: mcp__hive__session_done`, since Claude reads grants per skill,
+and stays inert while `doneUrl` is `null` (`claude-code/done-skill.ts`).
 
 **The portability check.** Settings › Skills runs `portabilityIssues(buffer, known)` over the open
 markdown file as it is typed. It flags `mcp__hive__x`, `hive-x` (a hive tool), `hive:x` or
