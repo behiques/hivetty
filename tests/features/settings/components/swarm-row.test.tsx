@@ -371,6 +371,9 @@ describe('SwarmRow: on, off and missing (HIVE-453)', () => {
 
     expect(screen.queryByRole('button', { name: /^Restore/ })).toBeNull();
     expect(screen.getByText("Can be restored after Dev Squad's first update.")).toBeInTheDocument();
+    // The note must not contradict that line by saying updates won't bring it back.
+    expect(screen.queryByText(/Updates won't bring it back/)).toBeNull();
+    expect(screen.getByText('Deleted outside HiveTTY.')).toBeInTheDocument();
   });
 
   it('renders neither section when both lists are empty', () => {

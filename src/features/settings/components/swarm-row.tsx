@@ -207,6 +207,7 @@ export function SwarmRow({
   const org = item.entry?.org ?? item.installed?.org ?? null;
   const off = turnedOff(item);
   const missing = missingOf(item);
+  const waitingForUpdate = item.installed !== null && isBundled(item.installed.version);
   const counts =
     item.installed === null ? countsOf(contents) : `${countsOf(contents)} · ${onCountsText(item)}`;
   const pinned =
@@ -268,16 +269,13 @@ export function SwarmRow({
         <ItemSection
           heading={offHeading(missing, 'missing')}
           warning
-          note="Deleted outside HiveTTY. Updates won't bring it back by themselves."
+          // The bundled Dev Squad's waiting line says when it can come back, so the note stops at the cause.
+          note={waitingForUpdate ? 'Deleted outside HiveTTY.' : "Deleted outside HiveTTY. Updates won't bring it back by themselves."}
           rows={missing}
           action="Restore"
           disabled={busy || updating}
           // The bundled Dev Squad has no clone to copy from until its first update.
-          waiting={
-            item.installed !== null && isBundled(item.installed.version)
-              ? `Can be restored after ${title}'s first update.`
-              : null
-          }
+          waiting={waitingForUpdate ? `Can be restored after ${title}'s first update.` : null}
           onAction={(row) => onRestore(row.kind, row.name)}
         />
       )}

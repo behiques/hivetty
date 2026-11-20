@@ -37,6 +37,8 @@ const EMPTY: SwarmsSnapshot = {
 
 let snapshot: SwarmsSnapshot = EMPTY;
 let unsubscribeChanged: (() => void) | null = null;
+let inFlight: Promise<void> | null = null;
+let readAgain = false;
 const listeners = new Set<() => void>();
 
 /** Replace the snapshot, never mutate it, and tell every listener once. */
@@ -107,13 +109,30 @@ export async function loadSwarms(): Promise<void> {
     });
   }
 
-  try {
-    const listing = await bridge.swarms.list();
-    publish({ listing });
-    pruneFailures(listing);
-  } catch (cause) {
-    console.error('[hive] could not list the swarms:', cause);
+  // One read at a time (HIVE-453: every agent row mounts `useSwarms`). A call while one is in flight shares it and
+  // asks for one more read after it, so a change that landed mid-read is not lost to the older answer.
+  if (inFlight !== null) {
+    readAgain = true;
+    return inFlight;
   }
+
+  const swarms = bridge.swarms;
+  inFlight = (async () => {
+    do {
+      readAgain = false;
+      try {
+        const listing = await swarms.list();
+        publish({ listing });
+        pruneFailures(listing);
+      } catch (cause) {
+        console.error('[hive] could not list the swarms:', cause);
+      }
+    } while (readAgain);
+  })().finally(() => {
+    inFlight = null;
+  });
+
+  return inFlight;
 }
 
 /** Ask main to check the registry now; it answers the list after the check. */
@@ -374,6 +393,8 @@ export async function restoreSwarmItem(kind: SwarmItemKind, name: string): Promi
 export function resetSwarmsState(): void {
   unsubscribeChanged?.();
   unsubscribeChanged = null;
+  inFlight = null;
+  readAgain = false;
   snapshot = EMPTY;
   listeners.clear();
 }

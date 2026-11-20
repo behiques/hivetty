@@ -125,6 +125,31 @@ describe('loadSwarms', () => {
     expect(swarmsSnapshot().lastUpdate).toEqual({ title: 'Standard', version: '1.5.0' });
   });
 
+  it('shares one read among callers that ask while it is in flight (HIVE-453: one per agent row)', async () => {
+    const h = bridge();
+
+    await Promise.all([loadSwarms(), loadSwarms(), loadSwarms(), loadSwarms()]);
+
+    // The first read, plus one re-read for everything asked while it ran: never one per caller.
+    expect(h.list.mock.calls.length).toBeLessThanOrEqual(2);
+    expect(swarmsSnapshot().listing).toBe(NOT_INSTALLED);
+  });
+
+  it('a change that lands while a read is in flight is read again, not lost', async () => {
+    const h = bridge();
+    let answer: (listing: SwarmListing) => void = () => undefined;
+    h.list.mockImplementationOnce(() => new Promise<SwarmListing>((resolve) => (answer = resolve)));
+    const first = loadSwarms();
+    h.list.mockResolvedValue(INSTALLED);
+
+    h.push({ updated: null });
+    answer(NOT_INSTALLED);
+    await first;
+    await flush();
+
+    expect(swarmsSnapshot().listing).toBe(INSTALLED);
+  });
+
   it('keeps the last listing when a read fails', async () => {
     const h = bridge();
     await loadSwarms();
