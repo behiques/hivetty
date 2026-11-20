@@ -11,7 +11,11 @@ import {
   resetSwarmsState,
   setSwarmAutoUpdate,
   devSquadOf,
+  onCounts,
+  restoreSwarmItem,
+  setSwarmItemEnabled,
   subscribeSwarms,
+  swarmOwnerOf,
   swarmsSnapshot,
   takeSwarmInstallRequest,
 } from '@/lib/swarms';
@@ -403,5 +407,137 @@ describe('devSquadOf', () => {
     expect(devSquadOf(swarmListing([swarmItem({ entry: swarmEntry({ slug: 'other' }) })]))).toBeNull();
     expect(devSquadOf(swarmListing([]))).toBeNull();
     expect(devSquadOf(null)).toBeNull();
+  });
+});
+
+describe('swarmOwnerOf (HIVE-453)', () => {
+  const squad = installedSwarm({
+    swarmId: 'sq1',
+    title: 'Dev Squad',
+    contents: {
+      agents: [
+        { name: 'builder', description: '', tools: [] },
+        { name: 'acr', description: '', tools: [] },
+      ],
+      skills: [
+        { name: 'tdd', description: '' },
+        { name: 'plan', description: '' },
+      ],
+    },
+    disabled: { agents: ['acr'], skills: [] },
+  });
+  const listing = swarmListing([swarmItem({ entry: null }), swarmItem({ installed: squad })]);
+
+  it('answers the installed swarm that ships the name, on unless its list holds it', () => {
+    expect(swarmOwnerOf(listing, 'agents', 'builder')).toEqual({
+      swarmId: 'sq1',
+      title: 'Dev Squad',
+      bundled: false,
+      on: true,
+    });
+    expect(swarmOwnerOf(listing, 'agents', 'acr')).toEqual({ swarmId: 'sq1', title: 'Dev Squad', bundled: false, on: false });
+    expect(swarmOwnerOf(listing, 'skills', 'tdd')?.on).toBe(true);
+  });
+
+  it('flags a bundled owner', () => {
+    const bundled = swarmListing([swarmItem({ installed: installedSwarm({ version: 'bundled' }) })]);
+    expect(swarmOwnerOf(bundled, 'skills', 'tdd')?.bundled).toBe(true);
+  });
+
+  it('is null for a null listing, an unknown name, or the other kind', () => {
+    expect(swarmOwnerOf(null, 'skills', 'tdd')).toBeNull();
+    expect(swarmOwnerOf(listing, 'skills', 'mine')).toBeNull();
+    expect(swarmOwnerOf(listing, 'skills', 'builder')).toBeNull();
+  });
+
+  it('reads an entry with no disabled field as everything on', () => {
+    const old = { ...installedSwarm() } as Partial<typeof squad>;
+    delete old.disabled;
+    const legacy = swarmListing([swarmItem({ installed: old as typeof squad })]);
+    expect(swarmOwnerOf(legacy, 'skills', 'tdd')?.on).toBe(true);
+  });
+});
+
+describe('onCounts (HIVE-453)', () => {
+  it('counts what is shipped minus what is off, ignoring off names no longer shipped', () => {
+    const item = swarmItem({
+      installed: installedSwarm({
+        contents: {
+          agents: [
+            { name: 'builder', description: '', tools: [] },
+            { name: 'acr', description: '', tools: [] },
+          ],
+          skills: [
+            { name: 'tdd', description: '' },
+            { name: 'plan', description: '' },
+            { name: 'debug', description: '' },
+          ],
+        },
+        disabled: { agents: ['acr'], skills: ['plan', 'gone'] },
+      }),
+    });
+    expect(onCounts(item)).toEqual({ agentsOn: 1, agents: 2, skillsOn: 2, skills: 3 });
+  });
+
+  it('is all zeros for a swarm not installed', () => {
+    expect(onCounts(swarmItem())).toEqual({ agentsOn: 0, agents: 0, skillsOn: 0, skills: 0 });
+  });
+});
+
+describe('setSwarmItemEnabled (HIVE-453)', () => {
+  it('sends the exact request, reloads and answers true', async () => {
+    const h = bridge(INSTALLED);
+    const setEnabled = vi.fn(() => Promise.resolve(installedSwarm()));
+    setBridge({ ...h, setEnabled });
+
+    expect(await setSwarmItemEnabled('standard', 'skills', 'tdd', false)).toBe(true);
+    expect(setEnabled).toHaveBeenCalledWith({ swarmId: 'standard', kind: 'skills', name: 'tdd', enabled: false });
+    expect(h.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers false when main answers null, and still reloads', async () => {
+    const h = bridge(INSTALLED);
+    setBridge({ ...h, setEnabled: vi.fn(() => Promise.resolve(null)) });
+
+    expect(await setSwarmItemEnabled('standard', 'agents', 'builder', true)).toBe(false);
+    expect(h.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers false on a rejection', async () => {
+    const h = bridge(INSTALLED);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    setBridge({ ...h, setEnabled: vi.fn(() => Promise.reject(new Error('no'))) });
+
+    expect(await setSwarmItemEnabled('standard', 'agents', 'builder', true)).toBe(false);
+  });
+
+  it('answers false with no bridge', async () => {
+    expect(await setSwarmItemEnabled('standard', 'agents', 'builder', true)).toBe(false);
+  });
+});
+
+describe('restoreSwarmItem (HIVE-453)', () => {
+  const withShipped = (reset: () => Promise<unknown>) => {
+    const h = bridge(INSTALLED);
+    (window as unknown as { hive: unknown }).hive = { swarms: h, shipped: { reset: vi.fn(reset) } };
+    return { h, reset: (window as unknown as { hive: { shipped: { reset: ReturnType<typeof vi.fn> } } }).hive.shipped.reset };
+  };
+
+  it('resets the one item, reloads and answers null', async () => {
+    const { h, reset } = withShipped(() => Promise.resolve([]));
+
+    expect(await restoreSwarmItem('skills', 'plan')).toBeNull();
+    expect(reset).toHaveBeenCalledWith({ kind: 'skills', name: 'plan' });
+    expect(h.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers the message on a rejection', async () => {
+    withShipped(() => Promise.reject(new Error('Dev Squad does not ship plan')));
+
+    expect(await restoreSwarmItem('skills', 'plan')).toBe('Dev Squad does not ship plan');
+  });
+
+  it('answers null with no bridge', async () => {
+    expect(await restoreSwarmItem('skills', 'plan')).toBeNull();
   });
 });

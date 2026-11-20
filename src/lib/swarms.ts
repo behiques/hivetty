@@ -1,4 +1,11 @@
-import type { SwarmFailure, SwarmListItem, SwarmListing } from '@shared/swarm-contract';
+import {
+  disabledOf,
+  isBundled,
+  type SwarmFailure,
+  type SwarmItemKind,
+  type SwarmListItem,
+  type SwarmListing,
+} from '@shared/swarm-contract';
 
 /**
  * The renderer's view of the installed swarms and the registry (HIVE-442).
@@ -238,6 +245,89 @@ export function devSquadOf(listing: SwarmListing | null): { id: string; installe
   const row = listing?.items.find((item) => item.entry?.kind === 'native' && item.entry.slug === 'dev-squad');
 
   return row?.entry ? { id: row.entry.id, installed: row.installed !== null } : null;
+}
+
+/** HIVE-453: the installed swarm that shipped an agent or a skill, and whether the person has it on. */
+export interface SwarmOwner {
+  swarmId: string;
+  title: string;
+  bundled: boolean;
+  on: boolean;
+}
+
+/** HIVE-453: the installed swarm whose contents list this name; null when none does, or with no listing. */
+export function swarmOwnerOf(listing: SwarmListing | null, kind: SwarmItemKind, name: string): SwarmOwner | null {
+  const installed = listing?.items.find((item) =>
+    item.installed?.contents[kind].some((element) => element.name === name),
+  )?.installed;
+
+  if (!installed) return null;
+
+  return {
+    swarmId: installed.swarmId,
+    title: installed.title,
+    bundled: isBundled(installed.version),
+    on: !disabledOf(installed)[kind].includes(name),
+  };
+}
+
+/** HIVE-453: how many of an installed swarm's agents and skills are on. Off names it no longer ships do not count. */
+export function onCounts(item: SwarmListItem): { agentsOn: number; agents: number; skillsOn: number; skills: number } {
+  const installed = item.installed;
+
+  if (installed === null) return { agentsOn: 0, agents: 0, skillsOn: 0, skills: 0 };
+
+  const off = disabledOf(installed);
+  const onOf = (kind: SwarmItemKind): number =>
+    installed.contents[kind].filter((element) => !off[kind].includes(element.name)).length;
+
+  return {
+    agentsOn: onOf('agents'),
+    agents: installed.contents.agents.length,
+    skillsOn: onOf('skills'),
+    skills: installed.contents.skills.length,
+  };
+}
+
+/** HIVE-453: turn one of a swarm's items on or off. True when main wrote it; the list is reloaded either way. */
+export async function setSwarmItemEnabled(
+  swarmId: string,
+  kind: SwarmItemKind,
+  name: string,
+  enabled: boolean,
+): Promise<boolean> {
+  const bridge = window.hive;
+
+  if (!bridge) return false;
+
+  let written = false;
+  try {
+    written = (await bridge.swarms.setEnabled({ swarmId, kind, name, enabled })) !== null;
+  } catch (cause) {
+    console.error('[hive] could not turn the swarm item on or off:', cause);
+  }
+
+  await loadSwarms();
+
+  return written;
+}
+
+/** HIVE-453: put a missing item back from its swarm; null when it was restored, else the message saying why not. */
+export async function restoreSwarmItem(kind: SwarmItemKind, name: string): Promise<string | null> {
+  const bridge = window.hive;
+
+  if (!bridge) return null;
+
+  let message: string | null = null;
+  try {
+    await bridge.shipped.reset({ kind, name });
+  } catch (cause) {
+    message = messageOf(cause);
+  }
+
+  await loadSwarms();
+
+  return message;
 }
 
 /** Test-only: drop the snapshot, the change subscription and every subscriber. */
