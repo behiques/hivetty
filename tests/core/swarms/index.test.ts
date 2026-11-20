@@ -589,6 +589,7 @@ describe('swarmCalls().setEnabled (HIVE-453)', () => {
 
     expect(engine.setEnabled).not.toHaveBeenCalled();
     expect(h.afterSkills).not.toHaveBeenCalled();
+    expect(h.afterAgents).not.toHaveBeenCalled();
     expect(h.changed).not.toHaveBeenCalled();
   });
 });

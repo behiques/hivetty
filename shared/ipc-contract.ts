@@ -974,7 +974,7 @@ export const CH = {
   swarmsRemove: 'swarms:remove',
   /** HIVE-442: turn a swarm's "Update automatically" on or off. Process-local. */
   swarmsSetAutoUpdate: 'swarms:set-auto-update',
-  /** HIVE-453: turn one of a swarm's agents or skills off or back on. */
+  /** HIVE-453: turn one of a swarm's agents or skills off or back on. Process-local. */
   swarmsSetEnabled: 'swarms:set-enabled',
   /** HIVE-442: look for newer versions now, apply the automatic ones, and answer the list. Process-local. */
   swarmsCheck: 'swarms:check',

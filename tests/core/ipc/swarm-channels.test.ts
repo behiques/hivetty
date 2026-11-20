@@ -221,7 +221,7 @@ describe('the swarm update channels (HIVE-442)', () => {
   });
 
   it('swarms:set-enabled hands its payload to the engine untouched (HIVE-453)', async () => {
-    const payload = { ...{ swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: false }, extra: 'passed through: the engine parses' };
+    const payload = { swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: false, extra: 'passed through: the engine parses' };
     await expect(invoke(CH.swarmsSetEnabled, payload)).resolves.toBe('SET_ENABLED');
     expect(swarmSpies.setEnabled).toHaveBeenCalledWith(payload);
   });
