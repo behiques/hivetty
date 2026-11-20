@@ -170,7 +170,7 @@ Keys are snake_case. An unknown key is an error, not ignored.
 | `wake.at` / `wake.days` | `[09:00, 17:00]` / `[mon, tue, …]` | none |
 | `wake.on` | `ledger`, `slack.mention`, `slack.app_mention`, `slack.channel:#name` | none |
 | `wake.quiet` | `23:00-07:00` | none |
-| `wake.check` | `onchange` or `always` | `onchange` |
+| `wake.check` | `onchange`, `always` or `holding` | `onchange` |
 | `tools` | rules that run without asking: `Read`, `Bash(git *)`, `mcp__slack__*` | none |
 | `autonomy` | `ask` (ask before anything consequential) or `act` | `ask` |
 | `skills` | skill names to allow | none |
@@ -200,7 +200,8 @@ A `#` after two or more spaces starts a comment; after one space it is text, so
   app was closed.
 - **Quiet hours** hold scheduled wakes; messages still wake it.
 - With `check: onchange` (the default), a tick with nothing new is skipped. The **Wake** tile
-  counts skips. Use `check: always` when the work lives outside the ledger.
+  counts skips. Use `check: always` when the work lives outside the ledger, and `check: holding`
+  to poll only while the agent holds a ledger claim (a shipper with open PRs).
 - An agent that is **asking** skips scheduled wakes; your answer is its wake.
 - `limits.daily_usd` holds every wake once the day's spend reaches it, and says so in the
   inbox. A held wake runs when a run ends or the next day.

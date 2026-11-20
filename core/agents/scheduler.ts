@@ -20,6 +20,7 @@ import {
   CLOSING_KINDS,
   afterTarget,
   askStates,
+  claims,
   laneOfRun,
   expiredAsks,
   isHeld,
@@ -732,6 +733,13 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
   };
 
   /**
+   * Does this agent hold work it is watching? What `check: holding` consults: a
+   * ledger claim it holds, or a queue standing from a wake it could not take.
+   */
+  const isHolding = (name: string, agent: AgentRunState, held: Record<string, string>): boolean =>
+    (agent.pendingWake ?? []).length > 0 || Object.values(held).includes(name);
+
+  /**
    * Did the last run find Slack signed out, and does the agent still name it?
    * (HIVE-123)
    *
@@ -797,6 +805,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
     // One read for the whole tick, not one per agent: `hasChanged` scans the
     // unfiltered log, and every agent here is asked about the same instant.
     const entries = deps.ledger.read().entries;
+    const held = claims(entries);
     /*
       Every write the tick makes is one a row is showing, so it is pushed —
       but only when something actually moves. A quiet-hours deferral recomputes
@@ -977,7 +986,10 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         continue;
       }
 
-      if (wake.check === 'onchange' && !hasChanged(name, agent, entries)) {
+      if (
+        (wake.check === 'onchange' && !hasChanged(name, agent, entries)) ||
+        (wake.check === 'holding' && !isHolding(name, agent, held))
+      ) {
         arm(name, due, next, {
           skipsSinceRun: (agent.skipsSinceRun ?? 0) + 1,
         });
