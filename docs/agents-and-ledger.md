@@ -449,6 +449,7 @@ scenario:
 | `sleeping`, `asking`, `failed` | wakes it now |
 | `working` | queues on `pendingWake`; flushed when the run closes |
 | `paused` | held on `pendingWake`; flushed on resume |
+| off (HIVE-453) | an ask to it is refused 409 at the ledger, `disabled` in the reason; a post is kept, as for `paused`; an ask already queued tells its asker once and waits until the agent is turned on |
 
 The waking kinds are `ask`, `answer`, `done`, `failed` and `post`. `done` and
 `failed` are there because they are how an asker takes its question back, so an

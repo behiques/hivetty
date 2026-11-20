@@ -60,6 +60,21 @@ publisher and the counts. The dot and the line beside it say where it stands:
 **Check for updates** looks for new versions now, instead of waiting for the next automatic check. When an
 update is applied, the line beside the buttons says so: "Dev Squad updated to v1.4.0".
 
+## On, off and missing
+
+An installed row's counts end with what is on: "HiveTTY · 4 agents · 14 skills · 3 of 4 agents and 13 of 14
+skills on". You turn a swarm's agents and skills off in Settings › Agents and Settings › Skills
+([Agents](agents.md), [Skills](skills.md)); a swarm's items have a switch there instead of **Delete**.
+
+Below the counts, the row lists:
+
+- **Turned off**, for example "1 agent and 1 skill turned off". **Turn on** beside each brings it back. An off
+  item still updates with the swarm.
+- **Missing**, for example "1 skill missing": an agent or skill the swarm installed whose folder was deleted
+  outside HiveTTY. Updates won't bring it back by themselves. **Restore** copies it back from the swarm. The
+  Dev Squad that came with HiveTTY has nothing to copy from until its first update, so its row says
+  "Can be restored after Dev Squad's first update." until then.
+
 ## Updates
 
 HiveTTY checks every six hours, when you sign in, and when you choose **Check for updates**.
@@ -91,7 +106,8 @@ file with two choices:
 Choose **Remove** on the row and confirm. The swarm's agents and skills go, except files you edited, which
 stay where they are. If the swarm cannot be removed, the reason appears under its row.
 
-Installing it again later starts fresh, with **Update automatically** back at its default.
+What you turned off goes with the swarm. Installing it again later starts fresh, with everything on and
+**Update automatically** back at its default.
 
 ## Install from a link
 
