@@ -340,6 +340,7 @@ import {
   setSwarmHooks,
   startSwarmUpdates,
   swarmCalls,
+  swarmOwns,
   swarmRunsIdle,
   swarmSeedSetFor,
   swarmSeedSets,
@@ -5123,9 +5124,15 @@ export function registerIpcHandlers(
     return skills?.write(request.name, request.body);
   });
 
-  handle(CH.skillsRemove, (_event, payload) =>
-    skills?.remove(parseSkillNameRequest(payload).name),
-  );
+  handle(CH.skillsRemove, async (_event, payload) => {
+    const { name } = parseSkillNameRequest(payload);
+    // HIVE-453: a swarm's skill is turned off, never deleted: its manifest entry would hold the deletion for good. A
+    // manifest read that fails rejects here too, so nothing is deleted on a guess.
+    if ((await swarmOwns('skills', name)) !== null) {
+      throw new Error(`/${name} was installed by a swarm: turn it off in Settings instead, or remove the swarm.`);
+    }
+    return skills?.remove(name);
+  });
 
   handle(CH.skillsRename, (_event, payload) => {
     const request = parseSkillRenameRequest(payload);
@@ -5265,9 +5272,14 @@ export function registerIpcHandlers(
     checkAgentHarness(parseAgentHarnessCheckRequest(payload).source),
   );
 
-  handle(CH.agentsRemove, (_event, payload) =>
-    agents?.remove(parseAgentNameRequest(payload).name),
-  );
+  handle(CH.agentsRemove, async (_event, payload) => {
+    const { name } = parseAgentNameRequest(payload);
+    // HIVE-453: the same rule as skills:remove, for a swarm's agent.
+    if ((await swarmOwns('agents', name)) !== null) {
+      throw new Error(`${name} was installed by a swarm: turn it off in Settings instead, or remove the swarm.`);
+    }
+    return agents?.remove(name);
+  });
 
   handle(CH.agentsRename, (_event, payload) => {
     const request = parseAgentRenameRequest(payload);

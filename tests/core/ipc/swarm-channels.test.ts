@@ -115,7 +115,9 @@ const adopt = vi.hoisted(() =>
   ),
 );
 const swarmSeedSetFor = vi.hoisted(() => vi.fn());
+const swarmOwns = vi.hoisted(() => vi.fn<(kind: string, name: string) => Promise<{ swarmId: string } | null>>());
 vi.mock('../../../core/swarms', () => ({
+  swarmOwns,
   swarmCalls: () => swarmSpies,
   setSwarmHooks,
   swarmSeedSets,
@@ -141,6 +143,25 @@ vi.mock('../../../core/seed', async (importOriginal) => ({
   ...seed,
 }));
 
+/** HIVE-453: the real skills and agents runtimes, held so a spec can watch their `remove`. */
+const runtimes = vi.hoisted(() => ({ skills: null as null | { remove: unknown }, agents: null as null | { remove: unknown } }));
+vi.mock('../../../core/skills', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../core/skills')>();
+  return {
+    ...real,
+    createSkillsRuntime: (...args: Parameters<typeof real.createSkillsRuntime>) =>
+      (runtimes.skills = real.createSkillsRuntime(...args)),
+  };
+});
+vi.mock('../../../core/agents', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../core/agents')>();
+  return {
+    ...real,
+    createAgentsRuntime: (...args: Parameters<typeof real.createAgentsRuntime>) =>
+      (runtimes.agents = real.createAgentsRuntime(...args)),
+  };
+});
+
 /** `tdd` is the swarm's; no swarm owns anything else (HIVE-448: there is no shipped set to fall back to). */
 const ownerOf = (kind: string, name: string) => Promise.resolve(kind === 'skills' && name === 'tdd' ? sets.W : null);
 
@@ -158,6 +179,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   swarmSeedSets.mockResolvedValue([sets.W, sets.K]);
   swarmSeedSetFor.mockImplementation(ownerOf);
+  swarmOwns.mockImplementation((kind, name) =>
+    Promise.resolve((kind === 'skills' && name === 'tdd') || (kind === 'agents' && name === 'acr') ? { swarmId: 'x' } : null),
+  );
   installDesktopPlatform();
   handlers.clear();
   shutdownHooks.length = 0;
@@ -385,5 +409,62 @@ describe('boot (HIVE-441, HIVE-447, HIVE-448)', () => {
 
     boot.release();
     await vi.waitFor(() => expect(answered).toBe(true));
+  });
+});
+
+describe('the remove guards (HIVE-453)', () => {
+  const watch = (runtime: null | { remove: unknown }) => {
+    const target = runtime as unknown as { remove: (name: string) => Promise<unknown> };
+    return vi.spyOn(target, 'remove').mockResolvedValue('REMOVED');
+  };
+
+  it('skills:remove refuses a name a swarm owns, and deletes nothing', async () => {
+    const remove = watch(runtimes.skills);
+
+    await expect(invoke(CH.skillsRemove, { name: 'tdd' })).rejects.toThrow(
+      '/tdd was installed by a swarm: turn it off in Settings instead, or remove the swarm.',
+    );
+    expect(swarmOwns).toHaveBeenCalledWith('skills', 'tdd');
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('skills:remove hands the person’s own name to the runtime', async () => {
+    const remove = watch(runtimes.skills);
+
+    await expect(invoke(CH.skillsRemove, { name: 'mine' })).resolves.toBe('REMOVED');
+    expect(remove).toHaveBeenCalledWith('mine');
+  });
+
+  it('agents:remove refuses a name a swarm owns, and deletes nothing', async () => {
+    const remove = watch(runtimes.agents);
+
+    await expect(invoke(CH.agentsRemove, { name: 'acr' })).rejects.toThrow(
+      'acr was installed by a swarm: turn it off in Settings instead, or remove the swarm.',
+    );
+    expect(swarmOwns).toHaveBeenCalledWith('agents', 'acr');
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('agents:remove hands the person’s own name to the runtime', async () => {
+    const remove = watch(runtimes.agents);
+
+    await expect(invoke(CH.agentsRemove, { name: 'mine' })).resolves.toBe('REMOVED');
+    expect(remove).toHaveBeenCalledWith('mine');
+  });
+
+  it('refuses, and deletes nothing, when the ownership read fails', async () => {
+    const skillRemove = watch(runtimes.skills);
+    const agentRemove = watch(runtimes.agents);
+    swarmOwns.mockRejectedValue(new Error('manifest unreadable'));
+
+    await expect(invoke(CH.skillsRemove, { name: 'mine' })).rejects.toThrow('manifest unreadable');
+    await expect(invoke(CH.agentsRemove, { name: 'mine' })).rejects.toThrow('manifest unreadable');
+    expect(skillRemove).not.toHaveBeenCalled();
+    expect(agentRemove).not.toHaveBeenCalled();
+  });
+
+  it('checks the name before it asks who owns it', async () => {
+    await expect(invoke(CH.skillsRemove, { name: '../x' })).rejects.toThrow();
+    expect(swarmOwns).not.toHaveBeenCalled();
   });
 });
