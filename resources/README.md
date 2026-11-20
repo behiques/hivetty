@@ -105,17 +105,10 @@ stands a head taller than its neighbours, which is exactly what happened when
 the dev dock was pointed at `icon.png`. Windows and Linux draw the file as
 given and take the full-bleed master.
 
-## Shipped skills and agents
+## No skills or agents
 
-`skills/<name>/` and `agents/<name>/AGENT.md` are copied into `~/.hivetty` when the app
-starts (HIVE-162, `core/seed/`). An agent folder ships exactly its `AGENT.md`;
-a skill folder ships whole. The user's edits win over updates; see
-`docs/guide/skills.md`.
-
-The Standard swarm's source is `behiques/hivetty-swarms` (HIVE-439). These two
-folders are a copy of the tag recorded in `swarm.lock.json`, with a sha256 per
-file. Never edit them here: edit the swarm in hivetty-swarms, tag it, then run
-`pnpm swarm:pull <tag>`, which replaces both folders with the tag's and writes
-the lock. `tests/resources/swarm-lock.test.ts` recomputes the hashes, so a hand
-edit, an added file or a removed one fails `pnpm test`. The lock sits outside
-the two packaged folders, so it does not ship.
+The app ships no skills and no agents (HIVE-448). They come from swarms; Dev
+Squad, the ticket-to-merge workflow, lives in `behiques/hivetty-swarms`, and
+`tests/swarm` (`pnpm test:swarm`) reads it from a checkout. `pnpm
+verify:bundle` fails a build whose `Contents/Resources` holds `agents`,
+`skills` or `shipped-history.json`.

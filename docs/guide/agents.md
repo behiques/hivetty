@@ -23,12 +23,13 @@ body that is its standing job. Each wake is one headless run of its CLI (`claude
 ## Agents from swarms
 
 Agents come in swarms: sets of agents and skills that install together and update when their
-publisher releases a new version ([Swarms](swarms.md)). An existing install already has the
-**Dev Squad** swarm, which carries the ticket-to-merge workflow: **builder**, which builds an
+publisher releases a new version ([Swarms](swarms.md)). HiveTTY ships no agents of its own. The
+**Dev Squad** swarm carries the ticket-to-merge workflow: **builder**, which builds an
 approved plan in its own worktree and opens the draft PR, **shipper**, the PR endgame, **acr**,
 the reviewer it asks (named after the review tool it runs, `acr`, which is a command on the
 machine, not this agent), and **fixer**, which works through a PR's findings on the PR branch.
-Settings › Automation › Swarms installs, updates and removes swarms. With no agent installed at
+A new install starts with no agents; an install that had the built-in agents keeps them, edits
+intact, as Dev Squad. Settings › Automation › Swarms installs, updates and removes swarms. With no agent installed at
 all, the Agents place, Settings › Agents and Home say agents come in swarms and offer
 **Install Dev Squad** and **Browse swarms**.
 

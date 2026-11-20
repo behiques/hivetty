@@ -5,6 +5,11 @@ version. HiveTTY publishes some, your organization can publish its own, and anyo
 swarm. Swarms are part of HiveTTY Pro, and everything a swarm installs is saved under `~/.hivetty`, beside your
 own agents and skills.
 
+HiveTTY itself ships no agents and no skills. **Dev Squad**, the ticket-to-merge workflow, is a swarm: a new
+install starts empty and offers **Install Dev Squad**. An install that had the built-in agents and skills keeps
+them, with your edits, as the installed Dev Squad. It reads "Bundled" until its first update, and until then
+shows no per-file edits.
+
 **On this page:** [Find a swarm](#find-a-swarm) · [What you agree to](#what-you-agree-to) ·
 [Your installed swarms](#your-installed-swarms) · [Updates](#updates) · [Files you edited](#files-you-edited) ·
 [Remove a swarm](#remove-a-swarm) · [Install from a link](#install-from-a-link) ·

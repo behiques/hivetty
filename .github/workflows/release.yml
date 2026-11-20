@@ -89,7 +89,7 @@ jobs:
             --title "$GITHUB_REF_NAME" \
             --draft \
             --verify-tag \
-            --notes "Download the \`.dmg\` below. Once installed, HiveTTY Pro checks for new versions itself and tells you in the Inbox."
+            --notes "Download the \`.dmg\` below. Once installed, HiveTTY Pro checks for new versions itself and tells you in the Inbox. A new install starts with no agents or skills: **Install Dev Squad** brings back the ticket-to-merge workflow. Existing users see no change."
 
   desktop:
     name: macOS (arm64)

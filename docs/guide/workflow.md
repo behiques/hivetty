@@ -1,8 +1,8 @@
 # Working a ticket
 
-From a Jira ticket to Done, with HiveTTY's own skills and agents doing the repetitive
-parts. Everything here comes in the **Dev Squad** swarm, which an existing install already has:
-the skills under `~/.hivetty/skills`, the agents under `~/.hivetty/agents`. Settings › Automation ›
+From a Jira ticket to Done, with the Dev Squad swarm's skills and agents doing the
+repetitive parts. Everything here comes in **Dev Squad**, which an install that had the
+built-ins already has: the skills under `~/.hivetty/skills`, the agents under `~/.hivetty/agents`. Settings › Automation ›
 Swarms installs, updates and removes swarms ([Swarms](swarms.md)); with no agent or skill
 installed, the Agents place, Settings and Home offer **Install Dev Squad**. Nothing depends on a
 plugin from outside.

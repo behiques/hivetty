@@ -970,7 +970,7 @@ text in braces is left alone), after first expanding each `{{include:<name>}}` l
 fragments and includes"), and drops the frontmatter keys `dropKeysFor(cli)` names: none for
 Claude Code, `hooks` and `allowed-tools` for Codex and Copilot, each with its indented block,
 blank lines included. A skill with no placeholder and none of those keys renders byte for byte as
-written. The shipped skills in `resources/skills` use placeholders; Claude's rendering of them
+written. The Dev Squad swarm's skills use placeholders; Claude's rendering of them
 equals what they said before this story, byte for byte.
 
 **The folders.** `core/skills/render.ts`'s `renderSkills(root, cli, read, { version,

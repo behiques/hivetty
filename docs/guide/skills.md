@@ -90,12 +90,13 @@ change first). Saving is never blocked.
 ## Skills from swarms
 
 Skills come in swarms: sets of agents and skills that install together and update when their
-publisher releases a new version ([Swarms](swarms.md)). An existing install already has the
-**Dev Squad** swarm, which carries the ticket-to-merge workflow: `/work-on` and `/goal-on` at the
+publisher releases a new version ([Swarms](swarms.md)). HiveTTY ships no skills of its own. The
+**Dev Squad** swarm carries the ticket-to-merge workflow: `/work-on` and `/goal-on` at the
 front, `/brainstorm`, `/plan`, `/execute`, `/tdd`, `/debug`, `/verify` and `/worktree` behind
 them, and the PR tail: `/ship`, `/review-pr-findings`, `/merge-pr`, `/spec-deviation` and
-`/pr-review`, the multi-agent review the reviewer agent runs. Settings › Automation › Swarms
-installs, updates and removes swarms. With no skill installed at all, Settings › Skills says so
+`/pr-review`, the multi-agent review the reviewer agent runs. A new install starts with none of
+them; an install that had the built-in skills keeps them, edits intact, as Dev Squad. Settings ›
+Automation › Swarms installs, updates and removes swarms. With no skill installed at all, Settings › Skills says so
 and offers **Install Dev Squad** and **Browse swarms**, as the Agents place and Home do for agents.
 
 A swarm's skills live in `~/.hivetty/skills` and are ordinary skills once they are there. Edit one
