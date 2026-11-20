@@ -40,9 +40,26 @@ jobs:
     name: ci
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # 'false' on a fork's pull request: secrets are not passed there, and the swarm tests skip.
+      HAS_SWARMS_KEY: ${{ secrets.HIVETTY_SWARMS_READ_KEY != '' }}
 
     steps:
       - uses: actions/checkout@v5
+
+      # The Dev Squad swarm (HIVE-448): tests/swarm reads it. A read-only deploy key on
+      # behiques/hivetty-swarms; GITHUB_TOKEN cannot read another private repository.
+      # After the first checkout, which cleans the workspace.
+      - uses: actions/checkout@v5
+        if: env.HAS_SWARMS_KEY == 'true'
+        with:
+          repository: behiques/hivetty-swarms
+          ssh-key: ${{ secrets.HIVETTY_SWARMS_READ_KEY }}
+          path: .swarms
+
+      - name: Point the swarm tests at the checkout
+        if: env.HAS_SWARMS_KEY == 'true'
+        run: echo "HIVE_SWARM_DIR=$GITHUB_WORKSPACE/.swarms/dev-squad" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@v6
 

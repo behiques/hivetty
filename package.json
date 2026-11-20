@@ -54,6 +54,7 @@
     "test:delivery": "HIVE_LIVE_DELIVERY_PROOF=1 PW_ELECTRON_ONLY=1 playwright test --project=electron tests/e2e/electron/delivery-drive.spec.ts",
     "test:hooks": "HIVE_LIVE_HOOK_PROOF=1 vitest run tests/live/hook-conformance.test.ts",
     "test:statusline": "HIVE_LIVE_STATUSLINE_PROOF=1 vitest run tests/live/statusline-conformance.test.ts",
+    "test:swarm": "vitest run tests/swarm",
     "test:skills": "HIVE_LIVE_SKILLS_PROOF=1 vitest run tests/live/skills-conformance.test.ts",
     "test:done": "HIVE_LIVE_DONE_PROOF=1 vitest run tests/live/done-conformance.test.ts",
     "test:goal": "HIVE_LIVE_GOAL_PROOF=1 vitest run tests/live/goal-hook-conformance.test.ts",

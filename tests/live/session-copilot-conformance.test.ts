@@ -42,6 +42,7 @@ import type { LedgerEntry, LedgerReadQuery, LedgerSnapshot, OpenAsk } from '../.
 import type { HiveNotification } from '../../shared/notification-contract';
 import type { PlanUpdate } from '../../shared/plan-contract';
 import { typedSkill } from '../../shared/skill-render';
+import { HAS_SWARM, SWARM_DIR } from '../support/swarm-tree';
 
 /**
  * What only a real interactive `copilot` can prove about a Copilot session (HIVE-280).
@@ -197,7 +198,7 @@ const readConfig = (path: string): Record<string, unknown> =>
       .join('\n'),
   ) as Record<string, unknown>;
 
-describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
+describe.skipIf(!READY || !HAS_SWARM)('a real interactive copilot session (HIVE-280)', () => {
   let receiver: Receiver;
   let tracker: StatusTracker;
   let url: string;
@@ -251,7 +252,7 @@ describe.skipIf(!READY)('a real interactive copilot session (HIVE-280)', () => {
 
     // HiveTTY's own skills plus two probes, rendered for Copilot as the app renders them (HIVE-362).
     source = join(scratch, 'skills-src');
-    cpSync(join(process.cwd(), 'resources', 'skills'), source, { recursive: true });
+    cpSync(join(SWARM_DIR, 'skills'), source, { recursive: true });
     const probe = (name: string, word: string): void => {
       mkdirSync(join(source, name));
       writeFileSync(

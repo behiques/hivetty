@@ -5,12 +5,12 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { renderSkills } from '../../core/skills/render';
 import { readUserSkills } from '../../core/skills/read';
+import { HAS_SWARM, SWARM_DIR } from '../support/swarm-tree';
 
 /**
  * The goal-on Stop hook, against a real `claude` (HIVE-165).
@@ -87,15 +87,14 @@ const stub = (): Promise<{ server: Server; url: string; receipts: Receipt[] }> =
     });
   });
 
-describe.skipIf(!enabled)('goal-on Stop hook through the generated plugin (HIVE-165)', () => {
+describe.skipIf(!enabled || !HAS_SWARM)('goal-on Stop hook through the generated plugin (HIVE-165)', () => {
   let pluginRoot: string;
   let goals: string;
   let cwd: string;
   let receiver: { server: Server; url: string; receipts: Receipt[] };
 
   beforeAll(async () => {
-    const resources = fileURLToPath(new URL('../../resources', import.meta.url));
-    const read = await readUserSkills(join(resources, 'skills'));
+    const read = await readUserSkills(join(SWARM_DIR, 'skills'));
     expect(read.invalid).toEqual([]);
     pluginRoot = join(mkdtempSync(join(tmpdir(), 'hive-goal-plugin-')), 'plugin');
     await renderSkills(pluginRoot, 'claude-code', read, { version: '0.0.0-test', doneUrl: null });

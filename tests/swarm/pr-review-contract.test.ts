@@ -1,9 +1,10 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+
+import { HAS_SWARM, SWARM_DIR } from '../support/swarm-tree';
 
 /**
  * The posting contract, held by test.
@@ -15,17 +16,19 @@ import { describe, expect, it } from 'vitest';
  * when it drifted. These assertions are that missing failure: the clauses a
  * review's verdict and body depend on cannot be softened without a red test.
  */
-const resources = fileURLToPath(new URL('../../../../resources', import.meta.url));
-const skill = join(resources, 'skills', 'pr-review');
-const read = (...parts: string[]) => readFileSync(join(skill, ...parts), 'utf8');
+const skill = join(SWARM_DIR, 'skills', 'pr-review');
+// Without the swarm checkout every suite below skips; the reads that run at
+// collection answer '' instead of throwing at import.
+const read = (...parts: string[]) => (HAS_SWARM ? readFileSync(join(skill, ...parts), 'utf8') : '');
 
 const posting = read('references', 'posting.md');
 const skillMd = read('SKILL.md');
 const scorer = read('prompts', 'confidence-scorer.md');
-const acr = readFileSync(join(resources, 'agents', 'acr', 'AGENT.md'), 'utf8');
+const acr = HAS_SWARM ? readFileSync(join(SWARM_DIR, 'agents', 'acr', 'AGENT.md'), 'utf8') : '';
 
 /** The text under one `## heading`, up to the next one. */
 const section = (markdown: string, heading: string) => {
+  if (!HAS_SWARM) return '';
   const start = markdown.indexOf(`## ${heading}\n`);
   expect(start, `posting.md has a "## ${heading}" section`).toBeGreaterThan(-1);
   const rest = markdown.slice(start + heading.length + 4);
@@ -33,7 +36,7 @@ const section = (markdown: string, heading: string) => {
   return end === -1 ? rest : rest.slice(0, end);
 };
 
-describe('pr-review verdict gate', () => {
+describe.skipIf(!HAS_SWARM)('pr-review verdict gate', () => {
   const verdict = section(posting, 'Verdict');
 
   it('withholds an approval on a Should Fix, not only on a Block', () => {
@@ -66,7 +69,7 @@ describe('pr-review verdict gate', () => {
   });
 });
 
-describe('pr-review body contract', () => {
+describe.skipIf(!HAS_SWARM)('pr-review body contract', () => {
   const body = section(posting, 'Body');
 
   it('is three parts, and puts every finding inline', () => {
@@ -103,7 +106,7 @@ describe('pr-review body contract', () => {
   });
 });
 
-describe('pr-review voice', () => {
+describe.skipIf(!HAS_SWARM)('pr-review voice', () => {
   const voice = section(posting, 'Voice');
 
   it('changes the words of a review and never its content', () => {
@@ -136,7 +139,7 @@ describe('pr-review voice', () => {
   });
 });
 
-describe('pr-review SKILL.md', () => {
+describe.skipIf(!HAS_SWARM)('pr-review SKILL.md', () => {
   it('sends Stage 4 to posting.md rather than trusting memory', () => {
     expect(skillMd).toContain('open `references/posting.md` now and follow it');
     expect(skillMd).toContain('Do not compose a\nbody from memory');
@@ -152,7 +155,7 @@ describe('pr-review SKILL.md', () => {
   });
 });
 
-describe('confidence scorer', () => {
+describe.skipIf(!HAS_SWARM)('confidence scorer', () => {
   it('scores a thread duplicate on its own evidence instead of zeroing it', () => {
     expect(scorer).toContain('`"duplicateOfThread": true`');
     expect(scorer).toContain('a 0 here loses it entirely if the prior-findings reviewer did not return');
@@ -164,7 +167,7 @@ describe('confidence scorer', () => {
   });
 });
 
-describe('acr agent', () => {
+describe.skipIf(!HAS_SWARM)('acr agent', () => {
   it('may not compose a review body or leave one in its work folder', () => {
     expect(acr).toContain('A review-mode job writes nothing outside the skill');
     expect(acr).toContain('never compose one yourself');
