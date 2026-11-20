@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import { EditorSurface } from '@components/editor/editor-surface';
 import { Button } from '@components/ui/button';
+import { Switch } from '@components/ui/switch';
 import { languageFor } from '@lib/explorer/language';
 import { humanSize } from '@lib/human-size';
 import type { FsRefusalReason } from '@shared/fs-contract';
@@ -50,6 +51,19 @@ interface SkillEditorProps {
    * four answers to one question; they come back when it is answered.
    */
   actionsHidden?: boolean;
+  /**
+   * The swarm that installed this skill, when one did (HIVE-453). Its skill is turned off, never deleted: a delete
+   * would be held for good by the swarm's record, so the switch takes Delete's place.
+   */
+  swarm?: SkillEditorSwarm | undefined;
+}
+
+export interface SkillEditorSwarm {
+  title: string;
+  on: boolean;
+  /** Why the last switch did not save, or null. */
+  failure: string | null;
+  onToggle: (next: boolean) => void;
 }
 
 /**
@@ -102,6 +116,7 @@ export function SkillEditor({
   onDelete,
   onRename,
   actionsHidden = false,
+  swarm,
 }: SkillEditorProps) {
   const appearance = useEditorAppearance();
 
@@ -217,6 +232,12 @@ export function SkillEditor({
         A never-saved skill has no path, and every never-saved skill is the same
         draft, so they share one key.
       */}
+      {swarm === undefined || swarm.on ? null : (
+        <p role="status" className="border-b border-border-soft bg-hover px-2.5 py-1.5 text-ui-sm text-muted">
+          This skill is off. New sessions leave it out of the / menu; it still updates with {swarm.title}.
+        </p>
+      )}
+
       {refused === null ? (
         <EditorSurface
           ariaLabel="Skill source"
@@ -253,15 +274,18 @@ export function SkillEditor({
         */}
         <span
           className={
-            problem === null
+            problem === null && (swarm?.failure ?? null) === null
               ? 'min-w-0 text-micro text-subtle'
               : 'min-w-0 text-micro text-red'
           }
         >
-          {refused !== null
-            ? 'Delivered to every session that starts with this skill.'
-            : (problem ??
-              'The name in the frontmatter names the folder and the command.')}
+          {swarm?.failure ??
+            (refused !== null
+              ? 'Delivered to every session that starts with this skill.'
+              : (problem ??
+                (swarm === undefined
+                  ? 'The name in the frontmatter names the folder and the command.'
+                  : `Installed by ${swarm.title}. Turn it off rather than deleting it.`)))}
         </span>
         <div className="flex shrink-0 gap-1.5" hidden={actionsHidden}>
           {onRename === undefined ? null : (
@@ -273,13 +297,17 @@ export function SkillEditor({
               Rename
             </button>
           )}
-          <button
-            type="button"
-            onClick={onDelete}
-            className="rounded-full border border-red-edge px-3 py-1 text-control font-semibold text-red hover:bg-hover"
-          >
-            Delete
-          </button>
+          {swarm === undefined ? (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="rounded-full border border-red-edge px-3 py-1 text-control font-semibold text-red hover:bg-hover"
+            >
+              Delete
+            </button>
+          ) : (
+            <Switch label={swarm.on ? 'Enabled' : 'Off'} checked={swarm.on} onCheckedChange={swarm.onToggle} />
+          )}
           {/*
             Save is absent for a refused file, not disabled.
 

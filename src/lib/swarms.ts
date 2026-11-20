@@ -1,3 +1,4 @@
+import type { AgentSummary } from '@shared/agent-contract';
 import {
   disabledOf,
   isBundled,
@@ -287,6 +288,44 @@ export function onCounts(item: SwarmListItem): { agentsOn: number; agents: numbe
     skillsOn: onOf('skills'),
     skills: installed.contents.skills.length,
   };
+}
+
+/** An agent that would act: its definition parsed, and it is not one of a swarm's agents turned off. */
+const enabledAgent = (listing: SwarmListing | null, agent: AgentSummary): boolean =>
+  agent.invalid === undefined && swarmOwnerOf(listing, 'agents', agent.name)?.on !== false;
+
+/** HIVE-453: the enabled agents whose `skills:` list this skill, in the order given: who turning it off affects. */
+export function skillUsers(listing: SwarmListing | null, agents: readonly AgentSummary[], skill: string): string[] {
+  return agents
+    .filter((agent) => agent.skills.includes(skill) && enabledAgent(listing, agent))
+    .map((agent) => agent.name);
+}
+
+/**
+ * HIVE-453: the enabled agents of the same swarm named in this agent's `asks_from:`, in that order: whose handoffs
+ * turning it off refuses. The `sess-*` wildcard is a person, not a flow, and is left out.
+ */
+export function swarmAskers(listing: SwarmListing | null, agents: readonly AgentSummary[], name: string): string[] {
+  const owner = swarmOwnerOf(listing, 'agents', name);
+  const target = agents.find((agent) => agent.name === name);
+
+  if (owner === null || target === undefined) return [];
+
+  return (target.asksFrom ?? []).filter((asker) => {
+    if (asker.startsWith('sess-')) return false;
+    const agent = agents.find((candidate) => candidate.name === asker);
+    return (
+      agent !== undefined &&
+      swarmOwnerOf(listing, 'agents', asker)?.swarmId === owner.swarmId &&
+      enabledAgent(listing, agent)
+    );
+  });
+}
+
+/** "a", "a and b", "a, b and c". */
+export function andList(names: readonly string[]): string {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1] ?? ''}`;
 }
 
 /** HIVE-453: turn one of a swarm's items on or off. True when main wrote it; the list is reloaded either way. */

@@ -24,6 +24,7 @@ import {
   skillNameProblem,
   writeSkillFile,
 } from '@/lib/skills';
+import { andList, onCounts, setSwarmItemEnabled, skillUsers, swarmOwnerOf } from '@/lib/swarms';
 
 import { Button } from '@components/ui/button';
 import { Hint } from '@components/ui/hint';
@@ -43,9 +44,11 @@ import {
   ShippedStrip,
 } from '@features/shared/components/shipped-marker';
 import { SwarmStarters } from '@features/shared/components/swarm-starters';
+import { useAgents } from '@hooks/use-agents';
 import { useRemoteCapabilities } from '@hooks/use-project-config';
 import { useShipped } from '@hooks/use-shipped';
 import { useSkills } from '@hooks/use-skills';
+import { useSwarms } from '@hooks/use-swarms';
 import type { FsRefusalReason } from '@shared/fs-contract';
 import { HIVE_TOOL_NAMES } from '@shared/ledger-tools';
 import { makePortable, portabilityIssues } from '@shared/skill-render';
@@ -184,6 +187,8 @@ export function SkillsSection() {
      * Escape-from-the-editor behaviour is unchanged.
      */
     staleOnEdit?: boolean;
+    /** The dismiss button's words; "Keep editing" unless the question is not about the buffer (HIVE-453). */
+    cancelLabel?: string;
   } | null>(null);
   /**
    * Why the last write did not happen, or `null`.
@@ -194,6 +199,11 @@ export function SkillsSection() {
    * rephrasing them here would throw exactly those away.
    */
   const [error, setError] = useState<string | null>(null);
+  /** Why the last Enabled switch did not save, or null (HIVE-453). Cleared by the next switch or a move away. */
+  const [swarmFailure, setSwarmFailure] = useState<string | null>(null);
+
+  const swarmListing = useSwarms().listing;
+  const agentList = useAgents()?.agents ?? [];
 
   useEffect(() => {
     void loadSkills();
@@ -283,6 +293,7 @@ export function SkillsSection() {
       () => {
         setDrilled(name);
         setOpen(name);
+        setSwarmFailure(null);
         setOpenPath('SKILL.md');
         setSelectedDir(null);
         setRefusal(null);
@@ -776,9 +787,64 @@ export function SkillsSection() {
     });
   };
 
+  /** The open skill's swarm, when one installed it (HIVE-453); never for a skill not yet saved. */
+  const openOwner = open === null ? null : swarmOwnerOf(swarmListing, 'skills', open);
+
+  /**
+   * Turn the open swarm skill on or off (HIVE-453). Off asks first when enabled agents list it in `skills:`, since
+   * their runs go on without it; with none, and always for on, it writes at once.
+   */
+  const toggleSwarmSkill = (next: boolean): void => {
+    if (open === null || openOwner === null) return;
+
+    const name = open;
+    const swarmId = openOwner.swarmId;
+    const write = (): void => {
+      setSwarmFailure(null);
+      void setSwarmItemEnabled(swarmId, 'skills', name, next).then((written) => {
+        if (!written) setSwarmFailure("Couldn't save. Try again.");
+      });
+    };
+    const users = next ? [] : skillUsers(swarmListing, agentList, name);
+
+    if (users.length === 0) {
+      write();
+      return;
+    }
+    setPending({
+      question: `Turn off /${name}?`,
+      detail: `${andList(users)} ${users.length === 1 ? 'uses' : 'use'} this skill. Their runs will carry on without it, and may stall where they'd call it.`,
+      confirmLabel: 'Turn off',
+      cancelLabel: 'Cancel',
+      act: write,
+    });
+  };
+
   const rows = [
     ...skills.map((skill) => ({ name: skill.name, reason: null as string | null })),
     ...invalid.map((skill) => ({ name: skill.name, reason: skill.reason })),
+  ].map((row) => ({ ...row, owner: swarmOwnerOf(swarmListing, 'skills', row.name) }));
+
+  /**
+   * The list in groups (HIVE-453): the person's own skills first, then one group per installed swarm under a
+   * header that counts what is on.
+   */
+  const groups = [
+    { key: 'own', header: null as string | null, rows: rows.filter((row) => row.owner === null) },
+    ...(swarmListing?.items ?? []).flatMap((item) => {
+      const installed = item.installed;
+      if (installed === null) return [];
+      const owned = rows.filter((row) => row.owner?.swarmId === installed.swarmId);
+      if (owned.length === 0) return [];
+      const counts = onCounts(item);
+      return [
+        {
+          key: installed.swarmId,
+          header: `${installed.title} · ${String(counts.skillsOn)} of ${String(counts.skills)} on`,
+          rows: owned,
+        },
+      ];
+    }),
   ];
 
   /** The drilled skill's own summary, or `undefined` when showing the list. */
@@ -980,9 +1046,19 @@ export function SkillsSection() {
           />
         ) : (
         <div className="flex flex-col overflow-y-auto rounded-lg border border-border">
-          {rows.map((row) => {
+          {groups.map((group) => [
+            group.header === null ? null : (
+              <div
+                key={`${group.key}-header`}
+                className="border-b border-border-soft bg-hover px-2.5 py-1 text-micro font-semibold text-subtle"
+              >
+                {group.header}
+              </div>
+            ),
+            ...group.rows.map((row) => {
             const active = row.name === open;
             const broken = row.reason !== null;
+            const off = row.owner?.on === false;
 
             return (
               <button
@@ -1003,11 +1079,12 @@ export function SkillsSection() {
               >
                 {/* Name and its dot as one group, so `justify-between` floats only the flags. */}
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate tabular-nums">
+                  <span className={`truncate tabular-nums ${off ? 'line-through' : ''}`}>
                     {broken ? row.name : `/${row.name}`}
                   </span>
                   <ShippedDot status={shipped.get(row.name)} />
                 </span>
+                {off ? <span className="shrink-0 text-micro text-subtle">off</span> : null}
                 {broken ? (
                   <span className="shrink-0 text-micro text-amber-text">invalid</span>
                 ) : null}
@@ -1016,7 +1093,8 @@ export function SkillsSection() {
                 ) : null}
               </button>
             );
-          })}
+            }),
+          ])}
 
           <button
             type="button"
@@ -1088,6 +1166,20 @@ export function SkillsSection() {
               // rename of the whole skill and already asks its own question.
               onRename={inFile ? renameOpenFile : undefined}
               actionsHidden={pending !== null || prompt !== null}
+              /*
+                A swarm's skill is turned off, not deleted (HIVE-453). Inside its bundle, Delete still removes the
+                one file on screen; single files are not what the switch governs.
+              */
+              swarm={
+                openOwner === null || inFile
+                  ? undefined
+                  : {
+                      title: openOwner.title,
+                      on: openOwner.on,
+                      failure: swarmFailure,
+                      onToggle: toggleSwarmSkill,
+                    }
+              }
             />
           )}
 
@@ -1115,7 +1207,7 @@ export function SkillsSection() {
               title={pending.question}
               confirmLabel={pending.confirmLabel}
               className="rounded-md border border-border-soft"
-              cancelLabel="Keep editing"
+              cancelLabel={pending.cancelLabel ?? 'Keep editing'}
               escape="document"
               onConfirm={() => {
                 pending.act();

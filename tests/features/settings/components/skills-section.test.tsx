@@ -19,10 +19,30 @@ import {
 import { emptySnapshot } from '@shared/config-contract';
 import type { SkillsSnapshot } from '@shared/skills-contract';
 
+import { resetAgents, setAgentsForTest } from '@/lib/agents';
 import { resetShippedState } from '@/lib/shipped';
+import type { AgentSummary } from '@shared/agent-contract';
 import { useUiStore } from '@stores/ui-store';
 
 import { shippedStatus } from '../../../support/shipped';
+import { installedSwarm, swarmItem, swarmListing } from '../../../support/swarms';
+
+const swarmState = vi.hoisted(() => ({
+  snapshot: null as import('@/lib/swarms').SwarmsSnapshot | null,
+  setEnabled: null as unknown as import('vitest').Mock,
+}));
+swarmState.setEnabled = vi.fn();
+
+vi.mock('@/lib/swarms', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/swarms')>();
+  return {
+    ...actual,
+    // Several tests set a partial `window.hive` with no `swarms`; the listing comes from `swarmState` instead.
+    loadSwarms: () => Promise.resolve(),
+    swarmsSnapshot: () => swarmState.snapshot ?? actual.swarmsSnapshot(),
+    setSwarmItemEnabled: (...args: unknown[]) => swarmState.setEnabled(...args),
+  };
+});
 
 const loadSkills = vi.fn();
 const readSkillFile = vi.fn();
@@ -1669,5 +1689,169 @@ describe('SkillsSection — shipped skills the user changed', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('does not ship skills/tdd');
+  });
+});
+
+describe('SkillsSection — a swarm\'s skills are turned off, not deleted (HIVE-453)', () => {
+  const SQUAD_SKILLS = [
+    'tdd',
+    'spec-deviation',
+    'plan',
+    'debug',
+    'verify',
+    'worktree',
+    'execute',
+    'brainstorm',
+    'ship',
+    'merge-pr',
+    'pr-review',
+    'review-pr-findings',
+    'work-on',
+    'goal-on',
+  ];
+  const agent = (name: string, over: Partial<AgentSummary> = {}): AgentSummary => ({
+    name,
+    description: '',
+    icon: 'ph-robot',
+    status: 'sleeping',
+    wake: { on: [] },
+    mcp: [],
+    tools: [],
+    skills: [],
+    rotateAfter: 50,
+    runs: [],
+    ...over,
+  });
+  const useSquad = (off: { agents?: string[]; skills?: string[] } = {}): void => {
+    swarmState.snapshot = {
+      listing: swarmListing([
+        swarmItem({
+          installed: installedSwarm({
+            swarmId: 'sq1',
+            title: 'Dev Squad',
+            contents: {
+              agents: ['builder', 'fixer', 'acr'].map((name) => ({ name, description: '', tools: [] })),
+              skills: SQUAD_SKILLS.map((name) => ({ name, description: '' })),
+            },
+            disabled: { agents: off.agents ?? [], skills: off.skills ?? [] },
+          }),
+        }),
+      ]),
+      busy: new Set(),
+      removing: new Set(),
+      failures: new Map(),
+      lastUpdate: null,
+    };
+  };
+  const openSkill = async (name: RegExp): Promise<void> => {
+    await userEvent.click(await screen.findByRole('button', { name }));
+    await screen.findByLabelText('Skill source');
+  };
+
+  beforeEach(() => {
+    swarmState.setEnabled.mockReset();
+    swarmState.setEnabled.mockResolvedValue(true);
+    setAgentsForTest({
+      agents: [
+        agent('builder', { skills: ['tdd', 'plan'] }),
+        agent('fixer', { skills: ['tdd'] }),
+        agent('acr', { skills: ['tdd'] }),
+        agent('broken', { skills: ['tdd'], invalid: 'bad yaml' }),
+      ],
+      agentsRoot: '/home/u/.hive/agents',
+    });
+  });
+
+  afterEach(() => {
+    swarmState.snapshot = null;
+    resetAgents();
+  });
+
+  it('an owned skill has the Enabled switch and no Delete; the person\'s own keeps Delete', async () => {
+    useSquad();
+    setSkillsForTest(withSkills('deploy', ...SQUAD_SKILLS));
+    render(<SkillsSection />);
+
+    await openSkill(/^\/spec-deviation/);
+    expect(screen.getByRole('switch', { name: 'Enabled' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+
+    await switchTo('deploy');
+    await screen.findByLabelText('Skill source');
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch')).toBeNull();
+  });
+
+  it('turns off a skill no agent uses at once', async () => {
+    useSquad();
+    setSkillsForTest(withSkills(...SQUAD_SKILLS));
+    render(<SkillsSection />);
+
+    await openSkill(/^\/spec-deviation/);
+    await userEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+
+    expect(swarmState.setEnabled).toHaveBeenCalledWith('sq1', 'skills', 'spec-deviation', false);
+    expect(screen.queryByRole('button', { name: 'Turn off' })).toBeNull();
+  });
+
+  it('asks first when enabled agents use it, naming only those, and Cancel writes nothing', async () => {
+    useSquad({ agents: ['acr'] });
+    setSkillsForTest(withSkills(...SQUAD_SKILLS));
+    render(<SkillsSection />);
+
+    await openSkill(/^\/tdd/);
+    await userEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+
+    expect(
+      screen.getByText(
+        "builder and fixer use this skill. Their runs will carry on without it, and may stall where they'd call it.",
+      ),
+    ).toBeInTheDocument();
+    expect(swarmState.setEnabled).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(swarmState.setEnabled).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Turn off' })).toBeNull();
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Turn off' }));
+    expect(swarmState.setEnabled).toHaveBeenCalledWith('sq1', 'skills', 'tdd', false);
+  });
+
+  it('turning on never asks', async () => {
+    useSquad({ skills: ['tdd'] });
+    setSkillsForTest(withSkills(...SQUAD_SKILLS));
+    render(<SkillsSection />);
+
+    await openSkill(/^\/tdd/);
+    await userEvent.click(screen.getByRole('switch', { name: 'Off' }));
+
+    expect(swarmState.setEnabled).toHaveBeenCalledWith('sq1', 'skills', 'tdd', true);
+  });
+
+  it('an off skill is tagged and struck through, its banner shows, and the group header counts what is on', async () => {
+    useSquad({ skills: ['spec-deviation'] });
+    setSkillsForTest(withSkills('deploy', ...SQUAD_SKILLS));
+    render(<SkillsSection />);
+
+    expect(await screen.findByText('Dev Squad · 13 of 14 on')).toBeInTheDocument();
+    const row = screen.getByRole('button', { name: /^\/spec-deviation/ });
+    expect(within(row).getByText('off')).toBeInTheDocument();
+    expect(within(row).getByText('/spec-deviation')).toHaveClass('line-through');
+
+    await openSkill(/^\/spec-deviation/);
+    expect(screen.getByRole('status')).toHaveTextContent(/is off/);
+  });
+
+  it('a failed write says so in the editor', async () => {
+    useSquad();
+    swarmState.setEnabled.mockResolvedValue(false);
+    setSkillsForTest(withSkills(...SQUAD_SKILLS));
+    render(<SkillsSection />);
+
+    await openSkill(/^\/spec-deviation/);
+    await userEvent.click(screen.getByRole('switch', { name: 'Enabled' }));
+
+    expect(await screen.findByText("Couldn't save. Try again.")).toBeInTheDocument();
   });
 });

@@ -11,7 +11,10 @@ import {
   resetSwarmsState,
   setSwarmAutoUpdate,
   devSquadOf,
+  andList,
   onCounts,
+  skillUsers,
+  swarmAskers,
   restoreSwarmItem,
   setSwarmItemEnabled,
   subscribeSwarms,
@@ -20,6 +23,7 @@ import {
   takeSwarmInstallRequest,
 } from '@/lib/swarms';
 
+import type { AgentSummary } from '@shared/agent-contract';
 import type { SwarmListing, SwarmsChanged } from '@shared/swarm-contract';
 
 import { installedSwarm, swarmEntry, swarmItem, swarmListing } from '../support/swarms';
@@ -539,5 +543,82 @@ describe('restoreSwarmItem (HIVE-453)', () => {
 
   it('answers null with no bridge', async () => {
     expect(await restoreSwarmItem('skills', 'plan')).toBeNull();
+  });
+});
+
+describe('who depends on a swarm item (HIVE-453)', () => {
+  const agent = (name: string, over: Partial<AgentSummary> = {}): AgentSummary => ({
+    name,
+    description: '',
+    icon: 'ph-robot',
+    status: 'sleeping',
+    wake: { on: [] },
+    mcp: [],
+    tools: [],
+    skills: [],
+    rotateAfter: 50,
+    runs: [],
+    ...over,
+  });
+  const squad = (off: string[] = []) =>
+    swarmListing([
+      swarmItem({
+        installed: installedSwarm({
+          swarmId: 'sq1',
+          title: 'Dev Squad',
+          contents: {
+            agents: ['builder', 'fixer', 'shipper', 'acr'].map((name) => ({ name, description: '', tools: [] })),
+            skills: [{ name: 'tdd', description: '' }],
+          },
+          disabled: { agents: off, skills: [] },
+        }),
+      }),
+      swarmItem({
+        installed: installedSwarm({
+          swarmId: 'other',
+          title: 'Other',
+          contents: { agents: [{ name: 'stranger', description: '', tools: [] }], skills: [] },
+        }),
+      }),
+    ]);
+
+  it('skillUsers names the enabled, valid agents that list the skill', () => {
+    const agents = [
+      agent('builder', { skills: ['tdd', 'plan'] }),
+      agent('fixer', { skills: ['tdd'] }),
+      agent('acr', { skills: ['tdd'] }),
+      agent('broken', { skills: ['tdd'], invalid: 'bad yaml' }),
+      agent('mine', { skills: ['tdd'] }),
+      agent('shipper', { skills: [] }),
+    ];
+    expect(skillUsers(squad(['acr']), agents, 'tdd')).toEqual(['builder', 'fixer', 'mine']);
+    expect(skillUsers(null, agents, 'nothing')).toEqual([]);
+  });
+
+  it('swarmAskers names the enabled agents of the same swarm in asksFrom, ignoring sess-*', () => {
+    const agents = [
+      agent('builder'),
+      agent('fixer', { asksFrom: ['shipper'] }),
+      agent('shipper', { asksFrom: ['sess-*', 'builder', 'stranger', 'mine'] }),
+      agent('acr'),
+      agent('stranger'),
+      agent('mine'),
+    ];
+    expect(swarmAskers(squad(), agents, 'shipper')).toEqual(['builder']);
+    expect(swarmAskers(squad(), agents, 'fixer')).toEqual(['shipper']);
+    expect(swarmAskers(squad(), agents, 'acr')).toEqual([]);
+    expect(swarmAskers(squad(['builder']), agents, 'shipper')).toEqual([]);
+    expect(swarmAskers(squad(), agents, 'mine')).toEqual([]);
+  });
+
+  it('swarmAskers skips an asker whose definition is invalid', () => {
+    const agents = [agent('builder', { invalid: 'bad' }), agent('shipper', { asksFrom: ['builder'] })];
+    expect(swarmAskers(squad(), agents, 'shipper')).toEqual([]);
+  });
+
+  it('andList joins names the way a sentence does', () => {
+    expect(andList(['builder'])).toBe('builder');
+    expect(andList(['builder', 'fixer'])).toBe('builder and fixer');
+    expect(andList(['a', 'b', 'c'])).toBe('a, b and c');
   });
 });

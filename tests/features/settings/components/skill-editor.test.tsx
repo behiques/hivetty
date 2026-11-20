@@ -92,3 +92,41 @@ describe('SkillEditor', () => {
     expect(onDelete).toHaveBeenCalled();
   });
 });
+
+describe('SkillEditor for a swarm skill (HIVE-453)', () => {
+  const swarm = (over: Partial<{ title: string; on: boolean; failure: string | null }> = {}) => ({
+    title: 'Dev Squad',
+    on: true,
+    failure: null,
+    onToggle: vi.fn(),
+    ...over,
+  });
+
+  it('offers the Enabled switch instead of Delete, and says who installed it', () => {
+    render(<SkillEditor {...props} swarm={swarm()} />);
+
+    const toggle = screen.getByRole('switch', { name: 'Enabled' });
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(screen.getByText(/Installed by Dev Squad/)).toBeInTheDocument();
+    expect(screen.queryByText(/is off/)).toBeNull();
+  });
+
+  it('reads Off with the banner while off, and the switch hands back the next state', () => {
+    const onToggle = vi.fn();
+    render(<SkillEditor {...props} swarm={{ ...swarm({ on: false }), onToggle }} />);
+
+    const toggle = screen.getByRole('switch', { name: 'Off' });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('status')).toHaveTextContent(/is off/);
+
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('shows a failed write in the notice line', () => {
+    render(<SkillEditor {...props} swarm={swarm({ failure: "Couldn't save. Try again." })} />);
+
+    expect(screen.getByText("Couldn't save. Try again.")).toHaveClass('text-red');
+  });
+});
