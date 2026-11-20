@@ -6,8 +6,6 @@
  * share no package: a rule changed here is changed there in the same week.
  */
 
-import { SKILL_NAME_PATTERN } from './skills-contract';
-
 export const SWARM_MANIFEST_FILE = 'swarm.json';
 
 export const SWARM_NAME_MAX = 64;
@@ -433,10 +431,8 @@ export function parseSwarmSetEnabledRequest(payload: unknown): SwarmSetEnabledRe
   const kind = record['kind'];
   if (kind !== 'agents' && kind !== 'skills') throw new Error('kind is not agents or skills');
   const name = record['name'];
-  // The skills and agents contracts share one folder-name pattern; a swarm item is one of those folders.
-  if (typeof name !== 'string' || name.length > SWARM_NAME_MAX || !SKILL_NAME_PATTERN.test(name)) {
-    throw new Error('name is not a skill or agent name');
-  }
+  // The same lowercase-dash slug as SKILL_NAME_PATTERN (skills-contract), kept local so this file imports nothing.
+  if (!isSlug(name, SWARM_NAME_MAX)) throw new Error('name is not a skill or agent name');
   const enabled = record['enabled'];
   if (typeof enabled !== 'boolean') throw new Error('enabled is not a boolean');
   return { swarmId, kind, name, enabled };

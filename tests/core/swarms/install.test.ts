@@ -1069,9 +1069,9 @@ describe('mergeListing', () => {
     expect(listing).toEqual({
       source: 'cache',
       items: [
-        { entry: a, installed: installedFor('A'), update: null , missing: NONE },
-        { entry: b, installed: null, update: null , missing: NONE },
-        { entry: null, installed: installedFor('C'), update: null , missing: NONE },
+        { entry: a, installed: installedFor('A'), update: null, missing: NONE },
+        { entry: b, installed: null, update: null, missing: NONE },
+        { entry: null, installed: installedFor('C'), update: null, missing: NONE },
       ],
     });
   });
@@ -1084,9 +1084,9 @@ describe('mergeListing', () => {
     const listing = mergeListing({ source: 'cloud', swarms: [a, b] }, [installedFor('c1'), installedFor('a1')], pending);
 
     expect(listing.items).toEqual([
-      { entry: a, installed: installedFor('a1'), update , missing: NONE },
-      { entry: b, installed: null, update: null , missing: NONE },
-      { entry: null, installed: installedFor('c1'), update , missing: NONE },
+      { entry: a, installed: installedFor('a1'), update, missing: NONE },
+      { entry: b, installed: null, update: null, missing: NONE },
+      { entry: null, installed: installedFor('c1'), update, missing: NONE },
     ]);
     expect(pending.mock.calls.map(([id]) => id).sort()).toEqual(['a1', 'c1']);
   });
