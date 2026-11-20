@@ -184,7 +184,7 @@ describe('agent-contract', () => {
   });
 
   it('offers exactly two check modes', () => {
-    expect(WAKE_CHECKS).toEqual(['onchange', 'always']);
+    expect(WAKE_CHECKS).toEqual(['onchange', 'always', 'holding']);
   });
 
   it('declares check as an enum over those two', () => {

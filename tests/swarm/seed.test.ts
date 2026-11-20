@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,6 +40,8 @@ describe.skipIf(!HAS_SWARM)('seedShipped', () => {
     );
     const read = await readUserSkills(join(target, 'skills'));
     expect(read.invalid).toEqual([]);
+    // Dev Squad 1.1.0 folds `ship` into the shipper agent; a swarm from before still carries it.
+    const shipsShip = existsSync(join(SWARM_DIR, 'skills', 'ship', 'SKILL.md'));
     expect(read.skills.map((entry) => entry.name)).toEqual([
       'brainstorm',
       'debug',
@@ -48,7 +51,7 @@ describe.skipIf(!HAS_SWARM)('seedShipped', () => {
       'plan',
       'pr-review',
       'review-pr-findings',
-      'ship',
+      ...(shipsShip ? ['ship'] : []),
       'spec-deviation',
       'tdd',
       'verify',

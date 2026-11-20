@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -19,6 +19,11 @@ import { HAS_SWARM, SWARM_DIR } from '../support/swarm-tree';
  * which would be a shipped agent that does nothing on a fresh machine.
  */
 const swarm = SWARM_DIR;
+// Dev Squad 1.1.0 folds the ship skill's stage machine into the shipper agent; read whichever holds it.
+const shipSkill = join(swarm, 'skills', 'ship', 'SKILL.md');
+const foldedShip = (): boolean => !existsSync(shipSkill);
+const stageMachine = (): string =>
+  readFileSync(foldedShip() ? join(swarm, 'agents', 'shipper', 'AGENT.md') : shipSkill, 'utf8');
 const folders = (name: string): string[] =>
   HAS_SWARM
     ? readdirSync(join(swarm, name), { withFileTypes: true })
@@ -75,7 +80,7 @@ describe.skipIf(!HAS_SWARM)('shipped agents', () => {
     expect(allows('git -C /w branch --show-current')).toBe(true);
   });
 
-  it('wakes the shipper every thirty minutes, a safety net under its GitHub and ledger wakes (HIVE-412)', () => {
+  it('wakes the shipper on a clock under its GitHub and ledger wakes: thirty minutes, or five while it holds a PR (HIVE-412)', () => {
     const source = readFileSync(join(swarm, 'agents', 'shipper', 'AGENT.md'), 'utf8');
     const result = parseAgent(source, {
       folder: 'shipper',
@@ -85,9 +90,14 @@ describe.skipIf(!HAS_SWARM)('shipped agents', () => {
     });
     if (!('def' in result)) throw new Error('shipper does not parse');
 
-    expect(result.def.wake.everyMs).toBe(30 * 60_000);
+    if (foldedShip()) {
+      expect(result.def.wake.everyMs).toBe(5 * 60_000);
+      expect(result.def.wake.check).toBe('holding');
+    } else {
+      expect(result.def.wake.everyMs).toBe(30 * 60_000);
+    }
     expect(source).not.toMatch(/ten.minute|ten minutes/);
-    expect(readFileSync(join(swarm, 'skills', 'ship', 'SKILL.md'), 'utf8')).not.toMatch(/ten.minute|ten minutes/);
+    expect(stageMachine()).not.toMatch(/ten.minute|ten minutes/);
   });
 
   it('lets the shipper push to any branch with its Bash grant, the default branch included', () => {
@@ -119,7 +129,7 @@ describe.skipIf(!HAS_SWARM)('shipped agents', () => {
     if (!('def' in result)) throw new Error('shipper does not parse');
     const allows = (command: string) =>
       result.def.tools.some((rule) => matches(rule, 'Bash', { command }));
-    const ship = readFileSync(join(swarm, 'skills', 'ship', 'SKILL.md'), 'utf8');
+    const ship = stageMachine();
     const row = (stage: string) => {
       const line = ship.split('\n').find((l) => l.startsWith(`| \`${stage}\` |`));
       if (!line) throw new Error(`ship has no ${stage} row`);
@@ -283,7 +293,7 @@ describe.skipIf(!HAS_SWARM)('the shipped agents in lanes, through the scheduler 
 describe.skipIf(!HAS_SWARM)('the shipper merge gate', () => {
   const read = (...path: string[]): string => readFileSync(join(swarm, ...path), 'utf8');
   const shipRow = (stage: string): string => {
-    const line = read('skills', 'ship', 'SKILL.md')
+    const line = stageMachine()
       .split('\n')
       .find((l) => l.startsWith(`| \`${stage}\` |`));
     if (!line) throw new Error(`ship has no ${stage} row`);

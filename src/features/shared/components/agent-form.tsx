@@ -166,6 +166,7 @@ type WakeMode = (typeof WAKE_MODES)[number]['value'];
 const CHECK_OPTIONS = [
   { value: 'onchange', label: 'on change' },
   { value: 'always', label: 'always' },
+  { value: 'holding', label: 'while holding' },
 ] as const;
 
 /** Times offered as one click. Anything else is added in the Source tab. */
@@ -359,7 +360,7 @@ export const FIELD_HELP: Record<string, string> = {
     wrongly here does not fail, it simply never runs.
   */
   'wake.check':
-    'on change — a scheduled wake is skipped unless something addressed the agent since its last run, which is what makes a five-minute interval affordable. always — every interval wakes it, for an agent whose work arrives somewhere the ledger cannot see, like a Slack search. Only applies to every…; a fixed time always runs.',
+    'on change — a scheduled wake is skipped unless something addressed the agent since its last run, which is what makes a five-minute interval affordable. always — every interval wakes it, for an agent whose work arrives somewhere the ledger cannot see, like a Slack search. while holding — the interval runs only while the agent holds a ledger claim, for an agent watching work it took, like a shipper with open PRs. Only applies to every…; a fixed time always runs.',
   /*
     `ledger` gets the most words because it is the one that is load-bearing and
     the one whose *absence* is easy to misread. Turning it off does not mean
@@ -1419,7 +1420,7 @@ export function AgentForm({
                 <SegmentedControl
                   label="Check"
                   options={CHECK_OPTIONS}
-                  value={at('wake.check') === 'always' ? 'always' : 'onchange'}
+                  value={at('wake.check') === 'always' || at('wake.check') === 'holding' ? at('wake.check') : 'onchange'}
                   onChange={(next) => {
                     /*
                       Absence is the value, as with `model` below: the parser

@@ -1997,6 +1997,62 @@ describe('createScheduler', () => {
     });
   });
 
+  describe('check: holding', () => {
+    const NOON = new Date(2026, 7, 31, 12).getTime();
+    const holding: WakeSpec = { everyMs: 300_000, check: 'holding', on: ['ledger'] };
+    const claim = (task: string, from = AGENT): LedgerEntry =>
+      entry({ id: `c-${task}`, kind: 'claim', from, to: undefined, ts: NOON - 3_600_000, meta: { task } });
+
+    beforeEach(() => {
+      clock = NOON;
+      scheduler.start();
+      state.patch(AGENT, { nextRunAt: NOON, lastRunAt: NOON - 600_000 });
+      schedules.set(AGENT, { wake: holding });
+    });
+
+    it('skips a tick while the agent holds no claim, and counts it', () => {
+      tick();
+
+      expect(woke).toEqual([]);
+      expect(state.read(AGENT).skipsSinceRun).toBe(1);
+      expect(state.read(AGENT).nextRunAt).toBe(NOON + 300_000);
+    });
+
+    it('wakes on every tick while it holds a claim, with nothing new addressed to it', () => {
+      entries.push(claim('acme/app#7'));
+
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'interval' }]);
+    });
+
+    it('goes quiet again once the claim is released', () => {
+      entries.push(claim('acme/app#7'));
+      entries.push(entry({ id: 'r1', kind: 'release', from: AGENT, to: undefined, ts: NOON - 60_000, meta: { task: 'acme/app#7' } }));
+
+      tick();
+
+      expect(woke).toEqual([]);
+    });
+
+    it('ignores a claim another party holds', () => {
+      entries.push(claim('acme/app#7 findings', 'zergling'));
+
+      tick();
+
+      expect(woke).toEqual([]);
+    });
+
+    it('wakes when a queued entry is waiting, claim or not', () => {
+      state.patch(AGENT, { pendingWake: [{ id: 'a1', kind: 'ask', from: 'overmind' }] });
+      refuseAfter = runCalls;
+
+      tick();
+
+      expect(woke).toEqual([{ name: AGENT, trigger: 'interval' }]);
+    });
+  });
+
   describe('slack signed out (HIVE-123)', () => {
     const NOON = new Date(2026, 7, 31, 12).getTime();
     const every5m: WakeSpec = { everyMs: 300_000, check: 'always', on: [] };

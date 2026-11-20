@@ -713,6 +713,12 @@ describe('AgentForm', () => {
       expect(patched(onChange, 'wake.check')).toBe('always');
     });
 
+    it('reads check: holding from the file as while holding', () => {
+      setup({ source: SOURCE.replace('  every: 5m\n', '  every: 5m\n  check: holding\n') });
+
+      expect(screen.getByRole('radio', { name: 'while holding' })).toHaveAttribute('aria-checked', 'true');
+    });
+
     /*
       Absence is the value, as with `model`: the parser materialises `onchange`
       itself, so writing it into every file would spell out a default rather

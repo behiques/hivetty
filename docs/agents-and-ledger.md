@@ -827,6 +827,13 @@ so the `pendingWake` clause above is already what `check: onchange` consults
 for it. Slack search-on-schedule agents still set `check: always`, because
 their change lives outside the log entirely.
 
+**`check: holding` runs the interval only while the agent holds a ledger claim,
+or has a standing `pendingWake`.** The claims are derived from the same tick's
+entries (`claims()` in `ledger-derive.ts`). It is for an agent that watches work
+it took, like the shipper with its open PRs: a claim per PR from intake to
+close, so it polls on its interval while it holds one and sleeps on the ledger
+when it holds none.
+
 **A refused wake arms the next time and leaves the skip count alone**, because a
 refusal is a wake deferred rather than a quiet tick. That refusal is also what
 keeps this tick from racing the permission fence's deferred wake: both doors are

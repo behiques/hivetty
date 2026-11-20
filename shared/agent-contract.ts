@@ -147,11 +147,16 @@ export const WAKE_EVERY_FLOOR_MS = 60_000;
  * somewhere this process cannot see — a Slack search, a PR sweep — where "has
  * anything changed?" has no local answer and the wake *is* the check.
  *
+ * `holding` is for an agent that watches work it has taken: the interval runs
+ * only while it holds a ledger claim (or has a queued wake), so a shipper can
+ * poll its open PRs every five minutes and sleep on the ledger when it holds
+ * none. Its claims are its own account of what it is watching.
+ *
  * Interval mode only. A fixed time is a promise to run then, so `parseAgent`
  * refuses `check:` alongside `at:` rather than letting a 09:00 standup agent
  * silently skip the one morning its ledger happened to be quiet.
  */
-export const WAKE_CHECKS = ['onchange', 'always'] as const;
+export const WAKE_CHECKS = ['onchange', 'always', 'holding'] as const;
 export type WakeCheck = (typeof WAKE_CHECKS)[number];
 
 /**
