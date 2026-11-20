@@ -472,6 +472,11 @@ Components never read a store object directly and never call `getState()`.
 | `useSetPrFileViewed()` | mark or unmark a file viewed, optimistically (HIVE-207) |
 | `useShipTrack(slug, n)` | the shipper's eight stops for one PR, with time and holder (HIVE-205) |
 | `useMergeAsk(slug, n)` | the shipper's open merge card for one PR, the ask the PR page's Merge answers (HIVE-205) |
+| `useJobEntry(jobKey(query))` | one job read's state, `{ state, history?, warnings?, problem? }` (Job Flow) |
+| `useLoadJob()` | read, or re-read, one job's thirty days of ledger history (Job Flow) |
+| `useJobFlow(query, now)` | the Flow tab's model: the job's history merged with the live tail, as lanes, handoffs and segments; `null` before anyone has written about the job. `query` must be memoised (Job Flow) |
+| `useTicketTab()` / `useSetTicketTab()` | ui-store: the ticket page's tab, `'ticket'` or `'flow'`, and its setter (Job Flow) |
+| `useFlowFocus(jobKey(query))` / `useSetFlowFocus()` | ui-store: the selected handoff on that job's Flow tab, `null` when the selection is another job's or none; the setter takes `(job, edge \| null)` (Job Flow) |
 | `useSessionPr(id)` | one row's PR, matched on its branch |
 | `useSessionPrRows(id)` | every PR `useSessionPrs` lists, each with its Hatchery row, matched by URL; `row: null` for a remembered PR. The session panel's PR tab and dot (HIVE-209) |
 | `useHasResumable()` | whether the fleet table reserves its Resume column |

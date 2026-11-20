@@ -256,7 +256,8 @@ describe('exposed surface', () => {
 
   /** HIVE-111. `post` and `answer` take no `from` — see the contract. */
   it('names every key of the ledger bridge', () => {
-    expect([...BRIDGE_LEDGER_KEYS]).toEqual(['list', 'post', 'answer', 'onChanged']);
+    // Job Flow added `job`: a read of the ledger's own day files; it writes nothing.
+    expect([...BRIDGE_LEDGER_KEYS]).toEqual(['list', 'post', 'answer', 'onChanged', 'job']);
   });
 
   it('carries the ledger push channel in EVENT_CHANNELS', () => {

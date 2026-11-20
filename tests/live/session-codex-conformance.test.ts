@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -68,7 +68,7 @@ import { HAS_SWARM, SWARM_DIR } from '../support/swarm-tree';
  *
  * The `$hive-done` case needs the hive server's script, so it runs after a `pnpm desktop:build`.
  *
- * Opt-in: `pnpm test:session:codex`. Skipped unless `codex --version` is 0.165.x or 0.166.x and
+ * Opt-in: `pnpm test:session:codex`. Skipped unless `codex --version` is 0.165.x, 0.166.x or 0.167.x and
  * `~/.codex/auth.json` exists; about seven minutes.
  */
 
@@ -77,7 +77,7 @@ const AUTH = join(homedir(), '.codex', 'auth.json');
 const READY =
   LIVE &&
   existsSync(AUTH) &&
-  /^codex-cli 0\.16[56]\./.test(spawnSync('codex', ['--version'], { encoding: 'utf8' }).stdout ?? '');
+  /^codex-cli 0\.16[567]\./.test(spawnSync('codex', ['--version'], { encoding: 'utf8' }).stdout ?? '');
 const SESSION = 'sess-cx';
 const CASE_MS = 240_000;
 
@@ -538,16 +538,24 @@ describe.skipIf(!READY || !HAS_SWARM)('a real interactive codex session (HIVE-27
       const entry = ledger.read({}).entries.find((e) => asked.ok && e.id === asked.id)!;
       const typed = codexAdapter.promptMarker([entry]);
       expect(typed.endsWith('\r')).toBe(true);
-      const log = await run('marker', {}, typed.slice(0, -1)); // the driver types the \r itself
+      await run('marker', {}, typed.slice(0, -1)); // the driver types the \r itself
       const id = statuses.find((s) => s.sessionUuid !== undefined)?.sessionUuid;
       const rollout = id === undefined ? null : codexRecord(() => home).transcriptPath(repo, id);
       finding('marker', { word, marker: typed, ledgerReads, rollout });
 
-      // The hook fired, the receiver looked the marker up, and the model answered from the entry.
+      /*
+        The hook fired, the receiver looked the marker up, and the entry is in what the model read:
+        a developer message of its own, body and all. Asserted there and not in the reply since
+        0.167.0 (2026-11-19, gpt-6.2-sol): one full run in three the model acknowledged the entry
+        and left the code out, with the whole entry in front of it.
+      */
       expect(ledgerReads).toContain(SESSION);
       expect(statuses.some((s) => s.signal?.kind === 'turn-end')).toBe(true);
       expect(rollout).not.toBeNull();
-      expect(flat(log)).toContain(word);
+      const read = rolloutItems(rollout!)
+        .filter((item) => item.type === 'message' && item.role === 'developer')
+        .map((item) => (item.content ?? []).map((part) => part.text ?? '').join(''));
+      expect(read.some((text) => text.includes(word))).toBe(true);
     },
     CASE_MS,
   );
@@ -590,6 +598,13 @@ describe.skipIf(!READY || !HAS_SWARM)('a real interactive codex session (HIVE-27
     HIVE-370, FINDINGS P10 (codex-cli 0.166.0): Stop runs goal-on's verifier beside the status hook,
     and Codex continues the turn on its block. The brief is written before the spawn, as Phase 1
     would have left it, and named by the session's HIVE_SESSION_ID.
+
+    Re-proved at 0.167.0 (2026-11-19, gpt-6.2-sol): the block still arrives, as a `<hook_prompt>`
+    user message, once per held turn. What changed is the model: with no word of a goal in its
+    conversation it answered "hi" to every block and spent the budget, every time when the prompt
+    said "and nothing else" or the item was cut at 80 characters before the brief's path, and one
+    time in four without either. A real goal session knows its brief, so the prompt now says so,
+    and the item fits the verifier's quote whole.
   */
   it(
     'holds a turn end on an unticked Outcome, releases once it is ticked, and posts receipts (HIVE-370)',
@@ -611,7 +626,7 @@ describe.skipIf(!READY || !HAS_SWARM)('a real interactive codex session (HIVE-27
           'Prove the goal verifier holds a Codex turn.',
           '',
           '## Outcome',
-          `- [ ] proof.txt in the working directory says OK, and this box is ticked in ${path}`,
+          `- [ ] proof.txt here says OK, and this box is ticked in ${relative(repo, path)}`,
           '',
           '## Verification evidence',
           '$ cat proof.txt',
@@ -624,7 +639,11 @@ describe.skipIf(!READY || !HAS_SWARM)('a real interactive codex session (HIVE-27
         join(SWARM_DIR, 'skills', 'goal-on', 'scripts', 'verify-goal.mjs'),
         join(codexPlugin!, 'skills', 'goal-on', 'scripts', 'verify-goal.mjs'),
       );
-      await run('goal', {}, 'Reply with the word hi and nothing else.');
+      await run(
+        'goal',
+        {},
+        `This session is held to the goal brief at ${relative(repo, path)}: whenever a hook says an Outcome item is unchecked, do what the item says, then tick its box. For now, only reply with the word hi.`,
+      );
       const after = readFileSync(path, 'utf8');
       const receipts = ledger
         .read({})

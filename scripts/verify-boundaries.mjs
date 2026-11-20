@@ -127,6 +127,24 @@ const CASES = [
     },
   },
   {
+    name: 'zone: components/flow/ may not import stores/ (Job Flow)',
+    rule: 'import/no-restricted-paths',
+    files: {
+      'src/stores/probe-target.ts': 'export const store = 1;\n',
+      'src/components/flow/probe.ts':
+        "import { store } from '@stores/probe-target';\nexport const probe = store;\n",
+    },
+  },
+  {
+    name: 'zone: components/flow/ may not import features/ (Job Flow)',
+    rule: 'import/no-restricted-paths',
+    files: {
+      'src/features/work/probe-target.ts': 'export const work = 1;\n',
+      'src/components/flow/probe.ts':
+        "import { work } from '@features/work/probe-target';\nexport const probe = work;\n",
+    },
+  },
+  {
     name: 'zone: lib/ may not import features/',
     rule: 'import/no-restricted-paths',
     files: {
