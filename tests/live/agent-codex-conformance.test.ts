@@ -56,12 +56,12 @@ import type { PlanChangedEvent } from '../../shared/plan-contract';
  * `harness: [codex]`.
  *
  * Opt-in: `pnpm desktop:build && pnpm test:agent:codex`. It needs `codex` on PATH, signed in, at
- * the version the fixtures were recorded against; a different version fails rather than proving
- * something nobody recorded.
+ * the version this suite was last proven against (`PINNED`; `tests/fixtures/codex/README.md` has
+ * each re-proof); a different version fails rather than proving something nobody recorded.
  */
 
 const LIVE = process.env['HIVE_LIVE_AGENT_CODEX_PROOF'] === '1';
-const PINNED = '0.165';
+const PINNED = '0.167';
 const TEARDOWN_WAIT_MS = 10_000;
 const TURN_MS = 240_000;
 
