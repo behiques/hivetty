@@ -387,6 +387,36 @@ describe('AgentsPanel', () => {
       }
     });
 
+    it('scrolls to Summons, unfolded, when every agent of the focused swarm sits there (HIVE-454)', async () => {
+      const scrolled: Element[] = [];
+      const original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+        scrolled.push(this);
+      });
+
+      try {
+        await installAB();
+        // Alpha's working agent fails too: both of Alpha's agents are in Summons, so Alpha has no section.
+        seed(
+          summary('asker', 'asking'),
+          summary('worker', 'failed'),
+          summary('sleeper', 'sleeping'),
+          summary('mine', 'sleeping'),
+        );
+        expect(screen.queryByRole('region', { name: 'Alpha' })).not.toBeInTheDocument();
+        await userEvent.click(laneHeader('Summons'));
+
+        act(() => useUiStore.getState().openAgentsAt('A'));
+
+        expect(scrolled).toEqual([screen.getByRole('region', { name: 'Summons' })]);
+        expect(laneHeader('Summons')).toHaveAttribute('aria-expanded', 'true');
+        expect(agentRow('asker')).toBeInTheDocument();
+        expect(useUiStore.getState().agentsFocus).toBeNull();
+      } finally {
+        Element.prototype.scrollIntoView = original;
+      }
+    });
+
     it('clears a focus with no such section, and scrolls nothing', async () => {
       const scrollIntoView = vi.fn();
       const original = Element.prototype.scrollIntoView;

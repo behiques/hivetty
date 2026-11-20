@@ -111,15 +111,26 @@ export function AgentsPanel() {
   const working = new Set(morphingIds);
   const sections = agentGroups(listing, [...morphingIds, ...idsOf('burrowed')]);
 
+  // A swarm whose agents are all asking or failed has no section, only rows in Summons.
+  const inSummons = focus !== null && agentGroups(listing, summonsIds).some((group) => group.id === focus);
+  const summonsFolded = useAgentsFolded()[SUMMONS] === true;
+  const toggle = useToggleAgentGroup();
+
   // The comb's "+N" for a swarm (HIVE-454): scroll its section into view, once, then let the focus go.
+  // With no section, its agents are in Summons: unfold that and scroll there instead.
   useEffect(() => {
     if (focus === null) return;
 
-    const section = panel.current?.querySelector(`section[data-group="${CSS.escape(focus)}"]`);
+    const at = (key: string) => panel.current?.querySelector(`section[data-group="${CSS.escape(key)}"]`);
+    let section = at(focus);
 
+    if (!section && inSummons) {
+      if (summonsFolded) toggle(SUMMONS);
+      section = at(SUMMONS);
+    }
     if (section && typeof section.scrollIntoView === 'function') section.scrollIntoView({ block: 'start' });
     clearFocus();
-  }, [focus, clearFocus]);
+  }, [focus, clearFocus, inSummons, summonsFolded, toggle]);
   /*
     The way to make another agent: a new agent's page, on Definition
     (HIVE-204). The page owns authoring now, so the panel opens it here
