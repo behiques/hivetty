@@ -382,10 +382,15 @@ describe('TheComb — the stage width (HIVE-454)', () => {
     const observer = wrapper();
     stage = 760;
     act(() => observer.callback());
+    clear.mockClear();
     unmount();
     expect(clear).toHaveBeenCalled();
     expect(observer.disconnect).toHaveBeenCalled();
+    const measured = vi.mocked(HTMLDivElement.prototype.getBoundingClientRect);
+    measured.mockClear();
     act(() => vi.advanceTimersByTime(RELAYOUT_MS));
+    // The pending relayout never runs: nothing measures the unmounted wrapper.
+    expect(measured).not.toHaveBeenCalled();
     expect(errors).not.toHaveBeenCalled();
   });
 
