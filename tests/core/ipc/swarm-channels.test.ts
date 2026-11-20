@@ -446,7 +446,7 @@ describe('boot (HIVE-441, HIVE-447, HIVE-448)', () => {
   });
 });
 
-describe('the remove guards (HIVE-453)', () => {
+describe('the remove and rename guards (HIVE-453)', () => {
   const watch = (runtime: null | { remove: unknown }) => {
     const target = runtime as unknown as { remove: (name: string) => Promise<unknown> };
     return vi.spyOn(target, 'remove').mockResolvedValue('REMOVED');
@@ -495,6 +495,49 @@ describe('the remove guards (HIVE-453)', () => {
     await expect(invoke(CH.agentsRemove, { name: 'mine' })).rejects.toThrow('manifest unreadable');
     expect(skillRemove).not.toHaveBeenCalled();
     expect(agentRemove).not.toHaveBeenCalled();
+  });
+
+  it('skills:rename refuses to move a name a swarm owns, and moves nothing', async () => {
+    const rename = vi.spyOn(runtimes.skills as unknown as { rename: (from: string, to: string) => Promise<unknown> }, 'rename')
+      .mockResolvedValue('RENAMED');
+
+    await expect(invoke(CH.skillsRename, { from: 'tdd', to: 'tdd-x' })).rejects.toThrow(
+      '/tdd was installed by a swarm: turn it off in Settings instead, or remove the swarm.',
+    );
+    expect(swarmOwns).toHaveBeenCalledWith('skills', 'tdd');
+    expect(rename).not.toHaveBeenCalled();
+
+    await expect(invoke(CH.skillsRename, { from: 'mine', to: 'mine-2' })).resolves.toBe('RENAMED');
+    expect(rename).toHaveBeenCalledWith('mine', 'mine-2');
+  });
+
+  it('agents:rename refuses to move a name a swarm owns, and moves nothing', async () => {
+    const rename = vi
+      .spyOn(
+        runtimes.agents as unknown as { rename: (from: string, to: string, source?: string) => Promise<unknown> },
+        'rename',
+      )
+      .mockResolvedValue('RENAMED');
+
+    await expect(invoke(CH.agentsRename, { from: 'acr', to: 'acr-x', source: '---' })).rejects.toThrow(
+      'acr was installed by a swarm: turn it off in Settings instead, or remove the swarm.',
+    );
+    expect(swarmOwns).toHaveBeenCalledWith('agents', 'acr');
+    expect(rename).not.toHaveBeenCalled();
+
+    await expect(invoke(CH.agentsRename, { from: 'mine', to: 'mine-2' })).resolves.toBe('RENAMED');
+    expect(rename).toHaveBeenCalledWith('mine', 'mine-2', undefined);
+  });
+
+  it('refuses a rename, and moves nothing, when the ownership read fails', async () => {
+    const skillRename = vi.spyOn(runtimes.skills as unknown as { rename: () => Promise<unknown> }, 'rename').mockResolvedValue('RENAMED');
+    const agentRename = vi.spyOn(runtimes.agents as unknown as { rename: () => Promise<unknown> }, 'rename').mockResolvedValue('RENAMED');
+    swarmOwns.mockRejectedValue(new Error('manifest unreadable'));
+
+    await expect(invoke(CH.skillsRename, { from: 'mine', to: 'mine-2' })).rejects.toThrow('manifest unreadable');
+    await expect(invoke(CH.agentsRename, { from: 'mine', to: 'mine-2' })).rejects.toThrow('manifest unreadable');
+    expect(skillRename).not.toHaveBeenCalled();
+    expect(agentRename).not.toHaveBeenCalled();
   });
 
   it('checks the name before it asks who owns it', async () => {

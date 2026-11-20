@@ -5167,8 +5167,12 @@ export function registerIpcHandlers(
     return skills?.remove(name);
   });
 
-  handle(CH.skillsRename, (_event, payload) => {
+  handle(CH.skillsRename, async (_event, payload) => {
     const request = parseSkillRenameRequest(payload);
+    // HIVE-453: a rename moves a swarm's folder off the name its manifest owns, the same hole a remove leaves.
+    if ((await swarmOwns('skills', request.from)) !== null) {
+      throw new Error(`/${request.from} was installed by a swarm: turn it off in Settings instead, or remove the swarm.`);
+    }
     return skills?.rename(request.from, request.to);
   });
 
@@ -5314,8 +5318,12 @@ export function registerIpcHandlers(
     return agents?.remove(name);
   });
 
-  handle(CH.agentsRename, (_event, payload) => {
+  handle(CH.agentsRename, async (_event, payload) => {
     const request = parseAgentRenameRequest(payload);
+    // HIVE-453: the same rule as skills:rename, for a swarm's agent.
+    if ((await swarmOwns('agents', request.from)) !== null) {
+      throw new Error(`${request.from} was installed by a swarm: turn it off in Settings instead, or remove the swarm.`);
+    }
     return agents?.rename(request.from, request.to, request.source);
   });
 
