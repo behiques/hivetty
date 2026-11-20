@@ -401,3 +401,74 @@ describe('AgentRow while a swarm agent is off (HIVE-453)', () => {
     expect(screen.getByRole('button', { name: /^builder, / })).not.toHaveAccessibleName(/^builder, off/);
   });
 });
+
+describe('AgentRow with its swarm tag (HIVE-454)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    resetSwarmsState();
+  });
+  afterEach(() => {
+    resetSwarmsState();
+    delete (window as unknown as { hive?: unknown }).hive;
+  });
+
+  const squad = swarmListing([
+    swarmItem({
+      installed: installedSwarm({
+        swarmId: 'sq1',
+        title: 'Dev Squad',
+        contents: { agents: [{ name: 'acr', description: '', tools: [] }], skills: [] },
+      }),
+    }),
+  ]);
+
+  const install = () => {
+    (window as unknown as { hive?: unknown }).hive = {
+      swarms: { list: vi.fn(() => Promise.resolve(squad)), onChanged: vi.fn(() => () => undefined) },
+    };
+  };
+
+  it('tags a swarm agent with its swarm, in words and in its name', async () => {
+    install();
+    useHiveStore.getState().hydrateAgents([summary({ name: 'acr', status: 'asking' })]);
+
+    render(<AgentRow id="acr" showSwarm />);
+
+    const tag = await screen.findByText('Dev Squad');
+    expect(tag).toHaveClass('text-micro', 'text-subtle');
+    expect(screen.getByRole('button', { name: /^acr, asking, Dev Squad/ })).toBeInTheDocument();
+  });
+
+  it('tags an agent no swarm ships as My swarm', async () => {
+    install();
+    useHiveStore.getState().hydrateAgents([summary({ name: 'mine' })]);
+
+    render(<AgentRow id="mine" showSwarm />);
+
+    expect(await screen.findByText('My swarm')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^mine, sleeping, My swarm/ })).toBeInTheDocument();
+  });
+
+  it('draws no tag before the listing loads', () => {
+    useHiveStore.getState().hydrateAgents([summary({ name: 'acr' })]);
+
+    render(<AgentRow id="acr" showSwarm />);
+
+    expect(screen.queryByText('My swarm')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^acr, sleeping/ })).not.toHaveAccessibleName(/My swarm/);
+  });
+
+  it('draws no tag without showSwarm', async () => {
+    install();
+    useHiveStore.getState().hydrateAgents([summary({ name: 'acr' })]);
+
+    render(<AgentRow id="acr" />);
+
+    await vi.waitFor(() => expect(window.hive?.swarms.list).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByText('Dev Squad')).not.toBeInTheDocument();
+  });
+});

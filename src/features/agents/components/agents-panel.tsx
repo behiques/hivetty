@@ -1,25 +1,60 @@
 import { CaretRight, Clock, Plus } from '@phosphor-icons/react';
+import { type ReactNode, useEffect, useRef } from 'react';
 
+import { agentGroups } from '@/lib/swarms';
 import { cn } from '@/lib/utils';
 
 import { EmptyState } from '@components/ui/empty-state';
 import { AgentRow } from '@features/agents/components/agent-row';
+import { useSwarms } from '@hooks/use-swarms';
 import { useAgentsByGroup, useStallCount } from '@stores/hive-store';
 import {
   type AgentGroupKey,
   useAgentPageActions,
+  useAgentsFocus,
   useAgentsFolded,
+  useClearAgentsFocus,
   useShowStalls,
   useStallsShown,
   useToggleAgentGroup,
 } from '@stores/ui-store';
 
-/** Each lane's square, in the colour its rows are asking for attention in. */
-const SQUARE: Record<AgentGroupKey, string> = {
-  summons: 'bg-amber',
-  morphing: 'bg-green',
-  burrowed: 'bg-subtle',
-};
+/** The fold key of the Summons lane; every other section folds under its swarm group id. */
+const SUMMONS = 'summons';
+
+interface LaneProps {
+  foldKey: string;
+  title: string;
+  /** The header after the title: Summons' count, or a section's morphing count and total. */
+  counts: ReactNode;
+  /** Summons' amber square; swarm sections have none and are told apart by name. */
+  square?: boolean;
+  children: ReactNode;
+}
+
+/** One folding lane: a caret header and its rows, folded under `foldKey` in the ui-store. */
+function Lane({ foldKey, title, counts, square = false, children }: LaneProps) {
+  const folded = useAgentsFolded()[foldKey] === true;
+  const toggle = useToggleAgentGroup();
+
+  return (
+    <section data-group={foldKey} aria-label={title} className="mb-2.5 flex flex-col gap-0.5">
+      <button
+        type="button"
+        aria-expanded={!folded}
+        onClick={() => toggle(foldKey)}
+        className="flex items-center gap-2 px-1.5 pt-2.5 pb-1.5 text-ui-sm font-semibold tracking-[0.06em] text-subtle uppercase"
+      >
+        <CaretRight size={12} aria-hidden="true" className={folded ? '' : 'rotate-90'} />
+        {square ? <span aria-hidden="true" className="size-[9px] rounded-xs bg-amber" /> : null}
+        {title}
+        {counts}
+      </button>
+
+      {folded ? null : children}
+    </section>
+  );
+}
 
 /**
  * Agents panel — the long-lived background agents, grouped by what they are
@@ -41,27 +76,50 @@ const SQUARE: Record<AgentGroupKey, string> = {
  * A flat alphabetical list answers "what do I have"; a panel is read to answer
  * "what needs me". Grouping by state puts the second question first — and it
  * is the state, not the name, that changes minute to minute (HIVE-116). Since
- * HIVE-204 the groups are lanes: Summons (needs a person), Morphing (working)
- * and Burrowed (resting), each folding under its own header, with the first two
- * counted again in the panel's header.
+ * HIVE-204 the groups are lanes, each folding under its own header.
+ *
+ * ## Grouped by swarm under a Summons lane (HIVE-454)
+ *
+ * Summons (asking, failed, invalid) comes first, from every swarm, each row
+ * tagged with its swarm. Below it, one folding section per swarm in
+ * `agentGroups` order (Settings order, My swarm last), working agents first and
+ * then resting ones. A section header counts its working agents in green and
+ * its rows in total. The header's summons and morphing counts are unchanged.
+ * `openAgentsAt(groupId)` sets a focus, which the panel scrolls into view and
+ * clears.
  *
  * The ordering rules — asking first, `failed` and invalid filed under Summons,
- * paused after sleeping, empty lanes omitted — all live in `useAgentsByGroup`,
- * so this component renders a decision rather than making one.
+ * paused after sleeping, empty groups omitted — live in `useAgentsByGroup` and
+ * `agentGroups`, so this component renders a decision rather than making one.
  */
 export function AgentsPanel() {
   const groups = useAgentsByGroup();
-  const folded = useAgentsFolded();
-  const toggle = useToggleAgentGroup();
+  const { listing } = useSwarms();
+  const focus = useAgentsFocus();
+  const clearFocus = useClearAgentsFocus();
+  const panel = useRef<HTMLDivElement>(null);
   const { openAgentPage } = useAgentPageActions();
   const stallsShown = useStallsShown();
   const showStalls = useShowStalls();
   const stalls = useStallCount();
 
-  const count = (key: AgentGroupKey) =>
-    groups.find((group) => group.key === key)?.ids.length ?? 0;
-  const summons = count('summons');
-  const morphing = count('morphing');
+  const idsOf = (key: AgentGroupKey) => groups.find((group) => group.key === key)?.ids ?? [];
+  const summonsIds = idsOf('summons');
+  const morphingIds = idsOf('morphing');
+  const summons = summonsIds.length;
+  const morphing = morphingIds.length;
+  const working = new Set(morphingIds);
+  const sections = agentGroups(listing, [...morphingIds, ...idsOf('burrowed')]);
+
+  // The comb's "+N" for a swarm (HIVE-454): scroll its section into view, once, then let the focus go.
+  useEffect(() => {
+    if (focus === null) return;
+
+    const section = panel.current?.querySelector(`section[data-group="${CSS.escape(focus)}"]`);
+
+    if (section && typeof section.scrollIntoView === 'function') section.scrollIntoView({ block: 'start' });
+    clearFocus();
+  }, [focus, clearFocus]);
   /*
     The way to make another agent: a new agent's page, on Definition
     (HIVE-204). The page owns authoring now, so the panel opens it here
@@ -71,7 +129,7 @@ export function AgentsPanel() {
   const newAgent = () => openAgentPage(null, 'definition');
 
   return (
-    <div data-panel="agents" className="flex flex-col gap-0.5">
+    <div ref={panel} data-panel="agents" className="flex flex-col gap-0.5">
       <div className="flex items-baseline gap-2.5 px-2 pt-2.5 pb-2 text-muted">
         <h2 className="text-ui-lg font-semibold text-ink">Agents</h2>
         <span className="text-ui-sm">
@@ -117,36 +175,46 @@ export function AgentsPanel() {
           No agents yet.
         </EmptyState>
       ) : (
-        groups.map((group) => (
-          <section
-            key={group.key}
-            aria-label={group.label}
-            className="mb-2.5 flex flex-col gap-0.5"
-          >
-            <button
-              type="button"
-              aria-expanded={!folded[group.key]}
-              onClick={() => toggle(group.key)}
-              className="flex items-center gap-2 px-1.5 pt-2.5 pb-1.5 text-ui-sm font-semibold tracking-[0.06em] text-subtle uppercase"
+        <>
+          {summons === 0 ? null : (
+            <Lane
+              foldKey={SUMMONS}
+              title="Summons"
+              square
+              counts={<span className="font-medium text-subtle">{summons}</span>}
             >
-              <CaretRight
-                size={12}
-                aria-hidden="true"
-                className={folded[group.key] ? '' : 'rotate-90'}
-              />
-              <span
-                aria-hidden="true"
-                className={cn('size-[9px] rounded-xs', SQUARE[group.key])}
-              />
-              {group.label}
-              <span className="font-medium text-subtle">{group.ids.length}</span>
-            </button>
+              {summonsIds.map((id) => (
+                <AgentRow key={id} id={id} showSwarm />
+              ))}
+            </Lane>
+          )}
+          {sections.map((section) => {
+            const busy = section.names.filter((name) => working.has(name)).length;
 
-            {folded[group.key]
-              ? null
-              : group.ids.map((id) => <AgentRow key={id} id={id} />)}
-          </section>
-        ))
+            return (
+              <Lane
+                key={section.id}
+                foldKey={section.id}
+                title={section.title}
+                counts={
+                  <span className="font-medium text-subtle">
+                    {busy > 0 ? (
+                      <>
+                        <span className="text-green">{busy}</span>
+                        {' · '}
+                      </>
+                    ) : null}
+                    {section.names.length}
+                  </span>
+                }
+              >
+                {section.names.map((id) => (
+                  <AgentRow key={id} id={id} />
+                ))}
+              </Lane>
+            );
+          })}
+        </>
       )}
 
     </div>
