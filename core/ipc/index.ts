@@ -340,6 +340,7 @@ import {
   setSwarmHooks,
   startSwarmUpdates,
   swarmCalls,
+  swarmDisabledNames,
   swarmOwns,
   swarmRunsIdle,
   swarmSeedSetFor,
@@ -2705,6 +2706,8 @@ export function registerIpcHandlers(
     installedPlugins: () => sessionAdapter().installed.pluginNames(),
     // HIVE-372: follow a changed skill or a new version. A read and a stat when current; no codex run when off and clean.
     onRendered: () => void codexPlugin.reconcile(),
+    // HIVE-453: a swarm's skill turned off in Settings leaves every generated plugin. Read at each regeneration.
+    disabledSkills: async () => new Set((await swarmDisabledNames()).skills),
   });
 
   /*

@@ -115,8 +115,10 @@ const adopt = vi.hoisted(() =>
   ),
 );
 const swarmSeedSetFor = vi.hoisted(() => vi.fn());
+const swarmDisabledNames = vi.hoisted(() => vi.fn(() => Promise.resolve({ agents: [] as string[], skills: [] as string[] })));
 const swarmOwns = vi.hoisted(() => vi.fn<(kind: string, name: string) => Promise<{ swarmId: string } | null>>());
 vi.mock('../../../core/swarms', () => ({
+  swarmDisabledNames,
   swarmOwns,
   swarmCalls: () => swarmSpies,
   setSwarmHooks,
@@ -144,13 +146,19 @@ vi.mock('../../../core/seed', async (importOriginal) => ({
 }));
 
 /** HIVE-453: the real skills and agents runtimes, held so a spec can watch their `remove`. */
-const runtimes = vi.hoisted(() => ({ skills: null as null | { remove: unknown }, agents: null as null | { remove: unknown } }));
+const runtimes = vi.hoisted(() => ({
+  skills: null as null | { remove: unknown },
+  skillsOptions: null as null | { disabledSkills?: () => Promise<ReadonlySet<string>> },
+  agents: null as null | { remove: unknown },
+}));
 vi.mock('../../../core/skills', async (importOriginal) => {
   const real = await importOriginal<typeof import('../../../core/skills')>();
   return {
     ...real,
-    createSkillsRuntime: (...args: Parameters<typeof real.createSkillsRuntime>) =>
-      (runtimes.skills = real.createSkillsRuntime(...args)),
+    createSkillsRuntime: (...args: Parameters<typeof real.createSkillsRuntime>) => {
+      runtimes.skillsOptions = args[0];
+      return (runtimes.skills = real.createSkillsRuntime(...args));
+    },
   };
 });
 vi.mock('../../../core/agents', async (importOriginal) => {
@@ -466,5 +474,16 @@ describe('the remove guards (HIVE-453)', () => {
   it('checks the name before it asks who owns it', async () => {
     await expect(invoke(CH.skillsRemove, { name: '../x' })).rejects.toThrow();
     expect(swarmOwns).not.toHaveBeenCalled();
+  });
+});
+
+describe('the skills runtime reads the off skills (HIVE-453)', () => {
+  it('hands it the off skill names of every installed swarm, read at each call', async () => {
+    swarmDisabledNames.mockResolvedValueOnce({ agents: ['acr'], skills: ['tdd', 'verify'] });
+
+    const off = await runtimes.skillsOptions?.disabledSkills?.();
+
+    expect(off).toEqual(new Set(['tdd', 'verify']));
+    expect(swarmDisabledNames).toHaveBeenCalledTimes(1);
   });
 });
