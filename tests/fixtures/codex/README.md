@@ -47,6 +47,19 @@ Re-proved, not re-recorded, against `codex-cli 0.165.0` on 2026-10-29 (HIVE-282)
 `test:session:codex` pass on these fixtures unchanged. One new finding: an Esc on the interactive approval
 prompt fires no hook (HIVE-365).
 
+Re-proved, not re-recorded, against `codex-cli 0.167.0` on 2026-11-19 (default model `gpt-6.2-sol`):
+`test:agent:codex` passes unchanged, 15 of 15, and `test:codex-plugin` passes. `test:session:codex` passes after
+two of its cases changed, neither for a change in what Codex sends or reads. Both come from the model following
+text a hook delivers less readily than before:
+
+- **The goal verifier's hold.** The `Stop` block still arrives, as a `<hook_prompt>` user message, once per held
+  turn. With no word of a goal in its conversation the model answered the prompt again and spent the budget.
+  The case's prompt now tells the session it has a brief, as a real goal session knows, and its Outcome item
+  fits the 80 characters the verifier quotes.
+- **The ledger marker.** The entry still reaches the model whole, as a developer message. One full run in three
+  the model acknowledged it and left out the code it asked for. The case now asserts the entry in the rollout,
+  which is what "reaches the model" means, not in the reply.
+
 Three rollout records pin the meters fold (HIVE-334, recorded 2026-10-29 from `codex-cli 0.165.0` unless named otherwise).
 `rollout-0.165.0.jsonl` is the rollout of one `python3 tests/fixtures/codex/interactive-0.164/probe.py --bypass --seconds 90`
 run (a real interactive TUI on a pty, Plus plan). `rollout-exec-0.165.0.jsonl` is the rollout of one `codex exec --json
