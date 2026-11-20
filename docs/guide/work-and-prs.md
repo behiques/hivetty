@@ -93,6 +93,33 @@ takes its place (the first, when it was the last). PRs and Agents do the same.
 The page re-reads the ticket every minute while it is open. A read that fails says so in
 its section with **Retry**, and what was already on screen stays, marked with its time.
 
+## The Flow tab
+
+Under the ticket's title, **Ticket | Flow** switches the page between the ticket and its
+**Flow**. A PR's page has the same **Flow** tab, after **Timeline**. Flow draws the job as a
+route: one track for each party that worked on it (you, the session, and every agent it
+brought in). A thick green line shows a party working, an amber one shows something waiting
+on you, and a dotted line shows a party waiting on someone else. Each handoff is a curve from
+one track to the next, with its ask's ref beside it.
+
+- **Click a handoff** to light its whole thread and read what was asked, its details, and how
+  and when it closed. **Show the whole job** clears it; **Go to** opens the session it
+  involved.
+- **Quiet stretches** of two hours or more fold into a break that says how long it was. A job
+  with many breaks draws wider than the tab and scrolls sideways.
+- **Handoffs seconds apart** are drawn a little apart, so each one can be read and clicked.
+  The time labels above the chart stay where their times are.
+- **Where the time went** sums each party's working time, and your waiting time, under the
+  chart.
+- While the job is live, the line above the chart names the stage it is on, and a pulsing
+  dot marks now.
+
+The tab reads the last 30 days of the ledger, so a job that ran across a week still draws
+whole. A PR's Flow finds the ticket the PR belongs to, and that ticket's other PRs, from what
+the agents wrote. The labels come from what each party wrote: the stage it named (the
+shipper's stages, the builder's), or else the skill it named. A day file the app could not
+read is named above the chart, or in place of it, with **Try again**, when nothing else was found.
+
 ## The Ticket tab
 
 A session started from a ticket has a **Ticket** tab in the session panel,

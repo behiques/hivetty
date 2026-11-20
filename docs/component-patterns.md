@@ -33,6 +33,12 @@
   store, or through `features/shared`.
 - `src/components/**` may not import from `features/**` — chrome and atoms stay
   domain-agnostic.
+- `src/components/flow/` (Job Flow) is the third props-only seam, beside
+  `terminal/` and `editor/`: the Flow chart and its parts import neither
+  `features/` nor `stores/`. Two slices mount it (the ticket page and the PR
+  page), and slices never import each other, so it cannot live in either;
+  `features/shared/components/job-flow-view.tsx` reads the stores and passes the
+  model down.
 - Colour comes from `--cc-*` tokens via Tailwind utilities. Raw hex literals in
   component code are banned.
 - Only the shadcn primitives actually needed are installed: `dialog`, `tooltip`,

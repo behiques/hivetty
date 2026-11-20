@@ -37,8 +37,10 @@ export interface AgentPage {
   view: AgentPageView;
 }
 
-/** The PR page's tabs (HIVE-205); Checks is HIVE-206's, Files HIVE-207's, Timeline HIVE-208's. */
-export type PrTab = 'conversation' | 'checks' | 'files' | 'timeline';
+/** The PR page's tabs (HIVE-205); Checks is HIVE-206's, Files HIVE-207's, Timeline HIVE-208's, Flow Job Flow's. */
+export type PrTab = 'conversation' | 'checks' | 'files' | 'timeline' | 'flow';
+/** The ticket page's tabs (Job Flow): the ticket itself, or its Flow. */
+export type TicketTab = 'ticket' | 'flow';
 /** The Files tab's diff layout (HIVE-207). */
 export type PrDiffView = 'unified' | 'split';
 /** Which PR the PRs place last opened (HIVE-205). */
@@ -260,6 +262,10 @@ interface UiState {
   prPageAt: number;
   /** The PR page's tab; kept across PRs, so Checks stays Checks (HIVE-205). */
   prTab: PrTab;
+  /** The ticket page's tab; kept across tickets, as the PR page's is (Job Flow). Not persisted. */
+  ticketTab: TicketTab;
+  /** The Flow tab's selected handoff, and the job it belongs to; another job's selection is not this one's (Job Flow). */
+  flowFocus: { job: string; edge: string } | null;
   /** The Checks tab's shown push, by head sha; null shows the newest (HIVE-206). Not persisted. */
   prRun: string | null;
   /** The job clicked in the Checks graph; null shows the failed one (HIVE-206). Not persisted. */
@@ -368,6 +374,9 @@ interface UiState {
   /** The PR the PRs stage is showing, and where it sits in the Hatchery; another PR forgets what `openPrPage` does. */
   rememberPrPage: (ref: PrPageRef, at: number) => void;
   setPrTab: (tab: PrTab) => void;
+  setTicketTab: (tab: TicketTab) => void;
+  /** Select a handoff on one job's Flow tab, or clear the selection with `null` (Job Flow). */
+  setFlowFocus: (job: string, edge: string | null) => void;
   showPrRun: (sha: string) => void;
   showPrJob: (id: number | null) => void;
   openPrChecks: (jobId: number | null) => void;
@@ -474,6 +483,8 @@ const initialUiState = {
   prPage: null as PrPageRef | null,
   prPageAt: -1,
   prTab: 'conversation' as PrTab,
+  ticketTab: 'ticket' as TicketTab,
+  flowFocus: null as { job: string; edge: string } | null,
   prRun: null as string | null,
   prJob: null as number | null,
   prsFolded: true,
@@ -808,6 +819,8 @@ export const useUiStore = create<UiState>()((set) => ({
         : freshPr(ref, at),
     ),
   setPrTab: (tab) => set({ prTab: tab }),
+  setTicketTab: (tab) => set({ ticketTab: tab }),
+  setFlowFocus: (job, edge) => set({ flowFocus: edge === null ? null : { job, edge } }),
   showPrRun: (sha) => set({ prRun: sha, prJob: null }),
   showPrJob: (id) => set({ prJob: id }),
   openPrChecks: (jobId) => set({ prTab: 'checks', prRun: null, prJob: jobId }),
@@ -941,6 +954,13 @@ export const usePrPage = () => useUiStore((state) => state.prPage);
 export const usePrPageAt = () => useUiStore((state) => state.prPageAt);
 export const useRememberPrPage = () => useUiStore((state) => state.rememberPrPage);
 export const usePrTab = () => useUiStore((state) => state.prTab);
+/** The ticket page's tab (Job Flow). */
+export const useTicketTab = () => useUiStore((state) => state.ticketTab);
+export const useSetTicketTab = () => useUiStore((state) => state.setTicketTab);
+/** The selected handoff on one job's Flow tab, or null: another job's selection is not this one's (Job Flow). */
+export const useFlowFocus = (job: string): string | null =>
+  useUiStore((state) => (state.flowFocus?.job === job ? state.flowFocus.edge : null));
+export const useSetFlowFocus = () => useUiStore((state) => state.setFlowFocus);
 /** The Checks tab's shown push and clicked job (HIVE-206). */
 export const usePrRun = () => useUiStore((state) => state.prRun);
 export const usePrJob = () => useUiStore((state) => state.prJob);

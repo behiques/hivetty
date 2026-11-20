@@ -407,7 +407,7 @@ export function isShipping(entries: readonly LedgerEntry[], slug: string, n: num
 }
 
 /** `meta.pr` + `meta.repo` name this PR, compared as {@link shipStage} compares. */
-const namesPr = (meta: Record<string, unknown> | undefined, slug: string, n: number): boolean => {
+export const namesPr = (meta: Record<string, unknown> | undefined, slug: string, n: number): boolean => {
   const repo = meta?.['repo'];
   return wholeNumberOf(meta?.['pr']) === n && typeof repo === 'string' && repo.toLowerCase() === slug.toLowerCase();
 };

@@ -16,6 +16,7 @@ import { PrChecks } from '@features/pull-requests/components/pr-checks';
 import { PrCommentBox } from '@features/pull-requests/components/pr-comment-box';
 import { PrConversation } from '@features/pull-requests/components/pr-conversation';
 import { PrFiles } from '@features/pull-requests/components/pr-files';
+import { PrFlowTab } from '@features/pull-requests/components/pr-flow-tab';
 import { PrActions, PrProperties } from '@features/pull-requests/components/pr-properties';
 import { PrTimeline } from '@features/pull-requests/components/pr-timeline';
 import { ShipTrack } from '@features/pull-requests/components/ship-track';
@@ -37,7 +38,7 @@ import {
 import { usePrPageActions, usePrTab, type PrTab } from '@stores/ui-store';
 
 /**
- * The tab strip; Files is HIVE-207's, Checks is HIVE-206's, Timeline is HIVE-208's.
+ * The tab strip; Files is HIVE-207's, Checks is HIVE-206's, Timeline is HIVE-208's, Flow is Job Flow's.
  * Glyphs, not words: four words left the title no room on a narrow stage. The word is the tab's name and hint.
  */
 export const PR_TABS = [
@@ -45,6 +46,7 @@ export const PR_TABS = [
   { value: 'files', label: 'Files', icon: 'ph-file-code' },
   { value: 'checks', label: 'Checks', icon: 'ph-check-circle' },
   { value: 'timeline', label: 'Timeline', icon: 'ph-clock' },
+  { value: 'flow', label: 'Flow', icon: 'ph-graph' },
 ] as const satisfies readonly SegmentedOption<PrTab>[];
 
 /** The open PR's detail re-reads once a minute while it is on stage; the first sweep is the open's read. */
@@ -212,6 +214,11 @@ export function PrPage({ row }: { row: HatcheryRow }) {
                   /* -mx-8 cancels the column's px-8: the Timeline carries its own 24px gutters (HIVE-208). */
                   <div className="-mx-8">
                     <PrTimeline pr={pr} />
+                  </div>
+                ) : tab === 'flow' ? (
+                  /* -mx-8 cancels the column's px-8: the Flow view carries its own gutters (Job Flow). */
+                  <div className="-mx-8">
+                    <PrFlowTab pr={pr} />
                   </div>
                 ) : (
                   <>

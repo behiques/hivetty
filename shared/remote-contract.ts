@@ -113,8 +113,9 @@ import { isThisMachineAction } from './notification-contract';
  * 50 → 51 (HIVE-442): `swarms:take-install-request` (call, process-local) and `swarms:install-requested`
  *   (event, local only).
  * 51 → 52 (Codex agents' sandbox grants): `CliAgents` and `SetCliAgentsRequest` gained `network` and `projectGit`.
+ * 52 → 53 (Job Flow): `CH` gained `ledger:job` (a read of the server's own ledger day files).
  */
-export const REMOTE_PROTOCOL_VERSION = 52;
+export const REMOTE_PROTOCOL_VERSION = 53;
 
 /**
  * What a frame is for.
@@ -288,6 +289,7 @@ export const FRAME_KIND = {
   [CH.ledgerList]: 'call',
   [CH.ledgerPost]: 'call',
   [CH.ledgerAnswer]: 'call',
+  [CH.ledgerJob]: 'call',
   [CH.ledgerChanged]: 'event',
   [CH.plansList]: 'call',
   [CH.planChanged]: 'event',
@@ -655,6 +657,9 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.ledgerList]: 'read',
   [CH.ledgerPost]: 'execute',
   [CH.ledgerAnswer]: 'execute',
+  // One job's entries from the server's own ledger day files (Job Flow): a read like `ledger:list`, but from
+  // disk, up to 30 files per call rather than the in-memory two days.
+  [CH.ledgerJob]: 'read',
   [CH.ledgerChanged]: 'read',
   [CH.plansList]: 'read',
   [CH.planChanged]: 'read',

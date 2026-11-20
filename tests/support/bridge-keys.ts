@@ -70,7 +70,7 @@ export const BRIDGE_NOTIFICATIONS_KEYS = [
 ] as const satisfies readonly (keyof HiveBridge['notifications'])[];
 
 export const BRIDGE_LEDGER_KEYS = [
-  'list', 'post', 'answer', 'onChanged',
+  'list', 'post', 'answer', 'onChanged', 'job',
 ] as const satisfies readonly (keyof HiveBridge['ledger'])[];
 
 export const BRIDGE_PLANS_KEYS = [

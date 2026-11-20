@@ -99,7 +99,7 @@ const featureIsolationZones = FEATURE_SLICES.map((slice) => ({
  * `scripts/verify-boundaries.mjs` proves both halves: `ui/` still blocked,
  * `layout/` allowed.
  */
-const FENCED_COMPONENT_DIRS = ['editor', 'terminal', 'ui'];
+const FENCED_COMPONENT_DIRS = ['editor', 'flow', 'terminal', 'ui'];
 
 const fencedComponentDirs = FENCED_COMPONENT_DIRS.map(
   (dir) => `./src/components/${dir}/**/*`,
@@ -212,6 +212,18 @@ export default tseslint.config(
               from: ['./src/features/**/*', './src/stores/**/*'],
               message:
                 'components/editor/ knows only its props. It may not import features/ or stores/.',
+            },
+
+            /**
+             * The Flow chart (Job Flow): an SVG that knows its props. The work
+             * and PR slices both mount it, so it cannot live in either;
+             * `features/shared/components/job-flow-view.tsx` reads the stores.
+             */
+            {
+              target: './src/components/flow/**/*',
+              from: ['./src/features/**/*', './src/stores/**/*'],
+              message:
+                'components/flow/ knows only its props. It may not import features/ or stores/.',
             },
 
             /**

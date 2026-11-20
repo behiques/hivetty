@@ -5,6 +5,8 @@ import {
   OVERMIND,
   type LedgerAnswerRequest,
   type LedgerEntry,
+  type LedgerJobQuery,
+  type LedgerJobResult,
   type LedgerPostRequest,
   type LedgerReadQuery,
   type LedgerResult,
@@ -24,6 +26,7 @@ import {
 } from '@shared/ledger-derive';
 import { honestPermissionAsk } from '@shared/permission-rules';
 
+import { readJobEntries } from './job-read';
 import { createLedgerStore } from './store';
 
 /**
@@ -64,6 +67,8 @@ export interface Ledger {
   append(request: LedgerPostRequest): LedgerResult;
   answer(request: LedgerAnswerRequest, from: string): LedgerResult;
   onChange(listener: (entry: LedgerEntry) => void): () => void;
+  /** One job across the last thirty day files (Job Flow); the store's two days are not enough. */
+  job(query: LedgerJobQuery): Promise<LedgerJobResult>;
 }
 
 const refuse = (status: number, reason: string): LedgerResult => ({
@@ -96,6 +101,9 @@ export function createLedger(options: LedgerOptions): Ledger {
   };
 
   const ledger: Ledger = {
+    job(query) {
+      return readJobEntries({ dir: options.dir, query, now: now() });
+    },
     read(query) {
       const all = store.all();
       // A short ref names its thread here too, as `append` already accepts one (HIVE-408).
