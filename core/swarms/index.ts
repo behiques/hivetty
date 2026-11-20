@@ -7,15 +7,18 @@
  * depends on neither the licence client nor the IPC layer.
  */
 import { lstat } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import {
+  disabledOf,
   isBundled,
   parseSwarmAutoUpdateRequest,
   parseSwarmRequest,
   type InstalledSwarm,
+  type SwarmDisabled,
   type SwarmEntry,
   type SwarmInstallResult,
+  type SwarmItemKind,
   type SwarmListing,
   type SwarmRemoveResult,
   type SwarmsChanged,
@@ -26,11 +29,11 @@ import { configPath } from '../config/paths';
 import { platform } from '../platform';
 import { resetShipped, serial } from '../seed/actions';
 import { SEED_MANIFEST_FILE } from '../seed/paths';
-import type { SeedOptions } from '../seed/seed';
+import { readManifest, type SeedOptions } from '../seed/seed';
 
 import { adoptBuiltIns, rekeyAdopted, rekeyTarget } from './adopt';
 import { createSwarmGit, type SwarmGit } from './git';
-import { createSwarms, mergeListing, type Swarms } from './install';
+import { createSwarms, mergeListing, missingOf, ownedFolders, type Swarms } from './install';
 import { swarmPaths } from './paths';
 import { cloneToken, readRegistry, type AuthedFetch, type RegistryRead } from './registry';
 import { reportFor, reportInstall } from './report';
@@ -169,8 +172,20 @@ export interface SwarmCalls {
 }
 
 export function swarmCalls(): SwarmCalls {
-  const list = async (): Promise<SwarmListing> =>
-    mergeListing(await registry(), await swarms().installed(), (swarmId) => updater().pending(swarmId));
+  const list = async (): Promise<SwarmListing> => {
+    const [read, installed] = [await registry(), await swarms().installed()];
+    // HIVE-453: mergeListing is synchronous, so each installed swarm's missing files are read first.
+    const dir = hiveDir();
+    const missing = new Map(
+      await Promise.all(installed.map(async (held) => [held.swarmId, await missingOf(dir, held.swarmId)] as const)),
+    );
+    return mergeListing(
+      read,
+      installed,
+      (swarmId) => updater().pending(swarmId),
+      (swarmId) => missing.get(swarmId) ?? { agents: [], skills: [] },
+    );
+  };
 
   return {
     list,
@@ -263,6 +278,25 @@ export const swarmManifestFiles = (): Promise<string[]> => swarms().manifestFile
 /** The set of the swarm that owns one agent or skill, or null when no swarm owns it. */
 export const swarmSeedSetFor = (kind: 'skills' | 'agents', name: string): Promise<SeedOptions | null> =>
   swarms().seedSetFor(`${kind}/${name}`);
+
+/**
+ * HIVE-453: the swarm whose seed manifest owns `<kind>/<name>`, or null. Unlike {@link swarmSeedSetFor} it includes
+ * bundled swarms, and it reads manifests, not folders, so it holds for a name whose folder is already gone. A pending
+ * first install is not an owner.
+ */
+export async function swarmOwns(kind: SwarmItemKind, name: string): Promise<{ swarmId: string } | null> {
+  for (const file of await swarmManifestFiles()) {
+    if (basename(file) !== 'seed.json') continue;
+    if (ownedFolders(await readManifest(file)).has(`${kind}/${name}`)) return { swarmId: basename(dirname(file)) };
+  }
+  return null;
+}
+
+/** HIVE-453: every name any installed swarm has turned off, per kind. */
+export async function swarmDisabledNames(): Promise<SwarmDisabled> {
+  const off = (await swarms().installed()).map(disabledOf);
+  return { agents: off.flatMap((d) => d.agents), skills: off.flatMap((d) => d.skills) };
+}
 
 /** Settings sync's reset of one file: through the swarm that owns it, and nothing for a name no swarm owns. */
 export async function resetOwnedFile(kind: 'skills' | 'agents', name: string): Promise<void> {

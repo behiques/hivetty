@@ -608,6 +608,29 @@ export function createSwarms(deps: SwarmDeps): Swarms {
   };
 }
 
+const exists = (path: string): Promise<boolean> =>
+  lstat(path).then(
+    () => true,
+    () => false,
+  );
+
+/**
+ * HIVE-453: the names a swarm's seed manifest tracks whose definition file (`SKILL.md`, `AGENT.md`) is absent under
+ * `hiveDir`. A missing manifest names nothing. Bundled swarms have their manifest on disk, so they are included.
+ * Never rejects: `readManifest` reads a missing or malformed file as empty, and `lstat` failures read as absent.
+ */
+export async function missingOf(hiveDir: string, swarmId: string): Promise<SwarmDisabled> {
+  // A row that is not a swarm id has no manifest to read: nothing missing, and the listing still answers.
+  if (!isSwarmId(swarmId)) return { agents: [], skills: [] };
+  const owned = ownedFolders(await readManifest(swarmPaths(hiveDir).seed(swarmId)));
+  const absent = async (kind: SwarmItemKind, file: string): Promise<string[]> => {
+    const names = [...owned].filter((folder) => folder.startsWith(`${kind}/`)).map((folder) => folder.slice(kind.length + 1));
+    const gone = await Promise.all(names.map(async (name) => !(await exists(join(hiveDir, kind, name, file)))));
+    return names.filter((_name, i) => gone[i]).sort();
+  };
+  return { agents: await absent('agents', 'AGENT.md'), skills: await absent('skills', 'SKILL.md') };
+}
+
 /**
  * Registry rows first, each with its installed entry; then installed swarms the registry did not return. Each
  * installed swarm carries the updater's pending update (HIVE-442).
@@ -616,6 +639,7 @@ export function mergeListing(
   registry: RegistryRead,
   installed: InstalledSwarm[],
   pending: (swarmId: string) => SwarmUpdate | null = () => null,
+  missing: (swarmId: string) => SwarmDisabled = () => ({ agents: [], skills: [] }),
 ): SwarmListing {
   const held = new Map(installed.map((entry) => [entry.swarmId, entry]));
   const listed = new Set(registry.swarms.map((entry) => entry.id));
@@ -624,11 +648,21 @@ export function mergeListing(
     items: [
       ...registry.swarms.map((entry) => {
         const mine = held.get(entry.id) ?? null;
-        return { entry, installed: mine, update: mine === null ? null : pending(entry.id), missing: { agents: [], skills: [] } };
+        return {
+          entry,
+          installed: mine,
+          update: mine === null ? null : pending(entry.id),
+          missing: mine === null ? { agents: [], skills: [] } : missing(entry.id),
+        };
       }),
       ...installed
         .filter((entry) => !listed.has(entry.swarmId))
-        .map((entry) => ({ entry: null, installed: entry, update: pending(entry.swarmId), missing: { agents: [], skills: [] } })),
+        .map((entry) => ({
+          entry: null,
+          installed: entry,
+          update: pending(entry.swarmId),
+          missing: missing(entry.swarmId),
+        })),
     ],
   };
 }

@@ -1232,4 +1232,15 @@ describe('mergeListing', () => {
     ]);
     expect(pending.mock.calls.map(([id]) => id).sort()).toEqual(['a1', 'c1']);
   });
+
+  it('carries the missing names of each installed swarm, and none for a row with nothing installed (HIVE-453)', () => {
+    const a = entryFor({ id: 'a1' });
+    const b = entryFor({ id: 'b1' });
+    const gone = { agents: ['acr'], skills: [] };
+    const missing = vi.fn((id: string) => (id === 'a1' || id === 'c1' ? gone : NONE));
+    const listing = mergeListing({ source: 'cloud', swarms: [a, b] }, [installedFor('c1'), installedFor('a1')], undefined, missing);
+
+    expect(listing.items.map((item) => item.missing)).toEqual([gone, NONE, gone]);
+    expect(missing.mock.calls.map(([id]) => id).sort()).toEqual(['a1', 'c1']);
+  });
 });
