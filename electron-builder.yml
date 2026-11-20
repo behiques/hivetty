@@ -66,17 +66,6 @@ asarUnpack:
 extraResources:
   - from: resources/tray
     to: tray
-  # The skills and agents the app ships (HIVE-162), seeded into `~/.hivetty` on
-  # boot by `core/seed/`. Read at runtime like the tray icon, so they
-  # ride the same block; `shippedRoot` in `seed/paths.ts` names both locations.
-  - from: resources/skills
-    to: skills
-  - from: resources/agents
-    to: agents
-  # Every past version of those files as part hashes, for a `~/.hivetty` seeded
-  # before the seed merged part by part (`pnpm seed:history`).
-  - from: resources/shipped-history.json
-    to: shipped-history.json
 
 mac:
   category: public.app-category.developer-tools

@@ -13,8 +13,7 @@ import { createHash } from 'node:crypto';
  * the hash of what the seed last shipped (the base), the file on disk, and
  * what ships now.
  *
- * Node-only apart from `node:crypto`, and with no path aliases, so
- * `scripts/shipped-history.ts` runs this same parser under plain Node.
+ * Node-only apart from `node:crypto`, and with no path aliases.
  */
 
 const FENCE = '---';

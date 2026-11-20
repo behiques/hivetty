@@ -37,8 +37,7 @@ const shippedPrefix = (mine: readonly string[], baseTools: string | undefined): 
  * is that a shipped tool someone removed by hand comes back, once. What a wake allows can only grow.
  * Writing `grants:` is what makes this run once.
  *
- * Its own file, not `merge.ts`: that one runs under plain Node in `scripts/shipped-history.ts` and takes
- * no path aliases. Pure; returns `current` unchanged when there is nothing to do, or nothing safe to do.
+ * Its own file, not `merge.ts`: that one stays free of path aliases. Pure; returns `current` unchanged when there is nothing to do, or nothing safe to do.
  */
 export function liftGrants(current: string, shipped: string, baseTools?: string): string {
   const mineFields = readFrontmatter(current)?.fields;

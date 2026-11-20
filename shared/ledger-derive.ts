@@ -385,7 +385,7 @@ export function shipStage(entries: readonly LedgerEntry[], slug: string, n: numb
  * anyone is driving the PR at all.
  *
  * The shipper posts one `post` per stage change with `meta: { pr, repo, stage }`
- * (`resources/skills/ship/SKILL.md`), `repo` as `owner/name`, and its claim on
+ * (the Dev Squad swarm's `ship` skill), `repo` as `owner/name`, and its claim on
  * the PR is the key `owner/name#N`. The whole slug is compared, case-insensitive
  * as GitHub's own names are: two repos with one short name under different
  * owners must not share a badge. Newest wins; the ledger is appended in order
@@ -519,7 +519,7 @@ export function mergeWaiting(open: readonly OpenAsk[], slug: string, n: number):
   return mergeAsk(open, slug, n) !== undefined;
 }
 
-/** The shipper's stops, in the order `resources/skills/ship/SKILL.md` walks them (HIVE-205). */
+/** The shipper's stops, in the order the Dev Squad swarm's `ship` skill walks them (HIVE-205). */
 export const SHIP_STOPS = ['intake', 'self-review', 'fix-self', 'ready', 'ci', 'findings', 'approval', 'merge'] as const;
 export type ShipStopName = (typeof SHIP_STOPS)[number];
 
@@ -714,7 +714,7 @@ interface AgentSite {
  *
  * The builder and the fixer post `meta.worktree` (and `meta.checkout`, the
  * project checkout the worktree was cut from) on the posts of a job
- * (`resources/skills/worktree`). Their worktrees live under `~/.hivetty/work`,
+ * (the Dev Squad swarm's `worktree` skill). Their worktrees live under `~/.hivetty/work`,
  * outside every project path, which is why the checkout has to be named too:
  * the renderer maps it to a project, and a terminal needs one.
  *
@@ -761,7 +761,7 @@ export interface BuildProgress {
  * The newest agent progress for one ticket, or nothing (HIVE-171).
  *
  * The builder posts one `post` per completed task with
- * `meta: { ticket, stage: "build", task, worktree }` (`resources/agents/builder`);
+ * `meta: { ticket, stage: "build", task, worktree }` (Dev Squad's `builder`);
  * the shipper and the fixer post their own stages on the same ticket. Any
  * party's `post` counts, and `from` says whose it was (HIVE-203). Same reading
  * rule as {@link isShipping}: the newest matching post.
