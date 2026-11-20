@@ -48,7 +48,7 @@ const git = (cwd: string, ...args: string[]): string =>
   execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 /** A bare repository with one commit per release, each tagged. */
-function makeRepo(releases: { tag?: string; files: Record<string, string> }[]): {
+function makeRepo(releases: { tag?: string; files: Record<string, string>; replace?: boolean }[]): {
   bare: string;
   commitOf(tag: string): string;
 } {
@@ -62,6 +62,8 @@ function makeRepo(releases: { tag?: string; files: Record<string, string> }[]): 
   git(work, 'config', 'commit.gpgsign', 'false');
   git(work, 'config', 'tag.gpgsign', 'false');
   for (const release of releases) {
+    // `replace`: this release's tree is exactly its files, so a file the last one had is deleted.
+    if (release.replace === true) rmSync(join(work, 'standard'), { recursive: true, force: true });
     for (const [rel, text] of Object.entries(release.files)) write(join(work, rel), text);
     git(work, 'add', '-A');
     git(work, 'commit', '-q', '--allow-empty', '-m', release.tag ?? 'untagged');
@@ -840,15 +842,17 @@ describe('setEnabled (HIVE-453)', () => {
     expect(readHive('swarms/installed.json')).toBe(before);
   });
 
-  it('writes a row the guard refuses back as it was read', async () => {
+  it('writes every other row, one the guard refuses included, back as it was read', async () => {
     const swarms = await installTwoSkills();
     const refused = { swarmId: 'not valid!' };
-    write(hive('swarms/installed.json'), JSON.stringify([refused, ...installedJson()]));
+    const other = { ...installedJson()[0], swarmId: 'b1', disabled: { agents: ['x'], skills: [] }, extra: 'kept' };
+    write(hive('swarms/installed.json'), JSON.stringify([refused, ...installedJson(), other]));
 
     expect(await swarms.setEnabled('sw1', 'skills', 'tdd', false)).not.toBeNull();
     const rows = readJson<unknown[]>('swarms/installed.json');
     expect(rows[0]).toEqual(refused);
     expect((rows[1] as InstalledSwarm).disabled.skills).toEqual(['tdd']);
+    expect(rows[2]).toEqual(other);
   });
 
   it('answers null and leaves an unreadable installed.json as it was', async () => {
@@ -886,6 +890,34 @@ describe('setEnabled (HIVE-453)', () => {
     expect(installedJson()[0]?.disabled).toEqual({ agents: ['acr'], skills: [] });
     expect(readHive('skills/s1/SKILL.md')).toBe(skillText('s1', 'new text'));
     expect(readHive('agents/acr/AGENT.md')).toBe(agentText('acr'));
+  });
+
+  it('drops an off name the new version no longer ships, so a later folder of that name is not held off', async () => {
+    const repo = makeRepo([
+      { tag: 'standard/v1.0.0', files: swarmFiles('1.0.0', { agents: ['acr', 'old'], skills: ['s1', 'gone'] }) },
+      { tag: 'standard/v1.1.0', files: swarmFiles('1.1.0', { agents: ['acr'], skills: ['s1'] }), replace: true },
+    ]);
+    const swarms = createSwarms(makeDeps());
+    const at = (version: string) =>
+      entryFor({ repoUrl: repo.bare, version, commit: repo.commitOf(`standard/v${version}`) });
+    expect((await swarms.install(at('1.0.0'))).ok).toBe(true);
+    await swarms.setEnabled('sw1', 'agents', 'acr', false);
+    await swarms.setEnabled('sw1', 'agents', 'old', false);
+    await swarms.setEnabled('sw1', 'skills', 'gone', false);
+
+    expect((await swarms.install(at('1.1.0'))).ok).toBe(true);
+
+    expect(installedJson()[0]?.disabled).toEqual({ agents: ['acr'], skills: [] });
+  });
+
+  it('turns a name back on even when the swarm no longer owns it', async () => {
+    const swarms = await installTwoSkills();
+    const stale = installedJson().map((row) => ({ ...row, disabled: { agents: [], skills: ['tdd', 'zzz'] } }));
+    write(hive('swarms/installed.json'), JSON.stringify(stale));
+
+    expect((await swarms.setEnabled('sw1', 'skills', 'zzz', true))?.disabled.skills).toEqual(['tdd']);
+    // Turning it off still needs the manifest to own it.
+    expect(await swarms.setEnabled('sw1', 'skills', 'zzz', false)).toBeNull();
   });
 
   it('starts a reinstall after Remove with everything on', async () => {

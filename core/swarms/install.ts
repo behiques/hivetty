@@ -21,6 +21,8 @@ import {
   swarmTag,
   type InstalledSwarm,
   type SwarmEntry,
+  type SwarmContents,
+  type SwarmDisabled,
   type SwarmFailure,
   type SwarmInstallResult,
   type SwarmItemKind,
@@ -104,6 +106,17 @@ export const isInstalled = (entry: unknown): entry is InstalledSwarm =>
   isSwarmFolder((entry as InstalledSwarm).folder);
 
 const isEntryOf = (entry: unknown, swarmId: string): boolean => isInstalled(entry) && entry.swarmId === swarmId;
+
+/**
+ * HIVE-453: the off names an update keeps, the ones the new version still ships. A name it dropped would otherwise
+ * hold off, for good, a folder of the same name the person writes later.
+ */
+const keptOff = (off: SwarmDisabled, contents: SwarmContents): SwarmDisabled => {
+  const ships = (list: { name: string }[]) => new Set(list.map((item) => item.name));
+  const agents = ships(contents.agents);
+  const skills = ships(contents.skills);
+  return { agents: off.agents.filter((n) => agents.has(n)), skills: off.skills.filter((n) => skills.has(n)) };
+};
 
 /**
  * Every entry as written, the ones `isInstalled` refuses included, for a write that puts the list back. Absent is
@@ -462,7 +475,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
         description: read.manifest.description,
         contents: read.contents,
         // HIVE-453: an update keeps what the person turned off; a first install starts with everything on.
-        disabled: previous === null ? { agents: [], skills: [] } : disabledOf(previous),
+        disabled: previous === null ? { agents: [], skills: [] } : keptOff(disabledOf(previous), read.contents),
       };
       await writeInstalled(paths.installed, [...raw.filter((held) => !isEntryOf(held, entry.id)), installed]);
       await rm(paths.pending(entry.id), { force: true });
@@ -518,8 +531,9 @@ export function createSwarms(deps: SwarmDeps): Swarms {
       const raw = await readInstalledRaw(paths.installed); // throws when unreadable: nothing is overwritten
       const held = raw.find((row) => isEntryOf(row, swarmId));
       if (!isInstalled(held)) return null;
-      // Only a name this swarm wrote. An adopted Dev Squad's manifest is on disk too, so this holds for it.
-      if (!ownedFolders(await readManifest(paths.seed(swarmId))).has(`${kind}/${name}`)) return null;
+      // Only a name this swarm wrote is turned off. An adopted Dev Squad's manifest is on disk too, so this holds for
+      // it. Turning a name on needs no owner: taking a name off the list is always safe.
+      if (!enabled && !ownedFolders(await readManifest(paths.seed(swarmId))).has(`${kind}/${name}`)) return null;
       const off = disabledOf(held);
       const rest = off[kind].filter((n) => n !== name);
       const next: InstalledSwarm = { ...held, disabled: { ...off, [kind]: enabled ? rest : [...rest, name].sort() } };
