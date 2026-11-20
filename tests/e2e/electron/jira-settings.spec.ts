@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
@@ -145,6 +146,13 @@ test('a typed site reaches the config file and survives a reopen', async ({}, te
 
 test('a ticket workflow reaches the config file, and the reader takes it back on a relaunch', async ({}, testInfo) => {
   const configPath = seed((name) => testInfo.outputPath(name));
+  // `hive:work-on` leads only when it is installed (HIVE-447), and the app ships no skills (HIVE-448): the skill an
+  // installed Dev Squad would have put beside the config.
+  mkdirSync(join(dirname(configPath), 'skills/work-on'), { recursive: true });
+  writeFileSync(
+    join(dirname(configPath), 'skills/work-on/SKILL.md'),
+    '---\nname: work-on\ndescription: Work a ticket.\n---\nWork it.\n',
+  );
   const launch = () => launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath, env: CLEAN });
   let app = await launch();
   let page = await app.firstWindow();

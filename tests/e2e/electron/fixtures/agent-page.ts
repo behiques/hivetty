@@ -19,10 +19,14 @@ export async function openSettingsAgents(page: Page): Promise<void> {
     .click();
 }
 
-/** Open a new agent's page from the Agents panel's + (HIVE-204). */
+/**
+ * Open a new agent's page (HIVE-204): the Agents panel's + once an agent is listed, the empty stage's New agent
+ * before. The panel is hidden while no agent is listed, and a fresh home lists none (HIVE-448), so one exact name
+ * reaches whichever of the two is on screen; Settings' `+ New agent` does not match it.
+ */
 export async function newAgentPage(page: Page): Promise<void> {
   await goToPlace(page, 'Agents');
-  await page.locator('[data-panel="agents"]').getByRole('button', { name: 'New agent', exact: true }).click();
+  await page.getByRole('button', { name: 'New agent', exact: true }).click();
   await expect(page.locator('[data-view="agent"]')).toBeVisible();
   await expect(page.getByText('New agent', { exact: true })).toBeVisible();
 }

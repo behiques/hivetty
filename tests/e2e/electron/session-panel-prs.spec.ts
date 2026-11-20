@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { expect, test, type Page } from '@playwright/test';
 
@@ -56,6 +56,13 @@ test('the PR tab lists every PR the session claimed and a chip picks which one i
     env: { PATH: `${stub}:/usr/bin:/bin` },
     importLoginEnv: false,
   });
+  // The ask goes to the shipper, and the ledger refuses an unknown party. The app ships no agents (HIVE-448): this
+  // is the one an installed Dev Squad would have put beside the config.
+  mkdirSync(join(dirname(configPath), 'agents/shipper'), { recursive: true });
+  writeFileSync(
+    join(dirname(configPath), 'agents/shipper/AGENT.md'),
+    '---\nname: shipper\ndescription: Ships PRs.\nicon: Ghost\nautonomy: ask\n---\nShip it.\n',
+  );
   const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
   try {
     const page = await app.firstWindow();
