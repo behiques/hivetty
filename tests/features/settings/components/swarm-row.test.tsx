@@ -343,10 +343,12 @@ describe('SwarmRow: on, off and missing (HIVE-453)', () => {
       missing,
     });
 
-  it('appends the on-counts to the counts line', () => {
+  it('appends the on-counts to the counts line, which wraps rather than truncating them at a narrow width', () => {
     renderRow(squad());
 
-    expect(screen.getByText(/4 agents · 3 skills · 3 of 4 agents and 2 of 3 skills on/)).toBeInTheDocument();
+    const line = screen.getByText(/4 agents · 3 skills · 3 of 4 agents and 2 of 3 skills on/);
+    expect(line).not.toHaveClass('truncate');
+    expect(line).toHaveClass('break-words');
   });
 
   it('lists what is turned off with Turn on, and what is missing with Restore', () => {

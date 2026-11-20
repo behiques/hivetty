@@ -224,7 +224,8 @@ export function SwarmRow({
               {badgeOf(item)}
             </Tag>
           </div>
-          <span className="truncate text-ui-sm text-subtle">
+          {/* Wraps, not truncates: at a narrow width the on-counts (HIVE-453) are the end that would be cut. */}
+          <span className="min-w-0 break-words text-ui-sm text-subtle">
             {publisher === '' ? counts : `${publisher} · ${counts}`}
           </span>
         </div>
