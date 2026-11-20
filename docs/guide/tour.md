@@ -50,7 +50,7 @@ One panel, for the place you are on. Home has none.
 | --- | --- |
 | **Sessions** | Each project, folded, with its sessions and terminals underneath. **All projects** on top shows the whole fleet on the Overmind; a project's name narrows it to that project. The **+** opens the new-session picker |
 | **Work** | Your Jira tickets, grouped by status |
-| **Agents** | Background agents in three lanes: Summons (asking or failed), Morphing (working), Burrowed (sleeping or paused) |
+| **Agents** | Background agents: Summons (asking or failed, tagged with their swarm) on top, then one folding section per swarm, My swarm last, working agents first |
 | **PRs** | The Hatchery: your open pull requests, with the merged ones folded underneath |
 
 A place with nothing to list draws no panel, and the stage says why and how to add the first one.

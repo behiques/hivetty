@@ -249,11 +249,13 @@ and its merge asks as before.
 
 ![The agent page: Activity with its status tiles, run log and ledger](../assets/guide/10-agent-view.png)
 
-- **The Agents panel**: three lanes, each folding under its name. **Summons** holds what
-  needs you (asking, failed, or a definition that will not parse), asking first.
-  **Morphing** holds what is working. **Burrowed** holds what rests: sleeping, then paused,
-  since nothing wakes a paused agent. The panel's head counts summons and morphing, and the
-  bar's Agents icon counts what is working.
+- **The Agents panel**: **Summons** first, every asking or failed agent from every swarm
+  (or a definition that will not parse), asking first, each tagged with its swarm; then one
+  folding section per swarm in Settings order, your own agents under **My swarm** last,
+  working agents first, then resting ones (sleeping, then paused). A section's header counts
+  its working agents in green and its agents in all, and each section folds under its name.
+  A swarm's **+N** on Home opens the panel at that swarm's section. The panel's head counts
+  summons and morphing, and the bar's Agents icon counts what is working.
 - **A row** is the agent's hexagon (amber when it asks, red when it failed, green while it
   works, a count when more than one run is live), its name with the age of its last word,
   and that last word: what it last put on the ledger (`ask a3 Reply to Marcos?`,
