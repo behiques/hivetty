@@ -503,6 +503,7 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'onInstallRequested',
     'remove',
     'setAutoUpdate',
+    'setEnabled',
     'takeInstallRequest',
   ]);
   // HIVE-367: cliSkills lists the user's own CLI skills by name, read-only.

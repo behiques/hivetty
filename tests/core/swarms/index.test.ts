@@ -17,6 +17,7 @@ const engine = vi.hoisted(() => ({
   installIf: vi.fn(),
   remove: vi.fn(),
   setAutoUpdate: vi.fn(),
+  setEnabled: vi.fn(),
   seedSets: vi.fn(),
   seedSetFor: vi.fn(),
   manifestFiles: vi.fn(),
@@ -552,6 +553,43 @@ describe('swarmCalls().setAutoUpdate', () => {
   it('rejects a payload with no flag, and writes nothing', async () => {
     await expect(swarmCalls().setAutoUpdate({ swarmId: 'a1' })).rejects.toThrow();
     expect(engine.setAutoUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('swarmCalls().setEnabled (HIVE-453)', () => {
+  it('writes the change, answers the entry, and refreshes the plugins, the agents and the list once each', async () => {
+    const held = heldAt('a1', '1.0.0', { disabled: { agents: [], skills: ['tdd'] } });
+    engine.setEnabled.mockResolvedValue(held);
+
+    await expect(swarmCalls().setEnabled({ swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: false })).resolves.toBe(held);
+
+    expect(engine.setEnabled).toHaveBeenCalledWith('a1', 'skills', 'tdd', false);
+    expect(h.afterSkills).toHaveBeenCalledTimes(1);
+    expect(h.afterAgents).toHaveBeenCalledTimes(1);
+    expect(h.changed).toHaveBeenCalledTimes(1);
+    expect(h.changed).toHaveBeenCalledWith({ updated: null });
+  });
+
+  it('answers null and refreshes nothing when the engine wrote nothing', async () => {
+    engine.setEnabled.mockResolvedValue(null);
+
+    await expect(swarmCalls().setEnabled({ swarmId: 'a1', kind: 'agents', name: 'nobody', enabled: false })).resolves.toBeNull();
+
+    expect(h.afterSkills).not.toHaveBeenCalled();
+    expect(h.afterAgents).not.toHaveBeenCalled();
+    expect(h.changed).not.toHaveBeenCalled();
+  });
+
+  it.each<unknown>([
+    { swarmId: 'a1', kind: 'files', name: 'tdd', enabled: false },
+    { swarmId: 'a1', kind: 'skills', name: '../x', enabled: false },
+    { swarmId: 'a1', kind: 'skills', name: 'tdd' },
+  ])('rejects %j, and writes and refreshes nothing', async (payload) => {
+    await expect(swarmCalls().setEnabled(payload)).rejects.toThrow();
+
+    expect(engine.setEnabled).not.toHaveBeenCalled();
+    expect(h.afterSkills).not.toHaveBeenCalled();
+    expect(h.changed).not.toHaveBeenCalled();
   });
 });
 

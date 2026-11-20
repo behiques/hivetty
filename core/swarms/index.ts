@@ -14,6 +14,7 @@ import {
   isBundled,
   parseSwarmAutoUpdateRequest,
   parseSwarmRequest,
+  parseSwarmSetEnabledRequest,
   type InstalledSwarm,
   type SwarmDisabled,
   type SwarmEntry,
@@ -168,6 +169,8 @@ export interface SwarmCalls {
   install(payload: unknown): Promise<SwarmInstallResult>;
   remove(payload: unknown): Promise<SwarmRemoveResult>;
   setAutoUpdate(payload: unknown): Promise<InstalledSwarm | null>;
+  /** HIVE-453: turn one of a swarm's agents or skills off or back on. */
+  setEnabled(payload: unknown): Promise<InstalledSwarm | null>;
   check(): Promise<SwarmListing>;
 }
 
@@ -221,6 +224,15 @@ export function swarmCalls(): SwarmCalls {
       const { swarmId, autoUpdate } = parseSwarmAutoUpdateRequest(payload);
       const result = await swarms().setAutoUpdate(swarmId, autoUpdate); // null when it could not be written
       void updater().check(); // a switch turned on applies what was waiting
+      return result;
+    },
+    setEnabled: async (payload) => {
+      const { swarmId, kind, name, enabled } = parseSwarmSetEnabledRequest(payload); // throws: nothing written
+      const result = await swarms().setEnabled(swarmId, kind, name, enabled); // null when nothing was written
+      if (result !== null) {
+        refresh(); // the plugins leave out an off skill; the agent sets learn an off agent
+        hooks.changed({ updated: null });
+      }
       return result;
     },
     check: async () => {

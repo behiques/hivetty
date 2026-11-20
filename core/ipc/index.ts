@@ -1993,6 +1993,7 @@ export function registerIpcHandlers(
   handle(CH.swarmsInstall, (_event, payload: unknown) => swarmCalls().install(payload));
   handle(CH.swarmsRemove, (_event, payload: unknown) => swarmCalls().remove(payload));
   handle(CH.swarmsSetAutoUpdate, (_event, payload: unknown) => swarmCalls().setAutoUpdate(payload));
+  handle(CH.swarmsSetEnabled, (_event, payload: unknown) => swarmCalls().setEnabled(payload));
   handle(CH.swarmsCheck, () => swarmCalls().check());
   // HIVE-442: the swarm an install link named, once. It opens the consent dialog; it never installs.
   handle(CH.swarmsTakeInstallRequest, () => takeSwarmInstallRequest());

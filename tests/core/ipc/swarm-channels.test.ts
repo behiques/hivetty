@@ -87,6 +87,7 @@ const swarmSpies = vi.hoisted(() => ({
   install: vi.fn((_payload: unknown) => Promise.resolve('INSTALL')),
   remove: vi.fn((_payload: unknown) => Promise.resolve('REMOVE')),
   setAutoUpdate: vi.fn((_payload: unknown) => Promise.resolve('SET_AUTO_UPDATE')),
+  setEnabled: vi.fn((_payload: unknown) => Promise.resolve('SET_ENABLED')),
   check: vi.fn(() => Promise.resolve('CHECK')),
 }));
 const setSwarmHooks = vi.hoisted(() => vi.fn());
@@ -217,6 +218,12 @@ describe('the swarm update channels (HIVE-442)', () => {
   it('swarms:set-auto-update hands its payload to the engine untouched', async () => {
     await expect(invoke(CH.swarmsSetAutoUpdate, { swarmId: 'a1', autoUpdate: false })).resolves.toBe('SET_AUTO_UPDATE');
     expect(swarmSpies.setAutoUpdate).toHaveBeenCalledWith({ swarmId: 'a1', autoUpdate: false });
+  });
+
+  it('swarms:set-enabled hands its payload to the engine untouched (HIVE-453)', async () => {
+    const payload = { ...{ swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: false }, extra: 'passed through: the engine parses' };
+    await expect(invoke(CH.swarmsSetEnabled, payload)).resolves.toBe('SET_ENABLED');
+    expect(swarmSpies.setEnabled).toHaveBeenCalledWith(payload);
   });
 
   it('swarms:check reaches the engine', async () => {

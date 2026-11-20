@@ -216,6 +216,7 @@ import type {
 import type {
   InstalledSwarm,
   SwarmAutoUpdateRequest,
+  SwarmSetEnabledRequest,
   SwarmInstallResult,
   SwarmListing,
   SwarmRemoveResult,
@@ -483,6 +484,8 @@ const bridge: HiveBridge = {
     // HIVE-442.
     setAutoUpdate: (request: SwarmAutoUpdateRequest): Promise<InstalledSwarm | null> =>
       ipcRenderer.invoke(CH.swarmsSetAutoUpdate, request) as Promise<InstalledSwarm | null>,
+    setEnabled: (request: SwarmSetEnabledRequest): Promise<InstalledSwarm | null> =>
+      ipcRenderer.invoke(CH.swarmsSetEnabled, request) as Promise<InstalledSwarm | null>,
     check: (): Promise<SwarmListing> => ipcRenderer.invoke(CH.swarmsCheck) as Promise<SwarmListing>,
     onChanged: (callback: (event: SwarmsChanged) => void) => subscribe<SwarmsChanged>(CH.swarmsChanged, callback),
     takeInstallRequest: (): Promise<string | null> =>

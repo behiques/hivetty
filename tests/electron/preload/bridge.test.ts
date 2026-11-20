@@ -1123,6 +1123,11 @@ describe('the swarm verbs (HIVE-441)', () => {
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.swarmsSetAutoUpdate, { swarmId: 'a1', autoUpdate: false });
   });
 
+  it('swarms.setEnabled invokes swarms:set-enabled with the request (HIVE-453)', async () => {
+    await (swarms().setEnabled as (request: unknown) => Promise<unknown>)({ swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: false });
+    expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.swarmsSetEnabled, { swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: false });
+  });
+
   it('swarms.check invokes swarms:check with no argument (HIVE-442)', async () => {
     await (swarms().check as () => Promise<unknown>)();
     expect(ipcRendererMock.invoke).toHaveBeenCalledWith(CH.swarmsCheck);

@@ -209,6 +209,7 @@ import type {
 import type {
   InstalledSwarm,
   SwarmAutoUpdateRequest,
+  SwarmSetEnabledRequest,
   SwarmInstallResult,
   SwarmListing,
   SwarmRemoveResult,
@@ -973,6 +974,8 @@ export const CH = {
   swarmsRemove: 'swarms:remove',
   /** HIVE-442: turn a swarm's "Update automatically" on or off. Process-local. */
   swarmsSetAutoUpdate: 'swarms:set-auto-update',
+  /** HIVE-453: turn one of a swarm's agents or skills off or back on. */
+  swarmsSetEnabled: 'swarms:set-enabled',
   /** HIVE-442: look for newer versions now, apply the automatic ones, and answer the list. Process-local. */
   swarmsCheck: 'swarms:check',
   /** HIVE-442, push: swarms changed on this machine; read the list again. Local only. */
@@ -2528,6 +2531,8 @@ export interface HiveBridge {
     remove(request: SwarmRequest): Promise<SwarmRemoveResult>;
     /** HIVE-442: null when the swarm is not installed or the list could not be written. */
     setAutoUpdate(request: SwarmAutoUpdateRequest): Promise<InstalledSwarm | null>;
+    /** HIVE-453: null when the name is not that swarm's, or the list could not be written. */
+    setEnabled(request: SwarmSetEnabledRequest): Promise<InstalledSwarm | null>;
     /** Looks for newer versions now and answers the list afterwards. */
     check(): Promise<SwarmListing>;
     onChanged(callback: (event: SwarmsChanged) => void): () => void;
