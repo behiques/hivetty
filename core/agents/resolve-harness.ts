@@ -22,8 +22,16 @@ export interface HarnessGate {
    * The card's model, effort and sandbox for agents on this CLI (HIVE-341, HIVE-342). On Claude,
    * `AGENT.md`'s model and effort win; on another CLI they are not its words, and the card's apply.
    */
-  defaults(id: HarnessId): Pick<CliAgents, 'model' | 'effort' | 'sandbox' | 'deny'>;
+  defaults(id: HarnessId): AgentDefaults;
 }
+
+/**
+ * The card's values for one wake. `writableRoots` is the card's `projectGit` resolved: the `.git`
+ * folder of each configured project, so the launch names folders and never reads the config.
+ */
+export type AgentDefaults = Pick<CliAgents, 'model' | 'effort' | 'sandbox' | 'deny' | 'network'> & {
+  writableRoots?: string[];
+};
 
 export interface ResolveDeps {
   adapter(id: HarnessId): HarnessAdapter | undefined;

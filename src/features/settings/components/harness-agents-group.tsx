@@ -7,6 +7,7 @@ import { SelectField } from '@/components/ui/select-field';
 import { Switch } from '@/components/ui/switch';
 import { TextField } from '@/components/ui/text-field';
 
+import { ConfirmSwitch } from '@features/settings/components/confirm-switch';
 import { SettingsGroup } from '@features/shared/components/settings-group';
 import { useCodexModels } from '@hooks/use-codex-models';
 import { clearCliToken, cliTokensState, setCliToken } from '@lib/cli-tokens';
@@ -34,6 +35,48 @@ const options = (values: readonly string[], saved?: string) => [
     label: value,
   })),
 ];
+
+/**
+ * What a Codex agent may do beyond its own workdir, each off until the person turns it on. Codex
+ * reads both under `workspace-write` only, so `read-only` leaves them inert and says why.
+ */
+function SandboxGrants({ agents }: { agents: CliAgents }) {
+  const readOnly = agents.sandbox === 'read-only';
+  const inert = !agents.enabled || readOnly;
+
+  return (
+    // A native fieldset disables both switches at once, as it does the selects above.
+    <fieldset disabled={inert} className="flex flex-col gap-1 disabled:opacity-50">
+      <Switch
+        label="Network access"
+        checked={agents.network === true}
+        onCheckedChange={(network) => void setCliAgentsConfig({ cli: 'codex', network })}
+        description={
+          readOnly
+            ? 'The read-only sandbox has no network.'
+            : 'Agent commands can reach the network: gh, git push, an install. Off, none can, and an agent cannot read a pull request.'
+        }
+      />
+      <ConfirmSwitch
+        label="Project git access"
+        checked={agents.projectGit === true}
+        disabled={inert}
+        onChange={(projectGit) => void setCliAgentsConfig({ cli: 'codex', projectGit })}
+        description={
+          readOnly
+            ? 'The read-only sandbox has no writable folder.'
+            : "Agents can write the .git folder of each project in Settings › Projects, so they can add a worktree under their own workdir, commit and fetch. Never your checkout's files."
+        }
+        confirm={{
+          label: 'Allow project git access?',
+          title: "Let Codex agents write every project's .git folder?",
+          confirmLabel: 'Allow',
+          body: "Agents can add a worktree, commit and fetch in each project in Settings › Projects, and still cannot write your checkout's files. The .git folder also holds git hooks and git config: an agent that is misled could plant a command there, and it would run outside the sandbox the next time git runs in that project.",
+        }}
+      />
+    </fieldset>
+  );
+}
 
 /**
  * A CLI's headless agent defaults (HIVE-341), on its harness page since HIVE-376. Copilot's deny patterns render
@@ -122,6 +165,7 @@ export function HarnessAgentsGroup({ cli, agents }: { cli: HarnessId; agents: Cl
           The sandbox defaults to workspace-write: an agent writes only inside its own workdir.
         </p>
       )}
+      {cli === 'codex' && <SandboxGrants agents={agents} />}
       {cli === 'copilot' && <DenyPatterns deny={agents.deny ?? NO_PATTERNS} />}
     </SettingsGroup>
   );

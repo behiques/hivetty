@@ -19,8 +19,9 @@ switches, so a Mac can sit out one group while the others keep syncing it.
 | **Appearance & preferences** | Theme, your theme library, density, the terminal and editor fonts and sizes, word wrap, line numbers, tab width, notification preferences and your Jira query |
 
 These never leave the Mac: your projects, environment variables, tokens and other credentials, server and
-remote settings, Slack, the Jira site and email, panel widths and split sizes, and each CLI's setting for
-skipping permission prompts. A Mac starts skipping prompts only when you turn that on there.
+remote settings, Slack, the Jira site and email, panel widths and split sizes, each CLI's setting for
+skipping permission prompts, and Codex agents' network access and project git access. A Mac starts
+skipping prompts, or widens the Codex sandbox, only when you turn that on there.
 
 ## Turn it on
 

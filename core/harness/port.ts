@@ -480,6 +480,10 @@ export interface HeadlessSpec {
   /** The system prompt's text, for a CLI that takes it inline. `files.systemPrompt` is the same text on disk. */
   instructions: string;
   sandbox?: HeadlessSandbox;
+  /** Codex only: the card's network grant. Read under `workspace-write` alone. */
+  network?: boolean;
+  /** Codex only: folders the run may write beside its workdir, the card's project git grant resolved. */
+  writableRoots?: readonly string[];
   /** The hive MCP server, for a CLI that takes it inline (`mcp.hiveServerSpec()`). */
   hiveServer: McpServerSpec;
   /** The CLI's app-owned home (`~/.hivetty/cli/<id>`, HIVE-343). Claude and Codex ignore it. */

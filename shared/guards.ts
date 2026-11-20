@@ -1837,6 +1837,8 @@ export function parseSetCliAgentsRequest(input: unknown): SetCliAgentsRequest {
     'model',
     'effort',
     'sandbox',
+    'network',
+    'projectGit',
     'deny',
   ]);
   const cli = assertOneOf(raw.cli, HARNESS_IDS, 'setCliAgents.cli');
@@ -1866,6 +1868,16 @@ export function parseSetCliAgentsRequest(input: unknown): SetCliAgentsRequest {
                 : fail('setCliAgents.sandbox: only codex takes a sandbox'),
         }
       : {}),
+    // The sandbox's two grants: Codex's alone, and a boolean, so nothing else can ride in on them.
+    ...(['network', 'projectGit'] as const).reduce<Pick<SetCliAgentsRequest, 'network' | 'projectGit'>>(
+      (grants, key) =>
+        raw[key] === undefined
+          ? grants
+          : cli !== 'codex'
+            ? fail(`setCliAgents.${key}: only codex takes it`)
+            : { ...grants, [key]: assertBoolean(raw[key], `setCliAgents.${key}`) },
+      {},
+    ),
     ...(raw.deny !== undefined
       ? {
           deny:

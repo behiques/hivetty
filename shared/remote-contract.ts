@@ -112,8 +112,9 @@ import { isThisMachineAction } from './notification-contract';
  *   (event, local only).
  * 50 → 51 (HIVE-442): `swarms:take-install-request` (call, process-local) and `swarms:install-requested`
  *   (event, local only).
+ * 51 → 52 (Codex agents' sandbox grants): `CliAgents` and `SetCliAgentsRequest` gained `network` and `projectGit`.
  */
-export const REMOTE_PROTOCOL_VERSION = 51;
+export const REMOTE_PROTOCOL_VERSION = 52;
 
 /**
  * What a frame is for.

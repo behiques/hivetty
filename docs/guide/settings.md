@@ -105,6 +105,28 @@ their row says why.
 "clis": { "claude-code": { "agents": { "enabled": true, "model": "haiku" } } }
 ```
 
+Codex agents run inside Codex's sandbox: **workspace-write** by default, where an agent writes only
+inside its own workdir, or **read-only**. Full access is never offered. Under workspace-write two
+switches widen it, both off by default:
+
+- **Network access** lets an agent's commands reach the network: `gh`, `git push`, an install.
+  Without it no command can, so a Codex agent cannot read a pull request or post a review.
+- **Project git access** lets agents write the `.git` folder of each project in Settings › Projects,
+  so a builder or a fixer can add a worktree under its own workdir, commit and fetch. They still
+  cannot write the files of your checkout. The `.git` folder also holds git hooks and git config, so
+  an agent that is misled could plant a command there, and it would run outside the sandbox the next
+  time git runs in that project. Turning it on asks you to confirm first.
+
+Under read-only both do nothing: Codex has no network and no writable folder there. Each Mac turns
+these on for itself; they are not synced. Whether a repository's own tools run inside the sandbox is
+a separate matter: a package store or a build cache outside the agent's workdir stays unwritable.
+
+**Example.** Let Codex agents reach GitHub and commit to your projects:
+
+```json
+"clis": { "codex": { "agents": { "network": true, "projectGit": true } } }
+```
+
 ### Codex's own skill list
 
 HiveTTY's skills already reach every Codex session HiveTTY starts. Settings › Harnesses › Codex has

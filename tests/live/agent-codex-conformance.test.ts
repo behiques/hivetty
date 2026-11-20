@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { agentPromptFile, agentStateFile, agentsRoot, cliHome, laneWorkdir } from '../../core/agents/paths';
 import { createPermissions, type Permissions } from '../../core/agents/permissions';
+import { createCliGate } from '../../core/agents/cli-gate';
 import { createAgentRegistry, type AgentRegistry } from '../../core/agents/registry';
 import type { HarnessGate } from '../../core/agents/resolve-harness';
 import { createRunTracker, type ChildLike, type RunTracker } from '../../core/agents/runs';
@@ -29,7 +30,7 @@ import { createSkillsRuntime } from '../../core/skills';
 import { hiveServerSpec } from '../../core/mcp/config';
 import { resolveClis } from '../../shared/cli-contract';
 import type { AgentRunState, RunLine } from '../../shared/agent-contract';
-import { CONFIG_PATH_ENV } from '../../shared/config-contract';
+import { CONFIG_PATH_ENV, type ProjectConfig } from '../../shared/config-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
   HOOK_ENV_SESSION,
@@ -69,7 +70,8 @@ const SHELL = 'probe-codex-shell';
 const PATCH = 'probe-codex-patch';
 const MCP = 'probe-codex-mcp';
 const SKILL = 'probe-codex-skill';
-const AGENTS = [CX, SHELL, PATCH, MCP, SKILL];
+const GRANT = 'probe-codex-grant';
+const AGENTS = [CX, SHELL, PATCH, MCP, SKILL, GRANT];
 
 const CX_MD = `---
 name: ${CX}
@@ -86,6 +88,22 @@ limits:
 ---
 This is a conformance probe. Do not read files or explore. Do exactly what your wake prompt
 asks, in as few steps as you can, then end your turn.
+`;
+
+/** Its shell is granted, so the fence never asks: what stops a command here is Codex's sandbox alone. */
+const GRANT_MD = `---
+name: ${GRANT}
+description: Proves the card's two sandbox grants reach a real run.
+icon: Ghost
+harness: [codex]
+wake:
+  on: [ledger]
+tools: [Bash]
+limits:
+  turns: 8
+---
+This is a conformance probe. Do not read files or explore. Run exactly the one shell command your
+wake prompt gives, once, whatever it prints or however it exits, then end your turn. Never retry it.
 `;
 
 const fenceMd = (name: string, call: string) => `---
@@ -130,6 +148,15 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
   const settlers = new Map<string, () => void>();
   /** Swapped by case 7; every other case runs with Codex entitled. */
   let entitled: HarnessGate['entitled'] = () => null;
+  /** The Codex card's two sandbox grants, as the config would hold them. Set by the grant cases. */
+  let card: { network?: boolean; projectGit?: boolean } = {};
+  /**
+   * A scratch project for the git grant. Under the repository's ignored `test-results/`, never the
+   * temp folder: Codex's workspace-write already writes `$TMPDIR` and `/tmp`, which would prove nothing.
+   */
+  let project: string;
+  let netScript: string;
+  let gitScript: string;
 
   beforeAll(async () => {
     const version = spawnSync('codex', ['--version'], { encoding: 'utf8' });
@@ -171,6 +198,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
       [MCP, fenceMd(MCP, 'The hive MCP tool jira_comment, with key "HIVE-1" and markdown "probe".')],
       // HIVE-360: no tools granted, so the fence asks about the read, and the ask names the file.
       [SKILL, fenceMd(SKILL, 'Before you reply, use $hive-verify: read its SKILL.md and nothing else, then reply DONE.')],
+      [GRANT, GRANT_MD],
     ] as const) {
       await mkdir(join(agentsRoot(), name), { recursive: true });
       await writeFile(join(agentsRoot(), name, 'AGENT.md'), body, 'utf8');
@@ -238,8 +266,53 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
       entitled: (id) => entitled(id),
       enabled: () => true,
       defaultCli: () => 'codex',
-      defaults: (id) => (id === 'codex' ? { effort: 'low' } : {}),
+      // The grants through the production gate, so a case flips the card and nothing else.
+      defaults: (id) =>
+        id === 'codex'
+          ? {
+              effort: 'low',
+              ...createCliGate(() => ({
+                clis: resolveClis({ codex: { agents: card } }),
+                projects: [{ path: project } as ProjectConfig],
+              })).defaults('codex'),
+            }
+          : {},
     };
+
+    project = join(process.cwd(), 'test-results', `live-codex-project-${randomUUID().slice(0, 8)}`);
+    await mkdir(project, { recursive: true });
+    for (const args of [
+      ['init', '-q', '-b', 'main'],
+      ['-c', 'user.email=probe@example.invalid', '-c', 'user.name=probe', 'commit', '-q', '--allow-empty', '-m', 'init'],
+    ]) {
+      expect(spawnSync('git', ['-C', project, ...args], { encoding: 'utf8' }).status).toBe(0);
+    }
+    // One command each, so the model has nothing to decide. The result goes to a file in the temp
+    // folder, which the sandbox always lets a run write: what is under test is the network and `.git`.
+    netScript = join(dir, 'net-probe.sh');
+    await writeFile(
+      netScript,
+      `code=$(curl -sS -m 20 -o /dev/null -w '%{http_code}' https://api.github.com/zen 2>/dev/null)\nprintf '%s' "$code" > "$1"\nexit 0\n`,
+      'utf8',
+    );
+    gitScript = join(dir, 'git-probe.sh');
+    await writeFile(
+      gitScript,
+      [
+        'PROJECT="$1"; OUT="$2"; BRANCH="$3"; WT="$4/$3"',
+        'G="git -c user.email=agent@example.invalid -c user.name=agent"',
+        'if $G -C "$PROJECT" worktree add -q "$WT" -b "$BRANCH" 2>/dev/null && echo x > "$WT/f" && $G -C "$WT" add f && $G -C "$WT" commit -q -m probe 2>/dev/null; then',
+        '  printf committed > "$OUT"',
+        'else',
+        '  printf refused > "$OUT"',
+        'fi',
+        // The checkout's own files, which no grant opens.
+        'echo x > "$PROJECT/USER-FILE.txt" 2>/dev/null',
+        'exit 0',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
 
     /*
       HIVE-360: the real skills runtime, rendered as production renders it, so a Codex wake carries
@@ -363,6 +436,7 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
     if (previousConfigPath === undefined) delete process.env[CONFIG_PATH_ENV];
     else process.env[CONFIG_PATH_ENV] = previousConfigPath;
     if (dir !== undefined) await rm(dir, { recursive: true, force: true });
+    if (project !== undefined) await rm(project, { recursive: true, force: true });
   }, TEARDOWN_WAIT_MS + 30_000);
 
   const settled = (name: string): Promise<void> =>
@@ -659,4 +733,65 @@ describe.skipIf(!LIVE)('real headless wakes, against a real codex', () => {
       await planReceiver.stop();
     }
   }, TURN_MS + 10_000);
+
+  /**
+   * The card's two sandbox grants, against the real sandbox. Measured first with `codex sandbox`
+   * at 0.167.0: `network_access` and `writable_roots` are read under workspace-write alone.
+   */
+  describe("the card's two sandbox grants", () => {
+    const argv = () => spawns.filter((spawn) => spawn.name === GRANT).at(-1)?.args ?? [];
+    const result = async (file: string): Promise<string> => (existsSync(file) ? await readFile(file, 'utf8') : '(no file)');
+    const run = (script: string, ...args: string[]) =>
+      wake(GRANT, `Run exactly this one shell command, once, then end your turn: sh ${[script, ...args].join(' ')}`);
+    const git = (...args: string[]) => spawnSync('git', ['-C', project, ...args], { encoding: 'utf8' }).stdout.trim();
+
+    it('no command reaches the network while network access is off', async (ctx) => {
+      if (skipReason !== undefined) ctx.skip(skipReason);
+      card = {};
+      const out = join(dir as string, 'net-off.txt');
+
+      await run(netScript, out);
+
+      expect(argv().some((arg) => arg.startsWith('sandbox_workspace_write.'))).toBe(false);
+      // curl's own "no response": the host never resolved.
+      expect(await result(out)).toBe('000');
+    }, TURN_MS);
+
+    it('a command reaches the network once network access is on', async (ctx) => {
+      if (skipReason !== undefined) ctx.skip(skipReason);
+      card = { network: true };
+      const out = join(dir as string, 'net-on.txt');
+
+      await run(netScript, out);
+
+      expect(argv()).toContain('sandbox_workspace_write.network_access=true');
+      expect(await result(out)).toBe('200');
+    }, TURN_MS);
+
+    it('a worktree and a commit in a project are refused while project git access is off', async (ctx) => {
+      if (skipReason !== undefined) ctx.skip(skipReason);
+      card = {};
+      const out = join(dir as string, 'git-off.txt');
+
+      await run(gitScript, project, out, 'probe-off', join(dir as string, 'worktrees'));
+
+      expect(await result(out)).toBe('refused');
+      expect(git('branch', '--list', 'probe-off')).toBe('');
+      expect(existsSync(join(project, 'USER-FILE.txt'))).toBe(false);
+    }, TURN_MS);
+
+    it('a run adds a worktree and commits once project git access is on, and still cannot write the checkout', async (ctx) => {
+      if (skipReason !== undefined) ctx.skip(skipReason);
+      card = { projectGit: true };
+      const out = join(dir as string, 'git-on.txt');
+
+      await run(gitScript, project, out, 'probe-on', join(dir as string, 'worktrees'));
+
+      expect(argv()).toContain(`sandbox_workspace_write.writable_roots=[${toml(join(project, '.git'))}]`);
+      expect(await result(out)).toBe('committed');
+      expect(git('log', '-1', '--format=%s', 'probe-on')).toBe('probe');
+      // Git data only: the checkout's own files stay out of reach.
+      expect(existsSync(join(project, 'USER-FILE.txt'))).toBe(false);
+    }, TURN_MS);
+  });
 });
