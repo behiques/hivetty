@@ -8,6 +8,10 @@ import type { LedgerEntry } from '@shared/ledger-contract';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 
+import { resetSwarmsState } from '@/lib/swarms';
+
+import { installedSwarm, swarmItem, swarmListing } from '../../../support/swarms';
+
 const NOW = 1_790_000_000_000;
 
 /**
@@ -346,5 +350,54 @@ describe('AgentRow — the slot', () => {
 
     expect(run).toHaveBeenCalledWith({ name: 'acr' });
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});
+
+describe('AgentRow while a swarm agent is off (HIVE-453)', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    useUiStore.getState().reset();
+    resetSwarmsState();
+  });
+  afterEach(() => {
+    resetSwarmsState();
+    delete (window as unknown as { hive?: unknown }).hive;
+  });
+
+  const squad = swarmListing([
+    swarmItem({
+      installed: installedSwarm({
+        swarmId: 'sq1',
+        title: 'Dev Squad',
+        contents: {
+          agents: ['acr', 'builder'].map((name) => ({ name, description: '', tools: [] })),
+          skills: [],
+        },
+        disabled: { agents: ['acr'], skills: [] },
+      }),
+    }),
+  ]);
+
+  it('greys out Pause and reads off for an off agent, and leaves an enabled one alone', async () => {
+    (window as unknown as { hive?: unknown }).hive = {
+      swarms: { list: vi.fn(() => Promise.resolve(squad)), onChanged: vi.fn(() => () => undefined) },
+    };
+    useHiveStore.getState().hydrateAgents([summary({ name: 'acr' }), summary({ name: 'builder' })]);
+
+    render(
+      <>
+        <AgentRow id="acr" />
+        <AgentRow id="builder" />
+      </>,
+    );
+
+    const pause = await screen.findByRole('button', { name: 'Pause acr' });
+    await vi.waitFor(() => expect(pause).toBeDisabled());
+    expect(pause).toHaveAttribute('aria-description', 'Turned off in Settings › Agents');
+    expect(screen.getByRole('button', { name: /^acr, off/ })).toBeInTheDocument();
+    expect(screen.getByText('off', { selector: 'i' })).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: 'Pause builder' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^builder, / })).not.toHaveAccessibleName(/^builder, off/);
   });
 });

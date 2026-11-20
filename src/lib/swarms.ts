@@ -95,7 +95,8 @@ function setFailure(swarmId: string, failure: SwarmFailure | null): void {
 export async function loadSwarms(): Promise<void> {
   const bridge = window.hive;
 
-  if (!bridge) return;
+  // A bridge with no `swarms` is a partial one (a test's, an older preload): nothing to read, and nothing to throw.
+  if (!bridge?.swarms) return;
 
   if (unsubscribeChanged === null) {
     unsubscribeChanged = bridge.swarms.onChanged((event) => {

@@ -82,6 +82,13 @@ describe('without a bridge (the browser target)', () => {
 });
 
 describe('loadSwarms', () => {
+  it('resolves quietly against a bridge with no swarms namespace (HIVE-453)', async () => {
+    (window as unknown as { hive?: unknown }).hive = { agents: {} };
+
+    await expect(loadSwarms()).resolves.toBeUndefined();
+    expect(swarmsSnapshot().listing).toBeNull();
+  });
+
   it('stores the listing and tells every subscriber once', async () => {
     bridge();
     const listener = vi.fn();
