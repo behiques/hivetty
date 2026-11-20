@@ -17,6 +17,12 @@ export const COMB_H = 520;
 export const SWARM = 'swarm';
 /** The project of the "+N projects" rest cell: every project. */
 export const ALL_PROJECTS = '*';
+/** HIVE-454: the narrowest stage the comb lays out for; a narrower one scales this down. */
+export const MIN_W = 640;
+
+/** HIVE-454: the logical width the comb lays out for a measured stage: 640–1376, an unknown (0) stage 1376. */
+export const layoutWidth = (stage: number): number =>
+  stage > 0 ? Math.min(Math.max(stage, MIN_W), COMB_W) : COMB_W;
 
 export type CellState = 'morphing' | 'summons' | 'failed' | 'burrowed' | 'terminal';
 
@@ -26,7 +32,7 @@ export const URGENCY: readonly CellState[] = ['summons', 'failed', 'morphing', '
 export interface CombInput {
   id: string;
   name: string;
-  /** A project id, or {@link SWARM} for an agent. */
+  /** A project id, or an agent group's id (by default {@link SWARM}) for an agent. */
   project: string;
   state: CellState;
   /** Plan progress, 0–1; absent draws half full. */
@@ -47,6 +53,8 @@ export interface CombCell {
   progress?: number;
   /** A rest cell's N. */
   more?: number;
+  /** HIVE-454: the cell belongs to an agent group's patch, a rest cell included. */
+  agent: boolean;
   x: number;
   y: number;
   phase: number;
@@ -65,7 +73,17 @@ export interface CombLayout {
   cells: CombCell[];
   patches: CombPatch[];
   grid: { x: number; y: number }[];
+  /** HIVE-454: the logical width this layout was made for. */
+  width: number;
 }
+
+/** HIVE-454: what a layout is made for: the stage's logical width and the agent groups, in order. */
+interface LayoutContext {
+  width: number;
+  groups: CombProject[];
+}
+
+const DEFAULT_GROUPS: CombProject[] = [{ id: SWARM, name: 'The swarm' }];
 
 type Slot = [col: number, row: number];
 
@@ -87,19 +105,20 @@ function placer(R: number): (slot: Slot) => { x: number; y: number } {
   return ([c, r]) => ({ x: c * w + (r & 1 ? w / 2 : 0), y: r * 1.5 * R + 14 });
 }
 
-function gridFor(R: number): { x: number; y: number }[] {
+function gridFor(R: number, width: number): { x: number; y: number }[] {
   const at = placer(R);
   const w = Math.sqrt(3) * R;
   const cells: { x: number; y: number }[] = [];
   for (let r = -1; r < COMB_H / (1.5 * R) + 1; r++) {
-    for (let c = -1; c < COMB_W / w + 1; c++) cells.push(at([c, r]));
+    for (let c = -1; c < width / w + 1; c++) cells.push(at([c, r]));
   }
   return cells;
 }
 
 /** The project ids with something live, in config order, unknown ids last in first-seen order. */
-function liveProjects(entities: CombInput[], projects: CombProject[]): CombProject[] {
-  const live = new Set(entities.filter((e) => e.project !== SWARM).map((e) => e.project));
+function liveProjects(entities: CombInput[], projects: CombProject[], groups: CombProject[]): CombProject[] {
+  const agentIds = new Set(groups.map((g) => g.id));
+  const live = new Set(entities.filter((e) => !agentIds.has(e.project)).map((e) => e.project));
   const known = projects.filter((p) => live.has(p.id));
   const unknown = [...live].filter((id) => !projects.some((p) => p.id === id)).map((id) => ({ id, name: id }));
   return [...known, ...unknown];
@@ -111,25 +130,26 @@ interface Patch {
   list: CombInput[];
   slots: Slot[];
   cap: number;
+  agent: boolean;
 }
 
 function place(R: number, patches: Patch[]): Pick<CombLayout, 'cells' | 'patches'> {
   const at = placer(R);
   const cells: CombCell[] = [];
   const labels: CombPatch[] = [];
-  for (const { project, label, list, slots, cap } of patches) {
+  for (const { project, label, list, slots, cap, agent } of patches) {
     const over = list.length > cap;
     const shown = over
       ? [...list].sort((a, b) => rank(a.state) - rank(b.state)).slice(0, cap - 1)
       : list;
     const mine: CombCell[] = shown.map((e, i) => ({
-      id: e.id, kind: 'entity', name: e.name, project, state: e.state, progress: e.progress,
+      id: e.id, kind: 'entity', name: e.name, project, state: e.state, progress: e.progress, agent,
       ...at(slots[i]!), phase: phaseOf(e.id),
     }));
     if (over) {
       const more = list.length - cap + 1;
       mine.push({
-        id: `rest:${project}`, kind: 'rest', name: `+${more}`, project, state: 'rest', more,
+        id: `rest:${project}`, kind: 'rest', name: `+${more}`, project, state: 'rest', more, agent,
         ...at(slots[cap - 1]!), phase: 0,
       });
     }
@@ -145,32 +165,48 @@ function place(R: number, patches: Patch[]): Pick<CombLayout, 'cells' | 'patches
 
 const NORMAL_CAP = 7;
 
+/** Every agent across the groups, as one list in input order, and the patch they draw as (until Task 3 splits them). */
+function agentsOf(entities: CombInput[], groups: CombProject[]): { list: CombInput[]; project: string; label: string } {
+  const ids = new Set(groups.map((g) => g.id));
+  const first = groups[0];
+  return {
+    list: entities.filter((e) => ids.has(e.project)),
+    project: first?.id ?? SWARM,
+    label: (first?.name ?? 'The swarm').toUpperCase(),
+  };
+}
+
 /** The normal layout, or null when it does not fit (then the scale layout takes over). */
-function normal(entities: CombInput[], projects: CombProject[]): CombLayout | null {
+function normal(entities: CombInput[], projects: CombProject[], { width, groups }: LayoutContext): CombLayout | null {
   const R = 36;
-  const agents = entities.filter((e) => e.project === SWARM);
+  const { list: agents, project, label } = agentsOf(entities, groups);
   if (agents.length > NORMAL_CAP) return null;
 
   const patches: Patch[] = [];
   if (agents.length > 0) {
-    const c0 = Math.round(COMB_W / (Math.sqrt(3) * R) / 2 - (agents.length - 1));
-    patches.push({ project: SWARM, label: 'THE SWARM', list: agents, slots: agents.map((_, i) => [c0 + 2 * i, 3]), cap: NORMAL_CAP });
+    const c0 = Math.round(width / (Math.sqrt(3) * R) / 2 - (agents.length - 1));
+    patches.push({ project, label, list: agents, slots: agents.map((_, i) => [c0 + 2 * i, 3]), cap: NORMAL_CAP, agent: true });
   }
   let col = 2;
-  for (const p of liveProjects(entities, projects)) {
+  for (const p of liveProjects(entities, projects, groups)) {
     const list = entities.filter((e) => e.project === p.id);
     const n = Math.min(list.length, NORMAL_CAP);
-    patches.push({ project: p.id, label: p.name.toUpperCase(), list, slots: Array.from({ length: n }, (_, i) => [col + 2 * i, 7]), cap: NORMAL_CAP });
+    patches.push({ project: p.id, label: p.name.toUpperCase(), list, slots: Array.from({ length: n }, (_, i) => [col + 2 * i, 7]), cap: NORMAL_CAP, agent: false });
     col += 2 * (n - 1) + 3;
   }
 
   const placed = place(R, patches);
-  if (placed.cells.some((c) => c.x + R > COMB_W)) return null;
-  return { mode: 'normal', R, ...placed, grid: gridFor(R) };
+  if (placed.cells.some((c) => c.x + R > width)) return null;
+  return { mode: 'normal', R, ...placed, grid: gridFor(R, width), width };
 }
 
-export function layoutComb(entities: CombInput[], projects: CombProject[]): CombLayout {
-  return normal(entities, projects) ?? scale(entities, projects);
+export function layoutComb(
+  entities: CombInput[],
+  projects: CombProject[],
+  opts: { width?: number; groups?: CombProject[] } = {},
+): CombLayout {
+  const context: LayoutContext = { width: opts.width ?? COMB_W, groups: opts.groups ?? DEFAULT_GROUPS };
+  return normal(entities, projects, context) ?? scale(entities, projects, context);
 }
 
 const SCALE_SWARM_CAP = 14;
@@ -187,19 +223,19 @@ const urgencyOf = (entities: CombInput[], project: string): number =>
  * rule the rail combs already follow. Agents keep their names under the cell;
  * a session's name shows only as a tag (drawn later).
  */
-function scale(entities: CombInput[], projects: CombProject[]): CombLayout {
+function scale(entities: CombInput[], projects: CombProject[], { width, groups }: LayoutContext): CombLayout {
   const R = 21;
-  const agents = entities.filter((e) => e.project === SWARM);
+  const { list: agents, project, label } = agentsOf(entities, groups);
   const patches: Patch[] = [];
   if (agents.length > 0) {
     const slots: Slot[] = [
       ...Array.from({ length: 7 }, (_, i): Slot => [12 + 2 * i, 4]),
       ...Array.from({ length: 7 }, (_, i): Slot => [13 + 2 * i, 6]),
     ];
-    patches.push({ project: SWARM, label: 'THE SWARM', list: agents, slots, cap: SCALE_SWARM_CAP });
+    patches.push({ project, label, list: agents, slots, cap: SCALE_SWARM_CAP, agent: true });
   }
 
-  let live = liveProjects(entities, projects);
+  let live = liveProjects(entities, projects, groups);
   const folded = live.length > SCALE_PATCHES;
   if (folded) {
     // Decision D10: the most urgent projects keep their patches.
@@ -215,7 +251,7 @@ function scale(entities: CombInput[], projects: CombProject[]): CombLayout {
     patches.push({
       project: p.id, label: truncate(p.name, 18).toUpperCase(),
       list: entities.filter((e) => e.project === p.id),
-      slots: [[c0, r0], [c0 + 1, r0], [c0, r0 + 1], [c0 + 1, r0 + 1]], cap: SCALE_PATCH_CAP,
+      slots: [[c0, r0], [c0 + 1, r0], [c0, r0 + 1], [c0 + 1, r0 + 1]], cap: SCALE_PATCH_CAP, agent: false,
     });
   });
 
@@ -223,9 +259,9 @@ function scale(entities: CombInput[], projects: CombProject[]): CombLayout {
   if (folded) {
     const more = live.length - shown.length;
     const { x, y } = placer(R)(origin(SCALE_PATCHES - 1));
-    placed.cells.push({ id: `rest:${ALL_PROJECTS}`, kind: 'rest', name: `+${more}`, project: ALL_PROJECTS, state: 'rest', more, x, y, phase: 0 });
+    placed.cells.push({ id: `rest:${ALL_PROJECTS}`, kind: 'rest', name: `+${more}`, project: ALL_PROJECTS, state: 'rest', more, agent: false, x, y, phase: 0 });
   }
-  return { mode: 'scale', R, ...placed, grid: gridFor(R) };
+  return { mode: 'scale', R, ...placed, grid: gridFor(R, width), width };
 }
 
 export type Rng = () => number;
@@ -249,7 +285,7 @@ export interface Flyer {
   a: number;
   /** Wing-beat phase. */
   k: number;
-  /** 1: bound for the swarm; 0: bound for a project. */
+  /** 1: bound for an agent cell; 0: bound for a project. */
   leg: 0 | 1;
   /** A cell id on a handoff, a point while wandering, null before the first pick. */
   target: string | { x: number; y: number } | null;
@@ -259,17 +295,17 @@ export interface Flyer {
   spine: Spine;
 }
 
-export const newFlyer = (index: number, rng: Rng): Flyer => {
-  const x = rng() * COMB_W;
+export const newFlyer = (index: number, rng: Rng, width = COMB_W): Flyer => {
+  const x = rng() * width;
   const y = 60 + rng() * (COMB_H - 120);
   const a = rng() * 6;
   return { x, y, a, k: index * 1.7, leg: (index % 2) as 0 | 1, target: null, turn: 0, spine: createSpine(x, y, a) };
 };
 
-export function syncFlyers(flyers: Flyer[], count: number, rng: Rng): Flyer[] {
+export function syncFlyers(flyers: Flyer[], count: number, rng: Rng, width = COMB_W): Flyer[] {
   if (flyers.length === count) return flyers;
   if (flyers.length > count) return flyers.slice(0, count);
-  return [...flyers, ...Array.from({ length: count - flyers.length }, (_, i) => newFlyer(flyers.length + i, rng))];
+  return [...flyers, ...Array.from({ length: count - flyers.length }, (_, i) => newFlyer(flyers.length + i, rng, width))];
 }
 
 const targetsOf = (layout: CombLayout): CombCell[] =>
@@ -307,11 +343,11 @@ export function stepFlyers(flyers: Flyer[], layout: CombLayout, rawDt: number, r
 
     if (aim === undefined || Math.hypot(aim.x - f.x, aim.y - ABOVE - f.y) < ARRIVED) {
       if (targets.length === 0) {
-        aim = { x: rng() * COMB_W, y: 60 + rng() * (COMB_H - 120) };
+        aim = { x: rng() * layout.width, y: 60 + rng() * (COMB_H - 120) };
         target = aim;
       } else {
         leg = leg ? 0 : 1;
-        const pool = targets.filter((c) => (leg ? c.project === SWARM : c.project !== SWARM));
+        const pool = targets.filter((c) => (leg ? c.agent : !c.agent));
         const pick = pool.length > 0 ? pool[Math.floor(rng() * pool.length)]! : targets[0]!;
         aim = pick;
         target = pick.id;
@@ -340,7 +376,7 @@ const STILL_WARM = 2;
 export function stillFlyers(layout: CombLayout, needs: number): Flyer[] {
   const rng = seededRng(7);
   const calm = isCalm(layout, needs);
-  let flyers = syncFlyers([], flyerCount(layout, needs), rng);
+  let flyers = syncFlyers([], flyerCount(layout, needs), rng, layout.width);
   for (let i = 0; i < 240; i++) flyers = stepFlyers(flyers, layout, 1 / 60, rng, calm);
   const speed = flightSpeed(calm);
   return flyers.map((f) => {
@@ -400,7 +436,7 @@ function drawCreep(ctx: CanvasRenderingContext2D, layout: CombLayout, t: number,
 
 /** The faint comb behind everything: a sweep line brightens it, flyers leave a creep trace. */
 function drawGrid(ctx: CanvasRenderingContext2D, layout: CombLayout, flyers: Flyer[], t: number, p: SwarmPalette): void {
-  const sweep = (((t * 0.12) % 1.6) - 0.3) * COMB_W;
+  const sweep = (((t * 0.12) % 1.6) - 0.3) * layout.width;
   ctx.lineWidth = 1;
   for (const cell of layout.grid) {
     const d = Math.abs(cell.x - sweep);
@@ -488,7 +524,7 @@ function drawCell(ctx: CanvasRenderingContext2D, c: CombCell, layout: CombLayout
   }
 
   // At scale only agents are named: their staggered rows leave a band under each cell, a session's 2×2 patch does not.
-  if (!sc || c.project === SWARM) {
+  if (!sc || c.agent) {
     ctx.font = sc ? `500 9px ${SANS}` : `500 11px ${SANS}`;
     ctx.fillStyle = c.state === 'burrowed' ? p.subtle : p.ink;
     ctx.fillText(truncate(c.name, sc ? 12 : 14), c.x, c.y + R + (sc ? 11 : 16));
@@ -537,7 +573,7 @@ export function drawComb(
   const sc = layout.mode === 'scale';
   ctx.globalAlpha = 1;
   ctx.fillStyle = palette.bg;
-  ctx.fillRect(0, 0, COMB_W, COMB_H);
+  ctx.fillRect(0, 0, layout.width, COMB_H);
 
   drawCreep(ctx, layout, t, palette);
   drawGrid(ctx, layout, flyers, t, palette);
@@ -558,7 +594,7 @@ export function drawComb(
 
   // Agents carry their names under the cell, and colour and motion carry their state, so only sessions get tags.
   if (sc) {
-    const urgent = layout.cells.filter((c) => c.project !== SWARM && (c.state === 'summons' || c.state === 'failed'));
+    const urgent = layout.cells.filter((c) => !c.agent && (c.state === 'summons' || c.state === 'failed'));
     for (const cell of urgent) drawTag(ctx, cell, layout.R, palette);
   }
 

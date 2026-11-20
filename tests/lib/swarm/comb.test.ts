@@ -11,6 +11,8 @@ import {
   hitTest,
   isCalm,
   layoutComb,
+  layoutWidth,
+  MIN_W,
   newFlyer,
   seededRng,
   stepFlyers,
@@ -190,6 +192,63 @@ describe('layoutComb — at scale', () => {
 const fixed = (...values: number[]) => { let i = 0; return () => values[i++ % values.length]!; };
 const flyer = (over: Partial<Flyer> = {}): Flyer => ({
   x: 100, y: 100, a: 0, k: 0, leg: 1, target: null, turn: 0, spine: createSpine(100, 100, 0), ...over,
+});
+
+describe('layoutComb — width and agent groups (HIVE-454)', () => {
+  it('clamps the stage to 640–1376, an unknown stage to 1376', () => {
+    expect(MIN_W).toBe(640);
+    expect(layoutWidth(0)).toBe(1376);
+    expect(layoutWidth(500)).toBe(640);
+    expect(layoutWidth(2000)).toBe(1376);
+    expect(layoutWidth(1000)).toBe(1000);
+  });
+
+  it('defaults to COMB_W and lays out inside a given width', () => {
+    expect(layoutComb(BUSY, PROJECTS).width).toBe(COMB_W);
+    const l = layoutComb(BUSY, PROJECTS, { width: 900 });
+    expect(l.width).toBe(900);
+    for (const g of l.grid) expect(g.x).toBeLessThan(900 + Math.sqrt(3) * l.R);
+    for (const c of l.cells) expect(c.x).toBeLessThanOrEqual(900 - l.R);
+  });
+
+  it('marks agent cells, rest cells included, and only those', () => {
+    const l = layoutComb(BUSY, PROJECTS);
+    for (const c of l.cells) expect(c.agent).toBe(c.project === SWARM);
+    const big = layoutComb(heavy([['p', 1]], 16).entities, [{ id: 'p', name: 'p' }]);
+    expect(big.cells.find((c) => c.id === 'rest:swarm')!.agent).toBe(true);
+  });
+
+  it('draws agents of a named group as one patch labelled with its name', () => {
+    const entities = [cell('a1', 'g1', 'morphing'), cell('a2', 'g1', 'burrowed'), cell('s1', 'the-hive', 'morphing')];
+    const l = layoutComb(entities, PROJECTS, { groups: [{ id: 'g1', name: 'Dev Squad' }] });
+    expect(l.patches.map((p) => p.label)).toEqual(['DEV SQUAD', 'THE-HIVE']);
+    expect(l.cells.filter((c) => c.agent).map((c) => c.id)).toEqual(['a1', 'a2']);
+  });
+
+  it('sends flyers from a non-SWARM group to a project and back', () => {
+    const entities = [cell('a1', 'g1', 'morphing'), cell('s1', 'the-hive', 'morphing')];
+    const l = layoutComb(entities, PROJECTS, { groups: [{ id: 'g1', name: 'Dev Squad' }] });
+    const a1 = l.cells.find((c) => c.id === 'a1')!;
+    const [next] = stepFlyers([flyer({ x: a1.x, y: a1.y - 18, leg: 1, target: 'a1' })], l, 1 / 60, fixed(0), false);
+    expect(next).toMatchObject({ leg: 0, target: 's1' });
+    const s1 = l.cells.find((c) => c.id === 's1')!;
+    const [back] = stepFlyers([flyer({ x: s1.x, y: s1.y - 18, leg: 0, target: 's1' })], l, 1 / 60, fixed(0), false);
+    expect(back).toMatchObject({ leg: 1, target: 'a1' });
+  });
+
+  it('spawns and wanders flyers inside the given width', () => {
+    expect(newFlyer(0, fixed(0.99), 700).x).toBeCloseTo(693);
+    expect(syncFlyers([], 1, fixed(0.5), 700)[0]!.x).toBeCloseTo(350);
+    const resting = layoutComb([cell('a', 'the-hive', 'burrowed')], PROJECTS, { width: 700 });
+    const [next] = stepFlyers([flyer()], resting, 1 / 60, fixed(0.5), true);
+    expect(next!.target).toEqual({ x: 350, y: 260 });
+  });
+
+  it('clears the given width', () => {
+    const { ctx, calls } = recordingContext();
+    drawComb(ctx, layoutComb(BUSY, PROJECTS, { width: 800 }), [], 0, PALETTE);
+    expect(calls.find((c) => c.op === 'fillRect')?.args).toEqual([0, 0, 800, 520]);
+  });
 });
 
 describe('flyers', () => {

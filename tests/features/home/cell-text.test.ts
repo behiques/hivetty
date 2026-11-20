@@ -8,7 +8,7 @@ const entity = (over: Partial<CombEntity>): CombEntity => ({
   id: 'x', name: 'x', kind: 'session', project: 'p1', state: 'burrowed', status: 'idle', ...over,
 });
 const cellFor = (over: Partial<CombCell>): CombCell => ({
-  id: 'x', kind: 'entity', name: 'x', project: 'p1', state: 'burrowed', x: 0, y: 0, phase: 0, ...over,
+  id: 'x', kind: 'entity', name: 'x', project: 'p1', state: 'burrowed', agent: false, x: 0, y: 0, phase: 0, ...over,
 });
 const names = (id: string) => ({ p1: 'the-hive' })[id] ?? id;
 const NOW = 1_000_000_000;
