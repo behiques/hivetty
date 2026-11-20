@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetAgents } from '@/lib/agents';
 import { resetShippedState } from '@/lib/shipped';
+import { resetSwarmsState } from '@/lib/swarms';
 import { resetProjectConfig, setProjectConfigForTest } from '@lib/project-config';
 
 import { AgentsSection } from '@features/settings/components/agents-section';
@@ -15,6 +16,7 @@ import { emptySnapshot } from '@shared/config-contract';
 import type { LicenceState } from '@shared/licence-contract';
 
 import { shippedStatus } from '../../../support/shipped';
+import { installedSwarm, swarmItem, swarmListing } from '../../../support/swarms';
 import { getByHint } from '@tests/support/hint';
 
 // HIVE-447: SwarmStarters reads the account; these stubs carry no account bridge.
@@ -148,6 +150,29 @@ describe('AgentsSection', () => {
 
     expect(await screen.findByText('slack-watcher')).toBeInTheDocument();
     expect(screen.getByText('sleeping')).toBeInTheDocument();
+  });
+
+  it('lists an off swarm agent as off, and its enabled sibling by its state (HIVE-453)', async () => {
+    resetSwarmsState();
+    stub([agent('acr'), agent('builder')]);
+    const squad = swarmListing([
+      swarmItem({
+        installed: installedSwarm({
+          contents: { agents: ['acr', 'builder'].map((name) => ({ name, description: '', tools: [] })), skills: [] },
+          disabled: { agents: ['acr'], skills: [] },
+        }),
+      }),
+    ]);
+    (window as unknown as { hive: { swarms: unknown } }).hive.swarms = {
+      list: vi.fn(async () => squad),
+      onChanged: vi.fn(() => () => {}),
+    };
+    render(<AgentsSection />);
+
+    const acr = await screen.findByRole('button', { name: /^acr/ });
+    await waitFor(() => expect(within(acr).getByText('off')).toBeInTheDocument());
+    expect(within(screen.getByRole('button', { name: /^builder/ })).getByText('sleeping')).toBeInTheDocument();
+    resetSwarmsState();
   });
 
   it('stacks its list above the editor below a 520px section (HIVE-225)', async () => {
