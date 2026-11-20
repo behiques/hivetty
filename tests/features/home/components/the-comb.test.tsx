@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session } from '@/types/entity';
 import type { AgentSummary } from '@shared/agent-contract';
-import { TheComb, TOOLTIP_MAX_W, TOOLTIP_SPARE, tooltipLeft } from '@features/home/components/the-comb';
+import { RELAYOUT_MS, TheComb, TOOLTIP_MAX_W, TOOLTIP_SPARE, tooltipLeft } from '@features/home/components/the-comb';
 import { COMB_W, layoutComb } from '@lib/swarm/comb';
+import { resetSwarmsState } from '@/lib/swarms';
+import { installedSwarm, swarmItem, swarmListing } from '@tests/support/swarms';
 import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
@@ -233,11 +235,44 @@ describe('TheComb — the cells that fold others (decision D6)', () => {
     );
   });
 
+  afterEach(() => {
+    resetSwarmsState();
+    delete (window as unknown as { hive?: unknown }).hive;
+  });
+
   it('opens Agents from the swarm\'s "+N" cell', () => {
     useHiveStore.setState({ entities: {}, order: [], agentOrder: [] });
     act(() => useHiveStore.getState().hydrateAgents(Array.from({ length: 16 }, (_, i) => agentSummary(`agent-${i}`))));
     render(<TheComb label="x" />);
-    fireEvent.click(screen.getByRole('button', { name: /^10 more agents/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^10 more in The swarm/ }));
+    expect(useUiStore.getState().place).toBe('agents');
+  });
+
+  it('draws one patch per installed swarm, and none called THE SWARM, once the listing loads (HIVE-454)', async () => {
+    const names = Array.from({ length: 16 }, (_, i) => `agent-${i}`);
+    const listing = swarmListing([
+      swarmItem({
+        installed: installedSwarm({
+          swarmId: 'sq1', title: 'Dev Squad',
+          contents: { agents: names.map((name) => ({ name, description: '', tools: [] })), skills: [] },
+        }),
+      }),
+    ]);
+    (window as unknown as { hive?: unknown }).hive = {
+      swarms: { list: vi.fn(() => Promise.resolve(listing)), onChanged: vi.fn(() => () => undefined) },
+    };
+    useHiveStore.setState({ entities: {}, order: [], agentOrder: [] });
+    act(() => useHiveStore.getState().hydrateAgents(names.map(agentSummary)));
+    render(<TheComb label="x" />);
+    const rest = await screen.findByRole('button', { name: /^10 more in Dev Squad/ });
+    expect(screen.getByRole('button', { name: /^agent-0, / })).toBeInTheDocument();
+    FakeIntersectionObserver.last!.fire(true);
+    const from = rec.calls.length;
+    act(() => raf.mock.calls.at(-1)![0](16));
+    const texts = rec.calls.slice(from).filter((c) => c.op === 'fillText').map((c) => c.args[0]);
+    expect(texts).toContain('DEV SQUAD');
+    expect(texts).not.toContain('THE SWARM');
+    fireEvent.click(rest);
     expect(useUiStore.getState().place).toBe('agents');
   });
 
@@ -279,7 +314,107 @@ describe('TheComb — the cells that fold others (decision D6)', () => {
   });
 });
 
+describe('TheComb — the stage width (HIVE-454)', () => {
+  class FakeResizeObserver {
+    static all: FakeResizeObserver[] = [];
+    observe = vi.fn();
+    disconnect = vi.fn();
+    callback: () => void;
+    constructor(callback: () => void) {
+      this.callback = callback;
+      FakeResizeObserver.all.push(this);
+    }
+  }
+  /** The comb's own observer, on its wrapper; the canvas loop keeps another on the canvas. */
+  const wrapper = () =>
+    FakeResizeObserver.all.findLast((o) => o.observe.mock.calls.some(([el]) => el instanceof HTMLDivElement))!;
+  let stage = 1000;
+
+  beforeEach(() => {
+    FakeResizeObserver.all = [];
+    stage = 1000;
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    vi.spyOn(HTMLDivElement.prototype, 'getBoundingClientRect').mockImplementation(
+      () => ({ left: 0, top: 0, width: stage, height: 520, right: stage, bottom: 520, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect,
+    );
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const aspect = () => (screen.getByRole('img') as HTMLCanvasElement).style.aspectRatio;
+
+  it('lays out for the measured width on the first render', () => {
+    render(<TheComb label="x" />);
+    expect(aspect()).toBe('1000 / 520');
+    expect(wrapper().observe).toHaveBeenCalledTimes(1);
+  });
+
+  it('clamps a narrow or unmeasured stage', () => {
+    stage = 300;
+    const { unmount } = render(<TheComb label="x" />);
+    expect(aspect()).toBe('640 / 520');
+    unmount();
+    stage = 0;
+    render(<TheComb label="x" />);
+    expect(aspect()).toBe('1376 / 520');
+  });
+
+  it('relays out only after the resize has settled for RELAYOUT_MS', () => {
+    vi.useFakeTimers();
+    render(<TheComb label="x" />);
+    stage = 900;
+    act(() => wrapper().callback());
+    act(() => vi.advanceTimersByTime(100));
+    stage = 760;
+    act(() => wrapper().callback());
+    act(() => vi.advanceTimersByTime(RELAYOUT_MS - 1));
+    expect(aspect()).toBe('1000 / 520');
+    act(() => vi.advanceTimersByTime(1));
+    expect(aspect()).toBe('760 / 520');
+  });
+
+  it('clears the pending relayout and disconnects on unmount', () => {
+    vi.useFakeTimers();
+    const clear = vi.spyOn(globalThis, 'clearTimeout');
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { unmount } = render(<TheComb label="x" />);
+    const observer = wrapper();
+    stage = 760;
+    act(() => observer.callback());
+    unmount();
+    expect(clear).toHaveBeenCalled();
+    expect(observer.disconnect).toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(RELAYOUT_MS));
+    expect(errors).not.toHaveBeenCalled();
+  });
+
+  it('measures once without a ResizeObserver', () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    render(<TheComb label="x" />);
+    expect(aspect()).toBe('1000 / 520');
+  });
+
+  it('keeps the tooltip inside a 1000-wide canvas', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      { left: 0, top: 0, width: 1000, height: 520, right: 1000, bottom: 520, x: 0, y: 0, toJSON: () => ({}) } as DOMRect,
+    );
+    const entities = Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`s${i}`, sess(`s${i}`, 'idle')]));
+    useHiveStore.setState({ entities, order: Object.keys(entities), agentOrder: [] });
+    render(<TheComb label="x" />);
+    const layout = layoutComb(Object.keys(entities).map((id) => ({ id, name: id, project: 'p1', state: 'burrowed' })), [], { width: 1000 });
+    const last = layout.cells.at(-1)!;
+    fireEvent.mouseMove(screen.getByRole('img'), { clientX: last.x, clientY: last.y });
+    const left = Number.parseFloat(screen.getByRole('tooltip').style.left);
+    expect(left).toBeLessThanOrEqual(1000 - TOOLTIP_MAX_W - TOOLTIP_SPARE);
+  });
+});
+
 describe('tooltipLeft (HIVE-225)', () => {
+  it('clamps to the layout width it is given (HIVE-454)', () => {
+    expect(tooltipLeft(990, 1, 1000)).toBe(1000 - TOOLTIP_MAX_W - TOOLTIP_SPARE);
+  });
+
   it('keeps a 240px tooltip inside the canvas at the 1100px window scale', () => {
     const k = 0.75;
     expect(tooltipLeft(COMB_W - 10, k) + TOOLTIP_MAX_W).toBeLessThanOrEqual(COMB_W * k);

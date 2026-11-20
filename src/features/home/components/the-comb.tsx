@@ -1,13 +1,15 @@
-import { type MouseEvent, useCallback, useMemo, useRef, useState } from 'react';
+import { type MouseEvent, type RefObject, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
+import { agentGroups } from '@/lib/swarms';
 import { cn } from '@/lib/utils';
 
 import { cellLabel, cellText, type CellText } from '@features/home/cell-text';
 import { type CanvasPaint, useCanvasLoop } from '@hooks/use-canvas-loop';
 import { useReducedMotion } from '@hooks/use-reduced-motion';
+import { useSwarms } from '@hooks/use-swarms';
 import {
-  ALL_PROJECTS, type CellState, type CombCell, COMB_W, type CombInput, drawComb,
-  type Flyer, flyerCount, hitTest, isCalm, layoutComb, stepFlyers, stillFlyers, SWARM, syncFlyers,
+  ALL_PROJECTS, type CellState, type CombCell, COMB_H, COMB_W, type CombInput, drawComb,
+  type Flyer, flyerCount, hitTest, isCalm, layoutComb, layoutWidth, stepFlyers, stillFlyers, SWARM, syncFlyers,
 } from '@lib/swarm/comb';
 import { useSwarmPalette } from '@stores/appearance-store';
 import { type CombEntity, useCombEntities, useOpenEntity, useProjects } from '@stores/hive-store';
@@ -23,8 +25,39 @@ export const TOOLTIP_MAX_W = 240;
 export const TOOLTIP_SPARE = 8;
 
 /** The tooltip's left edge in px: beside the cell, never past the canvas's right edge, never left of its left edge (HIVE-226). */
-export const tooltipLeft = (x: number, k: number): number =>
-  Math.max(0, Math.min((x + 18) * k, COMB_W * k - TOOLTIP_MAX_W - TOOLTIP_SPARE));
+export const tooltipLeft = (x: number, k: number, width = COMB_W): number =>
+  Math.max(0, Math.min((x + 18) * k, width * k - TOOLTIP_MAX_W - TOOLTIP_SPARE));
+
+/** HIVE-454: a resize relays the comb out this long after the last one, so a drag does not flip it every frame. */
+export const RELAYOUT_MS = 150;
+
+/**
+ * HIVE-454: the logical width the comb lays out for, from the wrapper's measured width. The first measurement
+ * applies at once; later ones apply {@link RELAYOUT_MS} after the resize settles. Meanwhile the old layout scales.
+ */
+function useLayoutWidth(wrapRef: RefObject<HTMLDivElement | null>): number {
+  const [width, setWidth] = useState(COMB_W);
+
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (wrap === null) return;
+    const measure = () => setWidth(layoutWidth(wrap.getBoundingClientRect().width));
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const observer = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(measure, RELAYOUT_MS);
+    });
+    observer.observe(wrap);
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [wrapRef]);
+
+  return width;
+}
 
 const WORD_CLASS: Record<CellState, string> = {
   morphing: 'text-green', summons: 'text-amber-text', failed: 'text-red', burrowed: 'text-subtle', terminal: 'text-muted',
@@ -64,10 +97,24 @@ export function TheComb({ label }: { label: string }) {
   const projects = useProjects();
   const palette = useSwarmPalette();
   const reduced = useReducedMotion();
+  const { listing } = useSwarms();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const width = useLayoutWidth(wrapRef);
 
+  // HIVE-454: the store keeps SWARM for every agent; the host sorts them into their swarms' groups.
+  const groups = useMemo(
+    () => agentGroups(listing, entities.filter((e) => e.kind === 'agent').map((e) => e.id)),
+    [listing, entities],
+  );
+  const groupOf = useMemo(() => new Map(groups.flatMap((g) => g.names.map((n) => [n, g.id] as const))), [groups]);
   const layout = useMemo(
-    () => layoutComb(entities.map(toCombInput), projects.map(({ id, name }) => ({ id, name }))),
-    [entities, projects],
+    () =>
+      layoutComb(
+        entities.map((e) => ({ ...toCombInput(e), project: e.kind === 'agent' ? (groupOf.get(e.id) ?? SWARM) : e.project })),
+        projects.map(({ id, name }) => ({ id, name })),
+        { width, groups: groups.map((g) => ({ id: g.id, name: g.title })) },
+      ),
+    [entities, projects, width, groups, groupOf],
   );
   const needs = useMemo(() => entities.filter((e) => e.state === 'summons').length, [entities]);
 
@@ -93,15 +140,16 @@ export function TheComb({ label }: { label: string }) {
 
   const byId = useMemo(() => new Map(entities.map((e) => [e.id, e])), [entities]);
   const projectName = useCallback(
-    (id: string) => projects.find((p) => p.id === id)?.name ?? id,
-    [projects],
+    (id: string) => groups.find((g) => g.id === id)?.title ?? projects.find((p) => p.id === id)?.name ?? id,
+    [groups, projects],
   );
 
   /** A cell opens what it stands for: the session or agent, or the list it folds (decisions D6, D7). */
   const activate = (cell: CombCell): void => {
     if (cell.kind === 'entity') {
       openEntity(cell.id);
-    } else if (cell.project === SWARM) {
+    } else if (cell.agent) {
+      // An agent group's "+N", or the "+N" SWARMS fold.
       selectPlace('agents');
     } else {
       // A project's cell is its list, so the Overmind rather than the last session.
@@ -113,7 +161,7 @@ export function TheComb({ label }: { label: string }) {
   /** The cell under the pointer, in logical units, and the CSS-px-per-unit scale. */
   const pick = (event: MouseEvent<HTMLCanvasElement>): { cell: CombCell | null; k: number } => {
     const rect = event.currentTarget.getBoundingClientRect();
-    const k = rect.width / COMB_W;
+    const k = rect.width / layout.width;
     if (k <= 0) return { cell: null, k };
     return { cell: hitTest(layout, (event.clientX - rect.left) / k, (event.clientY - rect.top) / k), k };
   };
@@ -122,7 +170,7 @@ export function TheComb({ label }: { label: string }) {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** The canvas's CSS-px-per-unit scale, for a tooltip placed without a pointer. */
-  const scale = (): number => (canvasRef.current?.getBoundingClientRect().width ?? 0) / COMB_W;
+  const scale = (): number => (canvasRef.current?.getBoundingClientRect().width ?? 0) / layout.width;
   const flock = useRef<Flyer[]>([]);
   const still = useMemo(() => (reduced ? stillFlyers(layout, needs) : null), [reduced, layout, needs]);
 
@@ -130,11 +178,11 @@ export function TheComb({ label }: { label: string }) {
     (ctx, t, dt, { w, dpr }) => {
       let flyers = still;
       if (!flyers) {
-        const synced = syncFlyers(flock.current, flyerCount(layout, needs), Math.random);
+        const synced = syncFlyers(flock.current, flyerCount(layout, needs), Math.random, layout.width);
         flyers = stepFlyers(synced, layout, dt, Math.random, isCalm(layout, needs));
         flock.current = flyers;
       }
-      const k = (w * dpr) / COMB_W;
+      const k = (w * dpr) / layout.width;
       ctx.setTransform(k, 0, 0, k, 0, 0);
       drawComb(ctx, layout, flyers, t, palette, k, focusedId);
     },
@@ -143,12 +191,13 @@ export function TheComb({ label }: { label: string }) {
   useCanvasLoop(canvasRef, paint, { still: reduced ? STILL_T : null });
 
   return (
-    <div className="relative">
+    <div ref={wrapRef} className="relative">
       <canvas
         ref={canvasRef}
         role="img"
         aria-label={label}
-        className={cn('block aspect-[1376/520] w-full', hover && 'cursor-pointer')}
+        className={cn('block w-full', hover && 'cursor-pointer')}
+        style={{ aspectRatio: `${layout.width} / ${COMB_H}` }}
         onMouseMove={(event) => {
           const { cell, k } = pick(event);
           hoverOn(cell, k);
@@ -162,7 +211,7 @@ export function TheComb({ label }: { label: string }) {
       {hover ? (
         <CombTooltip
           text={cellText(hover.cell, byId.get(hover.cell.id), projectName, now)}
-          left={tooltipLeft(hover.cell.x, hover.k)}
+          left={tooltipLeft(hover.cell.x, hover.k, layout.width)}
           top={Math.max(0, hover.cell.y - 10) * hover.k}
         />
       ) : null}

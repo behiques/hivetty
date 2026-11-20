@@ -59,7 +59,15 @@ describe('cellText', () => {
     expect(cellText(cellFor({ kind: 'rest', state: 'rest', more: 3, project: 'p1' }), undefined, names, NOW))
       .toEqual({ title: '3 more in the-hive', context: '', line: 'click to open the project' });
     expect(cellText(cellFor({ kind: 'rest', state: 'rest', more: 2, project: '*' }), undefined, names, NOW).title).toBe('2 more projects');
-    expect(cellText(cellFor({ kind: 'rest', state: 'rest', more: 4, project: 'swarm' }), undefined, names, NOW).line).toBe('click to open Agents');
+    expect(cellText(cellFor({ kind: 'rest', state: 'rest', more: 4, project: 'swarm', agent: true }), undefined, names, NOW).line).toBe('click to open Agents');
+  });
+
+  it("names an agent group's rest cell by the group, and the SWARMS fold by its count (HIVE-454)", () => {
+    const groupNames = (id: string) => ({ dev: 'Dev Squad' })[id] ?? id;
+    expect(cellText(cellFor({ kind: 'rest', state: 'rest', more: 3, project: 'dev', agent: true }), undefined, groupNames, NOW))
+      .toEqual({ title: '3 more in Dev Squad', context: '', line: 'click to open Agents' });
+    expect(cellText(cellFor({ kind: 'rest', state: 'rest', more: 2, project: '**', agent: true }), undefined, groupNames, NOW))
+      .toEqual({ title: '2 more swarms', context: '', line: 'click to open Agents' });
   });
 
   it('reads as one line for a screen reader', () => {
