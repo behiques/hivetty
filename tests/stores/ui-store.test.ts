@@ -748,10 +748,41 @@ describe('Work place (HIVE-203)', () => {
     expect(useUiStore.getState().workFolded.done).toBe(false);
   });
 
-  it('starts with every agent lane unfolded and folds one (HIVE-204)', () => {
-    expect(useUiStore.getState().agentsFolded).toEqual({ summons: false, morphing: false, burrowed: false });
-    useUiStore.getState().toggleAgentGroup('burrowed');
-    expect(useUiStore.getState().agentsFolded.burrowed).toBe(true);
+  it('starts with every agent section unfolded and folds one by its key (HIVE-454)', () => {
+    expect(useUiStore.getState().agentsFolded).toEqual({});
+    useUiStore.getState().toggleAgentGroup('swarm:mine');
+    expect(useUiStore.getState().agentsFolded).toEqual({ 'swarm:mine': true });
+    useUiStore.getState().toggleAgentGroup('swarm:mine');
+    expect(useUiStore.getState().agentsFolded).toEqual({ 'swarm:mine': false });
+  });
+
+  it('opens Agents at a folded section, unfolds it and focuses it (HIVE-454)', () => {
+    useUiStore.getState().toggleAgentGroup('s1');
+    useUiStore.getState().toggleAgentGroup('summons');
+    useUiStore.getState().openAgentsAt('s1');
+    const state = useUiStore.getState();
+    expect(state.place).toBe('agents');
+    expect(state.panelOpen).toBe(true);
+    expect(state.agentsFolded).toEqual({ s1: false, summons: true });
+    expect(state.agentsFocus).toBe('s1');
+    useUiStore.getState().clearAgentsFocus();
+    expect(useUiStore.getState().agentsFocus).toBeNull();
+  });
+
+  it('opening Agents at a section while on Agents keeps the panel open (HIVE-454)', () => {
+    useUiStore.getState().selectPlace('agents');
+    expect(useUiStore.getState().panelOpen).toBe(true);
+    useUiStore.getState().openAgentsAt('s2');
+    expect(useUiStore.getState().place).toBe('agents');
+    expect(useUiStore.getState().panelOpen).toBe(true);
+    expect(useUiStore.getState().agentsFocus).toBe('s2');
+  });
+
+  it('reset clears the folds and the focus (HIVE-454)', () => {
+    useUiStore.getState().openAgentsAt('s1');
+    useUiStore.getState().reset();
+    expect(useUiStore.getState().agentsFolded).toEqual({});
+    expect(useUiStore.getState().agentsFocus).toBeNull();
   });
 
   it('switches the conversation mode', () => {

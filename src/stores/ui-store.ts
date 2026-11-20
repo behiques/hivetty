@@ -26,8 +26,9 @@ export type WorkConversation = 'comments' | 'everything';
 export type AgentPageView = 'activity' | 'definition';
 
 /**
- * The Agents panel's lanes (HIVE-204). Declared here, not in hive-store, because hive-store imports this
- * module. In code a `group`, never a `lane`: `lane:` is an agent frontmatter key (HIVE-184).
+ * `useAgentsByGroup`'s three groups (HIVE-204). Declared here, not in hive-store, because hive-store imports
+ * this module. In code a `group`, never a `lane`: `lane:` is an agent frontmatter key (HIVE-184). The panel
+ * draws `summons` as its first lane and splits the rest into one section per swarm (HIVE-454).
  */
 export type AgentGroupKey = 'summons' | 'morphing' | 'burrowed';
 /** Which agent the Agents place has open, and on which view (HIVE-204). */
@@ -241,8 +242,13 @@ interface UiState {
   workFolded: Record<JiraStatusCategory, boolean>;
   /** The ticket page's conversation filter (HIVE-203). View state, not persisted; each open resets it. */
   workConversation: WorkConversation;
-  /** Which Agents panel lanes are folded; all start unfolded (HIVE-204). View state, not persisted. */
-  agentsFolded: Record<AgentGroupKey, boolean>;
+  /**
+   * Which Agents panel sections are folded, keyed by `'summons'` or a swarm group id (HIVE-454). A missing
+   * key means unfolded. View state, not persisted.
+   */
+  agentsFolded: Record<string, boolean>;
+  /** The swarm section the Agents panel scrolls into view next, then clears (HIVE-454). Not persisted. */
+  agentsFocus: string | null;
   /**
    * The Agents place's open page (HIVE-204): which agent, and Activity or Definition. `name: null` is a
    * new agent never saved. View state, not persisted.
@@ -356,7 +362,10 @@ interface UiState {
   /** The ticket the Work stage is showing, and where it sits in the list; quiet: no place, panel or overlay moves. */
   rememberWorkTicket: (key: string, at: number) => void;
   toggleWorkGroup: (category: JiraStatusCategory) => void;
-  toggleAgentGroup: (key: AgentGroupKey) => void;
+  toggleAgentGroup: (key: string) => void;
+  /** Opens the Agents place with that swarm section unfolded and focused (HIVE-454). */
+  openAgentsAt: (groupId: string) => void;
+  clearAgentsFocus: () => void;
   setWorkConversation: (mode: WorkConversation) => void;
   /**
    * Open an agent's page (HIVE-204): moves the bar to Agents, shows its panel and dismisses the
@@ -476,7 +485,8 @@ const initialUiState = {
   workTicketAt: -1,
   workFolded: { todo: false, 'in-progress': false, done: true } as Record<JiraStatusCategory, boolean>,
   workConversation: 'comments' as WorkConversation,
-  agentsFolded: { summons: false, morphing: false, burrowed: false } as Record<AgentGroupKey, boolean>,
+  agentsFolded: {} as Record<string, boolean>,
+  agentsFocus: null as string | null,
   agentPage: null as AgentPage | null,
   agentPageAt: -1,
   stallsShown: false,
@@ -774,6 +784,17 @@ export const useUiStore = create<UiState>()((set) => ({
     set((state) => ({ workFolded: { ...state.workFolded, [category]: !state.workFolded[category] } })),
   toggleAgentGroup: (key) =>
     set((state) => ({ agentsFolded: { ...state.agentsFolded, [key]: !state.agentsFolded[key] } })),
+  openAgentsAt: (groupId) =>
+    set((state) => ({
+      // selectPlace's move; already on Agents it shows the panel rather than toggling it shut.
+      place: 'agents',
+      panelOpen: true,
+      picker: false,
+      settings: false,
+      agentsFolded: { ...state.agentsFolded, [groupId]: false },
+      agentsFocus: groupId,
+    })),
+  clearAgentsFocus: () => set({ agentsFocus: null }),
   setWorkConversation: (mode) => set({ workConversation: mode }),
   openAgentPage: (name, view) =>
     set((state) => ({
@@ -934,6 +955,9 @@ export const useSetWorkConversation = () => useUiStore((state) => state.setWorkC
 /** The Agents panel's lane folds (HIVE-204). */
 export const useAgentsFolded = () => useUiStore((state) => state.agentsFolded);
 export const useToggleAgentGroup = () => useUiStore((state) => state.toggleAgentGroup);
+export const useAgentsFocus = () => useUiStore((state) => state.agentsFocus);
+export const useOpenAgentsAt = () => useUiStore((state) => state.openAgentsAt);
+export const useClearAgentsFocus = () => useUiStore((state) => state.clearAgentsFocus);
 /** The Agents place's open page and its actions (HIVE-204). */
 export const useAgentPage = () => useUiStore((state) => state.agentPage);
 export const useAgentPageAt = () => useUiStore((state) => state.agentPageAt);

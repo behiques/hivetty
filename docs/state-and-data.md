@@ -82,7 +82,11 @@ the picker from re-rendering thirteen live terminals.
   (`agentPage`/`agentPageAt`) and PRs (`prPage`/`prPageAt`) follow the same
   rule. `sessionsTab` is what the Sessions place returns to — the tab last
   opened there, or `'orch'` — kept apart from `activeTab` because the Agents
-  place writes an agent into that.
+  place writes an agent into that. The Agents place adds `agentsFolded`
+  (HIVE-454: keyed by `'summons'` or a swarm group id, a missing key is
+  unfolded) and `agentsFocus`, none persisted: `openAgentsAt(groupId)` moves
+  to Agents with that section unfolded and focused, and the panel scrolls the
+  section into view and clears the focus (`clearAgentsFocus`).
 - `src/stores/appearance-store.ts` — durable preferences: `theme`, the terminal
   and editor typography, `editorPlacement`, `editorNav`, `editorEditable`,
   `density`, `teamName`, What's new's `whatsNewSeen` (the `major.minor` last
