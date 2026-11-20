@@ -30,6 +30,8 @@ blob-report/
 *.swp
 .claude/worktrees/
 .tmp/
+# CI's hivetty-swarms checkout for tests/swarm (HIVE-448)
+.swarms/
 
 # Impeccable's materials are each developer's own, kept locally and never
 # committed: the product record and design record it reads (PRODUCT.md,

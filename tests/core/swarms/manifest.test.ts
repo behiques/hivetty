@@ -1,7 +1,7 @@
 // @vitest-environment node
-import { cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -326,23 +326,5 @@ describe('readSwarm', () => {
     it('skips the rule with no appVersion', async () => {
       expect((await readSwarm(dir)).problems).toEqual([]);
     });
-  });
-
-  it('reads the Standard swarm from resources/ with no problems', async () => {
-    const root = resolve(import.meta.dirname, '../../..');
-    await mkdir(dir, { recursive: true });
-    await cp(join(root, 'resources', 'agents'), join(dir, 'agents'), { recursive: true });
-    await cp(join(root, 'resources', 'skills'), join(dir, 'skills'), { recursive: true });
-    await writeFile(join(dir, 'swarm.json'), JSON.stringify(MANIFEST), 'utf8');
-
-    const read = await readSwarm(dir);
-
-    expect(read.problems).toEqual([]);
-    expect(read.contents.agents.map((agent) => agent.name)).toEqual(['acr', 'builder', 'fixer', 'shipper']);
-    expect(read.contents.skills).toHaveLength(14);
-    for (const skill of read.contents.skills) expect(skill.description).not.toBe('');
-    expect(read.contents.agents.find((agent) => agent.name === 'builder')?.tools).toContain(
-      'mcp__hive__jira_transition',
-    );
   });
 });

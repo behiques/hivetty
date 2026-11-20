@@ -9,7 +9,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { parseAgent } from '../../../core/agents/definition';
 import { baseOf } from '../../../core/seed/merge';
 import { seedShipped, type SeedReport } from '../../../core/seed/seed';
-import { readUserSkills } from '../../../core/skills/read';
 import { patchFrontmatter } from '../../../shared/agent-contract';
 
 /**
@@ -430,40 +429,6 @@ describe('seedShipped', () => {
 
     expect(report.kept).toEqual(['skills/worktree/SKILL.md']);
     expect(await onDisk('skills/worktree/SKILL.md')).toBe('theirs\n');
-  });
-
-  it('seeds the repository\'s own resources/skills into a tree the reader accepts whole', async () => {
-    const repoResources = new URL('../../../resources', import.meta.url).pathname;
-
-    const report = await seedShipped({ source: repoResources, target, manifestFile });
-
-    expect(report.created.length).toBeGreaterThan(0);
-    expect(report.created).toEqual(
-      expect.arrayContaining([
-        'agents/shipper/AGENT.md',
-        'agents/acr/AGENT.md',
-        'agents/fixer/AGENT.md',
-        'agents/builder/AGENT.md',
-      ]),
-    );
-    const read = await readUserSkills(join(target, 'skills'));
-    expect(read.invalid).toEqual([]);
-    expect(read.skills.map((entry) => entry.name)).toEqual([
-      'brainstorm',
-      'debug',
-      'execute',
-      'goal-on',
-      'merge-pr',
-      'plan',
-      'pr-review',
-      'review-pr-findings',
-      'ship',
-      'spec-deviation',
-      'tdd',
-      'verify',
-      'work-on',
-      'worktree',
-    ]);
   });
 });
 

@@ -67,6 +67,7 @@ import {
   SLACK_TRIGGER,
   type SlackSocketStatus,
 } from '../../shared/slack-contract';
+import { HAS_SWARM, SWARM_DIR } from '../support/swarm-tree';
 
 /**
  * What only a real `claude` can prove about a wake (HIVE-115).
@@ -696,16 +697,18 @@ the rules above the line say about that, and nothing else. Say nothing else.
 `;
 
 /**
- * The shipped builder's step 4, read off `resources/agents/builder/AGENT.md`
- * rather than copied here (HIVE-180), so this suite goes red on any wording
- * of that step that stops asking for the posts the plan panel reads.
+ * The shipped builder's step 4, read off `agents/builder/AGENT.md` in the
+ * swarm checkout rather than copied here (HIVE-180), so this suite goes red on
+ * any wording of that step that stops asking for the posts the plan panel
+ * reads. Read when the suite runs, not at import, so a machine without the
+ * checkout skips (HIVE-448).
  */
-const BUILDER_STEP_4 = ((): string => {
-  const text = readFileSync(join(process.cwd(), 'resources/agents/builder/AGENT.md'), 'utf8');
+const builderStep4 = (): string => {
+  const text = readFileSync(join(SWARM_DIR, 'agents/builder/AGENT.md'), 'utf8');
   const step = /^4\. [\s\S]*?(?=^5\. )/m.exec(text)?.[0];
-  if (step === undefined) throw new Error('resources/agents/builder/AGENT.md has no step 4');
+  if (step === undefined) throw new Error('agents/builder/AGENT.md in the swarm has no step 4');
   return step.trim();
-})();
+};
 
 /**
  * The builder's task progress (HIVE-180): a one-task plan that needs no
@@ -713,7 +716,7 @@ const BUILDER_STEP_4 = ((): string => {
  * post. Nothing in this body names `thread` or `state`; whatever the posts
  * carry, they carry because step 4 said so.
  */
-const BUILDSTEP_MD = `---
+const buildstepMd = (): string => `---
 name: ${BUILDSTEP}
 description: Follows the builder's step 4 on a one-task plan, then answers.
 icon: Ghost
@@ -735,7 +738,7 @@ as committed, at once. \`hive:execute\` is not available here; skip it. Use \`ti
 
 Carry out this step from your instructions, for task 1 only:
 
-${BUILDER_STEP_4}
+${builderStep4()}
 
 Then call \`ledger_answer\` on that ask with the body "probe built" and end
 your turn. Say nothing else.
@@ -1043,7 +1046,7 @@ touch ${marker}
 Do not call any other tool, and say nothing else.
 `;
 
-describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
+describe.skipIf(!LIVE || !HAS_SWARM)('one real headless wake, against a real claude', () => {
   /** `undefined` until `beforeAll` gets past its prerequisite check. */
   let dir: string | undefined;
   let hiveDir: string;
@@ -1157,7 +1160,7 @@ describe.skipIf(!LIVE)('one real headless wake, against a real claude', () => {
       [ASKER, ASKER_MD],
       [REPLYTO, REPLYTO_MD],
       [WITHDRAW, WITHDRAW_MD],
-      [BUILDSTEP, BUILDSTEP_MD],
+      [BUILDSTEP, buildstepMd()],
       [RESPONDER, RESPONDER_MD],
       [FENCE, fenceMd(marker)],
       [INTERVAL, INTERVAL_MD],
