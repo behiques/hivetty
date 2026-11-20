@@ -507,3 +507,34 @@ describe('AgentEditor', () => {
     });
   });
 });
+
+describe('AgentEditor for a swarm agent (HIVE-453)', () => {
+  const swarm = (on: boolean, onToggle = vi.fn()) => ({ title: 'Dev Squad', on, onToggle });
+
+  it('offers the Enabled switch instead of Delete, with the Pause or off? note', () => {
+    render(<AgentEditor {...props} swarm={swarm(true)} />);
+
+    expect(screen.getByRole('switch', { name: 'Enabled' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(screen.getByText(/Pause or off\?/)).toBeInTheDocument();
+    expect(screen.getByText(/Installed by Dev Squad/)).toBeInTheDocument();
+  });
+
+  it('reads Off with the banner while off, and the switch hands back the next state', () => {
+    const onToggle = vi.fn();
+    render(<AgentEditor {...props} swarm={swarm(false, onToggle)} />);
+
+    const toggle = screen.getByRole('switch', { name: 'Off' });
+    expect(screen.getByRole('status')).toHaveTextContent(/is off/);
+
+    fireEvent.click(toggle);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it('keeps Delete for the person\'s own agent', () => {
+    setup();
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: /^(Enabled|Off)$/ })).toBeNull();
+  });
+});

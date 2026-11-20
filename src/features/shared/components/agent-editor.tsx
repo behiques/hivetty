@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { EditorSurface } from '@components/editor/editor-surface';
 import { Button } from '@components/ui/button';
 import { SplitHandle } from '@components/ui/split-handle';
+import { Switch } from '@components/ui/switch';
 import { AgentForm, type RunsOnContext } from '@features/shared/components/agent-form';
 import { languageFor } from '@lib/explorer/language';
 import { onTablistKeyDown } from '@lib/tablist';
@@ -102,6 +103,17 @@ interface AgentEditorProps {
   layout?: 'split' | 'tabs';
   /** What the form's Runs on group needs (HIVE-396), built by `AgentDefinition`. */
   runsOn: RunsOnContext;
+  /**
+   * The swarm that installed this agent, when one did (HIVE-453). Its agent is turned off, never deleted: a delete
+   * would be held for good by the swarm's record, so the switch takes Delete's place.
+   */
+  swarm?: AgentEditorSwarm | undefined;
+}
+
+export interface AgentEditorSwarm {
+  title: string;
+  on: boolean;
+  onToggle: (next: boolean) => void;
 }
 
 /**
@@ -152,6 +164,7 @@ export function AgentEditor({
   actionsHidden = false,
   layout = 'split',
   runsOn,
+  swarm,
 }: AgentEditorProps) {
   const split = layout === 'split';
   const [tab, setTab] = useState<Tab>('form');
@@ -291,6 +304,22 @@ export function AgentEditor({
           {dirty ? 'unsaved' : 'saved'}
         </span>
       </div>
+
+      {/*
+        A swarm's agent (HIVE-453): who installed it, and the difference between the two ways to stop it. Off is
+        the lasting one, so it gets the banner while it holds.
+      */}
+      {swarm === undefined ? null : swarm.on ? (
+        <p className="border-b border-border-soft px-5 py-2 font-sans text-control leading-relaxed text-subtle">
+          Installed by {swarm.title}. <span className="font-semibold text-muted">Pause or off?</span> Pause stops it
+          for now. Off lasts through restarts and updates: it never wakes, and asks to it are refused.
+        </p>
+      ) : (
+        <p role="status" className="border-b border-border-soft bg-hover px-5 py-2 font-sans text-control text-muted">
+          This agent is off. It never wakes, and asks to it are refused until you turn it on. It still updates with{' '}
+          {swarm.title}.
+        </p>
+      )}
 
       {/*
         Below 900px of stage, today's Form | Source tabs; at or above, both
@@ -444,13 +473,17 @@ export function AgentEditor({
           </span>
         )}
         <div className="flex shrink-0 gap-1.5" hidden={actionsHidden}>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="rounded-full border border-red-edge px-3 py-1 text-control font-semibold text-red hover:bg-hover"
-          >
-            Delete
-          </button>
+          {swarm === undefined ? (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="rounded-full border border-red-edge px-3 py-1 text-control font-semibold text-red hover:bg-hover"
+            >
+              Delete
+            </button>
+          ) : (
+            <Switch label={swarm.on ? 'Enabled' : 'Off'} checked={swarm.on} onCheckedChange={swarm.onToggle} />
+          )}
           <button
             type="button"
             onClick={onRevert}
