@@ -2212,6 +2212,25 @@ describe('parseSetCliAgentsRequest (HIVE-341)', () => {
     );
   });
 
+  it("takes codex's two sandbox grants as booleans, for codex only", () => {
+    expect(parseSetCliAgentsRequest({ cli: 'codex', network: true, projectGit: false })).toEqual({
+      cli: 'codex',
+      network: true,
+      projectGit: false,
+    });
+    expect(parseSetCliAgentsRequest({ cli: 'codex', projectGit: true })).toEqual({ cli: 'codex', projectGit: true });
+    for (const key of ['network', 'projectGit']) {
+      expect(() => parseSetCliAgentsRequest({ cli: 'codex', [key]: 'true' })).toThrow(`setCliAgents.${key}`);
+      expect(() => parseSetCliAgentsRequest({ cli: 'codex', [key]: null })).toThrow(`setCliAgents.${key}`);
+      expect(() => parseSetCliAgentsRequest({ cli: 'claude-code', [key]: true })).toThrow(
+        `setCliAgents.${key}: only codex takes it`,
+      );
+      expect(() => parseSetCliAgentsRequest({ cli: 'copilot', [key]: false })).toThrow(
+        `setCliAgents.${key}: only codex takes it`,
+      );
+    }
+  });
+
   it("takes codex's own vocabulary (HIVE-342)", () => {
     expect(parseSetCliAgentsRequest({ cli: 'codex', model: 'gpt-6-luna' })).toEqual({
       cli: 'codex',

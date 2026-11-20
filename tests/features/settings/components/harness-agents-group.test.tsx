@@ -192,11 +192,11 @@ describe('HarnessAgentsGroup (HIVE-376, from HIVE-341/342)', () => {
     expect(screen.getByText(/in AGENT.md wins/)).toBeInTheDocument();
   });
 
-  it('reads the codex model, effort and sandbox in that order, inert when off', () => {
+  it('reads the codex model, effort and sandbox in that order, then its two grants, inert when off', () => {
     const { container } = renderGroup('codex', { codex: { agents: { enabled: false, sandbox: 'read-only' } } });
 
     const labels = [...container.querySelectorAll('fieldset label')].map((label) => label.textContent);
-    expect(labels).toEqual(['Model', 'Effort', 'Sandbox']);
+    expect(labels).toEqual(['Model', 'Effort', 'Sandbox', 'Network access', 'Project git access']);
     expect(screen.getByLabelText('Sandbox')).toHaveValue('read-only');
     expect(screen.getByLabelText('Sandbox')).toBeDisabled();
     expect(screen.getByText(/sandbox defaults to workspace-write/)).toBeInTheDocument();
@@ -298,5 +298,83 @@ describe('CopilotToken (HIVE-376, from HIVE-343)', () => {
     render(<CopilotToken />);
 
     expect(screen.queryByLabelText('Token')).not.toBeInTheDocument();
+  });
+});
+
+describe("codex's two sandbox grants", () => {
+  const network = () => screen.getByRole('switch', { name: 'Network access' });
+  const projectGit = () => screen.getByRole('switch', { name: 'Project git access' });
+
+  it('shows both on Codex only, off until the config says otherwise', () => {
+    const { unmount } = renderGroup('codex');
+
+    expect(network()).not.toBeChecked();
+    expect(network()).toBeEnabled();
+    expect(projectGit()).not.toBeChecked();
+    unmount();
+
+    renderGroup('claude-code');
+    expect(screen.queryByRole('switch', { name: 'Network access' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Project git access' })).not.toBeInTheDocument();
+  });
+
+  it('shows what the config holds', () => {
+    renderGroup('codex', { codex: { agents: { network: true, projectGit: true } } });
+
+    expect(network()).toBeChecked();
+    expect(projectGit()).toBeChecked();
+  });
+
+  it('network access writes at once, on and off', async () => {
+    const { unmount } = renderGroup('codex');
+    await userEvent.click(network());
+    expect(setCliAgentsConfig).toHaveBeenLastCalledWith({ cli: 'codex', network: true });
+    unmount();
+
+    renderGroup('codex', { codex: { agents: { network: true } } });
+    await userEvent.click(network());
+    expect(setCliAgentsConfig).toHaveBeenLastCalledWith({ cli: 'codex', network: false });
+  });
+
+  it('project git access asks first, naming the risk, and writes only on Allow', async () => {
+    renderGroup('codex');
+
+    await userEvent.click(projectGit());
+
+    const confirm = screen.getByRole('alertdialog', { name: 'Allow project git access?' });
+    expect(confirm).toHaveTextContent('still cannot write your checkout');
+    expect(confirm).toHaveTextContent('run outside the sandbox');
+    expect(setCliAgentsConfig).not.toHaveBeenCalled();
+
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Allow' }));
+
+    expect(setCliAgentsConfig).toHaveBeenCalledExactlyOnceWith({ cli: 'codex', projectGit: true });
+  });
+
+  it('project git access goes off at once', async () => {
+    renderGroup('codex', { codex: { agents: { projectGit: true } } });
+
+    await userEvent.click(projectGit());
+
+    expect(setCliAgentsConfig).toHaveBeenCalledExactlyOnceWith({ cli: 'codex', projectGit: false });
+  });
+
+  it('leaves both inert under read-only, and says why', async () => {
+    renderGroup('codex', { codex: { agents: { sandbox: 'read-only', network: true } } });
+
+    expect(network()).toBeDisabled();
+    expect(projectGit()).toBeDisabled();
+    expect(screen.getByText('The read-only sandbox has no network.')).toBeInTheDocument();
+    expect(screen.getByText('The read-only sandbox has no writable folder.')).toBeInTheDocument();
+
+    await userEvent.click(network());
+    expect(setCliAgentsConfig).not.toHaveBeenCalled();
+  });
+
+  it('leaves both inert while agents are off for Codex', () => {
+    renderGroup('codex', { codex: { agents: { enabled: false } } });
+
+    expect(network()).toBeDisabled();
+    expect(projectGit()).toBeDisabled();
   });
 });

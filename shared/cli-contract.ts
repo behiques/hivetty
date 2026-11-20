@@ -150,6 +150,13 @@ export interface CliAgents {
   effort?: string;
   /** Codex only (HIVE-342). Absent runs `workspace-write`. */
   sandbox?: HeadlessSandbox;
+  /** Codex only: a run's commands may reach the network. `workspace-write` only; absent means off. */
+  network?: boolean;
+  /**
+   * Codex only: a run may write the `.git` folder of each configured project, so it can add a
+   * worktree, commit and fetch. Never the checkout's files. `workspace-write` only; absent means off.
+   */
+  projectGit?: boolean;
   /** Copilot only (HIVE-343). */
   deny?: string[];
 }
@@ -265,6 +272,9 @@ export interface SetCliAgentsRequest {
   effort?: string | null;
   /** Codex only (HIVE-342). */
   sandbox?: HeadlessSandbox | null;
+  /** Codex only. `false` removes the key: off is its absence. */
+  network?: boolean;
+  projectGit?: boolean;
   /** Copilot only (HIVE-343). `null` clears the list. */
   deny?: string[] | null;
 }

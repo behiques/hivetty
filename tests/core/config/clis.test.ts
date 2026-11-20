@@ -80,6 +80,31 @@ describe('the clis block (HIVE-341)', () => {
     ]);
   });
 
+  it("reads codex's two sandbox grants as booleans only, and on codex only", () => {
+    const on = parseConfig(doc({ clis: { codex: { agents: { network: true, projectGit: true } } } }), 'config');
+    const off = parseConfig(doc({ clis: { codex: { agents: { network: false, projectGit: false } } } }), 'config');
+    // A typo must never widen a sandbox: anything but a boolean is dropped, not read as true.
+    const typed = parseConfig(doc({ clis: { codex: { agents: { network: 'true', projectGit: 1 } } } }), 'config');
+    const claude = parseConfig(
+      doc({ clis: { 'claude-code': { agents: { network: true, projectGit: true } } } }),
+      'config',
+    );
+
+    expect(on.clis).toEqual({ codex: { agents: { network: true, projectGit: true } } });
+    expect(on.errors).toEqual([]);
+    expect(off.clis).toEqual({ codex: { agents: { network: false, projectGit: false } } });
+    expect(typed.clis).toEqual({ codex: { agents: {} } });
+    expect(typed.errors).toEqual([
+      'config.clis.codex.agents.network: expected a boolean — ignored',
+      'config.clis.codex.agents.projectGit: expected a boolean — ignored',
+    ]);
+    expect(claude.clis).toEqual({ 'claude-code': { agents: {} } });
+    expect(claude.errors).toEqual([
+      'config.clis.claude-code.agents.network: only codex takes it — ignored',
+      'config.clis.claude-code.agents.projectGit: only codex takes it — ignored',
+    ]);
+  });
+
   it('reads deny patterns on copilot only, keeping the good ones (HIVE-343)', () => {
     const good = parseConfig(
       doc({ clis: { copilot: { agents: { deny: ['shell(rm:*)', 'write(.env)'] } } } }),
@@ -251,6 +276,25 @@ describe('the snapshot (HIVE-341)', () => {
 
     snapshot = setCliAgents({ cli: 'copilot', deny: null });
     expect(snapshot.clis.copilot.agents).toEqual({ enabled: true });
+  });
+
+  it("writes codex's two sandbox grants as true, and false deletes the key", () => {
+    writeFileSync(process.env[CONFIG_PATH_ENV]!, doc({}));
+    reloadConfig();
+
+    setCliAgents({ cli: 'codex', network: true });
+    let snapshot = setCliAgents({ cli: 'codex', projectGit: true });
+
+    expect(snapshot.clis.codex.agents).toEqual({ enabled: true, network: true, projectGit: true });
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis).toEqual({
+      codex: { agents: { network: true, projectGit: true } },
+    });
+
+    snapshot = setCliAgents({ cli: 'codex', network: false });
+    expect(snapshot.clis.codex.agents).toEqual({ enabled: true, projectGit: true });
+    snapshot = setCliAgents({ cli: 'codex', projectGit: false });
+    expect(snapshot.clis.codex.agents).toEqual({ enabled: true });
+    expect(JSON.parse(readFileSync(process.env[CONFIG_PATH_ENV]!, 'utf8')).clis).toEqual({ codex: { agents: {} } });
   });
 
   it("writes codex's sandbox, and null deletes it (HIVE-342)", () => {

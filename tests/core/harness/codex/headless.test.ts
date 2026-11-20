@@ -110,6 +110,56 @@ describe('launchCodexHeadless', () => {
     expect(toml('😀')).toBe('"😀"');
   });
 
+  describe("the card's two sandbox grants", () => {
+    const NETWORK = 'sandbox_workspace_write.network_access=true';
+    const roots = (args: readonly string[]) => args.filter((arg) => arg.startsWith('sandbox_workspace_write.writable_roots='));
+
+    it('adds neither when the card set neither: the argv is the one it always was', () => {
+      const { args } = launchCodexHeadless(spec());
+
+      expect(args.some((arg) => arg.startsWith('sandbox_workspace_write.'))).toBe(false);
+    });
+
+    it('turns network access on under workspace-write, as its own -c pair', () => {
+      const { args } = launchCodexHeadless(spec({ network: true }));
+
+      expect(args[args.indexOf(NETWORK) - 1]).toBe('-c');
+      expect(roots(args)).toEqual([]);
+    });
+
+    it('names the writable folders as a TOML list, each a quoted string', () => {
+      const { args } = launchCodexHeadless(
+        spec({ writableRoots: ['/repos/web/.git', '/Users/dev/it\'s "here"/api/.git'] }),
+      );
+
+      expect(roots(args)).toEqual([
+        'sandbox_workspace_write.writable_roots=["/repos/web/.git","/Users/dev/it\'s \\"here\\"/api/.git"]',
+      ]);
+      expect(args).not.toContain(NETWORK);
+    });
+
+    it('adds no list for a card with the grant on and no project to name', () => {
+      expect(roots(launchCodexHeadless(spec({ writableRoots: [] })).args)).toEqual([]);
+    });
+
+    it('adds neither under read-only, where Codex has no network and no writable folder', () => {
+      const { args } = launchCodexHeadless(
+        spec({ sandbox: 'read-only', network: true, writableRoots: ['/repos/web/.git'] }),
+      );
+
+      expect(args.some((arg) => arg.startsWith('sandbox_workspace_write.'))).toBe(false);
+    });
+
+    it('carries both on a resume too', () => {
+      const { args } = launchCodexHeadless(
+        spec({ conversation: { resume: 't' }, network: true, writableRoots: ['/repos/web/.git'] }),
+      );
+
+      expect(args).toContain(NETWORK);
+      expect(roots(args)).toHaveLength(1);
+    });
+  });
+
   it('refuses a sandbox outside HEADLESS_SANDBOXES rather than putting it on the argv', () => {
     for (const sandbox of ['danger-full-access', 'workspace-write" -c x="y', '']) {
       expect(() => launchCodexHeadless(spec({ sandbox: sandbox as HeadlessSandbox }))).toThrow(

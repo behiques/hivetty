@@ -6,7 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { goToPlace } from '../fixtures/places';
 
-import { launchHive } from './fixtures/hive-app';
+import { launchHive, setContentSize } from './fixtures/hive-app';
 
 /**
  * Each CLI's headless agent settings, driven through the real app (HIVE-341). Since HIVE-376 they sit on
@@ -102,6 +102,66 @@ test("the default CLI and codex's sandbox write the file (HIVE-342)", async ({},
 
     await page.waitForFunction(() => document.getAnimations().length === 0);
     await page.screenshot({ path: testInfo.outputPath('clis-codex.png'), fullPage: true });
+  } finally {
+    await app.close();
+  }
+});
+
+test("codex's two sandbox grants write the file, the git one after its confirm, and read-only leaves them inert", async ({}, testInfo) => {
+  const configPath = testInfo.outputPath('hive-config.json');
+  writeFileSync(configPath, JSON.stringify({ version: 2, projects: [] }));
+
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
+  const page = await app.firstWindow();
+  const agents = () => read(configPath).clis?.codex?.agents ?? {};
+
+  try {
+    await page.waitForSelector('nav[aria-label="Places"]');
+    // The window's minimum width, then 1440 below.
+    await setContentSize(app, 1100, 800);
+    await openPane(page, 'Codex');
+    const codex = agentsGroup(page);
+    const network = codex.getByRole('switch', { name: 'Network access' });
+    const projectGit = codex.getByRole('switch', { name: 'Project git access' });
+
+    // Off until the person turns them on, and absent from the file.
+    await expect(network).toHaveAttribute('aria-checked', 'false');
+    await expect(projectGit).toHaveAttribute('aria-checked', 'false');
+
+    await network.click();
+    await expect.poll(() => agents().network).toBe(true);
+
+    // The git grant asks first, and Cancel writes nothing.
+    await projectGit.click();
+    const confirm = codex.getByRole('alertdialog', { name: 'Allow project git access?' });
+    await expect(confirm).toContainText('run outside the sandbox');
+    await page.waitForFunction(() => document.getAnimations().length === 0);
+    await page.screenshot({ path: testInfo.outputPath('grants-confirm-1100.png'), fullPage: true });
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    expect(agents().projectGit).toBeUndefined();
+
+    await projectGit.click();
+    await codex.getByRole('alertdialog', { name: 'Allow project git access?' }).getByRole('button', { name: 'Allow' }).click();
+    await expect.poll(() => agents().projectGit).toBe(true);
+    await expect(projectGit).toHaveAttribute('aria-checked', 'true');
+
+    await setContentSize(app, 1440, 900);
+    await page.waitForFunction(() => document.getAnimations().length === 0);
+    await page.screenshot({ path: testInfo.outputPath('grants-on-1440.png'), fullPage: true });
+
+    // Off is the key's absence, and needs no confirm.
+    await projectGit.click();
+    await expect.poll(() => 'projectGit' in agents()).toBe(false);
+    expect(agents().network).toBe(true);
+
+    // Codex has no network and no writable folder under read-only: both go inert, and the file keeps its value.
+    await codex.getByRole('combobox', { name: 'Sandbox' }).selectOption('read-only');
+    await expect(network).toBeDisabled();
+    await expect(projectGit).toBeDisabled();
+    await expect(codex.getByText('The read-only sandbox has no network.')).toBeVisible();
+    expect(agents().network).toBe(true);
+    await page.waitForFunction(() => document.getAnimations().length === 0);
+    await page.screenshot({ path: testInfo.outputPath('grants-read-only-1440.png'), fullPage: true });
   } finally {
     await app.close();
   }
