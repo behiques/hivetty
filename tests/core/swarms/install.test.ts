@@ -35,6 +35,8 @@ let root: string;
 let hiveDir: string;
 let repoCount = 0;
 
+const NONE = { agents: [], skills: [] };
+
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
 
 const write = (path: string, text: string): void => {
@@ -207,6 +209,7 @@ describe('install', () => {
           agents: [{ name: 'a1', description: 'Helps out.', tools: ['Read', 'Bash'] }],
           skills: [{ name: 's1', description: 'Does s1.' }],
         },
+        disabled: { agents: [], skills: [] },
       },
     ]);
     expect(result.ok && result.installed.description).toBe('Ticket to merge.');
@@ -731,6 +734,7 @@ describe('setAutoUpdate', () => {
     title: swarmId,
     description: '',
     contents: { agents: [], skills: [] },
+    disabled: { agents: [], skills: [] },
   });
   const junk = { nope: 1 };
   const seedList = (): void => {
@@ -1054,6 +1058,7 @@ describe('mergeListing', () => {
     title: swarmId,
     description: '',
     contents: { agents: [], skills: [] },
+    disabled: { agents: [], skills: [] },
   });
 
   it('puts registry rows first with their installed entry, then installed swarms the registry left out', () => {
@@ -1064,9 +1069,9 @@ describe('mergeListing', () => {
     expect(listing).toEqual({
       source: 'cache',
       items: [
-        { entry: a, installed: installedFor('A'), update: null },
-        { entry: b, installed: null, update: null },
-        { entry: null, installed: installedFor('C'), update: null },
+        { entry: a, installed: installedFor('A'), update: null , missing: NONE },
+        { entry: b, installed: null, update: null , missing: NONE },
+        { entry: null, installed: installedFor('C'), update: null , missing: NONE },
       ],
     });
   });
@@ -1079,9 +1084,9 @@ describe('mergeListing', () => {
     const listing = mergeListing({ source: 'cloud', swarms: [a, b] }, [installedFor('c1'), installedFor('a1')], pending);
 
     expect(listing.items).toEqual([
-      { entry: a, installed: installedFor('a1'), update },
-      { entry: b, installed: null, update: null },
-      { entry: null, installed: installedFor('c1'), update },
+      { entry: a, installed: installedFor('a1'), update , missing: NONE },
+      { entry: b, installed: null, update: null , missing: NONE },
+      { entry: null, installed: installedFor('c1'), update , missing: NONE },
     ]);
     expect(pending.mock.calls.map(([id]) => id).sort()).toEqual(['a1', 'c1']);
   });

@@ -6,6 +6,8 @@
  * share no package: a rule changed here is changed there in the same week.
  */
 
+import { SKILL_NAME_PATTERN } from './skills-contract';
+
 export const SWARM_MANIFEST_FILE = 'swarm.json';
 
 export const SWARM_NAME_MAX = 64;
@@ -233,7 +235,24 @@ export interface InstalledSwarm {
   /** The manifest's description (HIVE-442). Absent on an entry written before it; read it as `''`. */
   description: string;
   contents: SwarmContents;
+  /** HIVE-453: what the person turned off. Absent on an entry written before it: read through `disabledOf`. */
+  disabled: SwarmDisabled;
 }
+
+/** HIVE-453: a swarm's agents and skills, by folder name, as two lists. */
+export interface SwarmDisabled {
+  agents: string[];
+  skills: string[];
+}
+
+/** `'agents' | 'skills'`: the two kinds of item a swarm installs that can be turned off. */
+export type SwarmItemKind = keyof SwarmDisabled;
+
+/** Nothing off, nothing missing. Frozen: copy it before changing it. */
+export const NOTHING_OFF: SwarmDisabled = Object.freeze({
+  agents: Object.freeze([]) as unknown as string[],
+  skills: Object.freeze([]) as unknown as string[],
+});
 
 /** A newer version the updater found for an installed swarm (HIVE-442). In memory only. */
 export interface SwarmUpdate {
@@ -247,6 +266,8 @@ export interface SwarmListItem {
   installed: InstalledSwarm | null;
   /** Null when up to date, not installed, or not checked yet. */
   update: SwarmUpdate | null;
+  /** HIVE-453: names the swarm's seed manifest tracks whose definition file is absent on disk. Empty when not installed. */
+  missing: SwarmDisabled;
 }
 
 export interface SwarmListing {
@@ -386,6 +407,39 @@ export function parseSwarmAutoUpdateRequest(payload: unknown): SwarmAutoUpdateRe
   const autoUpdate = (payload as Record<string, unknown>)['autoUpdate'];
   if (typeof autoUpdate !== 'boolean') throw new Error('autoUpdate is not a boolean');
   return { swarmId, autoUpdate };
+}
+
+const stringsOf = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string') : [];
+
+/** The off lists of an entry, tolerant of one written before HIVE-453 or hand-edited. */
+export function disabledOf(entry: InstalledSwarm): SwarmDisabled {
+  const raw: unknown = (entry as { disabled?: unknown }).disabled;
+  if (!isRecord(raw)) return { agents: [], skills: [] };
+  return { agents: stringsOf(raw['agents']), skills: stringsOf(raw['skills']) };
+}
+
+export interface SwarmSetEnabledRequest {
+  swarmId: string;
+  kind: SwarmItemKind;
+  name: string;
+  enabled: boolean;
+}
+
+/** `swarms:set-enabled` carries an id, a kind, a name and a boolean and nothing else (HIVE-453). */
+export function parseSwarmSetEnabledRequest(payload: unknown): SwarmSetEnabledRequest {
+  const { swarmId } = parseSwarmRequest(payload);
+  const record = payload as Record<string, unknown>;
+  const kind = record['kind'];
+  if (kind !== 'agents' && kind !== 'skills') throw new Error('kind is not agents or skills');
+  const name = record['name'];
+  // The skills and agents contracts share one folder-name pattern; a swarm item is one of those folders.
+  if (typeof name !== 'string' || name.length > SWARM_NAME_MAX || !SKILL_NAME_PATTERN.test(name)) {
+    throw new Error('name is not a skill or agent name');
+  }
+  const enabled = record['enabled'];
+  if (typeof enabled !== 'boolean') throw new Error('enabled is not a boolean');
+  return { swarmId, kind, name, enabled };
 }
 
 /** `swarms:changed`: read the list again. `updated` names an install that replaced an older version. */

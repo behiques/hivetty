@@ -339,6 +339,7 @@ const heldAt = (swarmId: string, version: string, patch: Partial<InstalledSwarm>
   title: 'Standard',
   description: 'Ticket to merge.',
   contents: { agents: [], skills: [] },
+  disabled: { agents: [], skills: [] },
   ...patch,
 });
 

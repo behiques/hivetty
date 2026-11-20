@@ -100,6 +100,7 @@ describe('adoptBuiltIns', () => {
             { name: 'verify', description: 'Does verify.' },
           ],
         },
+        disabled: { agents: [], skills: [] },
       },
     ]);
     expect(ADOPTED_SWARM_ID).toBe('bundled-dev-squad');

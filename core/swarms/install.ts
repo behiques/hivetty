@@ -454,6 +454,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
         title: read.manifest.title,
         description: read.manifest.description,
         contents: read.contents,
+        disabled: { agents: [], skills: [] },
       };
       await writeInstalled(paths.installed, [...raw.filter((held) => !isEntryOf(held, entry.id)), installed]);
       await rm(paths.pending(entry.id), { force: true });
@@ -571,11 +572,11 @@ export function mergeListing(
     items: [
       ...registry.swarms.map((entry) => {
         const mine = held.get(entry.id) ?? null;
-        return { entry, installed: mine, update: mine === null ? null : pending(entry.id) };
+        return { entry, installed: mine, update: mine === null ? null : pending(entry.id), missing: { agents: [], skills: [] } };
       }),
       ...installed
         .filter((entry) => !listed.has(entry.swarmId))
-        .map((entry) => ({ entry: null, installed: entry, update: pending(entry.swarmId) })),
+        .map((entry) => ({ entry: null, installed: entry, update: pending(entry.swarmId), missing: { agents: [], skills: [] } })),
     ],
   };
 }

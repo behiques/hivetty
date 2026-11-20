@@ -47,6 +47,7 @@ const installedFor = (overrides: Partial<InstalledSwarm> = {}): InstalledSwarm =
   title: 'Standard',
   description: 'Ticket to merge.',
   contents: { agents: [AGENT], skills: [SKILL] },
+  disabled: { agents: [], skills: [] },
   ...overrides,
 });
 
