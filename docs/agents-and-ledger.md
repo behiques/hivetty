@@ -2814,13 +2814,18 @@ come back from `resources/`.
 
 Adoption writes Dev Squad's entry under the local id `bundled-dev-squad` (a
 registry id is a cuid, which holds no `-`). The first registry read that
-returns a native row with slug `standard` re-keys it: `rekeyAdopted` moves
+returns a native row with slug `dev-squad` re-keys it: `rekeyAdopted` moves
 `seed.json` to `swarms/<id>/`, removes `swarms/bundled-dev-squad/`, then
 rewrites the entry's `swarmId`, inside the install queue and after the boot
 seed. The `registry()` wrapper in `core/swarms/index.ts` asks first, outside
 the queue, so a read with nothing to re-key never waits behind an install. From
 then on the listing, install and the updater match it by id like any other
 swarm.
+
+HIVE-448 renamed the swarm from Standard before any release carried it, so
+nothing migrates the old name. A development build of `main` between HIVE-447
+and HIVE-448 left its home with `swarms/bundled-standard/`: remove that swarm
+in Settings › Swarms and install Dev Squad.
 
 An entry at the version `bundled` has no clone, so its seed set reads its
 files against the shipped tree and history in `resources/`, with the swarm's
