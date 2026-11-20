@@ -22,8 +22,8 @@ export async function writeContainerSet(
     an http hook to any non-loopback private address, and `host.docker.internal`
     is one — measured from inside a container, recorded on `statusCommand`. A
     command hook is `curl` with the same headers and the payload from stdin,
-    and `curl` is what the ready and `/done` commands in this same set already
-    rely on being there.
+    and `curl` is what the ready command in this same set already relies on
+    being there.
   */
   const settings = hookSettings(origins.url, origins.readyUrl, identity, 'command');
 

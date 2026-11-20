@@ -37,8 +37,8 @@ import { launchHive } from './fixtures/hive-app';
  * the way a real agent's or a real session's hook would send it — over the
  * receiver's `POST /ledger`, authenticated by the token the app itself put in
  * that party's environment. So this spec starts one real (stubbed) session and
- * has its shell speak for it, with the exact request shape `doneCommand` and
- * `readyCommand` already use for their own hooks (`hook-vocabulary.ts`) — a
+ * has its shell speak for it, with the exact request shape `readyCommand`
+ * already uses for its own hook (`hook-vocabulary.ts`) — a
  * `curl` reading its own session id and token out of the environment the app
  * gave it.
  *
@@ -95,7 +95,7 @@ async function shell(page: Page, command: string): Promise<void> {
 
 /**
  * The curl this session's own hooks would run, built the same way
- * `doneCommand`/`readyCommand` build theirs: the URL, the session id and the
+ * `readyCommand` builds its own: the URL, the session id and the
  * token all come out of the environment the app injected, never out of this
  * file. The HTTP status lands in `statusMarker`, which is how the spec knows
  * the write actually reached the ledger rather than merely that curl ran.

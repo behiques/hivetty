@@ -6,10 +6,12 @@ export const DONE_DESCRIPTION =
   'Finish this session — mark it done in HiveTTY and close its terminal. Use it when the work a session was opened for is complete, either because the user asked to finish or because a skill has finished its task and is handing off. Closing is recoverable; the transcript stays readable afterwards.';
 
 /**
- * `done` for a CLI whose shell cannot reach the receiver (HIVE-368): one hive tool call instead of
- * Claude's `curl`. Written with HIVE-369's neutral names and filled per CLI. No `allowed-tools` and
- * no inert variant: the launch pre-approves the tool, and an unreachable Hive answers the call
- * with a sentence the model relays.
+ * `done` as one hive tool call (HIVE-368), for every CLI. Written with HIVE-369's neutral names and
+ * filled per CLI. Not a shell command: a repo's own PreToolUse:Bash hook may refuse a `curl` that
+ * reads `$HIVE_RECEIVER_URL`, and an MCP call never passes through Bash. Codex and Copilot
+ * pre-approve the tool at launch; Claude reads `allowed-tools` per skill, so its copy carries the
+ * grant, scoped to this one tool. An unreachable Hive answers the call with a sentence the model
+ * relays.
  */
 export function doneToolSkill(cli: HarnessId): string {
   return renderSkillText(
@@ -17,7 +19,7 @@ export function doneToolSkill(cli: HarnessId): string {
 name: done
 description: >-
   ${DONE_DESCRIPTION}
----
+${cli === 'claude-code' ? 'allowed-tools: {{tool:session_done}}\n' : ''}---
 
 Call \`{{tool:session_done}}\`. It tells HiveTTY this session is finished, and the app closes
 the terminal itself once the turn ends — you cannot close it yourself, and you do not need to.

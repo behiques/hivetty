@@ -1,4 +1,4 @@
-import { doneCommand } from './hook-vocabulary';
+import { doneToolSkill } from '../done-tool-skill';
 
 /**
  * The built-in `/done`, owned by the app and rewritten on every launch.
@@ -53,117 +53,30 @@ import { doneCommand } from './hook-vocabulary';
 /**
  * The skill, pointed at a receiver that is listening.
  *
- * `doneUrl` is a **liveness signal only** — it chooses between an inert body and
- * a working one, and is never interpolated. The command reads the receiver's
- * origin from the environment instead (HIVE-132), because this directory is
- * shared by every session and a containerised one cannot reach the loopback
- * address a host session would have baked. See {@link doneCommand}.
+ * `doneUrl` is a **liveness signal only**: it chooses between an inert body and a working one,
+ * and is never interpolated.
  *
- * It was baked once, on the reasoning that threading the URL through a variable
- * would put a value in every pty for something no session needs to see. That
- * was already untrue: `HIVE_RECEIVER_URL` is in every pty for the MCP host.
+ * The working body is the `session_done` call Codex and Copilot already make (HIVE-368), not the
+ * `curl` it was until rc.14. That `curl` read `$HIVE_RECEIVER_URL` and the session's token from
+ * the environment, and a repo's own PreToolUse:Bash hook that refuses `curl` with a `$` in it
+ * blocked it before `allowed-tools` was consulted, so `/done` failed in that repo. The MCP host
+ * makes the same POST from its own process, which no Bash hook sees, and the container set's
+ * HTTP server answers the call with the same `/done` handler.
  *
- * `null` writes a body that promises nothing. A built-in whose first act is a
- * failed request is worse than one that is honestly inert — the app said it
- * could not finish the session, which is true and actionable, rather than
- * appearing to work and leaving a terminal open.
+ * `null` writes a body that promises nothing. A built-in whose first act is a failed request is
+ * worse than one that is honestly inert.
  */
 export const doneSkill = (doneUrl: string | null): string =>
-  doneUrl === null ? INERT : active();
+  doneUrl === null ? INERT : doneToolSkill('claude-code');
 
-/**
- * The frontmatter, with the skill's own tool grant when it has a command to run.
- *
- * ## Why `allowed-tools` here rather than a permission in the settings file
- *
- * The first version of this authorised the `curl` with a `permissions.allow`
- * entry in the app-generated `--settings` file. That file merges **above** the
- * user's own scope, so the grant was one the user could neither see in their
- * settings nor revoke — and it applied to every session, for a command only this
- * one skill ever runs.
- *
- * `allowed-tools` is scoped to the skill that needs it, which is both narrower
- * and legible: the authorisation sits three lines above the command it
- * authorises, in a file the user can read. HIVE-93 specified it this way from
- * the start; the settings-file detour was a mistake, and a self review found it
- * had also been written as a **prefix** rule — which for `curl` is not a small
- * over-grant. `-K` reads a config file that redefines the target and the output,
- * `-o` and `-D` write to a chosen path, `--upload-file` sends one. None need a
- * shell operator, so none are caught by the `&&`/`;` handling that makes prefix
- * rules safe for ordinary commands.
- *
- * So the rule is the **exact** command, built from {@link doneCommand} — the same
- * builder the body below runs, which is what stops the grant and the command from
- * drifting into a permission prompt inside the app's own built-in.
- *
- * Omitted entirely when there is no endpoint: the inert body runs nothing, and a
- * grant for a command that is not there would be a claim with no purpose.
- */
-/**
- * A YAML **single-quoted** scalar, which is the only safe way to emit this rule.
- *
- * Unquoted — a *plain* scalar — is what shipped first, and it made the whole
- * frontmatter block unparseable. The value contains
- * `-H "x-hive-session: $HIVE_SESSION_ID"`, and a colon followed by a space is
- * YAML's mapping-value indicator: it is forbidden inside a plain scalar
- * regardless of any `"` around it, because a scalar that does not *start* with a
- * quote has no quoted regions — those double quotes are ordinary characters. The
- * `:` in `127.0.0.1:51234` is fine, being followed by a digit; the two header
- * ones are not.
- *
- * The cost of getting this wrong is total rather than partial. A scanner error
- * kills the **entire** block, taking `name` and `description` with it, so
- * `/done` is never registered at all — and because the built-in shares
- * `skills/` with the user's own custom skills, a plugin-level rejection takes
- * those down too. The app validates user skills and refuses to emit one it
- * cannot explain (`render.ts`); emitting an invalid one of its own would be the
- * same failure with none of the reporting.
- *
- * Single-quoted rather than double-quoted because its escaping rule is the
- * simplest one YAML has: a literal `'` is written `''` and nothing else means
- * anything. The command holds no quote today, but the URL is interpolated, so
- * the doubling is what keeps that from mattering.
- */
-const yamlScalar = (value: string): string =>
-  `'${value.replaceAll("'", "''")}'`;
-
-const frontmatter = (allowedTools?: string): string =>
-  `---
+const frontmatter = `---
 name: done
 description: >-
   Finish this session — mark it done in HiveTTY and close its terminal. Use it
   when the work a session was opened for is complete, either because the user
   asked to finish or because a skill has finished its task and is handing off.
   Closing is recoverable; the transcript stays readable afterwards.
-${allowedTools === undefined ? '' : `allowed-tools: ${yamlScalar(allowedTools)}\n`}---
-`;
-
-/**
- * What the skill says when the app can actually close the session.
- *
- * Written as an instruction with the command spelled out rather than as a
- * description of one, because the agent has to reproduce it **exactly** to match
- * the `allowed-tools` grant in the frontmatter above. The rule is the whole
- * command and not a prefix, so anything added, removed or reordered misses it —
- * and a miss is the permission prompt the grant exists to prevent. The fenced
- * block is what makes byte-for-byte reproduction the easy path.
- *
- * The closing line matters as much as the command. Without it the model tends to
- * narrate what it just did, and a paragraph written after the request has landed
- * is a paragraph the user reads in a terminal that is already closing.
- */
-const active = (): string => `${frontmatter(`Bash(${doneCommand()})`)}
-Run exactly this command:
-
-\`\`\`sh
-${doneCommand()}
-\`\`\`
-
-That request tells HiveTTY this session is finished. The app closes the
-terminal itself once the turn ends — you cannot close it yourself, and you do
-not need to.
-
-Then stop. Do not summarise, do not explain, and do not run anything else.
+---
 `;
 
 /**
@@ -173,7 +86,7 @@ Then stop. Do not summarise, do not explain, and do not run anything else.
  * app cannot hear it is a session the user has to close by hand, and knowing
  * that is the difference between one keystroke and a stare.
  */
-const INERT = `${frontmatter()}
+const INERT = `${frontmatter}
 This session cannot be closed automatically: HiveTTY is not reachable from it,
 so there is nowhere to report that the work is finished.
 

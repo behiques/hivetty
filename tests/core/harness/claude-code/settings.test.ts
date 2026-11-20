@@ -12,7 +12,6 @@ import {
   HOOK_HEADER_TOKEN,
 } from '../../../../shared/hook-contract';
 import {
-  doneCommand,
   HOOK_EVENTS,
 } from '../../../../core/harness/claude-code/hook-vocabulary';
 import { METRICS_REFRESH_SECONDS } from '../../../../shared/metrics-contract';
@@ -171,7 +170,7 @@ describe('hookSettings', () => {
  * What this file deliberately does NOT grant (HIVE-93).
  *
  * An earlier version wrote a `permissions.allow` entry here so the built-in
- * `/done` could run its `curl` without a prompt. It was moved to `allowed-tools`
+ * `/done` could run without a prompt. It was moved to `allowed-tools`
  * in the generated skill's own frontmatter, and this test is what keeps it from
  * creeping back: this file merges **above** the user's own scope, so a grant
  * written here is one they can neither find among their settings nor revoke.
@@ -274,23 +273,9 @@ describe('the settings file grants no permissions', () => {
     }
   });
 
-  it('authorises the curl at the skill instead, exactly', () => {
-    /*
-      The grant lives with the command it authorises. Exact, not a prefix:
-      `…:*` would let anything be appended to the same `curl` invocation, and
-      `-K` redefines the target, `-o`/`-D` write to a chosen path and
-      `--upload-file` sends one — none needing a shell operator, so none caught
-      by Claude Code's `&&`/`;` handling.
-    */
-    const command = doneCommand();
-    /*
-      Quoted, because the rule contains a colon-space inside its `-H` arguments
-      and YAML forbids that in a plain scalar. `done-skill.test.ts` is where the
-      value is read back through the quoting; here it is enough that the grant
-      lives in the skill and not in this file.
-    */
+  it('authorises /done at the skill instead, one tool and nothing wider', () => {
     expect(doneSkill('http://127.0.0.1:51234/done')).toContain(
-      `allowed-tools: 'Bash(${command})'`,
+      'allowed-tools: mcp__hive__session_done\n',
     );
   });
 });

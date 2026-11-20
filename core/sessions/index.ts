@@ -2582,9 +2582,9 @@ export function createSessions(options: SessionsOptions): Sessions {
      * set uses a resolved value. Rewriting the host file's *path* would name a
      * container path holding the wrong file.
      *
-     * `--plugin-dir` is the exception and stays shared. HIVE-132 made
-     * `doneCommand` read `$HIVE_RECEIVER_URL` rather than baking an origin, so
-     * one plugin directory serves host and container both.
+     * `--plugin-dir` is the exception and stays shared. `/done` calls the hive
+     * server's `session_done` rather than baking an origin, so one plugin
+     * directory serves host and container both.
      */
     const container = runtime.container;
     /*
