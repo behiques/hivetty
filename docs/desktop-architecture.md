@@ -1191,8 +1191,20 @@ unpackaged), `account-store.ts` keeps `<userData>/account.bin` through safeStora
 scheme, and `auth-client.ts` is the sign-in state machine; `index.ts` composes them into one client that
 `ipc/index.ts` and `ipc/remote-proxy.ts` both answer from.
 
-The scheme is `hivetty` in a packaged build (Info.plist, via `electron-builder.yml`'s `protocols`) and
-`hivetty-dev` unpackaged (`setAsDefaultProtocolClient` at launch). On macOS the link arrives as `open-url`,
+The scheme names the build's channel, which is also the cloud it talks to (HIVE-452), so a page links only the
+builds whose cloud knows its swarm ids:
+
+| Build | Scheme | Cloud | Who links to it |
+| --- | --- | --- | --- |
+| Packaged release (`1.0.0`) | `hivetty` | prod | hivetty.dev and prod's account pages |
+| Packaged release candidate (`1.0.0-rc.N`) | `hivetty-dev` | dev | dev.hivetty.dev and dev's account pages |
+| Unpackaged (a local checkout) | `hivetty-local` | dev, or a local cloud through `HIVETTY_CLOUD_URL` | a locally run hivetty-cloud |
+
+`electron-builder.yml`'s `protocols` declares both packaged schemes in Info.plist, since the file cannot branch on
+the version; each build drops links that are not its own. A packaged build also claims its scheme with
+`setAsDefaultProtocolClient` at every launch, which takes it back on a Mac where an unpackaged build once held
+it. An unpackaged build registers `hivetty-local` at launch, but macOS ignores the arguments that would start
+it, so a link reaches an unpackaged build only while it is running. On macOS the link arrives as `open-url`,
 whose listener `index.ts` installs in `will-finish-launching` so a link that cold-starts the app is not
 missed; links are held until the licence starts at `whenReady`. `second-instance` argv is scanned too, for
 Windows and Linux. Only `…://auth/callback` with the pending `state` is ever acted on.

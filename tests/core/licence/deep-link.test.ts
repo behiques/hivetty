@@ -11,12 +11,18 @@ import {
   schemeFor,
 } from '../../../core/licence/deep-link';
 
+const SCHEMES = ['hivetty', 'hivetty-dev', 'hivetty-local'] as const;
+/** Every build paired with each scheme that is not its own. */
+const OTHERS = SCHEMES.flatMap((own) => SCHEMES.filter((s) => s !== own).map((other) => [own, other] as const));
+
 describe('schemeFor / redirectUriFor', () => {
-  it('gives packaged builds hivetty and dev builds hivetty-dev', () => {
-    expect(schemeFor(true)).toBe('hivetty');
-    expect(schemeFor(false)).toBe('hivetty-dev');
+  it('names the build channel: release hivetty, release candidate hivetty-dev, unpackaged hivetty-local', () => {
+    expect(schemeFor({ isPackaged: true, prerelease: false })).toBe('hivetty');
+    expect(schemeFor({ isPackaged: true, prerelease: true })).toBe('hivetty-dev');
+    expect(schemeFor({ isPackaged: false, prerelease: false })).toBe('hivetty-local');
+    expect(schemeFor({ isPackaged: false, prerelease: true })).toBe('hivetty-local');
     expect(redirectUriFor('hivetty')).toBe('hivetty://auth/callback');
-    expect(redirectUriFor('hivetty-dev')).toBe('hivetty-dev://auth/callback');
+    expect(redirectUriFor('hivetty-local')).toBe('hivetty-local://auth/callback');
   });
 });
 
@@ -29,9 +35,11 @@ describe('parseCallback', () => {
     });
   });
 
+  it.each(OTHERS)('a %s build drops a %s callback', (own, other) => {
+    expect(parseCallback(`${other}://auth/callback?code=x&state=y`, own)).toBeNull();
+  });
+
   it.each([
-    ['a dev build handed the packaged scheme', 'hivetty://auth/callback?code=x&state=y', 'hivetty-dev'],
-    ['the packaged build handed the dev scheme', 'hivetty-dev://auth/callback?code=x&state=y', 'hivetty'],
     ['another host', 'hivetty://evil/callback?code=x&state=y', 'hivetty'],
     ['another path', 'hivetty://auth/other?code=x&state=y', 'hivetty'],
     ['a port', 'hivetty://auth:1/callback?code=x&state=y', 'hivetty'],
@@ -47,14 +55,17 @@ describe('parseCallback', () => {
 describe('parseSwarmInstall', () => {
   it.each([
     ['the packaged scheme', 'hivetty://swarms/install?id=a1_B-9', 'hivetty', 'a1_B-9'],
-    ['the dev scheme', 'hivetty-dev://swarms/install?id=x', 'hivetty-dev', 'x'],
+    ['the release candidate scheme', 'hivetty-dev://swarms/install?id=x', 'hivetty-dev', 'x'],
+    ['the local scheme', 'hivetty-local://swarms/install?id=x', 'hivetty-local', 'x'],
   ] as const)('accepts %s', (_name, url, scheme, swarmId) => {
     expect(parseSwarmInstall(url, scheme)).toEqual({ swarmId });
   });
 
+  it.each(OTHERS)('a %s build drops a %s install link', (own, other) => {
+    expect(parseSwarmInstall(`${other}://swarms/install?id=x`, own)).toBeNull();
+  });
+
   it.each([
-    ['a dev build handed the packaged scheme', 'hivetty://swarms/install?id=x', 'hivetty-dev'],
-    ['the packaged build handed the dev scheme', 'hivetty-dev://swarms/install?id=x', 'hivetty'],
     ['https', 'https://swarms/install?id=x', 'hivetty'],
     ['host swarm', 'hivetty://swarm/install?id=x', 'hivetty'],
     ['host auth', 'hivetty://auth/install?id=x', 'hivetty'],
@@ -124,10 +135,11 @@ describe('createDeepLinkRouter', () => {
   });
 });
 
-function fakeApp(isPackaged: boolean) {
+function fakeApp(isPackaged: boolean, version = '1.0.0') {
   const handlers = new Map<string, (...args: unknown[]) => void>();
   return {
     isPackaged,
+    getVersion: () => version,
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => handlers.set(event, handler)),
     setAsDefaultProtocolClient: vi.fn(() => true),
     fire: (event: string, ...args: unknown[]) => handlers.get(event)?.(...args),
@@ -152,24 +164,28 @@ describe('installDeepLinks', () => {
     expect(links.scheme).toBe('hivetty');
   });
 
-  it('registers nothing at runtime when packaged: Info.plist owns hivetty', () => {
-    const app = fakeApp(true);
-    installDeepLinks({ app: app as never, execPath: '/x', argv1: 'out/main/index.js' });
-    expect(app.setAsDefaultProtocolClient).not.toHaveBeenCalled();
+  it.each([
+    ['a release', 'hivetty', '1.0.0'],
+    ['a release candidate', 'hivetty-dev', '1.0.0-rc.13'],
+  ])('%s claims %s at launch, taking it back from any earlier owner', (_name, scheme, version) => {
+    const app = fakeApp(true, version);
+    const links = installDeepLinks({ app: app as never, execPath: '/x', argv1: 'out/main/index.js' });
+    expect(app.setAsDefaultProtocolClient.mock.calls).toEqual([[scheme]]);
+    expect(links.scheme).toBe(scheme);
   });
 
-  it('registers hivetty-dev with the resolved entry script when unpackaged', () => {
+  it('registers hivetty-local, and only that, with the resolved entry script when unpackaged', () => {
     const app = fakeApp(false);
     const links = installDeepLinks({ app: app as never, execPath: '/electron', argv1: 'out/main/index.js' });
-    expect(app.setAsDefaultProtocolClient).toHaveBeenCalledWith('hivetty-dev', '/electron', [
-      expect.stringMatching(/\/out\/main\/index\.js$/),
+    expect(app.setAsDefaultProtocolClient.mock.calls).toEqual([
+      ['hivetty-local', '/electron', [expect.stringMatching(/\/out\/main\/index\.js$/)]],
     ]);
-    expect(links.scheme).toBe('hivetty-dev');
+    expect(links.scheme).toBe('hivetty-local');
   });
 
-  it('registers hivetty-dev with no args when there is no entry script', () => {
+  it('registers hivetty-local with no args when there is no entry script', () => {
     const app = fakeApp(false);
     installDeepLinks({ app: app as never, execPath: '/electron' });
-    expect(app.setAsDefaultProtocolClient).toHaveBeenCalledWith('hivetty-dev', '/electron', []);
+    expect(app.setAsDefaultProtocolClient).toHaveBeenCalledWith('hivetty-local', '/electron', []);
   });
 });

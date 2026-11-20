@@ -23,7 +23,7 @@ describe('routeDeepLink (HIVE-442)', () => {
   it.each([
     ['the sign-in callback', 'hivetty://auth/callback?code=c&state=s'],
     ['a malformed swarm link', 'hivetty://swarms/install?id=../x'],
-    ['the dev scheme in a packaged build', 'hivetty-dev://swarms/install?id=a1'],
+    ['the release candidate scheme in a packaged release', 'hivetty-dev://swarms/install?id=a1'],
     ['garbage', 'garbage'],
   ])('hands %s to the sign-in callback exactly as before', (_name, url) => {
     const deps = routes();

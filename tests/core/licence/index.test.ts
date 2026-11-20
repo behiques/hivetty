@@ -106,7 +106,7 @@ describe('licence composition', () => {
 
     const url = new URL(openExternal.mock.calls[0]![0] as string);
     expect(url.origin).toBe('http://127.0.0.1:4010');
-    expect(url.searchParams.get('redirect_uri')).toBe('hivetty-dev://auth/callback');
+    expect(url.searchParams.get('redirect_uri')).toBe('hivetty-local://auth/callback');
     expect(broadcast).toHaveBeenCalledWith({ kind: 'signing-in' });
     expect(ACCOUNT_CALLS[CH.accountState]()).toEqual({ kind: 'signing-in' });
     ACCOUNT_CALLS[CH.accountCancel]();
@@ -120,7 +120,7 @@ describe('licence composition', () => {
     });
   });
 
-  it('sends a packaged release candidate to the dev cloud, returning on the packaged scheme', async () => {
+  it('sends a packaged release candidate to the dev cloud, returning on hivetty-dev (HIVE-452)', async () => {
     const openExternal = vi.fn().mockResolvedValue(undefined);
     startLicence({
       app: { isPackaged: true, getPath: () => dir, getVersion: () => '1.0.0-rc.1' },
@@ -137,7 +137,7 @@ describe('licence composition', () => {
     await ACCOUNT_CALLS[CH.accountSignIn]();
     const url = new URL(openExternal.mock.calls[0]![0] as string);
     expect(url.origin).toBe('https://api.dev.hivetty.dev');
-    expect(url.searchParams.get('redirect_uri')).toBe('hivetty://auth/callback');
+    expect(url.searchParams.get('redirect_uri')).toBe('hivetty-dev://auth/callback');
   });
 
   it('sends a packaged stable release to the prod cloud', async () => {
