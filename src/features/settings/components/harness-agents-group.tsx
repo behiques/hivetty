@@ -42,10 +42,11 @@ const options = (values: readonly string[], saved?: string) => [
  */
 function SandboxGrants({ agents }: { agents: CliAgents }) {
   const readOnly = agents.sandbox === 'read-only';
+  const inert = !agents.enabled || readOnly;
 
   return (
     // A native fieldset disables both switches at once, as it does the selects above.
-    <fieldset disabled={!agents.enabled || readOnly} className="flex flex-col gap-1 disabled:opacity-50">
+    <fieldset disabled={inert} className="flex flex-col gap-1 disabled:opacity-50">
       <Switch
         label="Network access"
         checked={agents.network === true}
@@ -59,6 +60,7 @@ function SandboxGrants({ agents }: { agents: CliAgents }) {
       <ConfirmSwitch
         label="Project git access"
         checked={agents.projectGit === true}
+        disabled={inert}
         onChange={(projectGit) => void setCliAgentsConfig({ cli: 'codex', projectGit })}
         description={
           readOnly

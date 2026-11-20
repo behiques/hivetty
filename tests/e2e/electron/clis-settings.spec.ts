@@ -154,6 +154,15 @@ test("codex's two sandbox grants write the file, the git one after its confirm, 
     await expect.poll(() => 'projectGit' in agents()).toBe(false);
     expect(agents().network).toBe(true);
 
+    // A confirm left open when the sandbox goes read-only closes, rather than sitting dimmed with dead buttons.
+    await projectGit.click();
+    await expect(codex.getByRole('alertdialog', { name: 'Allow project git access?' })).toBeVisible();
+    await codex.getByRole('combobox', { name: 'Sandbox' }).selectOption('read-only');
+    await expect(codex.getByRole('alertdialog')).toHaveCount(0);
+    await expect.poll(() => 'projectGit' in agents()).toBe(false);
+    await codex.getByRole('combobox', { name: 'Sandbox' }).selectOption('workspace-write');
+    await expect(codex.getByRole('alertdialog')).toHaveCount(0);
+
     // Codex has no network and no writable folder under read-only: both go inert, and the file keeps its value.
     await codex.getByRole('combobox', { name: 'Sandbox' }).selectOption('read-only');
     await expect(network).toBeDisabled();

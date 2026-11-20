@@ -61,4 +61,23 @@ describe('ConfirmSwitch', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(onChange).toHaveBeenCalledExactlyOnceWith(false);
   });
+
+  it('drops an open confirm when it is disabled, and writes nothing', async () => {
+    const onChange = vi.fn();
+    const props = { label: 'The grant', description: 'Why.', checked: false, confirm: CONFIRM, onChange };
+    const { rerender } = render(<ConfirmSwitch {...props} />);
+
+    await userEvent.click(screen.getByRole('switch', { name: 'The grant' }));
+    expect(screen.getByRole('alertdialog', { name: 'Allow it?' })).toBeInTheDocument();
+
+    rerender(<ConfirmSwitch {...props} disabled />);
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'The grant' })).not.toBeChecked();
+
+    rerender(<ConfirmSwitch {...props} />);
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

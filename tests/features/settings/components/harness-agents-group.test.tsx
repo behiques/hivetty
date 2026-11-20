@@ -371,6 +371,23 @@ describe("codex's two sandbox grants", () => {
     expect(setCliAgentsConfig).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['the sandbox goes read-only', { sandbox: 'read-only' as const }],
+    ['agents go off for Codex', { enabled: false }],
+  ])('drops an open project git confirm when %s', async (_, change) => {
+    const agents = (extra = {}) => resolveClis({ codex: { agents: extra } }).codex.agents;
+    const { rerender } = render(<HarnessAgentsGroup cli="codex" agents={agents()} />);
+
+    await userEvent.click(projectGit());
+    expect(screen.getByRole('alertdialog', { name: 'Allow project git access?' })).toBeInTheDocument();
+
+    rerender(<HarnessAgentsGroup cli="codex" agents={agents(change)} />);
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(projectGit()).toBeDisabled();
+    expect(setCliAgentsConfig).not.toHaveBeenCalled();
+  });
+
   it('leaves both inert while agents are off for Codex', () => {
     renderGroup('codex', { codex: { agents: { enabled: false } } });
 
