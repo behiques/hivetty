@@ -34,6 +34,7 @@ import {
   mergeAsk,
   mergeTarget,
   mergeWaiting,
+  namesPr,
   nextRef,
   openAsks,
   prEvents,
@@ -50,6 +51,7 @@ import {
   ttlOf,
   waitingAsks,
   STAGE_TEXT_MAX,
+  wholeNumberOf,
 } from '../../shared/ledger-derive';
 
 const NOW = 1_800_000_000_000;
@@ -1610,5 +1612,20 @@ describe('whyNotOpen', () => {
 
   it('keeps the bare reason for a thread that names no ask', () => {
     expect(whyNotOpen([], 'X9', 'x9', at(10, 0))).toBe('thread is not open: x9');
+  });
+});
+
+describe('namesPr and wholeNumberOf (Job Flow)', () => {
+  it('reads a PR number written as a number or a digit string, and nothing else', () => {
+    expect(wholeNumberOf(281)).toBe(281);
+    expect(wholeNumberOf('281')).toBe(281);
+    expect(wholeNumberOf(2.5)).toBeUndefined();
+    expect(wholeNumberOf('#281')).toBeUndefined();
+  });
+
+  it('matches a PR by number and by slug in any case', () => {
+    expect(namesPr({ pr: 281, repo: 'Behiques/HiveTTY' }, 'behiques/hivetty', 281)).toBe(true);
+    expect(namesPr({ pr: 282, repo: 'behiques/hivetty' }, 'behiques/hivetty', 281)).toBe(false);
+    expect(namesPr(undefined, 'behiques/hivetty', 281)).toBe(false);
   });
 });

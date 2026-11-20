@@ -159,6 +159,8 @@ import type {
 import type {
   LedgerAnswerRequest,
   LedgerEntry,
+  LedgerJobQuery,
+  LedgerJobResult,
   LedgerPostRequest,
   LedgerReadQuery,
   LedgerResult,
@@ -929,6 +931,9 @@ const bridge: HiveBridge = {
     /** Close a thread, by canonical id or short ref. */
     answer: (request: LedgerAnswerRequest): Promise<LedgerResult> =>
       ipcRenderer.invoke(CH.ledgerAnswer, request) as Promise<LedgerResult>,
+    /** One job across the last 30 days of files (Job Flow). Read-only. */
+    job: (query: LedgerJobQuery): Promise<LedgerJobResult> =>
+      ipcRenderer.invoke(CH.ledgerJob, query) as Promise<LedgerJobResult>,
     /** One entry landed, from any party. */
     onChanged: (callback: (entry: LedgerEntry) => void) =>
       subscribe<LedgerEntry>(CH.ledgerChanged, callback),

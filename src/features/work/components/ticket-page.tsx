@@ -5,9 +5,11 @@ import { useDetailsDrawer } from '@/hooks/use-details-drawer';
 import { useTicketRefresh } from '@/hooks/use-ticket-refresh';
 import type { Ticket } from '@/types/ticket';
 
+import { SegmentedControl, type SegmentedOption } from '@components/ui/segmented-control';
 import { SkeletonBar } from '@features/shared/components/skeleton-bar';
 import { AdfBlocks } from '@features/work/components/adf-blocks';
 import { JiraSetupPage } from '@features/work/components/jira-setup-page';
+import { TicketFlowTab } from '@features/work/components/ticket-flow-tab';
 import { TicketPageConversation } from '@features/work/components/ticket-page-conversation';
 import { LinesSkeleton, TicketProblem } from '@features/work/components/ticket-page-parts';
 import { TicketProperties } from '@features/work/components/ticket-properties';
@@ -23,9 +25,16 @@ import {
   useTicketRowModels,
   useWorkListed,
 } from '@stores/hive-store';
+import { type TicketTab, useSetTicketTab, useTicketTab } from '@stores/ui-store';
 
 /** The open ticket's page re-reads once a minute while it is on stage (HIVE-203, D9). */
 const usePagePoller = createPoller({ intervalMs: 60_000 });
+
+/** The ticket page's tabs (Job Flow): the ticket as Jira holds it, and the job as the ledger does. */
+const TICKET_TABS = [
+  { value: 'ticket', label: 'Ticket' },
+  { value: 'flow', label: 'Flow' },
+] as const satisfies readonly SegmentedOption<TicketTab>[];
 
 /** The description, its skeleton until the first read, or its problem in its place. */
 function Description({ ticketKey }: { ticketKey: string }) {
@@ -144,6 +153,8 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
 
   // The properties sidebar folds into this below a 760px page, as the PR page's does (HIVE-225).
   const drawer = useDetailsDrawer();
+  const tab = useTicketTab();
+  const setTab = useSetTicketTab();
 
   return (
     <section aria-label={`Ticket ${ticketKey}`} className="@container relative flex min-h-0 flex-1">
@@ -164,8 +175,20 @@ export function TicketPage({ ticketKey }: { ticketKey: string }) {
             </button>
           }
         />
-        <Description ticketKey={ticketKey} />
-        <TicketPageConversation ticketKey={ticketKey} />
+        <div className="mt-4">
+          <SegmentedControl label="Tab" options={TICKET_TABS} value={tab} onChange={setTab} />
+        </div>
+        {tab === 'flow' ? (
+          /* -mx-8 cancels the column's p-8: the Flow view carries its own gutters (Job Flow). */
+          <div className="-mx-8">
+            <TicketFlowTab ticketKey={ticketKey} />
+          </div>
+        ) : (
+          <>
+            <Description ticketKey={ticketKey} />
+            <TicketPageConversation ticketKey={ticketKey} />
+          </>
+        )}
       </div>
       <aside
         aria-label="Ticket properties"

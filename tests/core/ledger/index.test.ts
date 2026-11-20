@@ -46,6 +46,14 @@ describe('createLedger', () => {
     expect(ledger.read({ thread: 'a999' }).entries).toEqual([]);
   });
 
+  it('reads a job from its own directory, its own clock deciding today (Job Flow)', async () => {
+    ledger.append({ from: 'overmind', kind: 'post', body: 'plan', meta: { ticket: 'HIVE-401' } });
+    ledger.append({ from: 'overmind', kind: 'post', body: 'other', meta: { ticket: 'HIVE-9' } });
+    const result = await ledger.job({ ticket: 'HIVE-401', prs: [] });
+    expect(result.entries.map((e) => e.body)).toEqual(['plan']);
+    expect(result.warnings).toEqual([]);
+  });
+
   it('refuses a ref two writers both minted, and still takes the full id (HIVE-227)', () => {
     const ask = (id: string, to: string): string =>
       JSON.stringify({ id, ts: AT - 1000, from: 'builder', to, kind: 'ask', ref: 'a5', body: 'which?' });

@@ -55,7 +55,7 @@ const pad = (value: number, width = 2): string => String(value).padStart(width, 
  * rejecting a line for an odd `meta` would throw away correspondence this
  * loader exists to keep, and buy nothing.
  */
-const isEntry = (value: unknown): value is LedgerEntry => {
+export const isEntry = (value: unknown): value is LedgerEntry => {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Record<string, unknown>;
   const optionalString = (field: unknown): boolean =>
@@ -74,7 +74,7 @@ const isEntry = (value: unknown): value is LedgerEntry => {
 };
 
 /** `2026-08-28` — the file's name, in local time so "today" is the user's. */
-const dayOf = (ms: number): string => {
+export const dayOf = (ms: number): string => {
   const at = new Date(ms);
   return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
 };

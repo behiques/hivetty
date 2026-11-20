@@ -90,7 +90,7 @@ describe('PrPage', () => {
   it('draws its tabs as glyphs, each still named by its word', () => {
     render(<PrPage row={row} />);
     const tabs = within(screen.getByRole('radiogroup', { name: 'Tab' })).getAllByRole('radio');
-    expect(tabs.map((tab) => tab.getAttribute('aria-label'))).toEqual(['Conversation', 'Files 9', 'Checks', 'Timeline']);
+    expect(tabs.map((tab) => tab.getAttribute('aria-label'))).toEqual(['Conversation', 'Files 9', 'Checks', 'Timeline', 'Flow']);
     for (const tab of tabs) {
       expect(tab).toHaveTextContent('');
       expect(tab.querySelector('svg')).not.toBeNull();
@@ -102,6 +102,15 @@ describe('PrPage', () => {
     render(<PrPage row={row} />);
     await userEvent.click(screen.getByRole('radio', { name: 'Files 9' }));
     expect(screen.getByRole('complementary', { name: 'Changed files' })).toBeInTheDocument();
+  });
+
+  it('has a Flow tab last, after Timeline, that draws the job the PR belongs to (Job Flow)', async () => {
+    render(<PrPage row={row} />);
+    const tabs = within(screen.getByRole('radiogroup', { name: 'Tab' })).getAllByRole('radio');
+    expect(tabs.at(-1)).toHaveAccessibleName('Flow');
+    await userEvent.click(screen.getByRole('radio', { name: 'Flow' }));
+    expect(useUiStore.getState().prTab).toBe('flow');
+    expect(await screen.findByRole('button', { name: 'ask: builder to shipper' })).toBeInTheDocument();
   });
 });
 
@@ -158,11 +167,13 @@ describe('the Checks tab (HIVE-206)', () => {
 });
 
 describe('the Timeline tab (HIVE-208)', () => {
-  it('is the last tab, and choosing it shows the Timeline instead of the Conversation', async () => {
+  it('sits before Flow, and choosing it shows the Timeline instead of the Conversation', async () => {
     useHiveStore.setState({ loadPrTimeline: vi.fn(() => Promise.resolve()) });
     render(<PrPage row={row} />);
     const tabs = within(screen.getByRole('radiogroup', { name: 'Tab' })).getAllByRole('radio');
-    expect(tabs.at(-1)).toHaveAccessibleName('Timeline');
+    // Job Flow added Flow after it: GitHub's view of the PR, then the parties'.
+    expect(tabs.at(-2)).toHaveAccessibleName('Timeline');
+    expect(tabs.at(-1)).toHaveAccessibleName('Flow');
     await userEvent.click(screen.getByRole('radio', { name: 'Timeline' }));
     expect(screen.getByRole('region', { name: 'Timeline' })).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Conversation' })).toBeNull();

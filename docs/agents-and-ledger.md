@@ -73,6 +73,23 @@ debounce here would mean a caller is told an entry's id before that entry is
 actually on disk. A ledger whose reader and writer can disagree about what
 happened has stopped being a ledger.
 
+Two days is what the store **holds**, not all a reader can see. A ticket's
+Flow tab needs the whole job, and a job runs for days, so `ledger:job`
+(`core/ledger/job-read.ts`) reads the last thirty day files from disk
+on each call, asynchronously and one file at a time, and keeps only the job's
+entries (`jobEntries` in `shared/job-derive.ts`: the ticket, its PRs,
+a claim or release of the ticket, every thread that touched them, grown to a
+fixed point). It is a read: it
+writes nothing and holds nothing. The same malformed-line rule as the store's
+applies, and a day file that exists but cannot be read comes back named in
+`warnings` rather than read as empty. The renderer merges that history with
+the live tail and re-runs `jobEntries`, so a new entry joins its job the moment
+it lands.
+
+The Flow tab labels a lane with `meta.stage` when an entry has one and
+`meta.skill` (the name of the skill that wrote it) otherwise. Presentation
+only: nothing branches on either, and an entry with neither draws unlabelled.
+
 A malformed line — most likely the tail of a file the app was killed
 mid-write, or a hand-edit of a file the user is invited to open — is
 **skipped, not fatal**. It's collected in `malformed()` and reported on the
@@ -1237,7 +1254,7 @@ accept.
 Two callers, one `append`:
 
 - **The renderer**, over IPC (`CH.ledgerList` / `ledgerPost` / `ledgerAnswer`
-  / `ledgerChanged`). This is the overmind's own path — no header, no token,
+  / `ledgerChanged`, and the read `ledgerJob`). This is the overmind's own path — no header, no token,
   because it's a same-process call already gated by `assertSender`, and
   `from` is supplied as `OVERMIND` by the handler rather than accepted from
   the payload (see *The party rule* above).

@@ -141,6 +141,35 @@ describe('WorkStage (HIVE-203)', () => {
   });
 });
 
+describe('TicketPage: Ticket | Flow (Job Flow)', () => {
+  it('switches between the ticket and its Flow, keeping the header', async () => {
+    const user = userEvent.setup();
+    render(<TicketPage ticketKey="GRAC-3018" />);
+    expect(await screen.findByText('The description')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('radio', { name: 'Flow' }));
+    expect(await screen.findByText('No agent or session has written about GRAC-3018 yet.')).toBeInTheDocument();
+    expect(screen.queryByText('The description')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Hero refresh' })).toBeInTheDocument();
+    expect(useUiStore.getState().ticketTab).toBe('flow');
+
+    await user.click(screen.getByRole('radio', { name: 'Ticket' }));
+    expect(await screen.findByText('The description')).toBeInTheDocument();
+    expect(screen.queryByText('No agent or session has written about GRAC-3018 yet.')).toBeNull();
+  });
+
+  it('draws the job a ticket names', async () => {
+    useHiveStore.setState({
+      ledger: [
+        { id: '20261112-090000-0001', ts: 1, from: 'sess-1', to: 'builder', kind: 'ask', ref: 'a1', body: 'Build it.', meta: { ticket: 'GRAC-3018' } },
+      ],
+    });
+    useUiStore.getState().setTicketTab('flow');
+    render(<TicketPage ticketKey="GRAC-3018" />);
+    expect(await screen.findByRole('button', { name: /^a1: .* to builder$/ })).toBeInTheDocument();
+  });
+});
+
 describe('TicketPage (HIVE-203)', () => {
   it('draws the header from the list at once, and the description once read', async () => {
     const detail = deferred<unknown>();

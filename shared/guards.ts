@@ -108,8 +108,10 @@ import type {
 } from './ipc-contract';
 import { ISSUE_KEY_PATTERN, type JiraMention, type JiraTransitionByName, type JiraUsersRequest } from './jira-contract';
 import {
+  LEDGER_JOB_PRS_MAX,
   LEDGER_KINDS,
   type LedgerAnswerRequest,
+  type LedgerJobQuery,
   type LedgerKind,
   type LedgerPostRequest,
   type LedgerReadQuery,
@@ -3217,6 +3219,34 @@ export function parseLedgerReadQuery(input: unknown): LedgerReadQuery {
     query.limit = limit;
   }
 
+  return query;
+}
+
+/** A `ledger:job` payload (Job Flow): a ticket, PRs, or both; never neither. */
+export function parseLedgerJobQuery(input: unknown): LedgerJobQuery {
+  const source = asRecord(input, 'ledger job');
+  const query: LedgerJobQuery = { prs: [] };
+
+  const ticket = optionalString(source, 'ticket', 'ledger job');
+  if (ticket !== undefined) {
+    if (ticket.length > LEDGER_TICKET_MAX) {
+      throw new TypeError(`ledger job.ticket must be at most ${LEDGER_TICKET_MAX} characters`);
+    }
+    query.ticket = ticket;
+  }
+
+  const prs = source.prs ?? [];
+  if (!Array.isArray(prs) || prs.length > LEDGER_JOB_PRS_MAX) {
+    throw new TypeError(`ledger job.prs must be an array of at most ${LEDGER_JOB_PRS_MAX}`);
+  }
+  for (const pr of prs) {
+    const { repo, n } = asRecord(pr, 'ledger job.prs[]');
+    if (typeof repo !== 'string' || !REPO_SLUG.test(repo)) throw new TypeError('ledger job.prs[].repo must be owner/name');
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 1) throw new TypeError('ledger job.prs[].n must be a positive integer');
+    query.prs.push({ repo, n });
+  }
+
+  if (query.ticket === undefined && query.prs.length === 0) throw new TypeError('ledger job needs a ticket or a PR');
   return query;
 }
 

@@ -122,6 +122,28 @@ export interface LedgerReadQuery {
   limit?: number;
 }
 
+/** How many days `ledger:job` reads back, today included (Job Flow, 2026-11-12). */
+export const LEDGER_JOB_DAYS = 30;
+
+/** At most this many PRs seed one `ledger:job` read. */
+export const LEDGER_JOB_PRS_MAX = 20;
+
+/**
+ * One job's seeds (Job Flow): a ticket key, PRs as `owner/name` + number, or
+ * both. `jobEntries` grows them from what the entries name.
+ */
+export interface LedgerJobQuery {
+  ticket?: string;
+  prs: { repo: string; n: number }[];
+}
+
+/** What `ledger:job` answers: the job's entries in id order, and the day files that failed to read. */
+export interface LedgerJobResult {
+  entries: LedgerEntry[];
+  /** `YYYY-MM-DD` of each day file that existed and could not be read. */
+  warnings: string[];
+}
+
 export interface LedgerPostRequest {
   from: string;
   to?: string;
