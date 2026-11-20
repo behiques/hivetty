@@ -1,3 +1,6 @@
+import { statSync } from 'node:fs';
+import { join } from 'node:path';
+
 import type { ConfigSnapshot } from '@shared/config-contract';
 import type { HarnessId } from '@shared/harness-contract';
 
@@ -11,7 +14,7 @@ import type { HarnessGate } from './resolve-harness';
  * lease's (HIVE-332), through `licence/entitled.ts`; `entitled` is injected for tests and the e2e gate-off switch.
  */
 export function createCliGate(
-  read: () => Pick<ConfigSnapshot, 'clis' | 'agentsDefaultCli'>,
+  read: () => Pick<ConfigSnapshot, 'clis' | 'agentsDefaultCli' | 'projects'>,
   entitled: (id: HarnessId) => string | null = cliEntitled,
 ): HarnessGate {
   return {
@@ -19,13 +22,28 @@ export function createCliGate(
     enabled: (id) => read().clis[id].agents.enabled,
     defaultCli: () => read().agentsDefaultCli,
     defaults: (id) => {
-      const { model, effort, sandbox, deny } = read().clis[id].agents;
+      const { clis, projects } = read();
+      const { model, effort, sandbox, deny, network, projectGit } = clis[id].agents;
       return {
         ...(model === undefined ? {} : { model }),
         ...(effort === undefined ? {} : { effort }),
         ...(sandbox === undefined ? {} : { sandbox }),
         ...(deny === undefined ? {} : { deny }),
+        ...(network === true ? { network: true } : {}),
+        ...(projectGit === true ? { writableRoots: projectGitDirs(projects) } : {}),
       };
     },
   };
+}
+
+/**
+ * The `.git` folder of each configured project: what a Codex agent may write when the card's
+ * `projectGit` is on. Git data only, so the agent can add a worktree under its own folder, commit
+ * and fetch, and never the checkout's files.
+ */
+function projectGitDirs(projects: ConfigSnapshot['projects']): string[] {
+  // shortcut: a project whose `.git` is a file (a submodule, a linked worktree) is left out; resolve its common dir if one ever needs an agent.
+  return projects
+    .flatMap((project) => (project.path === null ? [] : [join(project.path, '.git')]))
+    .filter((dir) => statSync(dir, { throwIfNoEntry: false })?.isDirectory() === true);
 }

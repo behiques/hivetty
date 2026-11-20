@@ -453,6 +453,21 @@ output and hook payloads are in `tests/fixtures/codex/`.
 - `-m <model>` and `-c model_reasoning_effort="…"` from the Codex card, omitted when it names none.
 - `-c sandbox_mode="…"`: `resume` has no `-s`, so both shapes use `-c`. **The sandbox defaults to
   `workspace-write`** when the card sets none; `danger-full-access` is never offered.
+- **The card's two sandbox grants**, each off unless the person turned it on, each read by Codex
+  under `workspace-write` alone (measured with `codex sandbox` at 0.167.0), so `read-only` adds
+  neither:
+  - `-c sandbox_workspace_write.network_access=true` (`clis.codex.agents.network`). Without it no
+    command resolves a host: `gh` and `git push` fail, and an agent cannot read a pull request.
+  - `-c sandbox_workspace_write.writable_roots=["<project>/.git",…]` (`clis.codex.agents.projectGit`):
+    the `.git` folder of each configured project, resolved by `cli-gate.ts` at wake time. It is
+    what lets a builder or a fixer add a worktree under its own workdir, commit and fetch; the
+    checkout's files stay unwritable. **The whole folder, knowingly.** The narrower grant
+    (`worktrees`, `objects`, `refs`, `logs`) keeps hooks and git config out of reach but fails
+    `git -C <project> fetch` on `.git/FETCH_HEAD`, the first command the worktree skill runs. So
+    an agent with this grant can write `.git/hooks` and `.git/config`, and a command planted there
+    runs outside the sandbox the next time git runs in that project: Settings asks before turning
+    it on, and says so. A project whose `.git` is a file is left out.
+  Both are the machine owner's: never read from an `AGENT.md` or a swarm, and never synced.
 - `-c developer_instructions=…`, the system prompt followed by `catalog.md` (HIVE-360), on a
   first wake only: a resumed thread keeps it. Every `-c` value is `JSON.stringify` output, a valid TOML basic string, with DEL escaped and
   lone surrogates replaced, the two strings JSON writes that TOML refuses.

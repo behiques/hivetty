@@ -6,7 +6,7 @@ import {
   type Autonomy,
   type RunKind,
 } from '@shared/agent-contract';
-import { cliTakesEffort, type CliAgents } from '@shared/cli-contract';
+import { cliTakesEffort } from '@shared/cli-contract';
 import { DEFAULT_ENV_ARG, isSessionEnvDenied } from '@shared/config-contract';
 import { CAPABILITIES, type HarnessId } from '@shared/harness-contract';
 import { HOOK_ENV_GRANTS, HOOK_ENV_RECEIVER_URL } from '@shared/hook-contract';
@@ -19,6 +19,7 @@ import { withHostAlias } from '../hooks/container-origin';
 import type { McpServerSpec } from '../mcp/agent-config';
 
 import { HANDOFF_RULE } from './preamble';
+import type { AgentDefaults } from './resolve-harness';
 
 /**
  * The command line one wake runs (HIVE-115).
@@ -61,7 +62,7 @@ interface WakeInput {
   switchedFrom?: HarnessId;
   def: AgentDefinition;
   /** Settings › Harnesses › <CLI>'s model, effort, sandbox and deny for this CLI (HIVE-341, HIVE-342, HIVE-343). */
-  defaults?: Pick<CliAgents, 'model' | 'effort' | 'sandbox' | 'deny'>;
+  defaults?: AgentDefaults;
   /** Absent on the very first run, which mints one instead. */
   sessionUuid?: string;
   newUuid: string;
@@ -405,6 +406,9 @@ export function wakeCommand(input: WakeInput): WakeCommand {
     ...ran,
     // A sandbox is Codex's (HIVE-342): the card's, else `workspace-write`.
     ...(claude ? {} : { sandbox: input.defaults?.sandbox ?? 'workspace-write' }),
+    // The card's two sandbox grants, Codex's: off unless the person turned them on.
+    ...(input.defaults?.network === true ? { network: true } : {}),
+    ...(input.defaults?.writableRoots === undefined ? {} : { writableRoots: input.defaults.writableRoots }),
     limits: {
       turns: def.limits.turns,
       ...(def.limits.budgetUsd === undefined ? {} : { budgetUsd: def.limits.budgetUsd }),

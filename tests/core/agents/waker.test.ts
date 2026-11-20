@@ -1017,6 +1017,17 @@ describe('the adapter a wake runs on (HIVE-340)', () => {
       expect(seen[0]?.model).toBeUndefined();
       expect(seen[0]?.effort).toBeUndefined();
       expect(seen[0]?.sandbox).toBe('workspace-write');
+      // Neither grant: off is their absence.
+      expect(seen[0]).not.toHaveProperty('network');
+      expect(seen[0]).not.toHaveProperty('writableRoots');
+    });
+
+    it("hands the launch the card's network grant and its writable folders", () => {
+      const { seen, adapter } = recordingCodex();
+
+      build({ adapter, def: def(), defaults: { network: true, writableRoots: ['/repos/web/.git'] } });
+
+      expect(seen[0]).toMatchObject({ network: true, writableRoots: ['/repos/web/.git'] });
     });
 
     it("gives Claude no sandbox, and AGENT.md's model over the card's", () => {

@@ -644,7 +644,7 @@ describe('remote contract: the version handshake', () => {
   });
 
   it('is protocol 3: 2 carried a generation (HIVE-144), 3 caught up on unbumped channels (HIVE-140 audit)', () => {
-    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(52);
   });
 });
 
@@ -695,7 +695,7 @@ describe('remote contract: the attach snapshot (HIVE-144)', () => {
     expect(EVENT_CHANNELS).toContain(CH.changedFilesChanged);
     expect(frameKindOf(CH.changedFilesChanged)).toBe('event');
     expect(frameKindOf(CH.changedFilesList)).toBe('call');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(52);
   });
 
   it('snapshots the plans so a reattaching client sees the current plan (HIVE-179)', () => {
@@ -925,7 +925,7 @@ describe('PROCESS_LOCAL', () => {
     for (const channel of [CH.syncSetup, CH.syncSetGroup, CH.syncNow, CH.syncReset, CH.syncOpenConflicts, CH.syncReportAppearance]) {
       expect(CHANNEL_AUTHORIZATION[channel]).toBe('execute');
     }
-    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(52);
   });
 
   it('answers every swarm call locally: installs run on the machine you sit at (HIVE-441)', () => {
@@ -938,7 +938,7 @@ describe('PROCESS_LOCAL', () => {
     expect(CHANNEL_AUTHORIZATION[CH.swarmsList]).toBe('read');
     expect(CHANNEL_AUTHORIZATION[CH.swarmsInstall]).toBe('execute');
     expect(CHANNEL_AUTHORIZATION[CH.swarmsRemove]).toBe('execute');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(52);
   });
 
   it('answers the update calls locally and never relays swarms:changed (HIVE-442)', () => {
@@ -952,7 +952,7 @@ describe('PROCESS_LOCAL', () => {
     expect(frameKindOf(CH.swarmsChanged)).toBe('event');
     expect(isLocalOnlyEvent(CH.swarmsChanged)).toBe(true);
     expect(CHANNEL_AUTHORIZATION[CH.swarmsChanged]).toBe('read');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(52);
   });
 
   it('answers the install link request locally and never relays its push (HIVE-442)', () => {
@@ -964,7 +964,7 @@ describe('PROCESS_LOCAL', () => {
     expect(frameKindOf(CH.swarmsInstallRequested)).toBe('event');
     expect(isLocalOnlyEvent(CH.swarmsInstallRequested)).toBe(true);
     expect(CHANNEL_AUTHORIZATION[CH.swarmsInstallRequested]).toBe('read');
-    expect(REMOTE_PROTOCOL_VERSION).toBe(51);
+    expect(REMOTE_PROTOCOL_VERSION).toBe(52);
   });
 
   it('answers relay:status locally and grades both relay channels as reads (HIVE-429)', () => {

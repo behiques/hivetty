@@ -1348,6 +1348,11 @@ export function setCliAgents(request: SetCliAgentsRequest): ConfigSnapshot {
         if (next === null) delete agents[key];
         else if (next !== undefined) agents[key] = next;
       }
+      // Off is the key's absence, as `skipPermissions` is.
+      for (const key of ['network', 'projectGit'] as const) {
+        if (request[key] === true) agents[key] = true;
+        else if (request[key] === false) delete agents[key];
+      }
 
       return { ...draft, clis: { ...clis, [request.cli]: { ...cli, agents } } };
     }),

@@ -107,6 +107,13 @@ export function launchCodexHeadless(spec: HeadlessSpec): HeadlessPlan {
       ...(spec.model === undefined ? [] : ['-m', spec.model]),
       ...(spec.effort === undefined ? [] : config(`model_reasoning_effort=${toml(spec.effort)}`)),
       ...config(`sandbox_mode=${toml(sandbox)}`),
+      // The card's two grants. Codex reads both under `workspace-write` only, and so does this argv.
+      ...(sandbox === 'workspace-write' && spec.network === true
+        ? config('sandbox_workspace_write.network_access=true')
+        : []),
+      ...(sandbox === 'workspace-write' && spec.writableRoots !== undefined && spec.writableRoots.length > 0
+        ? config(`sandbox_workspace_write.writable_roots=${tomlList(spec.writableRoots)}`)
+        : []),
       ...(start
         ? config(
             `developer_instructions=${toml(

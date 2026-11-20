@@ -1428,7 +1428,7 @@ function optionalSlack(
 }
 
 const CLI_KEYS = ['agents', 'sessions', 'command', 'sessionModel', 'sessionEffort', 'installSkills', 'skipPermissions'] as const;
-const CLI_AGENT_KEYS = ['enabled', 'model', 'effort', 'sandbox', 'deny'] as const;
+const CLI_AGENT_KEYS = ['enabled', 'model', 'effort', 'sandbox', 'network', 'projectGit', 'deny'] as const;
 
 /**
  * The `clis` block (HIVE-341). Shaped like {@link optionalSlack}, one level deeper: a bad field
@@ -1546,6 +1546,13 @@ function optionalClis(
           `${agentsAt}.sandbox: expected one of ${HEADLESS_SANDBOXES.join(', ')} — ignored`,
         );
       }
+    }
+    // The sandbox's two grants: a typo must never widen a sandbox, so only `true` and `false` are read.
+    for (const key of ['network', 'projectGit'] as const) {
+      if (raw[key] === undefined) continue;
+      if (id !== 'codex') errors.push(`${agentsAt}.${key}: only codex takes it — ignored`);
+      else if (typeof raw[key] === 'boolean') agents[key] = raw[key];
+      else errors.push(`${agentsAt}.${key}: expected a boolean — ignored`);
     }
     if (raw.deny !== undefined) {
       if (id !== 'copilot') errors.push(`${agentsAt}.deny: only copilot takes deny patterns — ignored`);
