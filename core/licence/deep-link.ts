@@ -3,14 +3,17 @@ import { resolve } from 'node:path';
 import { isSwarmId } from '@shared/swarm-contract';
 
 /**
- * The `hivetty://` deep link (HIVE-264). Packaged builds own `hivetty` (Info.plist, through
- * electron-builder's `protocols`); unpackaged builds register `hivetty-dev` at runtime, so a dev build
- * never steals the installed app's links. The free HiveTTY never registers either.
+ * The deep link (HIVE-264), one scheme per build channel (HIVE-452), matching the cloud the build talks to:
+ * a release owns `hivetty` (prod), a release candidate `hivetty-dev` (the dev cloud), an unpackaged build
+ * `hivetty-local` (dev or a local cloud). Swarm ids differ per cloud, so a page links only the builds that
+ * talk to its own. Both packaged schemes are in Info.plist, through electron-builder's `protocols`; each
+ * build drops links that are not its own. The free HiveTTY registers none of them.
  */
 
-export type Scheme = 'hivetty' | 'hivetty-dev';
+export type Scheme = 'hivetty' | 'hivetty-dev' | 'hivetty-local';
 
-export const schemeFor = (isPackaged: boolean): Scheme => (isPackaged ? 'hivetty' : 'hivetty-dev');
+export const schemeFor = ({ isPackaged, prerelease }: { isPackaged: boolean; prerelease: boolean }): Scheme =>
+  !isPackaged ? 'hivetty-local' : prerelease ? 'hivetty-dev' : 'hivetty';
 
 export const redirectUriFor = (scheme: Scheme): string => `${scheme}://auth/callback`;
 
@@ -92,6 +95,7 @@ export function createDeepLinkRouter(scheme: Scheme): DeepLinkRouter {
  */
 export interface DeepLinkApp {
   readonly isPackaged: boolean;
+  getVersion(): string;
   on(event: 'will-finish-launching', listener: () => void): unknown;
   on(event: 'open-url', listener: (event: { preventDefault(): void }, url: string) => void): unknown;
   setAsDefaultProtocolClient(protocol: string, path?: string, args?: string[]): boolean;
@@ -110,7 +114,8 @@ export function installDeepLinks({
   execPath: string;
   argv1?: string;
 }): DeepLinkRouter & { scheme: Scheme } {
-  const scheme = schemeFor(app.isPackaged);
+  // A semver prerelease (`1.0.0-rc.1`) is a release candidate, as in `index.ts`.
+  const scheme = schemeFor({ isPackaged: app.isPackaged, prerelease: app.getVersion().includes('-') });
   const router = createDeepLinkRouter(scheme);
   app.on('will-finish-launching', () => {
     app.on('open-url', (event, url) => {
@@ -118,10 +123,14 @@ export function installDeepLinks({
       router.deliver(url);
     });
   });
-  if (!app.isPackaged) {
-    // shortcut: macOS ignores these args, so a dev cold start opens bare Electron; links reach a running
-    // dev app only. Fine for development; packaged builds are unaffected.
-    app.setAsDefaultProtocolClient('hivetty-dev', execPath, argv1 ? [resolve(argv1)] : []);
+  if (app.isPackaged) {
+    // Info.plist declares the scheme, but a Mac that once ran an unpackaged build may still route it to
+    // Electron; claiming it at every launch takes it back.
+    app.setAsDefaultProtocolClient(scheme);
+  } else {
+    // shortcut: macOS ignores these args, so a local cold start opens bare Electron; links reach a running
+    // unpackaged app only. Fine for development; packaged builds are unaffected.
+    app.setAsDefaultProtocolClient(scheme, execPath, argv1 ? [resolve(argv1)] : []);
   }
   return { ...router, scheme };
 }

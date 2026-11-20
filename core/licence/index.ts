@@ -80,7 +80,7 @@ function buildAccount(deps: AccountBoot & { openExternal: (url: string) => Promi
     hostname,
     randomBytes,
     generateDeviceKey,
-    scheme: schemeFor(app.isPackaged),
+    scheme: schemeFor({ isPackaged: app.isPackaged, prerelease }),
     runDeviceFlow: (input) => runDeviceFlow({ request: cloud.request, sleep: abortableSleep, now: Date.now }, input),
   });
   return {

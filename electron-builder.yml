@@ -16,12 +16,15 @@ appId: com.behiques.hivetty-pro
 # `docs/packaging-and-updates.md`.
 productName: HiveTTY Pro
 
-# The deep link sign-in returns on (HIVE-264), written to Info.plist's CFBundleURLTypes. Pro's alone:
-# the free HiveTTY never registers it, and unpackaged builds register their own dev scheme at runtime.
+# The deep links sign-in and swarm installs arrive on (HIVE-264), written to Info.plist's CFBundleURLTypes.
+# Pro's alone: the free HiveTTY never registers them. One scheme per build channel (HIVE-452): a release
+# answers hivetty, a release candidate hivetty-dev. This file cannot branch on the version, so both builds
+# declare both, and each drops links that are not its own. Unpackaged builds register their own at runtime.
 protocols:
   - name: HiveTTY Pro
     schemes:
       - hivetty
+      - hivetty-dev
 
 # The dmg and zip the updater fetches. Not the default `${productName}-…`:
 # GitHub turns the space in an asset name into a dot, and `latest-mac.yml`

@@ -33,9 +33,10 @@ This is **HiveTTY Pro**, a commercial, proprietary app by Behiques Consulting LL
   core file. Core features need no entitlement.
 - Pro's data lives in `~/.hivetty`. `~/.hive` belongs to the free HiveTTY: only the importer
   (HIVE-269) reads it, as a copy the user starts, and nothing writes there. Pro's name, bundle ID,
-  data folders and release feed are its own (HIVE-350). So is the `hivetty://` scheme sign-in
-  returns on (HIVE-264): the free HiveTTY must never register it, and unpackaged dev builds use
-  `hivetty-dev://` so they never steal it.
+  data folders and release feed are its own (HIVE-350). So are the deep-link schemes sign-in and
+  swarm installs arrive on (HIVE-264), one per build channel (HIVE-452): a release owns `hivetty://`,
+  a release candidate `hivetty-dev://`, an unpackaged build `hivetty-local://`. The free HiveTTY must
+  never register any of them.
 
 ## Essential commands
 

@@ -249,19 +249,21 @@ test.describe('a swarm from a fixture repository', () => {
     stub.controls.setSwarms([fixtureRow(repo, repo.releases[0])]);
     const { app, page } = await signedIn({ stub, testInfo, env: repo.env });
     try {
-      // Refused links: a malformed id, and the packaged scheme in this unpackaged build. Settings stays shut.
-      await openLink(app, 'hivetty-dev://swarms/install?id=../x');
+      // Refused links: a malformed id, and the release's and the release candidate's schemes in this unpackaged
+      // build (HIVE-452). Settings stays shut.
+      await openLink(app, 'hivetty-local://swarms/install?id=../x');
       await openLink(app, 'hivetty://swarms/install?id=fixture-swarm');
+      await openLink(app, 'hivetty-dev://swarms/install?id=fixture-swarm');
       await page.waitForTimeout(1_000);
       await expect(settingsNav(page)).toBeHidden();
 
-      await openLink(app, 'hivetty-dev://swarms/install?id=nope123');
+      await openLink(app, 'hivetty-local://swarms/install?id=nope123');
       await expect(page.getByText("This swarm isn't available to your account.")).toBeVisible({ timeout: 15_000 });
       await expectPane(page, 'swarms');
       await page.getByRole('button', { name: 'Dismiss' }).click();
       await expect(page.getByText("This swarm isn't available to your account.")).toBeHidden();
 
-      await openLink(app, 'hivetty-dev://swarms/install?id=fixture-swarm');
+      await openLink(app, 'hivetty-local://swarms/install?id=fixture-swarm');
       const dialog = page.getByRole('dialog', { name: `Install ${FIXTURE_SWARM.title}` });
       await expect(dialog).toBeVisible({ timeout: 15_000 });
       await page.waitForTimeout(500);
@@ -291,7 +293,7 @@ test('signed out: an install link opens Swarms and asks to sign in', async ({}, 
       page.getByRole('navigation', { name: 'Places' }).getByRole('button', { name: 'Settings', exact: true }),
     ).toBeVisible({ timeout: 15_000 });
 
-    await openLink(app, 'hivetty-dev://swarms/install?id=dev-squad');
+    await openLink(app, 'hivetty-local://swarms/install?id=dev-squad');
 
     await expect(page.getByText('Sign in to install this swarm.')).toBeVisible({ timeout: 15_000 });
     await expectPane(page, 'swarms');
