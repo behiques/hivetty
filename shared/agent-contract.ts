@@ -430,6 +430,8 @@ export interface AgentSummary {
    */
   mcp: string[];
   tools: string[];
+  /** HIVE-453: `skills:` from the definition, in order: Settings' "used by" line for a skill. `[]` when it never parsed. */
+  skills: string[];
   /** `harness:` from the definition, in order (HIVE-379): the CLI marks on its Settings row. Absent when it names none. */
   harness?: HarnessId[];
   lastRunAt?: number;
@@ -1534,13 +1536,15 @@ export interface AgentRunRequest {
  * `rotate` answers with this type too and a rotation is *not* queued: main
  * leaves `forceRotate` armed through a refusal, so it survives by a different
  * route and must not claim a queue it has no place in.
+ *
+ * `disabled` (HIVE-453): turned off in Settings; not queued.
  */
 export type AgentRunResult =
   | { started: true; run: string; kind: RunKind }
   | { started: false; queued: true; behind: QueueableRefusal; reason?: string; cli?: HarnessId }
   | {
       started: false;
-      refused: QueueableRefusal | 'unknown' | 'invalid';
+      refused: QueueableRefusal | 'unknown' | 'invalid' | 'disabled';
       reason?: string;
       cli?: HarnessId;
     };

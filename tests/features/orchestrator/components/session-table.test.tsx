@@ -855,6 +855,7 @@ describe('SessionTable', () => {
       wake: { on: ['slack.mention'], everyMs: 300_000 },
       mcp: [],
       tools: [],
+      skills: [],
       rotateAfter: 50,
       runs: [],
       ...over,

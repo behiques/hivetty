@@ -14,6 +14,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { HARNESS_IDS } from '@shared/harness-contract';
 import { MAX_BUNDLE_FILE_BYTES, type BundleManifest } from '@shared/skills-contract';
 
 import { readInstalledPluginNames } from '../../../core/harness/claude-code/installed';
@@ -1350,5 +1351,61 @@ describe('the Codex marketplace (HIVE-372)', () => {
     expect(marketplace?.dir).toBe(join(userDataPath, 'hive', 'plugins', 'codex-marketplace'));
     expect(marketplace?.version).toMatch(/^1\.0\.0\+[0-9a-f]{8}$/);
     expect(onRendered).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('an off skill (HIVE-453)', () => {
+  /** Every path under `dir`, relative to it, folders included. */
+  const pathsUnder = async (dir: string): Promise<string[]> =>
+    (await readdir(dir, { recursive: true })).map((rel) => rel.split('\\').join('/'));
+  const names = (paths: string[]): Set<string> => new Set(paths.flatMap((rel) => rel.split('/')));
+
+  beforeEach(async () => {
+    await writeSkill('tdd', skill('tdd'));
+    await writeSkill('debug', skill('debug'));
+  });
+
+  it('is left out of every CLI’s folder and the Codex marketplace, and still listed', async () => {
+    const skills = createSkillsRuntime({ userDataPath, version: '1.0.0', disabledSkills: async () => new Set(['tdd']) });
+
+    const read = await skills.sync();
+
+    for (const cli of HARNESS_IDS) {
+      const dir = skills.pluginDirPath(cli);
+      expect(dir, cli).not.toBeNull();
+      const rendered = names(await pathsUnder(dir as string));
+      expect(rendered.has('debug'), cli).toBe(true);
+      expect(rendered.has('tdd'), cli).toBe(false);
+    }
+    const marketplace = names(await pathsUnder(skills.codexMarketplace()?.dir as string));
+    expect(marketplace.has('debug')).toBe(true);
+    expect(marketplace.has('tdd')).toBe(false);
+    expect(read.skills.map((s) => s.name).sort()).toEqual(['debug', 'tdd']);
+    expect((await skills.list()).skills.map((s) => s.name).sort()).toEqual(['debug', 'tdd']);
+  });
+
+  it('comes back on the next sync once it is turned on', async () => {
+    let off = new Set(['tdd']);
+    const skills = createSkillsRuntime({ userDataPath, version: '1.0.0', disabledSkills: async () => off });
+    await skills.sync();
+    off = new Set();
+
+    await skills.sync();
+
+    expect(await pluginSkills()).toEqual(expect.arrayContaining(['debug', 'tdd']));
+  });
+
+  it('renders everything when the off list cannot be read, and says so once', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const skills = createSkillsRuntime({
+      userDataPath,
+      version: '1.0.0',
+      disabledSkills: () => Promise.reject(new Error('installed.json unreadable')),
+    });
+
+    await skills.sync();
+
+    expect(await pluginSkills()).toEqual(expect.arrayContaining(['debug', 'tdd']));
+    expect(info.mock.calls.filter(([line]) => String(line).includes('turned off'))).toHaveLength(1);
   });
 });

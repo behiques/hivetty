@@ -59,6 +59,11 @@ interface LedgerOptions {
    * Absent means "never".
    */
   isPausedAgent?: (id: string) => boolean;
+  /**
+   * HIVE-453: whether `id` names an agent turned off in Settings. An `ask` to one is refused: nothing would wake to
+   * answer it. Absent means "never".
+   */
+  isDisabledAgent?: (id: string) => boolean;
   now?: () => number;
 }
 
@@ -183,6 +188,18 @@ export function createLedger(options: LedgerOptions): Ledger {
         return refuse(
           409,
           `${request.to} is paused: an ask would wait unanswered until someone resumes it. Post instead, or ask another party.`,
+        );
+      }
+      // HIVE-453: the same rule for an agent turned off in Settings, which no trigger wakes.
+      if (
+        request.kind === 'ask' &&
+        request.to !== undefined &&
+        request.to !== request.from &&
+        options.isDisabledAgent?.(request.to) === true
+      ) {
+        return refuse(
+          409,
+          `${request.to} is turned off in Settings (disabled): nothing would answer this ask. Ask another party, or ask the person to turn it on.`,
         );
       }
 

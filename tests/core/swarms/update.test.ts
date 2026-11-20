@@ -44,6 +44,7 @@ const heldFor = (overrides: Partial<InstalledSwarm> = {}): InstalledSwarm => ({
   title: 'Standard',
   description: 'Ticket to merge.',
   contents: { agents: [], skills: [] },
+  disabled: { agents: [], skills: [] },
   ...overrides,
 });
 

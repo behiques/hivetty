@@ -95,6 +95,7 @@ export async function adoptBuiltIns(deps: AdoptDeps): Promise<void> {
         autoUpdate: true,
         lastError: null,
         contents: await contentsOf(deps.hiveDir, present),
+        disabled: { agents: [], skills: [] },
       };
       // The entry first. If only it lands, the next run finds it as the target and finishes the takeover.
       await writeInstalled(paths.installed, [...raw, target]);

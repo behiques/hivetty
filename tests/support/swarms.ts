@@ -48,6 +48,7 @@ export const installedSwarm = (over: Partial<InstalledSwarm> = {}): InstalledSwa
     agents: [{ name: 'builder', description: 'Builds plans.', tools: ['Read', 'Edit', 'Bash'] }],
     skills: [{ name: 'tdd', description: 'Test first.' }],
   },
+  disabled: { agents: [], skills: [] },
   ...over,
 });
 
@@ -55,6 +56,7 @@ export const swarmItem = (over: Partial<SwarmListItem> = {}): SwarmListItem => (
   entry: swarmEntry(),
   installed: null,
   update: null,
+  missing: { agents: [], skills: [] },
   ...over,
 });
 

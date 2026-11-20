@@ -209,6 +209,9 @@ function localAnswerFor(
     /* HIVE-442. How this machine's swarms update is this machine's own too. */
     case CH.swarmsSetAutoUpdate:
       return (request: unknown) => swarmCalls().setAutoUpdate(request);
+    /* HIVE-453. Which of this machine's swarm items are on is this machine's own. */
+    case CH.swarmsSetEnabled:
+      return (request: unknown) => swarmCalls().setEnabled(request);
     case CH.swarmsCheck:
       return () => swarmCalls().check();
     /* HIVE-442. An install link is opened on this machine, and only this machine takes it. */

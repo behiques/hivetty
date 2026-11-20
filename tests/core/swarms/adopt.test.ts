@@ -10,6 +10,8 @@ import type { InstalledSwarm, SwarmEntry } from '@shared/swarm-contract';
 
 import { baseOf } from '../../../core/seed/merge';
 import { ADOPTED_SWARM_ID, DEV_SQUAD, adoptBuiltIns, rekeyAdopted } from '../../../core/swarms/adopt';
+import type { SwarmGit } from '../../../core/swarms/git';
+import { createSwarms } from '../../../core/swarms/install';
 
 /**
  * Adoption (HIVE-447): the built-ins a home holds become the installed Dev Squad swarm, offline, once. Every case
@@ -69,6 +71,24 @@ afterEach(() => {
 });
 
 describe('adoptBuiltIns', () => {
+  it('lets an adopted Dev Squad’s items be turned off: its manifest is on disk (HIVE-453)', async () => {
+    seededHome();
+    await adopt();
+    const swarms = createSwarms({
+      hiveDir,
+      shippedManifest: hive('.seed.json'),
+      appVersion: '1.0.0',
+      git: {} as SwarmGit, // setEnabled never clones
+      cloneToken: () => Promise.reject(new Error('no network')),
+    });
+
+    expect((await swarms.setEnabled(ADOPTED_SWARM_ID, 'skills', 'tdd', false))?.disabled).toEqual({
+      agents: [],
+      skills: ['tdd'],
+    });
+    expect(installedJson()[0]?.disabled.skills).toEqual(['tdd']);
+  });
+
   it('holds a seeded home’s built-ins as the installed Dev Squad at version bundled, and leaves the marker', async () => {
     seededHome();
     const before = readJson<object>('.seed.json');
@@ -100,6 +120,7 @@ describe('adoptBuiltIns', () => {
             { name: 'verify', description: 'Does verify.' },
           ],
         },
+        disabled: { agents: [], skills: [] },
       },
     ]);
     expect(ADOPTED_SWARM_ID).toBe('bundled-dev-squad');

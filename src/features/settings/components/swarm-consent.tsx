@@ -115,7 +115,7 @@ function WhatChanges({ installed, entry }: { installed: InstalledSwarm; entry: S
  */
 export function SwarmConsent({ entry, installed, target, onConfirm, onCancel }: SwarmConsentProps) {
   const update = installed !== null;
-  const badge = badgeOf({ entry, installed, update: null });
+  const badge = badgeOf({ entry, installed, update: null, missing: { agents: [], skills: [] } });
   const lands = installVersionOf(entry);
   const next = target ?? lands;
   let version: string | null = lands === null ? null : `v${lands}`;

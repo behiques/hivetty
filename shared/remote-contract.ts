@@ -114,8 +114,9 @@ import { isThisMachineAction } from './notification-contract';
  *   (event, local only).
  * 51 → 52 (Codex agents' sandbox grants): `CliAgents` and `SetCliAgentsRequest` gained `network` and `projectGit`.
  * 52 → 53 (Job Flow): `CH` gained `ledger:job` (a read of the server's own ledger day files).
+ * 53 → 54 (HIVE-453): `swarms:set-enabled` (call, process-local).
  */
-export const REMOTE_PROTOCOL_VERSION = 53;
+export const REMOTE_PROTOCOL_VERSION = 54;
 
 /**
  * What a frame is for.
@@ -333,6 +334,7 @@ export const FRAME_KIND = {
   [CH.swarmsInstall]: 'call',
   [CH.swarmsRemove]: 'call',
   [CH.swarmsSetAutoUpdate]: 'call',
+  [CH.swarmsSetEnabled]: 'call',
   [CH.swarmsCheck]: 'call',
   [CH.swarmsChanged]: 'event',
   [CH.swarmsTakeInstallRequest]: 'call',
@@ -706,6 +708,8 @@ export const CHANNEL_AUTHORIZATION = {
   [CH.swarmsInstall]: 'execute',
   [CH.swarmsRemove]: 'execute',
   [CH.swarmsSetAutoUpdate]: 'execute',
+  // Turning an agent back on lets it run with the person's permissions again.
+  [CH.swarmsSetEnabled]: 'execute',
   // A check may install a newer version.
   [CH.swarmsCheck]: 'execute',
   [CH.swarmsChanged]: 'read',
@@ -1132,6 +1136,8 @@ const PROCESS_LOCAL_REFUSALS = {
     'swarms:remove removes a swarm from the machine you are sitting at, so it is answered there and never by a server.',
   [CH.swarmsSetAutoUpdate]:
     'swarms:set-auto-update changes how a swarm updates on the machine you are sitting at, so it is answered there and never by a server.',
+  [CH.swarmsSetEnabled]:
+    "swarms:set-enabled turns a swarm's agent or skill off or on on the machine you are sitting at, so it is answered there and never by a server.",
   [CH.swarmsCheck]:
     'swarms:check looks for swarm updates for the machine you are sitting at, so it is answered there and never by a server.',
   [CH.swarmsTakeInstallRequest]:

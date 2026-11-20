@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import {
   BUNDLED_VERSION,
   compareVersions,
+  disabledOf,
+  NOTHING_OFF,
   isBundled,
   isSwarmFolder,
   isSwarmId,
@@ -12,10 +14,13 @@ import {
   parseSwarmManifest,
   parseSwarmAutoUpdateRequest,
   parseSwarmRequest,
+  parseSwarmSetEnabledRequest,
   parseSwarmTag,
   swarmTag,
   versionLabel,
 } from '@shared/swarm-contract';
+
+import { installedSwarm } from '../support/swarms';
 
 const valid = {
   name: 'standard',
@@ -323,5 +328,80 @@ describe('parseSwarmAutoUpdateRequest', () => {
     { swarmId: 'a1', autoUpdate: 1 },
   ])('throws for %j', (payload) => {
     expect(() => parseSwarmAutoUpdateRequest(payload)).toThrow();
+  });
+});
+
+describe('disabledOf (HIVE-453)', () => {
+  const without = (): Record<string, unknown> => {
+    const { disabled: _drop, ...rest } = installedSwarm();
+    return rest;
+  };
+
+  it('passes a well-formed list through', () => {
+    expect(disabledOf({ ...installedSwarm(), disabled: { agents: ['acr'], skills: [] } })).toEqual({
+      agents: ['acr'],
+      skills: [],
+    });
+  });
+
+  it.each<[string, unknown]>([
+    ['absent', undefined],
+    ['a string', 'x'],
+    ['null', null],
+    ['an array', ['acr']],
+  ])('reads nothing off when disabled is %s', (_label, disabled) => {
+    const row = { ...without(), ...(disabled === undefined ? {} : { disabled }) } as unknown as Parameters<typeof disabledOf>[0];
+    expect(disabledOf(row)).toEqual({ agents: [], skills: [] });
+  });
+
+  it('keeps only the string entries of each list', () => {
+    const row = { ...without(), disabled: { agents: [1, 'acr', null], skills: 'tdd' } } as unknown as Parameters<
+      typeof disabledOf
+    >[0];
+    expect(disabledOf(row)).toEqual({ agents: ['acr'], skills: [] });
+  });
+
+  it('NOTHING_OFF is empty and frozen', () => {
+    expect(NOTHING_OFF).toEqual({ agents: [], skills: [] });
+    expect(Object.isFrozen(NOTHING_OFF)).toBe(true);
+  });
+});
+
+describe('parseSwarmSetEnabledRequest (HIVE-453)', () => {
+  it('returns the id, the kind, the name and the flag', () => {
+    expect(parseSwarmSetEnabledRequest({ swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: false })).toEqual({
+      swarmId: 'a1',
+      kind: 'skills',
+      name: 'tdd',
+      enabled: false,
+    });
+    expect(parseSwarmSetEnabledRequest({ swarmId: 'a1', kind: 'agents', name: 'acr', enabled: true })).toEqual({
+      swarmId: 'a1',
+      kind: 'agents',
+      name: 'acr',
+      enabled: true,
+    });
+  });
+
+  it('drops any other key', () => {
+    expect(
+      parseSwarmSetEnabledRequest({ swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: true, path: '/etc' }),
+    ).toEqual({ swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: true });
+  });
+
+  it.each<unknown>([
+    null,
+    {},
+    { swarmId: '../x', kind: 'skills', name: 'tdd', enabled: true },
+    { swarmId: 'a1', kind: 'files', name: 'tdd', enabled: true },
+    { swarmId: 'a1', name: 'tdd', enabled: true },
+    { swarmId: 'a1', kind: 'skills', name: '../x', enabled: true },
+    { swarmId: 'a1', kind: 'skills', name: 'TDD', enabled: true },
+    { swarmId: 'a1', kind: 'skills', name: '', enabled: true },
+    { swarmId: 'a1', kind: 'skills', name: 7, enabled: true },
+    { swarmId: 'a1', kind: 'skills', name: 'tdd' },
+    { swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: 'yes' },
+  ])('throws for %j', (payload) => {
+    expect(() => parseSwarmSetEnabledRequest(payload)).toThrow();
   });
 });

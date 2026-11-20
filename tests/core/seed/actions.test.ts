@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -11,7 +11,8 @@ import {
   shippedStatus,
   takeShippedPrompt,
 } from '../../../core/seed/actions';
-import { seedShipped } from '../../../core/seed/seed';
+import { readManifest, seedShipped, sha256 } from '../../../core/seed/seed';
+import { baseOf } from '../../../core/seed/merge';
 
 /**
  * What Settings reads about a shipped agent or skill the user changed, and
@@ -140,6 +141,46 @@ describe('shippedStatus', () => {
     await symlink(join(base, 'elsewhere'), join(target, 'agents/linked'));
 
     expect(await shippedStatus(opts())).toEqual([]);
+  });
+});
+
+describe('Restore of a deleted swarm item (HIVE-453: the existing shipped:reset)', () => {
+  const SKILL = '---\nname: tdd\ndescription: Test first.\n---\nBody.\n';
+  const SCRIPT = '#!/bin/sh\necho hi\n';
+
+  it('puts back every file of a skill whose folder was deleted, with its mode, and the next seed leaves it', async () => {
+    await ship('skills/tdd/SKILL.md', SKILL);
+    await ship('skills/tdd/run.sh', SCRIPT);
+    await chmod(join(source, 'skills/tdd/run.sh'), 0o755);
+    await seedShipped(opts());
+    await rm(join(target, 'skills/tdd'), { recursive: true });
+
+    await resetShipped(opts(), { kind: 'skills', name: 'tdd' });
+
+    expect(await onDisk('skills/tdd/SKILL.md')).toBe(SKILL);
+    expect(await onDisk('skills/tdd/run.sh')).toBe(SCRIPT);
+    expect((await stat(join(target, 'skills/tdd/run.sh'))).mode & 0o777).toBe(0o755);
+    const manifest = await readManifest(manifestFile);
+    expect(manifest.files['skills/tdd/SKILL.md']).toBe(sha256(Buffer.from(SKILL)));
+    expect(manifest.files['skills/tdd/run.sh']).toBe(sha256(Buffer.from(SCRIPT)));
+    expect(manifest.parts['skills/tdd/SKILL.md']).toEqual(baseOf(SKILL));
+
+    await seedShipped(opts());
+    expect(await onDisk('skills/tdd/SKILL.md')).toBe(SKILL);
+    expect(await readManifest(manifestFile)).toEqual(manifest);
+  });
+
+  it('puts back an agent whose folder was deleted', async () => {
+    await rm(join(target, 'agents/builder'), { recursive: true });
+
+    await resetShipped(opts(), { kind: 'agents', name: 'builder' });
+
+    expect(await onDisk(AGENT)).toBe(v1);
+    const manifest = await readManifest(manifestFile);
+    expect(manifest.files[AGENT]).toBe(sha256(Buffer.from(v1)));
+    expect(manifest.parts[AGENT]).toEqual(baseOf(v1));
+    await seedShipped(opts());
+    expect(await onDisk(AGENT)).toBe(v1);
   });
 });
 

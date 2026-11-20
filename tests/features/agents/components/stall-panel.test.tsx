@@ -20,7 +20,7 @@ const accept: LedgerEntry = { id: '20261113-130800-0001', ts: NOW - 112 * MIN, f
 const staleClaim: LedgerEntry = { id: '20261111-000000-0001', ts: NOW - 2 * DAY, from: 'sess-1c', kind: 'claim', body: '', meta: { task: 'HIVE-393' } };
 
 const agent = (name: string, over: Partial<AgentSummary> = {}): AgentSummary => ({
-  name, description: 'x', icon: 'Robot', status: 'sleeping', wake: { on: [] }, mcp: [], tools: [], rotateAfter: 50, runs: [], ...over,
+  name, description: 'x', icon: 'Robot', status: 'sleeping', wake: { on: [] }, mcp: [], tools: [], skills: [], rotateAfter: 50, runs: [], ...over,
 });
 
 const group = (name: string) => within(screen.getByRole('region', { name }));

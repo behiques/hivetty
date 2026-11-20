@@ -14,14 +14,18 @@ import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from 'n
 import { basename, dirname, join, sep } from 'node:path';
 
 import {
+  disabledOf,
   isBundled,
   isSwarmFolder,
   isSwarmId,
   swarmTag,
   type InstalledSwarm,
   type SwarmEntry,
+  type SwarmContents,
+  type SwarmDisabled,
   type SwarmFailure,
   type SwarmInstallResult,
+  type SwarmItemKind,
   type SwarmListing,
   type SwarmRemoveResult,
   type SwarmUpdate,
@@ -70,6 +74,11 @@ export interface Swarms {
   /** HIVE-442: the row's "Update automatically" switch. Null when the swarm is not installed or the list cannot be written. */
   setAutoUpdate(swarmId: string, autoUpdate: boolean): Promise<InstalledSwarm | null>;
   /**
+   * HIVE-453: turn one of a swarm's agents or skills off or back on. Null when the name is not that swarm's, the swarm
+   * is not installed, or nothing could be written.
+   */
+  setEnabled(swarmId: string, kind: SwarmItemKind, name: string, enabled: boolean): Promise<InstalledSwarm | null>;
+  /**
    * One set per installed swarm (HIVE-448: the app ships none of its own). An entry still at the version `bundled`
    * has no clone to read its files against, so it has no set until its first update installs a real version.
    */
@@ -97,6 +106,17 @@ export const isInstalled = (entry: unknown): entry is InstalledSwarm =>
   isSwarmFolder((entry as InstalledSwarm).folder);
 
 const isEntryOf = (entry: unknown, swarmId: string): boolean => isInstalled(entry) && entry.swarmId === swarmId;
+
+/**
+ * HIVE-453: the off names an update keeps, the ones the new version still ships. A name it dropped would otherwise
+ * hold off, for good, a folder of the same name the person writes later.
+ */
+const keptOff = (off: SwarmDisabled, contents: SwarmContents): SwarmDisabled => {
+  const ships = (list: { name: string }[]) => new Set(list.map((item) => item.name));
+  const agents = ships(contents.agents);
+  const skills = ships(contents.skills);
+  return { agents: off.agents.filter((n) => agents.has(n)), skills: off.skills.filter((n) => skills.has(n)) };
+};
 
 /**
  * Every entry as written, the ones `isInstalled` refuses included, for a write that puts the list back. Absent is
@@ -454,6 +474,8 @@ export function createSwarms(deps: SwarmDeps): Swarms {
         title: read.manifest.title,
         description: read.manifest.description,
         contents: read.contents,
+        // HIVE-453: an update keeps what the person turned off; a first install starts with everything on.
+        disabled: previous === null ? { agents: [], skills: [] } : keptOff(disabledOf(previous), read.contents),
       };
       await writeInstalled(paths.installed, [...raw.filter((held) => !isEntryOf(held, entry.id)), installed]);
       await rm(paths.pending(entry.id), { force: true });
@@ -491,6 +513,31 @@ export function createSwarms(deps: SwarmDeps): Swarms {
       if (!isInstalled(held)) return null;
       const next: InstalledSwarm = { ...held, autoUpdate };
       // Every other row, the ones `isInstalled` refuses included, goes back as it was read. Tmp file then rename.
+      await writeInstalled(paths.installed, raw.map((row) => (row === held ? next : row)));
+      return next;
+    } catch {
+      return null;
+    }
+  };
+
+  const setEnabledNow = async (
+    swarmId: string,
+    kind: SwarmItemKind,
+    name: string,
+    enabled: boolean,
+  ): Promise<InstalledSwarm | null> => {
+    if (!isSwarmId(swarmId)) return null;
+    try {
+      const raw = await readInstalledRaw(paths.installed); // throws when unreadable: nothing is overwritten
+      const held = raw.find((row) => isEntryOf(row, swarmId));
+      if (!isInstalled(held)) return null;
+      // Only a name this swarm wrote is turned off. An adopted Dev Squad's manifest is on disk too, so this holds for
+      // it. Turning a name on needs no owner: taking a name off the list is always safe.
+      if (!enabled && !ownedFolders(await readManifest(paths.seed(swarmId))).has(`${kind}/${name}`)) return null;
+      const off = disabledOf(held);
+      const rest = off[kind].filter((n) => n !== name);
+      const next: InstalledSwarm = { ...held, disabled: { ...off, [kind]: enabled ? rest : [...rest, name].sort() } };
+      // Every other row goes back as it was read. Tmp file then rename: a failed write leaves the old list.
       await writeInstalled(paths.installed, raw.map((row) => (row === held ? next : row)));
       return next;
     } catch {
@@ -544,6 +591,12 @@ export function createSwarms(deps: SwarmDeps): Swarms {
         await deps.ready?.();
         return setAutoUpdateNow(swarmId, autoUpdate);
       }),
+    // The same queue: an install writes installed.json too, and keeps the lists it read.
+    setEnabled: (swarmId, kind, name, enabled) =>
+      serial(async () => {
+        await deps.ready?.();
+        return setEnabledNow(swarmId, kind, name, enabled);
+      }),
     seedSets,
     manifestFiles,
     seedSetFor: async (folder) => {
@@ -555,6 +608,29 @@ export function createSwarms(deps: SwarmDeps): Swarms {
   };
 }
 
+const exists = (path: string): Promise<boolean> =>
+  lstat(path).then(
+    () => true,
+    () => false,
+  );
+
+/**
+ * HIVE-453: the names a swarm's seed manifest tracks whose definition file (`SKILL.md`, `AGENT.md`) is absent under
+ * `hiveDir`. A missing manifest names nothing. Bundled swarms have their manifest on disk, so they are included.
+ * Never rejects: `readManifest` reads a missing or malformed file as empty, and `lstat` failures read as absent.
+ */
+export async function missingOf(hiveDir: string, swarmId: string): Promise<SwarmDisabled> {
+  // A row that is not a swarm id has no manifest to read: nothing missing, and the listing still answers.
+  if (!isSwarmId(swarmId)) return { agents: [], skills: [] };
+  const owned = ownedFolders(await readManifest(swarmPaths(hiveDir).seed(swarmId)));
+  const absent = async (kind: SwarmItemKind, file: string): Promise<string[]> => {
+    const names = [...owned].filter((folder) => folder.startsWith(`${kind}/`)).map((folder) => folder.slice(kind.length + 1));
+    const gone = await Promise.all(names.map(async (name) => !(await exists(join(hiveDir, kind, name, file)))));
+    return names.filter((_name, i) => gone[i]).sort();
+  };
+  return { agents: await absent('agents', 'AGENT.md'), skills: await absent('skills', 'SKILL.md') };
+}
+
 /**
  * Registry rows first, each with its installed entry; then installed swarms the registry did not return. Each
  * installed swarm carries the updater's pending update (HIVE-442).
@@ -563,6 +639,7 @@ export function mergeListing(
   registry: RegistryRead,
   installed: InstalledSwarm[],
   pending: (swarmId: string) => SwarmUpdate | null = () => null,
+  missing: (swarmId: string) => SwarmDisabled = () => ({ agents: [], skills: [] }),
 ): SwarmListing {
   const held = new Map(installed.map((entry) => [entry.swarmId, entry]));
   const listed = new Set(registry.swarms.map((entry) => entry.id));
@@ -571,11 +648,21 @@ export function mergeListing(
     items: [
       ...registry.swarms.map((entry) => {
         const mine = held.get(entry.id) ?? null;
-        return { entry, installed: mine, update: mine === null ? null : pending(entry.id) };
+        return {
+          entry,
+          installed: mine,
+          update: mine === null ? null : pending(entry.id),
+          missing: mine === null ? { agents: [], skills: [] } : missing(entry.id),
+        };
       }),
       ...installed
         .filter((entry) => !listed.has(entry.swarmId))
-        .map((entry) => ({ entry: null, installed: entry, update: pending(entry.swarmId) })),
+        .map((entry) => ({
+          entry: null,
+          installed: entry,
+          update: pending(entry.swarmId),
+          missing: missing(entry.swarmId),
+        })),
     ],
   };
 }

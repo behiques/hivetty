@@ -124,6 +124,30 @@ describe('createLedger', () => {
     }
   });
 
+  it('refuses an ask to an agent turned off in Settings, and accepts a post and its own ask (HIVE-453)', () => {
+    const off = createLedger({
+      dir,
+      now: () => clock,
+      knowsParty: () => true,
+      isDisabledAgent: (id) => id === 'acr',
+    });
+
+    expect(off.append({ from: 'shipper', to: 'acr', kind: 'ask', body: 'review' })).toEqual({
+      ok: false,
+      status: 409,
+      reason:
+        'acr is turned off in Settings (disabled): nothing would answer this ask. Ask another party, or ask the person to turn it on.',
+    });
+    expect(off.read({}).entries).toHaveLength(0);
+    for (const entry of [
+      { from: 'shipper', to: 'acr', kind: 'post' },
+      { from: 'acr', to: 'acr', kind: 'ask' },
+      { from: 'shipper', to: 'builder', kind: 'ask' },
+    ] as const) {
+      expect(off.append({ ...entry, body: 'x' })).toMatchObject({ ok: true });
+    }
+  });
+
   it('accepts a post from a known party', () => {
     const result = ledger.append({ from: 'sess-a', kind: 'post', body: 'hello' });
 

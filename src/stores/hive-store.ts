@@ -1526,6 +1526,8 @@ export function agentRunRefusal(
       return `${name} is waiting for its CLI — try again when it can run`;
     case 'invalid':
       return `${name}'s definition could not be read — edit it to fix that`;
+    case 'disabled':
+      return `${name} is turned off — turn it on in Settings › Agents`;
     case 'unknown':
       return 'the agent runtime is not running';
   }

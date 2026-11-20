@@ -35,6 +35,8 @@ let root: string;
 let hiveDir: string;
 let repoCount = 0;
 
+const NONE = { agents: [], skills: [] };
+
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
 
 const write = (path: string, text: string): void => {
@@ -46,7 +48,7 @@ const git = (cwd: string, ...args: string[]): string =>
   execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 /** A bare repository with one commit per release, each tagged. */
-function makeRepo(releases: { tag?: string; files: Record<string, string> }[]): {
+function makeRepo(releases: { tag?: string; files: Record<string, string>; replace?: boolean }[]): {
   bare: string;
   commitOf(tag: string): string;
 } {
@@ -60,6 +62,8 @@ function makeRepo(releases: { tag?: string; files: Record<string, string> }[]): 
   git(work, 'config', 'commit.gpgsign', 'false');
   git(work, 'config', 'tag.gpgsign', 'false');
   for (const release of releases) {
+    // `replace`: this release's tree is exactly its files, so a file the last one had is deleted.
+    if (release.replace === true) rmSync(join(work, 'standard'), { recursive: true, force: true });
     for (const [rel, text] of Object.entries(release.files)) write(join(work, rel), text);
     git(work, 'add', '-A');
     git(work, 'commit', '-q', '--allow-empty', '-m', release.tag ?? 'untagged');
@@ -207,6 +211,7 @@ describe('install', () => {
           agents: [{ name: 'a1', description: 'Helps out.', tools: ['Read', 'Bash'] }],
           skills: [{ name: 's1', description: 'Does s1.' }],
         },
+        disabled: { agents: [], skills: [] },
       },
     ]);
     expect(result.ok && result.installed.description).toBe('Ticket to merge.');
@@ -731,6 +736,7 @@ describe('setAutoUpdate', () => {
     title: swarmId,
     description: '',
     contents: { agents: [], skills: [] },
+    disabled: { agents: [], skills: [] },
   });
   const junk = { nope: 1 };
   const seedList = (): void => {
@@ -792,6 +798,146 @@ describe('setAutoUpdate', () => {
     const rows = readJson<InstalledSwarm[]>('swarms/installed.json');
     expect(rows.find((row) => row.swarmId === 'a1')?.autoUpdate).toBe(false);
     expect(rows.map((row) => row.swarmId)).toContain('c1');
+  });
+});
+
+describe('setEnabled (HIVE-453)', () => {
+  const installTwoSkills = async () => {
+    const swarms = createSwarms(makeDeps());
+    const { entry } = released('1.0.0', { skills: ['tdd', 'debug'], agents: ['acr'] });
+    expect((await swarms.install(entry)).ok).toBe(true);
+    return swarms;
+  };
+
+  it('adds a name to the sorted, deduplicated off list, and removes it again', async () => {
+    const swarms = await installTwoSkills();
+
+    expect((await swarms.setEnabled('sw1', 'skills', 'tdd', false))?.disabled).toEqual({ agents: [], skills: ['tdd'] });
+    expect((await swarms.setEnabled('sw1', 'skills', 'debug', false))?.disabled.skills).toEqual(['debug', 'tdd']);
+    expect((await swarms.setEnabled('sw1', 'skills', 'tdd', false))?.disabled.skills).toEqual(['debug', 'tdd']);
+    expect((await swarms.setEnabled('sw1', 'agents', 'acr', false))?.disabled).toEqual({
+      agents: ['acr'],
+      skills: ['debug', 'tdd'],
+    });
+    expect((await swarms.setEnabled('sw1', 'skills', 'tdd', true))?.disabled.skills).toEqual(['debug']);
+    expect(installedJson()[0]?.disabled).toEqual({ agents: ['acr'], skills: ['debug'] });
+  });
+
+  it('answers null and writes nothing for a name the swarm’s manifest does not own', async () => {
+    const swarms = await installTwoSkills();
+    const before = readHive('swarms/installed.json');
+
+    expect(await swarms.setEnabled('sw1', 'skills', 'plan', false)).toBeNull();
+    // A skill name asked for as an agent is not owned either.
+    expect(await swarms.setEnabled('sw1', 'agents', 'tdd', false)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe(before);
+  });
+
+  it('answers null for a bad id, or a swarm that is not installed', async () => {
+    const swarms = await installTwoSkills();
+    const before = readHive('swarms/installed.json');
+
+    expect(await swarms.setEnabled('../x', 'skills', 'tdd', false)).toBeNull();
+    expect(await swarms.setEnabled('zz', 'skills', 'tdd', false)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe(before);
+  });
+
+  it('writes every other row, one the guard refuses included, back as it was read', async () => {
+    const swarms = await installTwoSkills();
+    const refused = { swarmId: 'not valid!' };
+    const other = { ...installedJson()[0], swarmId: 'b1', disabled: { agents: ['x'], skills: [] }, extra: 'kept' };
+    write(hive('swarms/installed.json'), JSON.stringify([refused, ...installedJson(), other]));
+
+    expect(await swarms.setEnabled('sw1', 'skills', 'tdd', false)).not.toBeNull();
+    const rows = readJson<unknown[]>('swarms/installed.json');
+    expect(rows[0]).toEqual(refused);
+    expect((rows[1] as InstalledSwarm).disabled.skills).toEqual(['tdd']);
+    expect(rows[2]).toEqual(other);
+  });
+
+  it('answers null and leaves an unreadable installed.json as it was', async () => {
+    const swarms = await installTwoSkills();
+    write(hive('swarms/installed.json'), '{');
+
+    expect(await swarms.setEnabled('sw1', 'skills', 'tdd', false)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe('{');
+  });
+
+  it('reads an entry written before HIVE-453 as nothing off', async () => {
+    const swarms = await installTwoSkills();
+    write(
+      hive('swarms/installed.json'),
+      JSON.stringify(installedJson().map(({ disabled: _drop, ...rest }) => rest)),
+    );
+
+    expect((await swarms.setEnabled('sw1', 'agents', 'acr', false))?.disabled).toEqual({ agents: ['acr'], skills: [] });
+  });
+
+  it('keeps the off lists across an update, with the new version’s files', async () => {
+    const repo = makeRepo([
+      { tag: 'standard/v1.0.0', files: swarmFiles('1.0.0', { agents: ['acr'] }) },
+      { tag: 'standard/v1.1.0', files: swarmFiles('1.1.0', { agents: ['acr'], body: 'new text' }) },
+    ]);
+    const swarms = createSwarms(makeDeps());
+    const at = (version: string) =>
+      entryFor({ repoUrl: repo.bare, version, commit: repo.commitOf(`standard/v${version}`) });
+    expect((await swarms.install(at('1.0.0'))).ok).toBe(true);
+    expect(await swarms.setEnabled('sw1', 'agents', 'acr', false)).not.toBeNull();
+
+    const result = await swarms.install(at('1.1.0'));
+
+    expect(result).toMatchObject({ ok: true, installed: { version: '1.1.0', disabled: { agents: ['acr'], skills: [] } } });
+    expect(installedJson()[0]?.disabled).toEqual({ agents: ['acr'], skills: [] });
+    expect(readHive('skills/s1/SKILL.md')).toBe(skillText('s1', 'new text'));
+    expect(readHive('agents/acr/AGENT.md')).toBe(agentText('acr'));
+  });
+
+  it('drops an off name the new version no longer ships, so a later folder of that name is not held off', async () => {
+    const repo = makeRepo([
+      { tag: 'standard/v1.0.0', files: swarmFiles('1.0.0', { agents: ['acr', 'old'], skills: ['s1', 'gone'] }) },
+      { tag: 'standard/v1.1.0', files: swarmFiles('1.1.0', { agents: ['acr'], skills: ['s1'] }), replace: true },
+    ]);
+    const swarms = createSwarms(makeDeps());
+    const at = (version: string) =>
+      entryFor({ repoUrl: repo.bare, version, commit: repo.commitOf(`standard/v${version}`) });
+    expect((await swarms.install(at('1.0.0'))).ok).toBe(true);
+    await swarms.setEnabled('sw1', 'agents', 'acr', false);
+    await swarms.setEnabled('sw1', 'agents', 'old', false);
+    await swarms.setEnabled('sw1', 'skills', 'gone', false);
+
+    expect((await swarms.install(at('1.1.0'))).ok).toBe(true);
+
+    expect(installedJson()[0]?.disabled).toEqual({ agents: ['acr'], skills: [] });
+  });
+
+  it('turns a name back on even when the swarm no longer owns it', async () => {
+    const swarms = await installTwoSkills();
+    const stale = installedJson().map((row) => ({ ...row, disabled: { agents: [], skills: ['tdd', 'zzz'] } }));
+    write(hive('swarms/installed.json'), JSON.stringify(stale));
+
+    expect((await swarms.setEnabled('sw1', 'skills', 'zzz', true))?.disabled.skills).toEqual(['tdd']);
+    // Turning it off still needs the manifest to own it.
+    expect(await swarms.setEnabled('sw1', 'skills', 'zzz', false)).toBeNull();
+  });
+
+  it('starts a reinstall after Remove with everything on', async () => {
+    const swarms = createSwarms(makeDeps());
+    const { entry } = released('1.0.0', { agents: ['acr'] });
+    expect((await swarms.install(entry)).ok).toBe(true);
+    expect(await swarms.setEnabled('sw1', 'agents', 'acr', false)).not.toBeNull();
+    expect(await swarms.remove('sw1')).toEqual({ ok: true });
+
+    const again = await swarms.install(entry);
+
+    expect(again).toMatchObject({ ok: true, installed: { disabled: { agents: [], skills: [] } } });
+  });
+
+  it('takes the queue, so two changes started in the same tick both land', async () => {
+    const swarms = await installTwoSkills();
+
+    await Promise.all([swarms.setEnabled('sw1', 'skills', 'tdd', false), swarms.setEnabled('sw1', 'skills', 'debug', false)]);
+
+    expect(installedJson()[0]?.disabled.skills).toEqual(['debug', 'tdd']);
   });
 });
 
@@ -1054,6 +1200,7 @@ describe('mergeListing', () => {
     title: swarmId,
     description: '',
     contents: { agents: [], skills: [] },
+    disabled: { agents: [], skills: [] },
   });
 
   it('puts registry rows first with their installed entry, then installed swarms the registry left out', () => {
@@ -1064,9 +1211,9 @@ describe('mergeListing', () => {
     expect(listing).toEqual({
       source: 'cache',
       items: [
-        { entry: a, installed: installedFor('A'), update: null },
-        { entry: b, installed: null, update: null },
-        { entry: null, installed: installedFor('C'), update: null },
+        { entry: a, installed: installedFor('A'), update: null, missing: NONE },
+        { entry: b, installed: null, update: null, missing: NONE },
+        { entry: null, installed: installedFor('C'), update: null, missing: NONE },
       ],
     });
   });
@@ -1079,10 +1226,21 @@ describe('mergeListing', () => {
     const listing = mergeListing({ source: 'cloud', swarms: [a, b] }, [installedFor('c1'), installedFor('a1')], pending);
 
     expect(listing.items).toEqual([
-      { entry: a, installed: installedFor('a1'), update },
-      { entry: b, installed: null, update: null },
-      { entry: null, installed: installedFor('c1'), update },
+      { entry: a, installed: installedFor('a1'), update, missing: NONE },
+      { entry: b, installed: null, update: null, missing: NONE },
+      { entry: null, installed: installedFor('c1'), update, missing: NONE },
     ]);
     expect(pending.mock.calls.map(([id]) => id).sort()).toEqual(['a1', 'c1']);
+  });
+
+  it('carries the missing names of each installed swarm, and none for a row with nothing installed (HIVE-453)', () => {
+    const a = entryFor({ id: 'a1' });
+    const b = entryFor({ id: 'b1' });
+    const gone = { agents: ['acr'], skills: [] };
+    const missing = vi.fn((id: string) => (id === 'a1' || id === 'c1' ? gone : NONE));
+    const listing = mergeListing({ source: 'cloud', swarms: [a, b] }, [installedFor('c1'), installedFor('a1')], undefined, missing);
+
+    expect(listing.items.map((item) => item.missing)).toEqual([gone, NONE, gone]);
+    expect(missing.mock.calls.map(([id]) => id).sort()).toEqual(['a1', 'c1']);
   });
 });

@@ -116,6 +116,8 @@ describe('createRunTracker', () => {
   let state: ReturnType<typeof createAgentState>;
   let head: string | undefined;
   let registered: { run: string; owner: string; since?: string }[];
+  /** HIVE-453: the agents turned off in Settings. */
+  let disabledNames: Set<string>;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -146,10 +148,12 @@ describe('createRunTracker', () => {
     statusWhenClosed = undefined;
     head = undefined;
     registered = [];
+    disabledNames = new Set();
     state = createAgentState({ path: '/dev/null/agents.json', debounceMs: 1 });
 
     tracker = createRunTracker({
       runToken: (run: string) => `tok-${run}`,
+      isDisabled: (name) => disabledNames.has(name),
       spawn,
       command: (name, trigger, extra, options) => {
         commandCalls += 1;
@@ -328,6 +332,19 @@ describe('createRunTracker', () => {
 
     expect(tracker.run('a', 'manual')).toEqual({ started: false, refused: 'paused' });
     expect(state.read('a').skipsSinceRun).toBe(3);
+  });
+
+  it('refuses an agent turned off in Settings, for any trigger, before building its command (HIVE-453)', () => {
+    disabledNames = new Set(['a']);
+
+    for (const trigger of ['manual', 'ledger', 'interval'] as const) {
+      expect(tracker.run('a', trigger)).toEqual({ started: false, refused: 'disabled' });
+    }
+    expect(commandCalls).toBe(0);
+    expect(spawnCalls).toHaveLength(0);
+
+    disabledNames = new Set();
+    expect(tracker.run('a', 'manual').started).toBe(true);
   });
 
   it('refuses a second run while one is live', () => {

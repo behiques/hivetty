@@ -58,7 +58,7 @@ describe('createScheduler', () => {
    * `working` and `paused` and reports the rest, so a fake that could not say
    * which it was could not drive that difference.
    */
-  let refuse: 'working' | 'paused' | 'saturated' | 'invalid' | 'cli' | 'budget' | false;
+  let refuse: 'working' | 'paused' | 'saturated' | 'invalid' | 'cli' | 'budget' | 'disabled' | false;
   /** The `reason` a refusal carries, as `RunTracker` gives one for `invalid`. */
   let refuseReason: string | undefined;
   /** The CLI a `cli` refusal names (HIVE-399). */
@@ -1013,6 +1013,32 @@ describe('createScheduler', () => {
       refuse = false;
       tick();
       expect(state.read(AGENT).refused).toBeUndefined();
+    });
+
+    it('tells the asker once that an agent turned off cannot wake, keeps the ask queued, and runs it once on (HIVE-453)', () => {
+      refuse = 'disabled';
+      entries = [asked];
+      scheduler.start();
+      scheduler.onEntry(asked);
+      tick();
+      tick();
+
+      expect(notes()).toEqual([
+        {
+          from: 'overmind',
+          to: 'builder',
+          kind: 'post',
+          thread: 'a26',
+          body: `${AGENT} cannot wake: disabled; a26 is queued`,
+          meta: { refused: 'disabled', agent: AGENT },
+        },
+      ]);
+      expect(state.read(AGENT).pendingWake).toEqual([expect.objectContaining({ id: 'a26' })]);
+
+      refuse = false;
+      tick();
+      expect(state.read(AGENT).pendingWake).toEqual([]);
+      expect(woke.at(-1)).toMatchObject({ name: AGENT, trigger: 'ledger' });
     });
 
     it('says a hold waits on a live run, not midnight, and marks the note (HIVE-412)', () => {

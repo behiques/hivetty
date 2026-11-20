@@ -49,6 +49,7 @@ const swarmSpies = {
   install: vi.fn((_request: unknown) => Promise.resolve('FAKE_SWARM_INSTALL')),
   remove: vi.fn((_request: unknown) => Promise.resolve('FAKE_SWARM_REMOVE')),
   setAutoUpdate: vi.fn((_request: unknown) => Promise.resolve('FAKE_SWARM_SET_AUTO_UPDATE')),
+  setEnabled: vi.fn((_request: unknown) => Promise.resolve('FAKE_SWARM_SET_ENABLED')),
   check: vi.fn(() => Promise.resolve('FAKE_SWARM_CHECK')),
 };
 const takeSwarmInstallRequest = vi.fn(() => 'a1');
@@ -243,7 +244,7 @@ afterEach(() => {
 
 describe('registerRemoteProxy', () => {
   it('binds every call channel to the client', () => {
-    expect(callChannels.length).toBe(177);
+    expect(callChannels.length).toBe(178);
 
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
@@ -562,7 +563,7 @@ describe('registerRemoteProxy', () => {
   it('records every binding, so the mode can be switched back', () => {
     registerRemoteProxy({ client: fakeClient(), broadcaster: fakeBroadcaster() });
 
-    expect(remoteProxyBindingsSize()).toBe(183);
+    expect(remoteProxyBindingsSize()).toBe(184);
   });
 
   /**
@@ -576,8 +577,8 @@ describe('registerRemoteProxy', () => {
    * `remote:forget` (HIVE-153).
    */
   describe('PROCESS_LOCAL channels (HIVE-144 Rulings 24 and 28, HIVE-153, HIVE-149, HIVE-151)', () => {
-    it('names exactly forty-five channels', () => {
-      expect(PROCESS_LOCAL.length).toBe(45);
+    it('names exactly forty-six channels', () => {
+      expect(PROCESS_LOCAL.length).toBe(46);
       expect([...PROCESS_LOCAL].sort()).toEqual(
         [
           'account:billing',
@@ -615,6 +616,7 @@ describe('registerRemoteProxy', () => {
           'swarms:list',
           'swarms:remove',
           'swarms:set-auto-update',
+          'swarms:set-enabled',
           'swarms:take-install-request',
           'sync:now',
           'sync:open-conflicts',
@@ -697,6 +699,15 @@ describe('registerRemoteProxy', () => {
       await expect(invoke('swarms:check', trustedEvent, undefined)).resolves.toBe('FAKE_SWARM_CHECK');
       expect(swarmSpies.setAutoUpdate).toHaveBeenCalledWith({ swarmId: 'a1', autoUpdate: false });
       expect(swarmSpies.check).toHaveBeenCalledTimes(1);
+      expect(client.call).not.toHaveBeenCalled();
+    });
+
+    it('answers swarms:set-enabled on this machine with its payload, never client.call (HIVE-453)', async () => {
+      const client = fakeClient();
+      registerRemoteProxy({ client, broadcaster: fakeBroadcaster() });
+
+      await expect(invoke('swarms:set-enabled', trustedEvent, { swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: false })).resolves.toBe('FAKE_SWARM_SET_ENABLED');
+      expect(swarmSpies.setEnabled).toHaveBeenCalledWith({ swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: false });
       expect(client.call).not.toHaveBeenCalled();
     });
 
@@ -1337,8 +1348,8 @@ describe('registerRemoteProxy', () => {
     // pins — not `callChannels.length + notifyChannels.length`, which would
     // recompute its own expectation from the same source the code under test
     // reads and could never catch a channel silently lost between the two.
-    expect(removeHandler).toHaveBeenCalledTimes(183);
-    expect(removeAllListeners).toHaveBeenCalledTimes(183);
+    expect(removeHandler).toHaveBeenCalledTimes(184);
+    expect(removeAllListeners).toHaveBeenCalledTimes(184);
     expect(remoteProxyBindingsSize()).toBe(0);
 
     client.emit('pty:data', { seq: 2 });

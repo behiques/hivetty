@@ -99,6 +99,7 @@ describe('OvermindHead (HIVE-197)', () => {
         wake: { on: [] },
         mcp: [],
         tools: [],
+        skills: [],
         rotateAfter: 50,
         runs: [],
         live: [{ run: 'r', kind: 'task', trigger: 'ledger', startedAt: 1, lane: 'repo:acme/nova-web' }],

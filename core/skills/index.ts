@@ -191,6 +191,11 @@ interface SkillsRuntimeOptions {
   ready?: Promise<unknown>;
   /** HIVE-372: after every regeneration, so the Codex plugin installer can follow a changed skill. */
   onRendered?: () => void;
+  /**
+   * HIVE-453: the skills a swarm's entry has turned off, read at every regeneration. They are left out of every
+   * rendered folder and still listed. Absent means nothing is off; a rejection reads as nothing off.
+   */
+  disabledSkills?: () => Promise<ReadonlySet<string>>;
 }
 
 export function createSkillsRuntime({
@@ -200,6 +205,7 @@ export function createSkillsRuntime({
   ready,
   installedPlugins,
   onRendered,
+  disabledSkills,
 }: SkillsRuntimeOptions): SkillsRuntime {
   const hiveRoot = join(userDataPath, 'hive');
   const folderFor = (cli: HarnessId): string =>
@@ -239,12 +245,25 @@ export function createSkillsRuntime({
     () => ({ skills: [], invalid: [] }),
   );
 
+  /** HIVE-453: an unreadable off list must not drop every session's skills, so it reads as nothing off. */
+  const offNow = async (): Promise<ReadonlySet<string>> => {
+    try {
+      return (await disabledSkills?.()) ?? new Set();
+    } catch (cause) {
+      console.info(`[hive] the swarm skills turned off in Settings could not be read — every skill is rendered (${String(cause)})`);
+      return new Set();
+    }
+  };
+
   const regenerate = async (): Promise<SkillsRead> => {
     const read = await readUserSkills(skillsRoot());
+    const off = await offNow();
+    // What the CLIs get leaves out an off skill. What this answers does not: the list and agent validation know it.
+    const rendered: SkillsRead = off.size === 0 ? read : { ...read, skills: read.skills.filter((s) => !off.has(s.name)) };
 
     for (const cli of HARNESS_IDS) {
       try {
-        await renderSkills(folderFor(cli), cli, read, {
+        await renderSkills(folderFor(cli), cli, rendered, {
           version,
           doneUrl: doneUrl?.() ?? null,
         });
@@ -273,7 +292,7 @@ export function createSkillsRuntime({
     }
 
     try {
-      marketplace = await writeCodexMarketplace(join(hiveRoot, 'plugins', 'codex-marketplace'), read, {
+      marketplace = await writeCodexMarketplace(join(hiveRoot, 'plugins', 'codex-marketplace'), rendered, {
         version,
         doneUrl: doneUrl?.() ?? null,
       });

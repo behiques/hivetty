@@ -17,6 +17,7 @@ const engine = vi.hoisted(() => ({
   installIf: vi.fn(),
   remove: vi.fn(),
   setAutoUpdate: vi.fn(),
+  setEnabled: vi.fn(),
   seedSets: vi.fn(),
   seedSetFor: vi.fn(),
   manifestFiles: vi.fn(),
@@ -54,7 +55,9 @@ const {
   setSwarmHooks,
   startSwarmUpdates,
   swarmCalls,
+  swarmDisabledNames,
   swarmManifestFiles,
+  swarmOwns,
   swarmRunsIdle,
   swarmSeedSetFor,
   swarmSeedSets,
@@ -207,6 +210,77 @@ describe('swarmCalls().list', () => {
   });
 });
 
+describe('missing files, ownership and the off names (HIVE-453)', () => {
+  let home: string;
+  const manifestOf = (rels: string[]): string =>
+    JSON.stringify({ files: Object.fromEntries(rels.map((rel) => [rel, 'x'.repeat(64)])), parts: {} });
+  const put = async (rel: string, text: string): Promise<void> => {
+    await fs.mkdir(join(home, rel, '..'), { recursive: true });
+    await fs.writeFile(join(home, rel), text);
+  };
+
+  beforeEach(async () => {
+    home = await fs.mkdtemp(join(tmpdir(), 'hive-swarm-off-'));
+    config.path = join(home, 'config.json');
+    // a1 owns skills/plan, skills/tdd and agents/acr; b1 (bundled) owns skills/verify; c1's first install is pending.
+    await put('swarms/a1/seed.json', manifestOf(['skills/plan/SKILL.md', 'skills/tdd/SKILL.md', 'skills/tdd/notes.md', 'agents/acr/AGENT.md']));
+    await put('swarms/b1/seed.json', manifestOf(['skills/verify/SKILL.md']));
+    await put('swarms/c1/pending.json', manifestOf(['skills/later/SKILL.md']));
+    await put('skills/tdd/SKILL.md', 'tdd');
+    await put('skills/plan/notes.md', 'only notes: SKILL.md is gone');
+    await put('agents/acr/AGENT.md', 'acr');
+    engine.manifestFiles.mockResolvedValue(
+      ['a1', 'b1', 'c1'].flatMap((id) => [join(home, 'swarms', id, 'seed.json'), join(home, 'swarms', id, 'pending.json')]),
+    );
+  });
+
+  afterEach(async () => {
+    await fs.rm(home, { recursive: true, force: true });
+  });
+
+  it('lists the names whose definition file is absent, for every installed swarm, bundled ones included', async () => {
+    engine.installed.mockResolvedValue([heldAt('a1', '1.0.0'), heldAt('b1', 'bundled')]);
+    registry.readRegistry.mockResolvedValue({ swarms: [a1, entry('z1')], source: 'cloud' });
+
+    const items = (await swarmCalls().list()).items;
+
+    expect(items.find((item) => item.entry?.id === 'a1')?.missing).toEqual({ agents: [], skills: ['plan'] });
+    expect(items.find((item) => item.installed?.swarmId === 'b1')?.missing).toEqual({ agents: [], skills: ['verify'] });
+    expect(items.find((item) => item.entry?.id === 'z1')?.missing).toEqual({ agents: [], skills: [] });
+  });
+
+  it('lists nothing missing for a swarm with no seed manifest', async () => {
+    engine.installed.mockResolvedValue([heldAt('d1', '1.0.0')]);
+    registry.readRegistry.mockResolvedValue({ swarms: [], source: 'cloud' });
+
+    expect((await swarmCalls().list()).items[0]?.missing).toEqual({ agents: [], skills: [] });
+  });
+
+  it('names the swarm that owns a name, bundled ones included, and null for a name none owns', async () => {
+    await expect(swarmOwns('skills', 'tdd')).resolves.toEqual({ swarmId: 'a1' });
+    await expect(swarmOwns('agents', 'acr')).resolves.toEqual({ swarmId: 'a1' });
+    await expect(swarmOwns('skills', 'verify')).resolves.toEqual({ swarmId: 'b1' });
+    await expect(swarmOwns('agents', 'tdd')).resolves.toBeNull();
+    await expect(swarmOwns('skills', 'mine')).resolves.toBeNull();
+    // A pending first install is not an owner: its files are not the swarm's until the install lands.
+    await expect(swarmOwns('skills', 'later')).resolves.toBeNull();
+  });
+
+  it('owns a name whose folder is already gone from disk', async () => {
+    await expect(swarmOwns('skills', 'plan')).resolves.toEqual({ swarmId: 'a1' });
+  });
+
+  it('unions the off names of every installed swarm', async () => {
+    engine.installed.mockResolvedValue([
+      heldAt('a1', '1.0.0', { disabled: { agents: ['acr'], skills: ['tdd'] } }),
+      heldAt('b1', 'bundled', { disabled: { agents: [], skills: ['verify'] } }),
+      { ...heldAt('e1', '1.0.0'), disabled: undefined } as unknown as InstalledSwarm,
+    ]);
+
+    await expect(swarmDisabledNames()).resolves.toEqual({ agents: ['acr'], skills: ['tdd', 'verify'] });
+  });
+});
+
 describe('the registry read', () => {
   it("reads through the hook's fetch and the cache under ~/.hivetty/swarms", async () => {
     await swarmCalls().list();
@@ -339,6 +413,7 @@ const heldAt = (swarmId: string, version: string, patch: Partial<InstalledSwarm>
   title: 'Standard',
   description: 'Ticket to merge.',
   contents: { agents: [], skills: [] },
+  disabled: { agents: [], skills: [] },
   ...patch,
 });
 
@@ -478,6 +553,44 @@ describe('swarmCalls().setAutoUpdate', () => {
   it('rejects a payload with no flag, and writes nothing', async () => {
     await expect(swarmCalls().setAutoUpdate({ swarmId: 'a1' })).rejects.toThrow();
     expect(engine.setAutoUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('swarmCalls().setEnabled (HIVE-453)', () => {
+  it('writes the change, answers the entry, and refreshes the plugins, the agents and the list once each', async () => {
+    const held = heldAt('a1', '1.0.0', { disabled: { agents: [], skills: ['tdd'] } });
+    engine.setEnabled.mockResolvedValue(held);
+
+    await expect(swarmCalls().setEnabled({ swarmId: 'a1', kind: 'skills', name: 'tdd', enabled: false })).resolves.toBe(held);
+
+    expect(engine.setEnabled).toHaveBeenCalledWith('a1', 'skills', 'tdd', false);
+    expect(h.afterSkills).toHaveBeenCalledTimes(1);
+    expect(h.afterAgents).toHaveBeenCalledTimes(1);
+    expect(h.changed).toHaveBeenCalledTimes(1);
+    expect(h.changed).toHaveBeenCalledWith({ updated: null });
+  });
+
+  it('answers null and refreshes nothing when the engine wrote nothing', async () => {
+    engine.setEnabled.mockResolvedValue(null);
+
+    await expect(swarmCalls().setEnabled({ swarmId: 'a1', kind: 'agents', name: 'nobody', enabled: false })).resolves.toBeNull();
+
+    expect(h.afterSkills).not.toHaveBeenCalled();
+    expect(h.afterAgents).not.toHaveBeenCalled();
+    expect(h.changed).not.toHaveBeenCalled();
+  });
+
+  it.each<unknown>([
+    { swarmId: 'a1', kind: 'files', name: 'tdd', enabled: false },
+    { swarmId: 'a1', kind: 'skills', name: '../x', enabled: false },
+    { swarmId: 'a1', kind: 'skills', name: 'tdd' },
+  ])('rejects %j, and writes and refreshes nothing', async (payload) => {
+    await expect(swarmCalls().setEnabled(payload)).rejects.toThrow();
+
+    expect(engine.setEnabled).not.toHaveBeenCalled();
+    expect(h.afterSkills).not.toHaveBeenCalled();
+    expect(h.afterAgents).not.toHaveBeenCalled();
+    expect(h.changed).not.toHaveBeenCalled();
   });
 });
 

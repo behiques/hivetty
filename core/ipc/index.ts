@@ -340,6 +340,8 @@ import {
   setSwarmHooks,
   startSwarmUpdates,
   swarmCalls,
+  swarmDisabledNames,
+  swarmOwns,
   swarmRunsIdle,
   swarmSeedSetFor,
   swarmSeedSets,
@@ -909,6 +911,12 @@ let prWatchTimer: ReturnType<typeof setInterval> | null = null;
  */
 const knownAgents = new Set<string>();
 /**
+ * HIVE-453: the agents a swarm's entry has turned off in Settings, refilled with {@link knownAgents}. A set for the
+ * same reason: the run tracker and `Ledger.append` ask it synchronously. An unreadable list leaves it empty, which is
+ * the safe direction for a wake.
+ */
+const disabledAgents = new Set<string>();
+/**
  * The subset of {@link knownAgents} whose definitions take ledger wakes.
  *
  * A second set rather than a lookup through the registry, for the reason
@@ -1088,8 +1096,28 @@ function refreshKnownAgents(): Promise<void> {
       // schedules have ever been read. A failed listing must not license the
       // tick to clear the times a previous one established.
     });
-  // Returned for Reload, which answers only once the caches are rebuilt.
-  return listed ?? Promise.resolve();
+  // Returned for Reload, which answers only once the caches are rebuilt, the off set included.
+  return Promise.all([listed, refreshDisabledAgents()]).then(() => undefined);
+}
+
+/** The latest {@link refreshDisabledAgents} call: an older read that lands late is dropped. */
+let disabledRead = 0;
+
+/**
+ * HIVE-453: re-read {@link disabledAgents} from the installed swarms. Beside the listing rather than inside it, so
+ * the party set is rebuilt as soon as the folder is read. Never rejects: an unreadable list reads as nothing off.
+ */
+function refreshDisabledAgents(): Promise<void> {
+  disabledRead += 1;
+  const mine = disabledRead;
+  return swarmDisabledNames().then(
+    (off) => off.agents,
+    () => [],
+  ).then((names) => {
+    if (mine !== disabledRead) return;
+    disabledAgents.clear();
+    for (const name of names) disabledAgents.add(name);
+  });
 }
 /**
  * Who the socket is held open for, as `subscriptions.ts` asks it (HIVE-124).
@@ -1993,6 +2021,7 @@ export function registerIpcHandlers(
   handle(CH.swarmsInstall, (_event, payload: unknown) => swarmCalls().install(payload));
   handle(CH.swarmsRemove, (_event, payload: unknown) => swarmCalls().remove(payload));
   handle(CH.swarmsSetAutoUpdate, (_event, payload: unknown) => swarmCalls().setAutoUpdate(payload));
+  handle(CH.swarmsSetEnabled, (_event, payload: unknown) => swarmCalls().setEnabled(payload));
   handle(CH.swarmsCheck, () => swarmCalls().check());
   // HIVE-442: the swarm an install link named, once. It opens the consent dialog; it never installs.
   handle(CH.swarmsTakeInstallRequest, () => takeSwarmInstallRequest());
@@ -2087,6 +2116,8 @@ export function registerIpcHandlers(
       */
       history?.resumable(id) !== undefined,
     isPausedAgent: (id) => knownAgents.has(id) && agentState?.read(id).status === 'paused',
+    // HIVE-453: an agent turned off in Settings; a name that is not an agent is the unknown-party rule's.
+    isDisabledAgent: (id) => knownAgents.has(id) && disabledAgents.has(id),
   });
 
   // HIVE-364. The ledger loads without calling a listener and the hub keeps
@@ -2703,6 +2734,8 @@ export function registerIpcHandlers(
     installedPlugins: () => sessionAdapter().installed.pluginNames(),
     // HIVE-372: follow a changed skill or a new version. A read and a stat when current; no codex run when off and clean.
     onRendered: () => void codexPlugin.reconcile(),
+    // HIVE-453: a swarm's skill turned off in Settings leaves every generated plugin. Read at each regeneration.
+    disabledSkills: async () => new Set((await swarmDisabledNames()).skills),
   });
 
   /*
@@ -2946,6 +2979,8 @@ export function registerIpcHandlers(
   };
 
   runs = createRunTracker({
+    // HIVE-453: a swarm agent turned off in Settings is refused for every trigger.
+    isDisabled: (name) => disabledAgents.has(name),
     // Keeps the Mac awake while any agent run is live (HIVE-408); the desktop holds the one blocker. Server mode's own blocker is separate.
     onLive: (live) => {
       platform().desktop?.keepAwake(live);
@@ -5122,12 +5157,22 @@ export function registerIpcHandlers(
     return skills?.write(request.name, request.body);
   });
 
-  handle(CH.skillsRemove, (_event, payload) =>
-    skills?.remove(parseSkillNameRequest(payload).name),
-  );
+  handle(CH.skillsRemove, async (_event, payload) => {
+    const { name } = parseSkillNameRequest(payload);
+    // HIVE-453: a swarm's skill is turned off, never deleted: its manifest entry would hold the deletion for good. A
+    // manifest read that fails rejects here too, so nothing is deleted on a guess.
+    if ((await swarmOwns('skills', name)) !== null) {
+      throw new Error(`/${name} was installed by a swarm: turn it off in Settings instead, or remove the swarm.`);
+    }
+    return skills?.remove(name);
+  });
 
-  handle(CH.skillsRename, (_event, payload) => {
+  handle(CH.skillsRename, async (_event, payload) => {
     const request = parseSkillRenameRequest(payload);
+    // HIVE-453: a rename moves a swarm's folder off the name its manifest owns, the same hole a remove leaves.
+    if ((await swarmOwns('skills', request.from)) !== null) {
+      throw new Error(`/${request.from} was installed by a swarm: turn it off in Settings instead, or remove the swarm.`);
+    }
     return skills?.rename(request.from, request.to);
   });
 
@@ -5264,12 +5309,21 @@ export function registerIpcHandlers(
     checkAgentHarness(parseAgentHarnessCheckRequest(payload).source),
   );
 
-  handle(CH.agentsRemove, (_event, payload) =>
-    agents?.remove(parseAgentNameRequest(payload).name),
-  );
+  handle(CH.agentsRemove, async (_event, payload) => {
+    const { name } = parseAgentNameRequest(payload);
+    // HIVE-453: the same rule as skills:remove, for a swarm's agent.
+    if ((await swarmOwns('agents', name)) !== null) {
+      throw new Error(`${name} was installed by a swarm: turn it off in Settings instead, or remove the swarm.`);
+    }
+    return agents?.remove(name);
+  });
 
-  handle(CH.agentsRename, (_event, payload) => {
+  handle(CH.agentsRename, async (_event, payload) => {
     const request = parseAgentRenameRequest(payload);
+    // HIVE-453: the same rule as skills:rename, for a swarm's agent.
+    if ((await swarmOwns('agents', request.from)) !== null) {
+      throw new Error(`${request.from} was installed by a swarm: turn it off in Settings instead, or remove the swarm.`);
+    }
     return agents?.rename(request.from, request.to, request.source);
   });
 

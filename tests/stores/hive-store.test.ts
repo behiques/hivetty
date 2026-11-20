@@ -1171,6 +1171,7 @@ describe('hive-store', () => {
             wake: { on: ['slack.mention'], everyMs: 300_000 },
             mcp: [],
             tools: [],
+            skills: [],
             rotateAfter: 50,
             skipsSinceRun: 0,
             runs: [],
@@ -1323,6 +1324,7 @@ describe('hive-store', () => {
               wake: { on: ['slack.mention'], everyMs: 300_000 },
               mcp: [],
               tools: [],
+              skills: [],
               rotateAfter: 50,
               skipsSinceRun: 0,
               runs: [],
@@ -1824,6 +1826,7 @@ describe('hive-store', () => {
             wake: { on: ['slack.mention'], everyMs: 300_000 },
             mcp: [],
             tools: [],
+            skills: [],
             rotateAfter: 50,
             skipsSinceRun: 0,
             runs: [],
@@ -1932,6 +1935,7 @@ describe('hive-store', () => {
             wake: { on: ['slack.mention'], everyMs: 300_000 },
             mcp: [],
             tools: [],
+            skills: [],
             rotateAfter: 50,
             skipsSinceRun: 0,
             runs: [],
@@ -2013,6 +2017,7 @@ describe('hive-store', () => {
         wake: { on: ['slack.mention'], everyMs: 300_000 },
         mcp: [],
         tools: [],
+        skills: [],
         rotateAfter: 50,
         skipsSinceRun: 0,
         runs: [],
@@ -3053,6 +3058,7 @@ describe('hive-store', () => {
       wake: { on: [] },
       mcp: [],
       tools: [],
+      skills: [],
       rotateAfter: 50,
       skipsSinceRun: 0,
       runs: [],
@@ -3175,6 +3181,7 @@ describe('hive-store', () => {
           wake: { on: ['ledger'] },
           mcp: [],
           tools: [],
+          skills: [],
           rotateAfter: 50,
           skipsSinceRun: 0,
           runs: [],
@@ -3220,6 +3227,7 @@ describe('hive-store', () => {
           wake: { on: ['ledger'] },
           mcp: [],
           tools: [],
+          skills: [],
           rotateAfter: 50,
           runs: [],
           refused: [r],
@@ -3367,6 +3375,7 @@ describe('hive-store', () => {
           wake: { on: ['ledger'] },
           mcp: [],
           tools: [],
+          skills: [],
           rotateAfter: 50,
           skipsSinceRun: 0,
           runs: [],
@@ -3394,6 +3403,7 @@ describe('hive-store', () => {
           wake: { on: [] },
           mcp: [],
           tools: [],
+          skills: [],
           rotateAfter: 50,
           skipsSinceRun: 0,
           runs: [],
@@ -3432,6 +3442,7 @@ describe('hive-store', () => {
           wake: { on: [] },
           mcp: [],
           tools: [],
+          skills: [],
           rotateAfter: 50,
           skipsSinceRun: 0,
           runs: [],
@@ -5896,6 +5907,7 @@ describe('the agent view selectors', () => {
     wake: { on: [] },
     mcp: [],
     tools: [],
+    skills: [],
     rotateAfter: 50,
     skipsSinceRun: 0,
     runs: [],
@@ -6420,6 +6432,12 @@ describe('the cli wait in words (HIVE-399)', () => {
   it('still reads when main sent neither', () => {
     expect(agentRunQueued('fixer', { started: false, queued: true, behind: 'cli' })).toBe(
       'queued for fixer — waiting for its CLI: it cannot run',
+    );
+  });
+
+  it('refused disabled says where to turn it on (HIVE-453)', () => {
+    expect(agentRunRefusal('acr', { started: false, refused: 'disabled' })).toBe(
+      'acr is turned off — turn it on in Settings › Agents',
     );
   });
 
