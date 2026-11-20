@@ -292,6 +292,47 @@ export function swarmOwnerOf(listing: SwarmListing | null, kind: SwarmItemKind, 
   };
 }
 
+/**
+ * HIVE-454: an ordered group of agent names Home and the Agents list draw as one swarm. Before the listing loads
+ * there is one group, so nothing passes through MY SWARM on boot.
+ */
+export interface AgentGroup {
+  id: string;
+  title: string;
+  names: string[];
+}
+
+/** The one group before the listing loads. Its id is the comb's `SWARM`. */
+export const THE_SWARM = { id: 'swarm', title: 'The swarm' } as const;
+
+/** The agents no installed swarm ships: the ones the person wrote. Always last. */
+export const MY_SWARM = { id: 'swarm:mine', title: 'My swarm' } as const;
+
+/** HIVE-454: the names grouped by installed swarm in Settings order, then MY SWARM; empty groups dropped. */
+export function agentGroups(listing: SwarmListing | null, names: readonly string[]): AgentGroup[] {
+  if (names.length === 0) return [];
+  if (listing === null) return [{ ...THE_SWARM, names: [...names] }];
+
+  const bySwarm = new Map<string, string[]>();
+  const mine: string[] = [];
+
+  for (const name of names) {
+    const owner = swarmOwnerOf(listing, 'agents', name);
+
+    if (owner === null) mine.push(name);
+    else bySwarm.set(owner.swarmId, [...(bySwarm.get(owner.swarmId) ?? []), name]);
+  }
+
+  const groups = listing.items.flatMap((item): AgentGroup[] => {
+    const installed = item.installed;
+    const list = installed ? bySwarm.get(installed.swarmId) : undefined;
+
+    return installed && list ? [{ id: installed.swarmId, title: installed.title, names: list }] : [];
+  });
+
+  return mine.length > 0 ? [...groups, { ...MY_SWARM, names: mine }] : groups;
+}
+
 /** HIVE-453: how many of an installed swarm's agents and skills are on. Off names it no longer ships do not count. */
 export function onCounts(item: SwarmListItem): { agentsOn: number; agents: number; skillsOn: number; skills: number } {
   const installed = item.installed;

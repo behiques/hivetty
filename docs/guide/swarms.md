@@ -75,6 +75,18 @@ Below the counts, the row lists:
   Dev Squad that came with HiveTTY has nothing to copy from until its first update, so its row says
   "Can be restored after Dev Squad's first update." until then.
 
+## On Home
+
+Home's comb draws one patch of agents per installed swarm, labelled with the swarm's title, in the
+order Settings › Swarms lists them. Agents you wrote yourself sit last, under **MY SWARM**.
+
+On a wide stage the patches sit side by side. With more swarms, or a narrower window, each swarm
+becomes a cluster with the agents' names inside their cells. With more still, the clusters shrink
+and the names move to the tooltip; when even those don't fit, the swarms that need you least fold
+into one "+N" cell. The comb lays itself out again a moment after you stop resizing the window.
+
+A swarm's "+N", and the folded swarms' "+N", open Agents.
+
 ## Updates
 
 HiveTTY checks every six hours, when you sign in, and when you choose **Check for updates**.

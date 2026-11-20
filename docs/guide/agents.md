@@ -31,7 +31,8 @@ machine, not this agent), and **fixer**, which works through a PR's findings on 
 A new install starts with no agents; an install that had the built-in agents keeps them, edits
 intact, as Dev Squad. Settings › Automation › Swarms installs, updates and removes swarms. With no agent installed at
 all, the Agents place, Settings › Agents and Home say agents come in swarms and offer
-**Install Dev Squad** and **Browse swarms**.
+**Install Dev Squad** and **Browse swarms**. Home draws each swarm's agents as their own patch
+([Swarms › On Home](swarms.md#on-home)).
 
 None of Dev Squad's agents has a budget: no `limits.budget_usd` and no `limits.daily_usd`, so they
 spend without a cap until you set one in Settings › Agents, and a cap you set stays set through

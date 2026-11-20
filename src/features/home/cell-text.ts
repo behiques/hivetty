@@ -1,5 +1,5 @@
 import { statusLabel } from '@components/ui/status-dot';
-import { ALL_PROJECTS, type CellState, type CombCell, SWARM } from '@lib/swarm/comb';
+import { ALL_PROJECTS, ALL_SWARMS, type CellState, type CombCell } from '@lib/swarm/comb';
 import type { CombEntity } from '@stores/hive-store';
 
 /** The comb's state words: the Hive's own vocabulary for a cell. */
@@ -41,7 +41,8 @@ export function cellText(
   if (cell.kind === 'rest' || entity === undefined) {
     const more = cell.more ?? 0;
     if (cell.project === ALL_PROJECTS) return { title: `${more} more projects`, context: '', line: 'click to see every session' };
-    if (cell.project === SWARM) return { title: `${more} more agents`, context: '', line: 'click to open Agents' };
+    if (cell.project === ALL_SWARMS) return { title: `${more} more swarms`, context: '', line: 'click to open Agents' };
+    if (cell.agent) return { title: `${more} more in ${projectName(cell.project)}`, context: '', line: 'click to open Agents' };
     return { title: `${more} more in ${projectName(cell.project)}`, context: '', line: 'click to open the project' };
   }
   // Decision D2: only an agent's ask carries a wait until HIVE-214's queue gives sessions one.

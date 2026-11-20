@@ -20,8 +20,13 @@ import {
   subscribeSwarms,
   swarmOwnerOf,
   swarmsSnapshot,
+  agentGroups,
+  MY_SWARM,
+  THE_SWARM,
   takeSwarmInstallRequest,
 } from '@/lib/swarms';
+
+import { SWARM } from '@/lib/swarm/comb';
 
 import type { AgentSummary } from '@shared/agent-contract';
 import type { SwarmListing, SwarmsChanged } from '@shared/swarm-contract';
@@ -652,5 +657,56 @@ describe('who depends on a swarm item (HIVE-453)', () => {
     expect(andList(['builder'])).toBe('builder');
     expect(andList(['builder', 'fixer'])).toBe('builder and fixer');
     expect(andList(['a', 'b', 'c'])).toBe('a, b and c');
+  });
+});
+
+describe('agentGroups (HIVE-454)', () => {
+  const swarmOf = (swarmId: string, title: string, agents: string[], off: string[] = []) =>
+    swarmItem({
+      entry: swarmEntry({ id: swarmId, title }),
+      installed: installedSwarm({
+        swarmId,
+        title,
+        contents: { agents: agents.map((name) => ({ name, description: '', tools: [] })), skills: [] },
+        disabled: { agents: off, skills: [] },
+      }),
+    });
+
+  it('puts every name in one THE_SWARM group before the listing loads', () => {
+    expect(agentGroups(null, ['b', 'a'])).toEqual([{ id: 'swarm', title: 'The swarm', names: ['b', 'a'] }]);
+  });
+
+  it('answers no groups for no names', () => {
+    expect(agentGroups(null, [])).toEqual([]);
+    expect(agentGroups(swarmListing([swarmOf('a', 'A', ['x'])]), [])).toEqual([]);
+  });
+
+  it('groups by installed swarm in listing order, then MY_SWARM with the rest, names in input order', () => {
+    const listing = swarmListing([swarmOf('sa', 'A', ['a1', 'a2']), swarmOf('sb', 'B', ['b1'])]);
+    expect(agentGroups(listing, ['b1', 'mine', 'a2', 'a1'])).toEqual([
+      { id: 'sa', title: 'A', names: ['a2', 'a1'] },
+      { id: 'sb', title: 'B', names: ['b1'] },
+      { id: MY_SWARM.id, title: 'My swarm', names: ['mine'] },
+    ]);
+  });
+
+  it('follows listing.items order, not name order', () => {
+    const listing = swarmListing([swarmOf('zz', 'Zed', ['z']), swarmOf('aa', 'Alpha', ['a'])]);
+    expect(agentGroups(listing, ['a', 'z']).map((group) => group.id)).toEqual(['zz', 'aa']);
+  });
+
+  it('drops a swarm with none of the names and a registry row with nothing installed', () => {
+    const listing = swarmListing([swarmItem(), swarmOf('sa', 'A', ['a1']), swarmOf('sb', 'B', ['b1'])]);
+    expect(agentGroups(listing, ['b1']).map((group) => group.id)).toEqual(['sb']);
+  });
+
+  it('keeps an off agent in its swarm', () => {
+    const listing = swarmListing([swarmOf('sa', 'A', ['a1', 'a2'], ['a2'])]);
+    expect(agentGroups(listing, ['a1', 'a2'])).toEqual([{ id: 'sa', title: 'A', names: ['a1', 'a2'] }]);
+  });
+
+  it("uses the comb's SWARM id for THE_SWARM", () => {
+    expect(THE_SWARM.id).toBe(SWARM);
+    expect(MY_SWARM).toEqual({ id: 'swarm:mine', title: 'My swarm' });
   });
 });
