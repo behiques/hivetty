@@ -799,6 +799,116 @@ describe('setAutoUpdate', () => {
   });
 });
 
+describe('setEnabled (HIVE-453)', () => {
+  const installTwoSkills = async () => {
+    const swarms = createSwarms(makeDeps());
+    const { entry } = released('1.0.0', { skills: ['tdd', 'debug'], agents: ['acr'] });
+    expect((await swarms.install(entry)).ok).toBe(true);
+    return swarms;
+  };
+
+  it('adds a name to the sorted, deduplicated off list, and removes it again', async () => {
+    const swarms = await installTwoSkills();
+
+    expect((await swarms.setEnabled('sw1', 'skills', 'tdd', false))?.disabled).toEqual({ agents: [], skills: ['tdd'] });
+    expect((await swarms.setEnabled('sw1', 'skills', 'debug', false))?.disabled.skills).toEqual(['debug', 'tdd']);
+    expect((await swarms.setEnabled('sw1', 'skills', 'tdd', false))?.disabled.skills).toEqual(['debug', 'tdd']);
+    expect((await swarms.setEnabled('sw1', 'agents', 'acr', false))?.disabled).toEqual({
+      agents: ['acr'],
+      skills: ['debug', 'tdd'],
+    });
+    expect((await swarms.setEnabled('sw1', 'skills', 'tdd', true))?.disabled.skills).toEqual(['debug']);
+    expect(installedJson()[0]?.disabled).toEqual({ agents: ['acr'], skills: ['debug'] });
+  });
+
+  it('answers null and writes nothing for a name the swarm’s manifest does not own', async () => {
+    const swarms = await installTwoSkills();
+    const before = readHive('swarms/installed.json');
+
+    expect(await swarms.setEnabled('sw1', 'skills', 'plan', false)).toBeNull();
+    // A skill name asked for as an agent is not owned either.
+    expect(await swarms.setEnabled('sw1', 'agents', 'tdd', false)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe(before);
+  });
+
+  it('answers null for a bad id, or a swarm that is not installed', async () => {
+    const swarms = await installTwoSkills();
+    const before = readHive('swarms/installed.json');
+
+    expect(await swarms.setEnabled('../x', 'skills', 'tdd', false)).toBeNull();
+    expect(await swarms.setEnabled('zz', 'skills', 'tdd', false)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe(before);
+  });
+
+  it('writes a row the guard refuses back as it was read', async () => {
+    const swarms = await installTwoSkills();
+    const refused = { swarmId: 'not valid!' };
+    write(hive('swarms/installed.json'), JSON.stringify([refused, ...installedJson()]));
+
+    expect(await swarms.setEnabled('sw1', 'skills', 'tdd', false)).not.toBeNull();
+    const rows = readJson<unknown[]>('swarms/installed.json');
+    expect(rows[0]).toEqual(refused);
+    expect((rows[1] as InstalledSwarm).disabled.skills).toEqual(['tdd']);
+  });
+
+  it('answers null and leaves an unreadable installed.json as it was', async () => {
+    const swarms = await installTwoSkills();
+    write(hive('swarms/installed.json'), '{');
+
+    expect(await swarms.setEnabled('sw1', 'skills', 'tdd', false)).toBeNull();
+    expect(readHive('swarms/installed.json')).toBe('{');
+  });
+
+  it('reads an entry written before HIVE-453 as nothing off', async () => {
+    const swarms = await installTwoSkills();
+    write(
+      hive('swarms/installed.json'),
+      JSON.stringify(installedJson().map(({ disabled: _drop, ...rest }) => rest)),
+    );
+
+    expect((await swarms.setEnabled('sw1', 'agents', 'acr', false))?.disabled).toEqual({ agents: ['acr'], skills: [] });
+  });
+
+  it('keeps the off lists across an update, with the new version’s files', async () => {
+    const repo = makeRepo([
+      { tag: 'standard/v1.0.0', files: swarmFiles('1.0.0', { agents: ['acr'] }) },
+      { tag: 'standard/v1.1.0', files: swarmFiles('1.1.0', { agents: ['acr'], body: 'new text' }) },
+    ]);
+    const swarms = createSwarms(makeDeps());
+    const at = (version: string) =>
+      entryFor({ repoUrl: repo.bare, version, commit: repo.commitOf(`standard/v${version}`) });
+    expect((await swarms.install(at('1.0.0'))).ok).toBe(true);
+    expect(await swarms.setEnabled('sw1', 'agents', 'acr', false)).not.toBeNull();
+
+    const result = await swarms.install(at('1.1.0'));
+
+    expect(result).toMatchObject({ ok: true, installed: { version: '1.1.0', disabled: { agents: ['acr'], skills: [] } } });
+    expect(installedJson()[0]?.disabled).toEqual({ agents: ['acr'], skills: [] });
+    expect(readHive('skills/s1/SKILL.md')).toBe(skillText('s1', 'new text'));
+    expect(readHive('agents/acr/AGENT.md')).toBe(agentText('acr'));
+  });
+
+  it('starts a reinstall after Remove with everything on', async () => {
+    const swarms = createSwarms(makeDeps());
+    const { entry } = released('1.0.0', { agents: ['acr'] });
+    expect((await swarms.install(entry)).ok).toBe(true);
+    expect(await swarms.setEnabled('sw1', 'agents', 'acr', false)).not.toBeNull();
+    expect(await swarms.remove('sw1')).toEqual({ ok: true });
+
+    const again = await swarms.install(entry);
+
+    expect(again).toMatchObject({ ok: true, installed: { disabled: { agents: [], skills: [] } } });
+  });
+
+  it('takes the queue, so two changes started in the same tick both land', async () => {
+    const swarms = await installTwoSkills();
+
+    await Promise.all([swarms.setEnabled('sw1', 'skills', 'tdd', false), swarms.setEnabled('sw1', 'skills', 'debug', false)]);
+
+    expect(installedJson()[0]?.disabled.skills).toEqual(['debug', 'tdd']);
+  });
+});
+
 describe('readInstalled', () => {
   it.each([
     ['not json', 'not json'],
