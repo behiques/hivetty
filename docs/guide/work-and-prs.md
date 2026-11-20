@@ -105,7 +105,8 @@ one track to the next, with its ask's ref beside it.
 - **Click a handoff** to light its whole thread and read what was asked, its details, and how
   and when it closed. **Show the whole job** clears it; **Go to** opens the session it
   involved.
-- **Quiet stretches** of two hours or more fold into a break that says how long it was.
+- **Quiet stretches** of two hours or more fold into a break that says how long it was. A job
+  with many breaks draws wider than the tab and scrolls sideways.
 - **Handoffs seconds apart** are drawn a little apart, so each one can be read and clicked.
   The time labels above the chart stay where their times are.
 - **Where the time went** sums each party's working time, and your waiting time, under the
@@ -117,7 +118,7 @@ The tab reads the last 30 days of the ledger, so a job that ran across a week st
 whole. A PR's Flow finds the ticket the PR belongs to, and that ticket's other PRs, from what
 the agents wrote. The labels come from what each party wrote: the stage it named (the
 shipper's stages, the builder's), or else the skill it named. A day file the app could not
-read is named above the chart.
+read is named above the chart, or in place of it, with **Try again**, when nothing else was found.
 
 ## The Ticket tab
 

@@ -39,6 +39,8 @@ export function JobFlowChart({ flow, selected, onSelect }: JobFlowChartProps) {
     [flow],
   );
   const x = (t: number) => LABEL_W + scale.x(t);
+  /** The frame's width, or more for a job with so many breaks that the axis ran longer: the tab scrolls sideways. */
+  const width = LABEL_W + Math.round(scale.width) + RIGHT;
   const nameOf = (id: string) => flow.lanes.find((lane) => lane.id === id)?.name ?? id;
   const focus = selected === null ? null : (flow.edges.find((edge) => edge.id === selected)?.thread ?? null);
   /** Off the selected thread, a mark dims; with nothing selected, nothing does. */
@@ -59,8 +61,8 @@ export function JobFlowChart({ flow, selected, onSelect }: JobFlowChartProps) {
     <svg
       role="img"
       aria-label="The job's parties over time"
-      viewBox={`0 0 ${CHART_W} ${height}`}
-      width={CHART_W}
+      viewBox={`0 0 ${width} ${height}`}
+      width={width}
       height={height}
       className="block"
     >

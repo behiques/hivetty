@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { JobFlowChart } from '@components/flow/job-flow-chart';
+import { CHART_W, JobFlowChart } from '@components/flow/job-flow-chart';
 import { buildJobFlow, HANDOFF_MIN_PX } from '@lib/job-flow';
 import { type LedgerEntry, OVERMIND } from '@shared/ledger-contract';
 
@@ -53,6 +53,28 @@ describe('JobFlowChart: the frame (Job Flow)', () => {
     const gapped = buildJobFlow({ entries: quiet, party, now: at(0) })!;
     render(<JobFlowChart flow={gapped} selected={null} onSelect={noop} />);
     expect(screen.getByTestId('flow-gap').textContent).toBe('5h 00m');
+  });
+});
+
+describe('JobFlowChart: a job with many breaks (Job Flow)', () => {
+  it('grows wider than its frame so thirty breaks still leave the work room, and stays its usual width otherwise', () => {
+    const { unmount } = render(<JobFlowChart flow={flow} selected={null} onSelect={noop} />);
+    expect(screen.getByRole('img').getAttribute('width')).toBe(String(CHART_W));
+    unmount();
+
+    // A post every three hours for four days: thirty silences, each a break.
+    const posts = Array.from({ length: 31 }, (_, i) => e(i * 180, { from: 'sess-1', kind: 'post' }));
+    const long = buildJobFlow({ entries: posts, party, now: at(0) })!;
+    expect(long.gaps).toHaveLength(30);
+    render(<JobFlowChart flow={long} selected={null} onSelect={noop} />);
+    const svg = screen.getByRole('img');
+    const width = Number(svg.getAttribute('width'));
+    expect(width).toBeGreaterThan(CHART_W);
+    expect(svg.getAttribute('viewBox')).toBe(`0 0 ${String(width)} ${svg.getAttribute('height') ?? ''}`);
+    const breaks = screen.getAllByTestId('flow-gap').map((gap) => Number(gap.getAttribute('x')));
+    expect(breaks).toHaveLength(30);
+    for (let i = 1; i < breaks.length; i += 1) expect(breaks[i] ?? 0).toBeGreaterThan(breaks[i - 1] ?? 0);
+    expect(breaks.at(-1) ?? 0).toBeLessThan(width);
   });
 });
 

@@ -46,28 +46,37 @@ export function JobFlowView({ query, emptyText }: { query: LedgerJobQuery; empty
       </div>
     );
   }
+  const warnings = entry?.warnings ?? [];
+  const unread = `Some of the ledger could not be read: ${warnings.join(', ')}.`;
   if (flow === null) {
-    return entry === undefined || entry.state === 'loading' ? (
-      <div role="status" aria-label="Loading the flow" aria-busy className="flex animate-pulse flex-col gap-2 px-6 pt-4">
-        <SkeletonBar className="w-[92%]" />
-        <SkeletonBar className="w-[84%]" />
-        <SkeletonBar className="w-[58%]" />
-      </div>
-    ) : (
+    if (entry === undefined || entry.state === 'loading') {
+      return (
+        <div role="status" aria-label="Loading the flow" aria-busy className="flex animate-pulse flex-col gap-2 px-6 pt-4">
+          <SkeletonBar className="w-[92%]" />
+          <SkeletonBar className="w-[84%]" />
+          <SkeletonBar className="w-[58%]" />
+        </div>
+      );
+    }
+    // Nothing to draw and days that would not read: the history may be in them, so this is not "nothing written".
+    return warnings.length === 0 ? (
       <p className="px-6 pt-4 text-ui text-subtle">{emptyText}</p>
+    ) : (
+      <div className="px-6 pt-4">
+        <SourceProblem message={unread} onRetry={() => load(query)} />
+      </div>
     );
   }
 
   const edge = selected === null ? undefined : flow.edges.find((x) => x.id === selected);
   const session =
     edge === undefined ? undefined : [edge.from, edge.to].find((id) => flow.lanes.find((lane) => lane.id === id)?.kind === 'session');
-  const warnings = entry?.warnings ?? [];
 
   return (
     <div className="@container grid gap-[18px] px-6 py-4">
       <JobFlowSummary flow={flow} />
       {warnings.length === 0 ? null : (
-        <p className="text-ui-sm text-amber-text">{`Some of the ledger could not be read: ${warnings.join(', ')}.`}</p>
+        <p className="text-ui-sm text-amber-text">{unread}</p>
       )}
       <JobFlowLegend />
       <div className="overflow-x-auto rounded-xl border border-border-soft bg-panel">

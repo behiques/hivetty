@@ -120,7 +120,8 @@ const strip = ({ own: _own, ...segment }: RawSegment): FlowSegment => segment;
  * Who was working, waiting on you, or waiting, and when.
  *
  * An ask gives its receiver work from the ask (or the release of the PR it is
- * held on) to its close, and its asker a wait for the same window; an ask to
+ * held on, when that comes after the ask and before its close) to its close,
+ * and its asker a wait for the same window; an ask to
  * you is your amber span. The originator, who asked nobody for the job, works
  * from its first word to its last. Then, per lane: a party's own waits cut its
  * work, and its work cuts a held ask's queue. Open windows run to `end`.
@@ -133,7 +134,9 @@ export function flowSegments(entries: readonly LedgerEntry[], end: number): Flow
     if (ask.kind !== 'ask' || ask.to === undefined || ask.to === ask.from) continue;
     const closed = closedAt(ask, entries) ?? end;
     const target = afterTarget(ask);
-    const starts = target === undefined ? ask.ts : (entries.find((entry) => releasesAfter(entry, target))?.ts ?? end);
+    // A PR released before the ask holds nothing, and a hold never outlasts the ask's own close.
+    const released = target === undefined ? ask.ts : (entries.find((entry) => releasesAfter(entry, target))?.ts ?? end);
+    const starts = Math.min(closed, Math.max(ask.ts, released));
     if (ask.to === OVERMIND) {
       raw.push({ lane: OVERMIND, from: ask.ts, to: closed, tone: 'you', thread: ask.id });
     } else {
@@ -232,6 +235,8 @@ export interface FlowSpan extends Span { x: number; w: number }
 export const HANDOFF_MIN_PX = 36;
 /** The most of the axis the stretching may take, so a burst of handoffs never leaves the work no room. */
 const STRETCH_SHARE = 0.7;
+/** The least of the asked width the time itself keeps. Breaks that would take more make the axis longer instead. */
+const VISIBLE_MIN_SHARE = 0.5;
 
 /** One straight run of the axis: between two handoffs, or from one to the edge of its span. */
 interface Piece extends Span { x: number; w: number; k: number; tight: boolean }
@@ -244,6 +249,10 @@ interface Piece extends Span { x: number; w: number; k: number; tight: boolean }
  * proportion: an ask and its answer a second later would otherwise be drawn on
  * top of each other. So the axis is the clock between handoffs, and not across
  * them; the ticks are placed through `x`, and stay true.
+ *
+ * `width` is how long the axis came out: `widthPx`, or more when the breaks
+ * alone would have left the time under half of it (a job quiet overnight for
+ * weeks). The caller draws that wide and scrolls.
  */
 export function flowScale(
   start: number,
@@ -251,7 +260,7 @@ export function flowScale(
   gaps: readonly FlowGap[],
   widthPx: number,
   anchors: readonly number[] = [],
-): { x: (t: number) => number; spans: FlowSpan[] } {
+): { x: (t: number) => number; spans: FlowSpan[]; width: number } {
   const windows: Span[] = [];
   let cursor = start;
   for (const gap of gaps) {
@@ -272,7 +281,7 @@ export function flowScale(
 
   // Fill from the bottom: a piece between two handoffs that the clock would draw under the floor takes the floor, and the rest share what is left.
   const all = pieces.flat();
-  const visible = widthPx - gaps.length * GAP_PX;
+  const visible = Math.max(widthPx - gaps.length * GAP_PX, widthPx * VISIBLE_MIN_SHARE);
   const floor = Math.min(HANDOFF_MIN_PX, (visible * STRETCH_SHARE) / Math.max(all.filter((piece) => piece.tight).length, 1));
   const floored = new Set<Piece>();
   let k = 0;
@@ -307,7 +316,7 @@ export function flowScale(
     }
     return right;
   };
-  return { x, spans };
+  return { x, spans, width: Math.max(widthPx, right) };
 }
 
 export interface FlowBucket { party: string; ms: number; tone: 'work' | 'you' }

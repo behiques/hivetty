@@ -118,6 +118,23 @@ describe('flowSegments (Job Flow)', () => {
     expect(spansOf('builder', 'work', segs)).toEqual([[52, 55], [60, 70]]);
   });
 
+  it('starts a held ask’s work at the ask when its PR had already closed, and never past the ask’s own close', () => {
+    const closed = e(40, { from: 'shipper', kind: 'post', meta: { pr: 281, repo: 'behiques/hivetty', stage: 'closed' } });
+    const held = e(51, { from: 'sess-1', to: 'builder', kind: 'ask', meta: { after: 'behiques/hivetty#281' } });
+    const done = e(70, { from: 'builder', to: 'sess-1', kind: 'answer', thread: held.id });
+    const segs = flowSegments([closed, held, done], at(70));
+    expect(spansOf('builder', 'work', segs)).toEqual([[51, 70]]);
+    expect(spansOf('builder', 'wait', segs)).toEqual([]);
+
+    // Withdrawn before its PR closed: the queue stops at the ask's close, and no work is drawn.
+    const early = e(80, { from: 'sess-1', to: 'fixer', kind: 'ask', meta: { after: 'behiques/hivetty#300' } });
+    const failed = e(85, { from: 'fixer', to: 'sess-1', kind: 'failed', thread: early.id });
+    const late = e(95, { from: 'shipper', kind: 'post', meta: { pr: 300, repo: 'behiques/hivetty', stage: 'closed' } });
+    const cut = flowSegments([early, failed, late], at(95));
+    expect(spansOf('fixer', 'wait', cut)).toEqual([[80, 85]]);
+    expect(spansOf('fixer', 'work', cut)).toEqual([]);
+  });
+
   it('starts the originator’s work at its claim, before it has asked anyone', () => {
     const claim = e(0, { from: 'sess-1', kind: 'claim', meta: { task: 'HIVE-401' } });
     const ask = e(20, { from: 'sess-1', to: 'builder', kind: 'ask', meta: { ticket: 'HIVE-401' } });
@@ -242,6 +259,28 @@ describe('flowGaps and flowScale (Job Flow)', () => {
     expect(x(5 * HOUR)).toBeCloseTo(x(9 * HOUR), 6);
     expect(x(10 * HOUR)).toBeCloseTo(300 + GAP_PX, 6);
     expect((spans[0]?.w ?? 0) + (spans[1]?.w ?? 0)).toBeCloseTo(300, 6);
+  });
+
+  it('keeps half the width for the time when the breaks would take more, and grows the axis instead', () => {
+    // Thirty one-hour stretches with a three-hour silence between each: 29 breaks are 1160px, more than the 922px asked for.
+    const gaps = Array.from({ length: 29 }, (_, i) => ({ from: (4 * i + 1) * HOUR, to: (4 * i + 4) * HOUR }));
+    const end = 29 * 4 * HOUR + HOUR;
+    const { x, spans, width } = flowScale(0, end, gaps, 922, [HOUR / 2, HOUR / 2 + 1000]);
+    expect(width).toBeCloseTo(461 + 29 * GAP_PX, 6);
+    expect(x(end)).toBeCloseTo(width, 6);
+    expect(spans).toHaveLength(30);
+    for (const [i, span] of spans.entries()) {
+      expect(span.w).toBeGreaterThan(0);
+      if (i > 0) expect(span.x).toBeCloseTo((spans[i - 1]?.x ?? 0) + (spans[i - 1]?.w ?? 0) + GAP_PX, 6);
+    }
+    expect(x(HOUR / 2 + 1000) - x(HOUR / 2)).toBeCloseTo(HANDOFF_MIN_PX, 6);
+    expect(x(HOUR)).toBeGreaterThan(x(HOUR / 2 + 1000)); // left to right, never mirrored
+  });
+
+  it('answers the asked width when the breaks leave the time more than half of it', () => {
+    expect(flowScale(0, 10 * HOUR, [{ from: 2 * HOUR, to: 9 * HOUR }], 300 + GAP_PX).width).toBe(300 + GAP_PX);
+    expect(flowScale(0, 4 * HOUR, [], 400).width).toBe(400);
+    expect(flowScale(5, 5, [], 400, [5]).width).toBe(400);
   });
 
   it('draws a job that begins and ends in the same instant at the start of the axis', () => {

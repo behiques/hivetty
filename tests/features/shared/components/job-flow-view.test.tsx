@@ -79,6 +79,17 @@ describe('JobFlowView (Job Flow)', () => {
     expect(await screen.findByText('Some of the ledger could not be read: 2026-11-01.')).toBeTruthy();
   });
 
+  it('says the ledger could not be read, not that nothing was written, when a job comes back empty with unreadable days', async () => {
+    job.mockResolvedValue({ entries: [], warnings: ['2026-11-01', '2026-11-02'] });
+    render(<JobFlowView query={ticket('HIVE-401')} emptyText="No agent or session has written about HIVE-401 yet." />);
+    expect(await screen.findByText('Some of the ledger could not be read: 2026-11-01, 2026-11-02.')).toBeTruthy();
+    expect(screen.queryByText('No agent or session has written about HIVE-401 yet.')).toBeNull();
+    job.mockResolvedValue({ entries: JOB, warnings: [] });
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+    expect(job).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole('img', { name: "The job's parties over time" })).toBeTruthy();
+  });
+
   it('selects a handoff and shows its card; Show the whole job clears it', async () => {
     job.mockResolvedValue({ entries: JOB, warnings: [] });
     render(<JobFlowView query={ticket('HIVE-401')} emptyText="" />);
@@ -99,7 +110,7 @@ describe('JobFlowView (Job Flow)', () => {
     expect(openEntity).toHaveBeenCalledWith('sess-1');
   });
 
-  it('moves now once a minute while the job is live, and stops when it is not', async () => {
+  it('moves now once a minute while the job is live', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(at(27));
     job.mockResolvedValue({ entries: JOB.slice(0, 6), warnings: [] });
@@ -109,5 +120,19 @@ describe('JobFlowView (Job Flow)', () => {
       vi.advanceTimersByTime(60_000);
     });
     expect(screen.getByText('28m')).toBeTruthy();
+  });
+
+  it('keeps no timer for a finished job', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(at(40));
+    job.mockResolvedValue({ entries: JOB, warnings: [] });
+    render(<JobFlowView query={ticket('HIVE-401')} emptyText="" />);
+    expect(await screen.findByText('32m')).toBeTruthy();
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(screen.getByText('32m')).toBeTruthy();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
