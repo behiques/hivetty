@@ -1,7 +1,7 @@
 /**
  * Adoption (HIVE-447): the built-ins a home already holds become the installed swarm Dev Squad, at the version
- * "bundled", with no network. The marker it leaves stops the boot seed for that home for good, so removing
- * Dev Squad does not bring the built-ins back. It stays after HIVE-448 for installs that skipped a release.
+ * "bundled", with no network. The marker it leaves stops adoption for that home for good, so removing Dev Squad
+ * does not adopt the built-ins again. It stays after HIVE-448 for installs that skipped a release.
  */
 import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -100,17 +100,17 @@ export async function adoptBuiltIns(deps: AdoptDeps): Promise<void> {
       await writeInstalled(paths.installed, [...raw, target]);
     }
     const mineFile = paths.seed(target.swarmId);
-    // The swarm's manifest, then `.seed.json`. If only the first lands, both name the files: the boot seed
-    // passes over them, and the next run moves nothing twice.
+    // The swarm's manifest, then `.seed.json`. If only the first lands, both name the files: nothing seeds at
+    // boot to rewrite them, and the next run moves nothing twice.
     await takeOver(deps.shippedManifest, shipped, mineFile, await readManifest(mineFile), owned);
   } else if (owned.size > 0) {
-    // Every built-in was deleted. With the marker the boot seed never runs again, so "seeded once, gone now"
-    // has nothing left to protect, and a later install must create the files.
+    // Every built-in was deleted. With the marker adoption never runs again and boot seeds nothing, so "seeded
+    // once, gone now" has nothing left to protect, and a later install must create the files.
     await writeManifest(deps.shippedManifest, { files: {}, parts: {} });
   }
 
   await mkdir(paths.root, { recursive: true });
-  await writeFile(paths.adopted, ''); // last: only a finished adoption stops the boot seed
+  await writeFile(paths.adopted, ''); // last: only a finished adoption stops the next launch adopting again
 }
 
 /** The registry's Dev Squad row, when its id can become a folder and is not the local one. */
@@ -146,7 +146,7 @@ export async function rekeyAdopted(hiveDir: string, rows: readonly SwarmEntry[])
   const row = rekeyTarget(rows, raw.filter(isInstalled));
   if (row === null) return false;
   await mkdir(paths.dir(row.id), { recursive: true });
-  // The manifest first. If only it moves, the entry still says `bundled-dev-squad`: the boot seed reads every
+  // The manifest first. If only it moves, the entry still says `bundled-dev-squad`: settings sync reads every
   // folder's manifest whatever installed.json says, and the next call finds nothing to move and finishes.
   await rename(paths.seed(ADOPTED_SWARM_ID), paths.seed(row.id)).catch((cause: unknown) => {
     if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;

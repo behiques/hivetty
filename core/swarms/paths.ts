@@ -4,7 +4,7 @@
  * `installed.json` lists the installed swarms, `registry.json` keeps the
  * cloud's last list for offline use, and `askpass.sh` answers Git's prompts
  * for a native fetch. `adopted` marks a home whose built-ins became the Dev Squad
- * swarm (HIVE-447): the boot seed never runs there again. Each swarm gets `<id>/repo` (its clone), `<id>/repo.new`
+ * swarm (HIVE-447): adoption never runs there again. Each swarm gets `<id>/repo` (its clone), `<id>/repo.new`
  * (the clone an install is staging), `<id>/seed.json` (its seed manifest) and
  * `<id>/pending.json` (a first install's file hashes while it seeds).
  *

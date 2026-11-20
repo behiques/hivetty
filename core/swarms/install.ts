@@ -232,7 +232,7 @@ async function giveBackTaken(
 /**
  * Move every entry of `shipped` under a `taken` folder into `mine` (an entry `mine` already has is kept), then write
  * `mineFile` and, after it, `shippedFile` without the moved entries. If only the first write lands, both manifests
- * name the path: sync reads either, the boot seed passes over the folder, and the next call moves nothing twice.
+ * name the path: sync reads either, nothing seeds at boot to rewrite it, and the next call moves nothing twice.
  * Mutates `mine`.
  */
 export async function takeOver(
