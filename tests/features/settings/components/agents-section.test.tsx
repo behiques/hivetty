@@ -119,26 +119,26 @@ describe('AgentsSection', () => {
     render(<AgentsSection />);
 
     const sentence = await screen.findByText(
-      'Agents come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.',
+      'Agents come in swarms. Install Dev Squad for the ticket-to-merge workflow, or browse for others.',
     );
     expect(screen.queryByText(/asleep until the waker lands/)).toBeNull();
     const card = sentence.closest('.border-dashed') as HTMLElement;
     expect(within(card).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Install Standard',
+      'Install Dev Squad',
       'Browse swarms',
     ]);
     await userEvent.click(within(card).getByRole('button', { name: 'Browse swarms' }));
     expect(useUiStore.getState().swarmsBrowseRequest).toBe(true);
   });
 
-  it('while empty, Install Standard is the one primary; + New agent uses the default variant (HIVE-447)', async () => {
+  it('while empty, Install Dev Squad is the one primary; + New agent uses the default variant (HIVE-447)', async () => {
     stub([]);
     render(<AgentsSection />);
 
     const create = await screen.findByRole('button', { name: '+ New agent' });
     expect(create).not.toHaveClass('bg-brand-fill');
     expect(create).toHaveClass('border-edge');
-    expect(screen.getByRole('button', { name: 'Install Standard' })).toHaveClass('bg-brand-fill');
+    expect(screen.getByRole('button', { name: 'Install Dev Squad' })).toHaveClass('bg-brand-fill');
   });
 
   it('lists an agent with its state', async () => {

@@ -91,12 +91,12 @@ change first). Saving is never blocked.
 
 Skills come in swarms: sets of agents and skills that install together and update when their
 publisher releases a new version ([Swarms](swarms.md)). An existing install already has the
-**Standard** swarm, which carries the ticket-to-merge workflow: `/work-on` and `/goal-on` at the
+**Dev Squad** swarm, which carries the ticket-to-merge workflow: `/work-on` and `/goal-on` at the
 front, `/brainstorm`, `/plan`, `/execute`, `/tdd`, `/debug`, `/verify` and `/worktree` behind
 them, and the PR tail: `/ship`, `/review-pr-findings`, `/merge-pr`, `/spec-deviation` and
 `/pr-review`, the multi-agent review the reviewer agent runs. Settings › Automation › Swarms
 installs, updates and removes swarms. With no skill installed at all, Settings › Skills says so
-and offers **Install Standard** and **Browse swarms**, as the Agents place and Home do for agents.
+and offers **Install Dev Squad** and **Browse swarms**, as the Agents place and Home do for agents.
 
 A swarm's skills live in `~/.hivetty/skills` and are ordinary skills once they are there. Edit one
 in Settings and your edits stay, while an update still reaches what you did not touch: in
@@ -107,7 +107,7 @@ skill amber and holds the new body back until you choose to **Compare**, **Take 
 swarm's files back. Other files in a skill update only if you never edited them. Delete a
 skill and it stays deleted.
 
-To get a deleted skill back, reinstall Standard (or the swarm it came from) in Settings ›
+To get a deleted skill back, reinstall Dev Squad (or the swarm it came from) in Settings ›
 Automation › Swarms; for a skill you edited, **Reset to shipped** puts its files back.
 
 ## Rules

@@ -1,7 +1,7 @@
 /**
- * Adoption (HIVE-447): the built-ins a home already holds become the installed swarm Standard, at the version
+ * Adoption (HIVE-447): the built-ins a home already holds become the installed swarm Dev Squad, at the version
  * "bundled", with no network. The marker it leaves stops the boot seed for that home for good, so removing
- * Standard does not bring the built-ins back. It stays after HIVE-448 for installs that skipped a release.
+ * Dev Squad does not bring the built-ins back. It stays after HIVE-448 for installs that skipped a release.
  */
 import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -21,18 +21,18 @@ import { readAgents, readSkills } from './manifest';
 import { swarmPaths } from './paths';
 
 /** Registry ids are cuids, which hold no `-`: this one cannot be a registry's. */
-export const ADOPTED_SWARM_ID = 'bundled-standard';
+export const ADOPTED_SWARM_ID = 'bundled-dev-squad';
 
-/** What the app shipped as built-ins. Constants, not `resources/swarm.lock.json`: HIVE-448 deletes the lock. */
-export const STANDARD = {
-  slug: 'standard',
+/** The swarm the built-ins became (HIVE-448 renamed it from Standard before any release carried it). */
+export const DEV_SQUAD = {
+  slug: 'dev-squad',
   kind: 'native',
   org: null,
-  title: 'Standard',
+  title: 'Dev Squad',
   description: 'Ticket to merge: plan, build, review, ship.',
   repoUrl: 'https://github.com/behiques/hivetty-swarms.git',
-  folder: 'standard',
-  commit: '97c5d2dfde58f021dba3c9222ba6fcd8e1033996',
+  folder: 'dev-squad',
+  commit: 'e0fec8c5b2bd8b489132744eeac00aa456541e56',
 } as const;
 
 export interface AdoptDeps {
@@ -49,7 +49,7 @@ const exists = (path: string): Promise<boolean> =>
     () => false,
   );
 
-const isStandard = (held: InstalledSwarm): boolean => held.kind === STANDARD.kind && held.slug === STANDARD.slug;
+const isDevSquad = (held: InstalledSwarm): boolean => held.kind === DEV_SQUAD.kind && held.slug === DEV_SQUAD.slug;
 
 /** What is on disk for the adopted folders. A file the reader refuses still counts, by name. */
 async function contentsOf(hiveDir: string, present: readonly string[]): Promise<SwarmContents> {
@@ -85,11 +85,11 @@ export async function adoptBuiltIns(deps: AdoptDeps): Promise<void> {
   if (present.length > 0) {
     // Unreadable throws: nothing is written, no marker, and the next launch tries again.
     const raw = await readInstalledRaw(paths.installed);
-    let target = raw.filter(isInstalled).find(isStandard) ?? null;
+    let target = raw.filter(isInstalled).find(isDevSquad) ?? null;
     if (target === null) {
       target = {
         swarmId: ADOPTED_SWARM_ID,
-        ...STANDARD,
+        ...DEV_SQUAD,
         version: BUNDLED_VERSION,
         installedAt: (deps.now ?? (() => new Date()))().toISOString(),
         autoUpdate: true,
@@ -113,29 +113,29 @@ export async function adoptBuiltIns(deps: AdoptDeps): Promise<void> {
   await writeFile(paths.adopted, ''); // last: only a finished adoption stops the boot seed
 }
 
-/** The registry's Standard row, when its id can become a folder and is not the local one. */
-function standardRow(rows: readonly SwarmEntry[]): SwarmEntry | null {
-  const row = rows.find((one) => one.kind === STANDARD.kind && one.slug === STANDARD.slug);
+/** The registry's Dev Squad row, when its id can become a folder and is not the local one. */
+function devSquadRow(rows: readonly SwarmEntry[]): SwarmEntry | null {
+  const row = rows.find((one) => one.kind === DEV_SQUAD.kind && one.slug === DEV_SQUAD.slug);
   return row === undefined || !isSwarmId(row.id) || row.id === ADOPTED_SWARM_ID ? null : row;
 }
 
 /**
- * The registry's Standard row when an adopted entry waits to take its id, else null. Pure, so a caller can ask
+ * The registry's Dev Squad row when an adopted entry waits to take its id, else null. Pure, so a caller can ask
  * before it queues anything.
  */
 export function rekeyTarget(rows: readonly SwarmEntry[], held: readonly InstalledSwarm[]): SwarmEntry | null {
-  const row = standardRow(rows);
+  const row = devSquadRow(rows);
   if (row === null) return null;
   if (!held.some((one) => one.swarmId === ADOPTED_SWARM_ID) || held.some((one) => one.swarmId === row.id)) return null;
   return row;
 }
 
 /**
- * The registry named Standard: the adopted entry takes the registry's id, so install, update and the listing
+ * The registry named Dev Squad: the adopted entry takes the registry's id, so install, update and the listing
  * match it by id like any other swarm. Each step tolerates having already run.
  */
 export async function rekeyAdopted(hiveDir: string, rows: readonly SwarmEntry[]): Promise<boolean> {
-  if (standardRow(rows) === null) return false;
+  if (devSquadRow(rows) === null) return false;
   const paths = swarmPaths(hiveDir);
   let raw: unknown[];
   try {
@@ -146,7 +146,7 @@ export async function rekeyAdopted(hiveDir: string, rows: readonly SwarmEntry[])
   const row = rekeyTarget(rows, raw.filter(isInstalled));
   if (row === null) return false;
   await mkdir(paths.dir(row.id), { recursive: true });
-  // The manifest first. If only it moves, the entry still says `bundled-standard`: the boot seed reads every
+  // The manifest first. If only it moves, the entry still says `bundled-dev-squad`: the boot seed reads every
   // folder's manifest whatever installed.json says, and the next call finds nothing to move and finishes.
   await rename(paths.seed(ADOPTED_SWARM_ID), paths.seed(row.id)).catch((cause: unknown) => {
     if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause;

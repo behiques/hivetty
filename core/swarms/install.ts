@@ -513,7 +513,7 @@ export function createSwarms(deps: SwarmDeps): Swarms {
     }
     const swarms = (await readInstalled(paths.installed)).map((held): SeedOptions => {
       const manifestFile = paths.seed(held.swarmId);
-      // HIVE-447: an adopted Standard has no clone until its first update: its files read against the shipped tree.
+      // HIVE-447: an adopted Dev Squad has no clone until its first update: its files read against the shipped tree.
       if (isBundled(held.version)) {
         return { source: shipped.source, history: shipped.history, target: deps.hiveDir, manifestFile };
       }

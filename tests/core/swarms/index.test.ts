@@ -411,11 +411,11 @@ describe('a removal (HIVE-442)', () => {
     expect(h.changed).toHaveBeenCalledWith({ updated: null });
   });
 
-  it('reports nothing for a bundled Standard, which was never reported as installed (HIVE-447)', async () => {
-    engine.installed.mockResolvedValue([heldAt('bundled-standard', 'bundled')]);
+  it('reports nothing for a bundled Dev Squad, which was never reported as installed (HIVE-447)', async () => {
+    engine.installed.mockResolvedValue([heldAt('bundled-dev-squad', 'bundled')]);
     engine.remove.mockResolvedValue({ ok: true });
 
-    await swarmCalls().remove({ swarmId: 'bundled-standard' });
+    await swarmCalls().remove({ swarmId: 'bundled-dev-squad' });
 
     expect(reportInstall).not.toHaveBeenCalled();
     expect(h.changed).toHaveBeenCalledWith({ updated: null });
@@ -636,7 +636,7 @@ describe('the install link request (HIVE-442)', () => {
   });
 });
 
-describe('the adopted Standard and the registry (HIVE-447)', () => {
+describe('the adopted Dev Squad and the registry (HIVE-447)', () => {
   const REAL = 'cmwn22bge000001jtss3qlz4i';
   let home: string;
 
@@ -651,13 +651,13 @@ describe('the adopted Standard and the registry (HIVE-447)', () => {
     );
     engine.installed.mockImplementation(() => readInstalled(join(home, 'swarms/installed.json')));
     const { mkdir, writeFile } = await import('node:fs/promises');
-    await mkdir(join(home, 'swarms/bundled-standard'), { recursive: true });
-    await writeFile(join(home, 'swarms/bundled-standard/seed.json'), JSON.stringify({ files: {}, parts: {} }));
+    await mkdir(join(home, 'swarms/bundled-dev-squad'), { recursive: true });
+    await writeFile(join(home, 'swarms/bundled-dev-squad/seed.json'), JSON.stringify({ files: {}, parts: {} }));
     await writeFile(
       join(home, 'swarms/installed.json'),
-      JSON.stringify([{ ...heldAt('bundled-standard', 'bundled'), autoUpdate: true }]),
+      JSON.stringify([{ ...heldAt('bundled-dev-squad', 'bundled'), autoUpdate: true }]),
     );
-    registry.readRegistry.mockResolvedValue({ source: 'cloud', swarms: [entry(REAL, { version: '1.0.1' })] });
+    registry.readRegistry.mockResolvedValue({ source: 'cloud', swarms: [entry(REAL, { version: '1.0.1', slug: 'dev-squad', folder: 'dev-squad', title: 'Dev Squad' })] });
   });
 
   afterEach(async () => {
@@ -704,7 +704,7 @@ describe('the adopted Standard and the registry (HIVE-447)', () => {
     await writeFile(installedJson, '[]'); // first launch: adoption has not written its entry yet
     let finishAdoption: () => void = () => undefined;
     const adopted = new Promise<void>((resolve) => (finishAdoption = resolve)).then(() =>
-      writeFile(installedJson, JSON.stringify([{ ...heldAt('bundled-standard', 'bundled'), autoUpdate: true }])),
+      writeFile(installedJson, JSON.stringify([{ ...heldAt('bundled-dev-squad', 'bundled'), autoUpdate: true }])),
     );
     h.ready.mockImplementation(() => adopted);
     // As the engine does: the queue waits for the seed and the adoption, then reads what it replaces.
@@ -720,7 +720,7 @@ describe('the adopted Standard and the registry (HIVE-447)', () => {
     finishAdoption();
     await clicked;
 
-    // Without the re-key the install finds nothing to replace and collides with bundled-standard's folders.
+    // Without the re-key the install finds nothing to replace and collides with bundled-dev-squad's folders.
     expect(replaced?.swarmId).toBe(REAL);
     expect(replaced?.version).toBe('bundled');
   });
@@ -734,7 +734,7 @@ describe('the adopted Standard and the registry (HIVE-447)', () => {
     const listing = await swarmCalls().list();
 
     expect(listing.items[0]?.entry?.id).toBe(REAL);
-    expect(listing.items.map((item) => item.installed?.swarmId ?? null)).toEqual([null, 'bundled-standard']);
+    expect(listing.items.map((item) => item.installed?.swarmId ?? null)).toEqual([null, 'bundled-dev-squad']);
   });
 });
 
@@ -775,7 +775,7 @@ describe('seedAndAdopt: the boot seed, then adoption (HIVE-447)', () => {
     expect(seedBuiltIns).toHaveBeenCalledWith(EXCLUDE);
     expect(await exists('swarms/adopted')).toBe(true);
     const installed = JSON.parse(await fs.readFile(at('swarms/installed.json'), 'utf8')) as InstalledSwarm[];
-    expect(installed.map((held) => [held.swarmId, held.version])).toEqual([['bundled-standard', 'bundled']]);
+    expect(installed.map((held) => [held.swarmId, held.version])).toEqual([['bundled-dev-squad', 'bundled']]);
 
     await seedAndAdopt(seedBuiltIns);
     expect(seedBuiltIns).toHaveBeenCalledTimes(1);
@@ -821,7 +821,7 @@ describe('seedAndAdopt: the boot seed, then adoption (HIVE-447)', () => {
     await expect(seedAndAdopt(seedBuiltIns)).resolves.toBeUndefined();
 
     expect(await exists('swarms/adopted')).toBe(false);
-    expect(info).toHaveBeenCalledWith(expect.stringContaining('could not be adopted as the Standard swarm'));
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('could not be adopted as the Dev Squad swarm'));
   });
 
   it('leaves no marker when the seed reports failure with null, as seedShippedIntoHive does, and seeds again next launch', async () => {
@@ -830,7 +830,7 @@ describe('seedAndAdopt: the boot seed, then adoption (HIVE-447)', () => {
 
     await expect(seedAndAdopt(failing)).resolves.toBeUndefined();
     expect(await exists('swarms/adopted')).toBe(false);
-    expect(info).toHaveBeenCalledWith(expect.stringContaining('could not be adopted as the Standard swarm'));
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('could not be adopted as the Dev Squad swarm'));
 
     await seedAndAdopt(seedBuiltIns);
     expect(seedBuiltIns).toHaveBeenCalledTimes(1);
@@ -846,11 +846,11 @@ describe('seedAndAdopt: the boot seed, then adoption (HIVE-447)', () => {
     expect(info).toHaveBeenCalledWith(expect.stringContaining('EACCES'));
   });
 
-  it('brings no built-in back after Standard is removed', async () => {
+  it('brings no built-in back after Dev Squad is removed', async () => {
     await seedAndAdopt(seedBuiltIns);
-    // What removing Standard leaves: no entry, no swarm folder, no agent file. The marker stays.
+    // What removing Dev Squad leaves: no entry, no swarm folder, no agent file. The marker stays.
     await fs.rm(at('agents'), { recursive: true });
-    await fs.rm(at('swarms/bundled-standard'), { recursive: true });
+    await fs.rm(at('swarms/bundled-dev-squad'), { recursive: true });
     await fs.writeFile(at('swarms/installed.json'), '[]');
 
     await seedAndAdopt(seedBuiltIns);

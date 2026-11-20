@@ -76,7 +76,7 @@ describe('ComingUp with no agent installed (HIVE-447)', () => {
     expect(within(section).getByRole('heading', { name: 'Agents' })).toBeInTheDocument();
     expect(within(section).getByText('No agents yet. Agents come in swarms.')).toBeInTheDocument();
     expect(within(section).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Install Standard',
+      'Install Dev Squad',
       'Browse swarms',
     ]);
   });

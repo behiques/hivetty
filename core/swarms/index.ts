@@ -98,7 +98,7 @@ function swarms(): Swarms {
 
 const registry = async (): Promise<RegistryRead> => {
   const read = await readRegistry(hooks.authedFetch(), swarmPaths(hiveDir()).registry);
-  // HIVE-447: the adopted Standard takes the registry's id, in the install queue and after the boot seed. Never the
+  // HIVE-447: the adopted Dev Squad takes the registry's id, in the install queue and after the boot seed. Never the
   // reason a read fails. No caller reads the registry from inside the queue, so this never waits on itself. Asked
   // first outside the queue, so a read with nothing to re-key never waits behind an install's clone.
   if (rekeyTarget(read.swarms, await swarms().installed()) === null) return read; // installed() never rejects
@@ -193,7 +193,7 @@ export function swarmCalls(): SwarmCalls {
       const result = await swarms().remove(swarmId); // never rejects
       if (result.ok) {
         updater().clear(swarmId);
-        // A bundled Standard was never reported as installed (HIVE-447).
+        // A bundled Dev Squad was never reported as installed (HIVE-447).
         if (before !== null && !isBundled(before.version)) {
           void reportInstall(hooks.authedFetch(), swarmId, { state: 'removed', version: before.version });
         }
@@ -263,7 +263,7 @@ export async function seedAndAdopt(seed: (exclude: ReadonlySet<string> | undefin
     if ((await seed(exclude)) === null) throw new Error('the shipped seed failed');
     await adoptBuiltIns({ hiveDir: dir, shippedManifest: shippedOptions().manifestFile });
   } catch (cause) {
-    console.info(`[hive] the built-in agents and skills could not be adopted as the Standard swarm (${String(cause)})`);
+    console.info(`[hive] the built-in agents and skills could not be adopted as the Dev Squad swarm (${String(cause)})`);
   }
 }
 

@@ -2721,7 +2721,7 @@ only when the copy on disk is byte-identical to what the last seed wrote
 (`~/.hivetty/.seed.json` holds that hash per file), and otherwise left alone. A
 shipped file that is later dropped from `resources/` is never deleted.
 
-Those two folders are not edited in this repo (HIVE-439). The Standard swarm's
+Those two folders are not edited in this repo (HIVE-439). The Dev Squad swarm's
 source is `behiques/hivetty-swarms`: change an agent or a skill there, tag it,
 and bring the tag in with `pnpm swarm:pull <tag>`, which replaces both folders
 and writes `resources/swarm.lock.json`, a sha256 per file.
@@ -2729,13 +2729,13 @@ and writes `resources/swarm.lock.json`, a sha256 per file.
 lock.
 
 Agents and skills now come from swarms. The built-ins in `resources/` are
-seeded once more and then adopted as the installed swarm Standard (HIVE-447):
+seeded once more and then adopted as the installed swarm Dev Squad (HIVE-447):
 `seedAndAdopt` in `core/swarms/index.ts` is the boot seed's promise. It seeds
 from `resources/` as above, then `adoptBuiltIns` (`core/swarms/adopt.ts`)
-writes Standard's entry at the version `bundled`, moves every built-in entry
+writes Dev Squad's entry at the version `bundled`, moves every built-in entry
 from `.seed.json` to that swarm's manifest, and writes the marker
 `~/.hivetty/swarms/adopted` last. A home with the marker is never seeded from
-`resources/` again, so removing Standard stays removed. Adoption needs no
+`resources/` again, so removing Dev Squad stays removed. Adoption needs no
 network, no Git and no registry. A failed seed or a failed adoption is logged,
 leaves no marker, and is tried again at the next launch.
 
@@ -2810,12 +2810,12 @@ it wrote, and keeps the edited ones as the person's. On an adopted home the
 marker outlives the entry, so a removed swarm's taken-over built-ins do not
 come back from `resources/`.
 
-#### The adopted Standard (HIVE-447)
+#### The adopted Dev Squad (HIVE-447)
 
-Adoption writes Standard's entry under the local id `bundled-standard` (a
+Adoption writes Dev Squad's entry under the local id `bundled-dev-squad` (a
 registry id is a cuid, which holds no `-`). The first registry read that
 returns a native row with slug `standard` re-keys it: `rekeyAdopted` moves
-`seed.json` to `swarms/<id>/`, removes `swarms/bundled-standard/`, then
+`seed.json` to `swarms/<id>/`, removes `swarms/bundled-dev-squad/`, then
 rewrites the entry's `swarmId`, inside the install queue and after the boot
 seed. The `registry()` wrapper in `core/swarms/index.ts` asks first, outside
 the queue, so a read with nothing to re-key never waits behind an install. From

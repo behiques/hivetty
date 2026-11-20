@@ -93,18 +93,18 @@ describe('AgentsStage', () => {
 });
 
 describe('AgentsStage with no agent (HIVE-211)', () => {
-  it('says agents come in swarms, offers Install Standard and Browse, and New agent opens a blank definition (HIVE-447)', async () => {
+  it('says agents come in swarms, offers Install Dev Squad and Browse, and New agent opens a blank definition (HIVE-447)', async () => {
     render(<AgentsStage />);
 
     expect(screen.getByRole('heading', { name: 'No agents yet' })).toBeInTheDocument();
     expect(document.querySelector('[data-glyph="comb"]')).not.toBeNull();
     expect(
-      screen.getByText('Agents come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.'),
+      screen.getByText('Agents come in swarms. Install Dev Squad for the ticket-to-merge workflow, or browse for others.'),
     ).toBeInTheDocument();
     expect(screen.queryByText(/An agent is a headless Claude/)).toBeNull();
     expect(screen.queryByText('Pick an agent')).toBeNull();
     expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Install Standard',
+      'Install Dev Squad',
       'Browse swarms',
       'New agent',
     ]);

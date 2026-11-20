@@ -160,7 +160,7 @@ export function compareVersions(a: string, b: string): number {
 }
 
 /**
- * The version of a Standard adopted from the built-ins (HIVE-447) until its first update. Compared by name through
+ * The version of a Dev Squad adopted from the built-ins (HIVE-447) until its first update. Compared by name through
  * `isBundled`, never through `compareVersions`.
  */
 export const BUNDLED_VERSION = 'bundled';

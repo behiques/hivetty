@@ -53,7 +53,7 @@ publisher and the counts. The dot and the line beside it say where it stands:
 | No longer available | The swarm left the registry, or your organization withdrew it. It stays installed and won't update | **Remove** |
 
 **Check for updates** looks for new versions now, instead of waiting for the next automatic check. When an
-update is applied, the line beside the buttons says so: "Standard updated to v1.4.0".
+update is applied, the line beside the buttons says so: "Dev Squad updated to v1.4.0".
 
 ## Updates
 
@@ -100,6 +100,6 @@ itself: you still read the dialog and choose **Install**.
 
 ## The update notification
 
-When a swarm updates itself, with nobody clicking, HiveTTY raises a notification: "Standard updated to v1.4.0".
+When a swarm updates itself, with nobody clicking, HiveTTY raises a notification: "Dev Squad updated to v1.4.0".
 Turn it off, or choose where it appears, under **Settings › Notifications**, "When a swarm updates itself".
 Updates you start yourself raise no notification.

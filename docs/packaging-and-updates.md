@@ -164,20 +164,20 @@ Unpacking also preserves the executable bit, which matters because the published
 is why CI's build step comes after a plain `pnpm install` rather than an
 `--ignore-scripts` one.
 
-## The built-in agents and skills become the Standard swarm (HIVE-447)
+## The built-in agents and skills become the Dev Squad swarm (HIVE-447)
 
 Agents and skills still ship in `resources/agents` and `resources/skills` in
 this release. On the first launch of it they are seeded into `~/.hivetty` as
-before, then adopted as the installed swarm Standard, in the same launch and
-with no network: Standard appears in Settings › Swarms, and the files the
+before, then adopted as the installed swarm Dev Squad, in the same launch and
+with no network: Dev Squad appears in Settings › Swarms, and the files the
 person edited stay edited.
 
 `~/.hivetty/swarms/adopted` marks an adopted home. With it the boot seed from
-`resources/` never runs there again, so a home that removes Standard does not
+`resources/` never runs there again, so a home that removes Dev Squad does not
 get the built-ins back. A failed seed or adoption leaves no marker, and the next
 launch tries again.
 
-`bundled` is the version of an adopted Standard until its first update. Settings
+`bundled` is the version of an adopted Dev Squad until its first update. Settings
 shows it as "Bundled" ("Bundled · v1.0.1 available", and "Bundled → v1.0.1" in
 the update dialog). It is compared by name through `isBundled`, never as a
 version number. The updater treats it like any other installed version: the

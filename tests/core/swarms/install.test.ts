@@ -988,13 +988,13 @@ describe('the seed sets', () => {
       description: '',
       contents: { agents: [], skills: [] },
     });
-    write(hive('swarms/installed.json'), JSON.stringify([held('bundled-standard', 'bundled'), held('swOne', '1.0.0')]));
+    write(hive('swarms/installed.json'), JSON.stringify([held('bundled-dev-squad', 'bundled'), held('swOne', '1.0.0')]));
     const shipped = { ...shippedOptions(), history: join(root, 'resources/shipped-history.json') };
 
     const sets = await createSwarms(makeDeps()).seedSets(shipped);
 
     expect(sets.swarms).toEqual([
-      { source: shipped.source, history: shipped.history, target: hiveDir, manifestFile: hive('swarms/bundled-standard/seed.json') },
+      { source: shipped.source, history: shipped.history, target: hiveDir, manifestFile: hive('swarms/bundled-dev-squad/seed.json') },
       setOf('swOne'),
     ]);
   });

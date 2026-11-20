@@ -2673,7 +2673,7 @@ export function registerIpcHandlers(
     `onChange` a hand-written one does.
   */
   // HIVE-441: folders an installed swarm owns are the swarm's to write. HIVE-447: seeded from `resources/` until this
-  // home is adopted as the Standard swarm, then never again.
+  // home is adopted as the Dev Squad swarm, then never again.
   const seeded = seedAndAdopt((exclude) => seedShippedIntoHive(undefined, exclude));
 
   /*

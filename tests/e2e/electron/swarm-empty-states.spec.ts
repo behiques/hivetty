@@ -14,24 +14,24 @@ import { createSwarmRepo, FIXTURE_SWARM, type SwarmRepo } from './fixtures/swarm
 
 /**
  * HIVE-447 PR 3: a home with no agents or skills says they come in swarms, in the Agents stage, Settings › Skills
- * (and Agents) and Home's middle column, and Install Standard from each installs the registry's Standard row. The
- * row is served by the stub cloud with the slug `standard` and kind `native`, and resolves to the local fixture
+ * (and Agents) and Home's middle column, and Install Dev Squad from each installs the registry's Dev Squad row. The
+ * row is served by the stub cloud with the slug `dev-squad` and kind `native`, and resolves to the local fixture
  * repository, whose one agent and one skill are what "no longer empty" looks for.
  *
- * Not here: Work's "comes with the Standard swarm" notice on a ticket start. No Electron fixture serves a Jira
+ * Not here: Work's "comes with the Dev Squad swarm" notice on a ticket start. No Electron fixture serves a Jira
  * ticket to the Work tab; PR 2's unit tests and its drive cover it.
  */
 
-const AGENTS_SENTENCE = 'Agents come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.';
-const SKILLS_SENTENCE = 'Skills come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.';
+const AGENTS_SENTENCE = 'Agents come in swarms. Install Dev Squad for the ticket-to-merge workflow, or browse for others.';
+const SKILLS_SENTENCE = 'Skills come in swarms. Install Dev Squad for the ticket-to-merge workflow, or browse for others.';
 const HOME_LINE = 'No agents yet. Agents come in swarms.';
 
-/** The registry's Standard row, pointing at the fixture repository's first release. */
-const standardRow = (repo: SwarmRepo): Record<string, unknown> => ({
-  id: 'standard-fixture',
-  slug: 'standard',
+/** The registry's Dev Squad row, pointing at the fixture repository's first release. */
+const devSquadRow = (repo: SwarmRepo): Record<string, unknown> => ({
+  id: 'dev-squad-fixture',
+  slug: 'dev-squad',
   kind: 'native',
-  title: 'Standard',
+  title: 'Dev Squad',
   description: 'The agents and skills most work needs.',
   publisher: 'HiveTTY',
   tags: [],
@@ -50,11 +50,11 @@ const standardRow = (repo: SwarmRepo): Record<string, unknown> => ({
 });
 
 /**
- * Install Standard, then confirm in the consent dialog. Retried as a pair: until the registry listing reaches the
+ * Install Dev Squad, then confirm in the consent dialog. Retried as a pair: until the registry listing reaches the
  * renderer there is no row to name, and the button asks to sign in instead (a recorded no-op here).
  */
-async function installStandard(page: Page, from: () => ReturnType<Page['getByRole']>): Promise<void> {
-  const dialog = page.getByRole('dialog', { name: 'Install Standard' });
+async function installDevSquad(page: Page, from: () => ReturnType<Page['getByRole']>): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: 'Install Dev Squad' });
   await baseExpect(async () => {
     await from().click();
     await baseExpect(dialog).toBeVisible({ timeout: 2_000 });
@@ -66,7 +66,7 @@ async function installStandard(page: Page, from: () => ReturnType<Page['getByRol
   ).toBeVisible({ timeout: 30_000 });
 }
 
-baseTest.describe('an unseeded home, signed in, with Standard in the registry', () => {
+baseTest.describe('an unseeded home, signed in, with Dev Squad in the registry', () => {
   let stub: StubCloud;
   let dir: string;
   let repo: SwarmRepo;
@@ -77,7 +77,7 @@ baseTest.describe('an unseeded home, signed in, with Standard in the registry', 
     dir = mkdtempSync(join(tmpdir(), 'hive-swarm-repo-'));
     repo = await createSwarmRepo(dir);
     stub = await startStubCloud();
-    stub.controls.setSwarms([standardRow(repo)]);
+    stub.controls.setSwarms([devSquadRow(repo)]);
   });
   baseTest.afterEach(async () => {
     await stub.close();
@@ -90,24 +90,24 @@ baseTest.describe('an unseeded home, signed in, with Standard in the registry', 
       await goToPlace(page, 'Home');
       const home = page.getByRole('region', { name: 'Agents' });
       await baseExpect(home.getByText(HOME_LINE)).toBeVisible({ timeout: 15_000 });
-      await baseExpect(home.getByRole('button', { name: 'Install Standard' })).toBeVisible();
+      await baseExpect(home.getByRole('button', { name: 'Install Dev Squad' })).toBeVisible();
       await baseExpect(home.getByRole('button', { name: 'Browse swarms' })).toBeVisible();
 
       await openPane(page, 'skills');
       await baseExpect(page.getByText(SKILLS_SENTENCE)).toBeVisible();
-      await baseExpect(page.getByRole('button', { name: 'Install Standard' })).toBeVisible();
+      await baseExpect(page.getByRole('button', { name: 'Install Dev Squad' })).toBeVisible();
       await baseExpect(page.getByRole('button', { name: 'Browse swarms' })).toBeVisible();
 
       await openPane(page, 'agents');
       await baseExpect(page.getByText(AGENTS_SENTENCE)).toBeVisible();
-      await baseExpect(page.getByRole('button', { name: 'Install Standard' })).toBeVisible();
+      await baseExpect(page.getByRole('button', { name: 'Install Dev Squad' })).toBeVisible();
       await closeSettings(page);
 
       await goToPlace(page, 'Agents');
       const main = page.getByRole('main');
       await baseExpect(main.getByRole('heading', { name: 'No agents yet' })).toBeVisible();
       await baseExpect(main.getByText(AGENTS_SENTENCE)).toBeVisible();
-      await baseExpect(main.getByRole('button', { name: 'Install Standard' })).toBeVisible();
+      await baseExpect(main.getByRole('button', { name: 'Install Dev Squad' })).toBeVisible();
       await baseExpect(main.getByRole('button', { name: 'New agent', exact: true })).toBeVisible();
 
       await main.getByRole('button', { name: 'Browse swarms' }).click();
@@ -119,12 +119,12 @@ baseTest.describe('an unseeded home, signed in, with Standard in the registry', 
     }
   });
 
-  baseTest('Install Standard from the Agents stage lists its agent', async ({}, testInfo) => {
+  baseTest('Install Dev Squad from the Agents stage lists its agent', async ({}, testInfo) => {
     const { app, page } = await signedIn({ stub, testInfo, env: repo.env });
     try {
       await goToPlace(page, 'Agents');
       const main = page.getByRole('main');
-      await installStandard(page, () => main.getByRole('button', { name: 'Install Standard' }));
+      await installDevSquad(page, () => main.getByRole('button', { name: 'Install Dev Squad' }));
       await closeSettings(page);
 
       await goToPlace(page, 'Agents');
@@ -137,12 +137,12 @@ baseTest.describe('an unseeded home, signed in, with Standard in the registry', 
     }
   });
 
-  baseTest('Install Standard from Settings › Skills lists its skill', async ({}, testInfo) => {
+  baseTest('Install Dev Squad from Settings › Skills lists its skill', async ({}, testInfo) => {
     const { app, page } = await signedIn({ stub, testInfo, env: repo.env });
     try {
       await openPane(page, 'skills');
       await baseExpect(page.getByText(SKILLS_SENTENCE)).toBeVisible();
-      await installStandard(page, () => page.getByRole('button', { name: 'Install Standard' }));
+      await installDevSquad(page, () => page.getByRole('button', { name: 'Install Dev Squad' }));
 
       await openPane(page, 'skills');
       await baseExpect(page.getByText(`/${FIXTURE_SWARM.skill.name}`).first()).toBeVisible({ timeout: 15_000 });
@@ -152,13 +152,13 @@ baseTest.describe('an unseeded home, signed in, with Standard in the registry', 
     }
   });
 
-  baseTest("Install Standard from Home empties Home's line", async ({}, testInfo) => {
+  baseTest("Install Dev Squad from Home empties Home's line", async ({}, testInfo) => {
     const { app, page } = await signedIn({ stub, testInfo, env: repo.env });
     try {
       await goToPlace(page, 'Home');
       const home = page.getByRole('region', { name: 'Agents' });
       await baseExpect(home.getByText(HOME_LINE)).toBeVisible({ timeout: 15_000 });
-      await installStandard(page, () => home.getByRole('button', { name: 'Install Standard' }));
+      await installDevSquad(page, () => home.getByRole('button', { name: 'Install Dev Squad' }));
       await closeSettings(page);
 
       await goToPlace(page, 'Agents');
@@ -173,14 +173,14 @@ baseTest.describe('an unseeded home, signed in, with Standard in the registry', 
   });
 });
 
-test.describe('a seeded home, adopted as Standard (PR 1)', () => {
-  test('Swarms shows Standard as Bundled, Agents lists the built-ins, Home never says none', async ({ page }) => {
+test.describe('a seeded home, adopted as Dev Squad (PR 1)', () => {
+  test('Swarms shows Dev Squad as Bundled, Agents lists the built-ins, Home never says none', async ({ page }) => {
     await page.waitForSelector('nav[aria-label="Places"]');
 
     await openPane(page, 'swarms');
     const rows = page.getByRole('listitem');
     await expect(rows).toHaveCount(1, { timeout: 15_000 });
-    await expect(rows.first()).toContainText('Standard');
+    await expect(rows.first()).toContainText('Dev Squad');
     await expect(rows.first()).toContainText('Bundled');
     await closeSettings(page);
 

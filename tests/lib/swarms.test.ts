@@ -10,7 +10,7 @@ import {
   removeSwarm,
   resetSwarmsState,
   setSwarmAutoUpdate,
-  standardOf,
+  devSquadOf,
   subscribeSwarms,
   swarmsSnapshot,
   takeSwarmInstallRequest,
@@ -381,25 +381,27 @@ describe('providerOf', () => {
   });
 });
 
-describe('standardOf', () => {
-  it('answers the native standard row, not installed', () => {
+describe('devSquadOf', () => {
+  it('answers the native dev-squad row, not installed', () => {
     const listing = swarmListing([
-      swarmItem({ entry: swarmEntry({ id: 'cmty1', slug: 'standard', kind: 'community' }) }),
-      swarmItem({ entry: swarmEntry({ id: 'std1' }) }),
+      swarmItem({ entry: swarmEntry({ id: 'cmty1', slug: 'dev-squad', kind: 'community' }) }),
+      swarmItem({ entry: swarmEntry({ id: 'std1', slug: 'dev-squad' }) }),
     ]);
-    expect(standardOf(listing)).toEqual({ id: 'std1', installed: false });
+    expect(devSquadOf(listing)).toEqual({ id: 'std1', installed: false });
   });
 
-  it('answers the native standard row, installed', () => {
+  it('answers the native dev-squad row, installed', () => {
     const listing = swarmListing([
-      swarmItem({ entry: swarmEntry({ id: 'std1' }), installed: installedSwarm({ swarmId: 'std1' }) }),
+      swarmItem({ entry: swarmEntry({ id: 'std1', slug: 'dev-squad' }), installed: installedSwarm({ swarmId: 'std1' }) }),
     ]);
-    expect(standardOf(listing)).toEqual({ id: 'std1', installed: true });
+    expect(devSquadOf(listing)).toEqual({ id: 'std1', installed: true });
   });
 
-  it('is null with no native standard row or no listing', () => {
-    expect(standardOf(swarmListing([swarmItem({ entry: swarmEntry({ slug: 'other' }) })]))).toBeNull();
-    expect(standardOf(swarmListing([]))).toBeNull();
-    expect(standardOf(null)).toBeNull();
+  it('is null with no native dev-squad row or no listing', () => {
+    // HIVE-448: Standard was renamed before any release carried it; a row still named standard is not the one.
+    expect(devSquadOf(swarmListing([swarmItem({ entry: swarmEntry({ slug: 'standard' }) })]))).toBeNull();
+    expect(devSquadOf(swarmListing([swarmItem({ entry: swarmEntry({ slug: 'other' }) })]))).toBeNull();
+    expect(devSquadOf(swarmListing([]))).toBeNull();
+    expect(devSquadOf(null)).toBeNull();
   });
 });
