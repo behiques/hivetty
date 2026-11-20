@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  ALL_SWARMS,
   type CellState,
   type CombInput,
   type CombLayout,
@@ -140,8 +141,9 @@ describe('layoutComb — at scale', () => {
     expect(layout.R).toBe(21);
   });
 
-  it('switches when there are more than seven agents, even with room', () => {
-    expect(layoutComb([...Array.from({ length: 8 }, (_, i) => agent(`a${i}`, 'morphing'))], []).mode).toBe('scale');
+  it('clusters, not side by side, when a group has more than seven agents and there is room (HIVE-454)', () => {
+    const l = layoutComb([...Array.from({ length: 8 }, (_, i) => agent(`a${i}`, 'morphing'))], []);
+    expect(l).toMatchObject({ mode: 'normal', agents: 'clusters' });
   });
 
   it('switches when the normal layout does not fit the canvas', () => {
@@ -149,18 +151,17 @@ describe('layoutComb — at scale', () => {
     expect(layoutComb(wide.entities, wide.projects).mode).toBe('scale');
   });
 
-  it('stacks the swarm as two staggered rows of seven', () => {
+  it('clusters the swarm small on row 5: its 6 most urgent and a "+8" (HIVE-454 §2 step 3)', () => {
     const swarm = layout.cells.filter((c) => c.project === SWARM);
-    expect(swarm).toHaveLength(14);
-    expect(swarm[0]).toMatchObject(at(12, 4));
-    expect(swarm[6]).toMatchObject(at(24, 4));
-    expect(swarm[7]).toMatchObject(at(13, 6));
+    expect(swarm).toHaveLength(7);
+    expect(swarm[0]!.y).toBeCloseTo(at(0, 5).y);
+    expect(swarm[6]).toMatchObject({ id: 'rest:swarm', more: 8 });
   });
 
-  it('nests each project as a 2×2 patch, six per row', () => {
+  it('nests each project as a 2×2 patch, five per row at 1376, on rows 10 and 14 (HIVE-454 §2 step 3)', () => {
     const first = layout.cells.filter((c) => c.project === 'the-hive');
-    expect(first.map(({ x, y }) => ({ x, y }))).toEqual([at(2, 9), at(3, 9), at(2, 10), at(3, 10)]);
-    expect(layout.cells.find((c) => c.project === 'incorpx-customer-onboarding-portal')).toMatchObject(at(2, 13));
+    expect(first.map(({ x, y }) => ({ x, y }))).toEqual([at(2, 10), at(3, 10), at(2, 11), at(3, 11)]);
+    expect(layout.cells.find((c) => c.project === 'billing-svc')).toMatchObject(at(2, 14));
   });
 
   it('caps a patch at four, the fourth "+N" (N = count − 3), the most urgent first', () => {
@@ -174,18 +175,18 @@ describe('layoutComb — at scale', () => {
     expect(layout.patches.find((p) => p.project === 'incorpx-customer-onboarding-portal')!.label).toBe('INCORPX-CUSTOMER-…');
   });
 
-  it('folds projects past twelve into one "+N projects" cell, keeping the urgent ones', () => {
+  it('folds projects past ten at 1376 into one "+N projects" cell, keeping the urgent ones', () => {
     const counts: [string, number][] = [...HEAVY_COUNTS, ['zz-urgent', 1]];
     const many = heavy(counts);
     many.entities = many.entities.map((e) => (e.project === 'zz-urgent' ? { ...e, state: 'summons' } : e));
     const l = layoutComb(many.entities, many.projects);
-    expect(l.cells.find((c) => c.id === 'rest:*')).toMatchObject({ project: '*', name: '+2', more: 2, ...at(32, 13) });
+    expect(l.cells.find((c) => c.id === 'rest:*')).toMatchObject({ project: '*', name: '+4', more: 4, ...at(26, 14) });
     expect(l.cells.some((c) => c.project === 'zz-urgent')).toBe(true);
   });
 
-  it('turns a fifteenth agent into a "+N" swarm cell', () => {
+  it('turns a seventh agent of a big group into a "+N" swarm cell', () => {
     const l = layoutComb(heavy([['p', 1]], 16).entities, [{ id: 'p', name: 'p' }]);
-    expect(l.cells.find((c) => c.id === 'rest:swarm')).toMatchObject({ name: '+3', more: 3 });
+    expect(l.cells.find((c) => c.id === 'rest:swarm')).toMatchObject({ name: '+10', more: 10 });
   });
 });
 
@@ -248,6 +249,182 @@ describe('layoutComb — width and agent groups (HIVE-454)', () => {
     const { ctx, calls } = recordingContext();
     drawComb(ctx, layoutComb(BUSY, PROJECTS, { width: 800 }), [], 0, PALETTE);
     expect(calls.find((c) => c.op === 'fillRect')?.args).toEqual([0, 0, 800, 520]);
+  });
+});
+
+// HIVE-454: the design's three loads.
+const swarmOf = (id: string, specs: (string | [string, CellState])[]): CombInput[] =>
+  specs.map((spec) => (typeof spec === 'string' ? cell(spec, id, 'burrowed') : cell(spec[0], id, spec[1])));
+const sessionsOf = (project: string, states: CellState[]): CombInput[] =>
+  states.map((state, i) => cell(`${project}-${i}`, project, state));
+
+const DEV = swarmOf('dev', ['acr', ['builder', 'morphing'], 'clerk', ['fixer', 'summons'], 'shipper']);
+const OPS2 = swarmOf('ops', [['pager', 'morphing'], 'triage']);
+const OPS3 = swarmOf('ops', [['pager', 'morphing'], 'triage', 'backup']);
+const ACME6 = swarmOf('acme', [['deployer', 'morphing'], 'auditor', ['oncall', 'summons'], 'migrator', 'costs', 'janitor']);
+const ACME8 = [...ACME6, ...swarmOf('acme', [['reviewer', 'morphing'], 'sbom'])];
+const DOCS = swarmOf('docs', [['writer', 'morphing'], ['linkcheck', 'failed']]);
+const SEC = swarmOf('sec', [['scanner', 'morphing'], 'secrets', ['deps', 'summons']]);
+const DATA = swarmOf('data', [['etl', 'morphing'], 'dbt', 'quality', 'reports']);
+const MINE1 = swarmOf('swarm:mine', ['standup']);
+const MINE2 = swarmOf('swarm:mine', ['standup', 'inbox']);
+const TWO = [...sessionsOf('hivetty', ['morphing', 'summons', 'terminal']), ...sessionsOf('hivetty-cloud', ['morphing', 'burrowed'])];
+const TEN_COUNTS: [string, CellState[]][] = [
+  ['hivetty', ['morphing', 'summons', 'terminal', 'burrowed', 'morphing']], ['hivetty-cloud', ['morphing', 'burrowed']],
+  ['hivetty-swarms', ['summons']], ['site', ['morphing', 'terminal']], ['billing', ['burrowed', 'morphing', 'terminal']],
+  ['acme-api', ['failed', 'burrowed']], ['acme-web', ['terminal']], ['infra', ['morphing', 'burrowed']],
+  ['design', ['burrowed']], ['mobile', ['terminal']],
+];
+const TEN = TEN_COUNTS.flatMap(([project, states]) => sessionsOf(project, states));
+const projectsOf = (ids: string[]) => ids.map((id) => ({ id, name: id }));
+const TITLES: Record<string, string> = {
+  dev: 'Dev Squad', acme: 'Acme Platform', ops: 'Ops Watch', docs: 'Docs Crew', sec: 'Security', data: 'Data Team',
+  'swarm:mine': 'My swarm',
+};
+const groupsFor = (ids: string[]) => ids.map((id) => ({ id, name: TITLES[id]! }));
+const LOADS = {
+  few: { entities: [...DEV, ...OPS2, ...MINE1, ...TWO], projects: projectsOf(['hivetty', 'hivetty-cloud']), groups: groupsFor(['dev', 'ops', 'swarm:mine']) },
+  more: {
+    entities: [...DEV, ...ACME6, ...OPS3, ...DOCS, ...MINE2, ...TWO], projects: projectsOf(['hivetty', 'hivetty-cloud']),
+    groups: groupsFor(['dev', 'acme', 'ops', 'docs', 'swarm:mine']),
+  },
+  many: {
+    entities: [...DEV, ...ACME8, ...OPS3, ...DOCS, ...SEC, ...DATA, ...MINE2, ...TEN], projects: projectsOf(TEN_COUNTS.map(([id]) => id)),
+    groups: groupsFor(['dev', 'acme', 'ops', 'docs', 'sec', 'data', 'swarm:mine']),
+  },
+};
+type Load = keyof typeof LOADS;
+const layoutOf = (load: Load, width: number) => {
+  const { entities, projects, groups } = LOADS[load];
+  return layoutComb(entities, projects, { width, groups });
+};
+const PICKS: [Load, number, CombLayout['agents']][] = [
+  ['few', 1376, 'side'], ['few', 1024, 'clusters'], ['few', 760, 'clusters'],
+  ['more', 1376, 'clusters'], ['more', 1024, 'small'], ['more', 760, 'small'],
+  ['many', 1376, 'small'], ['many', 1024, 'small'], ['many', 760, 'small'],
+];
+
+describe('layoutComb — the pick (HIVE-454)', () => {
+  it.each(PICKS)('%s at %i lays agents out %s', (load, width, agents) => {
+    const l = layoutOf(load, width);
+    expect(l.agents).toBe(agents);
+    expect(l.mode).toBe(agents === 'small' ? 'scale' : 'normal');
+    expect(l.R).toBe(agents === 'small' ? 21 : 36);
+  });
+
+  it.each(PICKS)('%s at %i keeps every cell inside the width', (load, width) => {
+    const l = layoutOf(load, width);
+    for (const c of l.cells) {
+      expect(c.x, c.id).toBeGreaterThan(l.R);
+      expect(c.x, c.id).toBeLessThan(width - l.R);
+    }
+  });
+
+  it('draws one patch per group, labelled with its full name, in group order', () => {
+    expect(layoutOf('few', 1376).patches.map((p) => p.label)).toEqual(['DEV SQUAD', 'OPS WATCH', 'MY SWARM', 'HIVETTY', 'HIVETTY-CLOUD']);
+    expect(layoutOf('more', 1376).patches.slice(0, 5).map((p) => p.project)).toEqual(['dev', 'acme', 'ops', 'docs', 'swarm:mine']);
+  });
+
+  it('lays side by side two columns apart within a group, the run centred on row 3', () => {
+    const l = layoutOf('few', 1376);
+    const cols = (project: string) => l.cells.filter((c) => c.project === project).map((c) => Math.round((c.x - w / 2) / w));
+    expect(cols('dev')).toEqual([3, 5, 7, 9, 11]);
+    expect(cols('ops')).toEqual([14, 16]);
+    expect(cols('swarm:mine')).toEqual([19]);
+    for (const c of l.cells.filter((cell) => cell.agent)) expect(c.y).toBeCloseTo(3 * 1.5 * R + 14);
+  });
+
+  it('builds a cluster as a centre and its ring, the label above its top cell', () => {
+    const l = layoutOf('few', 1024);
+    const dev = l.cells.filter((c) => c.project === 'dev');
+    const [centre] = dev;
+    const offsets = dev.map((c) => [(c.x - centre!.x) / w, (c.y - centre!.y) / (1.5 * R)]);
+    const expected = [[0, 0], [1, 0], [0.5, -1], [-0.5, -1], [-1, 0]];
+    offsets.forEach(([dc, dr], i) => {
+      expect(dc).toBeCloseTo(expected[i]![0]!);
+      expect(dr).toBeCloseTo(expected[i]![1]!);
+    });
+    expect(centre!.y).toBeCloseTo(3 * 1.5 * R + 14);
+    expect(l.patches.find((p) => p.project === 'dev')!.y).toBeCloseTo(centre!.y - 1.5 * R - R - 12);
+  });
+
+  it('shows a cluster of 9 as its 6 most urgent and a "+3" rest cell', () => {
+    const nine = swarmOf('big', ['a', 'b', ['c', 'summons'], 'd', ['e', 'morphing'], 'f', ['g', 'failed'], 'h', ['i', 'morphing']]);
+    const l = layoutComb(nine, [], { groups: [{ id: 'big', name: 'Big' }] });
+    expect(l.agents).toBe('clusters');
+    const cells = l.cells.filter((c) => c.project === 'big');
+    expect(cells).toHaveLength(7);
+    expect(cells[6]).toMatchObject({ id: 'rest:big', kind: 'rest', name: '+3', more: 3, agent: true });
+    expect(cells.slice(0, 4).map((c) => c.id)).toEqual(['c', 'g', 'e', 'i']);
+  });
+
+  it('folds the least urgent groups at many@760 into one "+2" SWARMS cell, the rest in input order', () => {
+    const l = layoutOf('many', 760);
+    expect(l.cells.find((c) => c.id === 'rest:**')).toMatchObject({ project: ALL_SWARMS, kind: 'rest', more: 2, name: '+2', agent: true });
+    const agentPatches = l.patches.filter((p) => l.cells.some((c) => c.agent && c.project === p.project)).map((p) => p.project);
+    expect(agentPatches).toEqual(['dev', 'acme', 'ops', 'docs', 'sec', ALL_SWARMS]);
+    expect(l.patches.find((p) => p.project === ALL_SWARMS)!.label).toBe('SWARMS');
+  });
+
+  it('puts small clusters on row 5 and cuts their labels to 18', () => {
+    const long = swarmOf('long', ['x']);
+    const l = layoutComb([...long, ...LOADS.many.entities], LOADS.many.projects, {
+      width: 1376, groups: [{ id: 'long', name: 'A very long swarm title' }, ...LOADS.many.groups],
+    });
+    expect(l.agents).toBe('small');
+    expect(l.cells.find((c) => c.id === 'x')!.y).toBeCloseTo(5 * 1.5 * 21 + 14);
+    expect(l.patches[0]!.label).toBe('A VERY LONG SWARM…');
+  });
+
+  it('lays small projects as 2×2 patches, perRow from the width, on rows 10 and 14', () => {
+    const l = layoutOf('many', 1376);
+    const ws = Math.sqrt(3) * 21;
+    const at = (c: number, row: number) => ({ x: c * ws + (row & 1 ? ws / 2 : 0), y: row * 1.5 * 21 + 14 });
+    // perRow = floor((1376 / ws − 2) / 6) = 5
+    expect(l.cells.find((c) => c.project === 'hivetty')).toMatchObject(at(2, 10));
+    expect(l.cells.find((c) => c.project === 'hivetty-cloud')).toMatchObject(at(8, 10));
+    expect(l.cells.find((c) => c.project === TEN_COUNTS[5]![0])).toMatchObject(at(2, 14));
+    expect(l.cells.some((c) => c.id === 'rest:*')).toBe(false);
+    const narrow = layoutOf('many', 760); // perRow 3: 6 patches, the sixth "+5"
+    expect(narrow.cells.find((c) => c.id === 'rest:*')).toMatchObject({ more: 5, ...at(14, 14) });
+  });
+
+  it('with no agents lays projects side by side, else small', () => {
+    expect(layoutComb(TWO, LOADS.few.projects, { groups: [] }).agents).toBe('side');
+    expect(layoutComb(TEN, LOADS.many.projects, { groups: [] }).agents).toBe('small');
+  });
+
+  it('hit-tests each layout at its first agent cell', () => {
+    for (const [load, width] of PICKS) {
+      const l = layoutOf(load, width);
+      const first = l.cells.find((c) => c.agent)!;
+      expect(hitTest(l, first.x + 2, first.y - 2)?.id).toBe(first.id);
+    }
+  });
+
+  it('hit-tests the nearest of two touching small cells, within 0.87·R', () => {
+    const l = layoutOf('many', 1376);
+    const [a, b] = l.cells.filter((c) => c.project === 'dev');
+    const ws = Math.sqrt(3) * 21;
+    expect(b!.x - a!.x).toBeCloseTo(ws);
+    expect(hitTest(l, a!.x + ws * 0.45, a!.y)?.id).toBe(a!.id);
+    expect(hitTest(l, a!.x + ws * 0.55, a!.y)?.id).toBe(b!.id);
+    expect(hitTest(l, a!.x, a!.y + 19)).toBeNull();
+  });
+
+  it('sends flyers to agent cells in more than one group', () => {
+    const l = layoutOf('few', 1376);
+    const rng = seededRng(3);
+    const flock = Array.from({ length: 30 }, () => flyer({ leg: 0, target: null }));
+    const projects = new Set(
+      stepFlyers(flock, l, 1 / 60, rng, false).map((f) => l.cells.find((c) => c.id === f.target)!.project),
+    );
+    expect(projects.size).toBeGreaterThan(1);
+    for (const project of projects) expect(['dev', 'ops', 'swarm:mine']).toContain(project);
+  });
+
+  it('labels one group before load THE SWARM', () => {
+    expect(layoutComb([agent('a', 'morphing')], []).patches[0]!.label).toBe('THE SWARM');
   });
 });
 
@@ -376,23 +553,21 @@ describe('drawComb', () => {
     expect(texts).toContain('THE SWARM');
   });
 
-  it('names every agent under its cell at scale, whatever its state, and tags none', () => {
+  it('names no agent at scale, and tags none: the tooltip has them (HIVE-454 §2 step 3)', () => {
     const { entities, projects } = heavy(HEAVY_COUNTS);
-    const l = layoutComb([...entities.slice(0, 12), agent('idle-one', 'burrowed'), ...entities.slice(14)], projects);
-    const { calls } = draw(l);
-    for (const c of l.cells.filter((cell) => cell.project === SWARM && cell.kind === 'entity')) {
-      const at = calls.findIndex((call) => call.op === 'fillText' && call.args[0] === c.name);
-      expect(at, c.name).toBeGreaterThanOrEqual(0);
-      expect(calls[at]!.args.slice(1)).toEqual([c.x, c.y + l.R + 11]);
-      expect(calls.slice(0, at).findLast((call) => call.op === 'set:font')?.args[0]).toMatch(/^500 9px /);
-    }
+    const l = layoutComb(entities, projects);
+    const { texts } = draw(l);
+    for (const c of l.cells.filter((cell) => cell.agent && cell.kind === 'entity')) expect(texts).not.toContain(truncate(c.name, 12));
   });
 
-  it('cuts a long agent name to 12 under its cell at scale', () => {
-    const { entities, projects } = heavy(HEAVY_COUNTS);
-    const { texts } = draw(layoutComb([...entities.slice(0, 13), agent('release-notes-writer', 'burrowed')], projects));
-    expect(texts).toContain('release-not…');
-    expect(texts).not.toContain('release-notes-writer');
+  it('names a clustered agent inside its cell, cut to 8, at 11 px (HIVE-454)', () => {
+    const l = layoutComb([...Array.from({ length: 7 }, (_, i) => agent(`a${i}`, 'burrowed')), agent('release-notes-writer', 'morphing')], []);
+    expect(l.agents).toBe('clusters');
+    const { calls } = draw(l);
+    const c = l.cells.find((cell) => cell.id === 'release-notes-writer')!;
+    const at = calls.findIndex((call) => call.op === 'fillText' && call.args[0] === 'release…');
+    expect(calls[at]!.args.slice(1)).toEqual([c.x, c.y + 4]);
+    expect(calls.slice(0, at).findLast((call) => call.op === 'set:font')?.args[0]).toMatch(/^500 11px /);
   });
 
   it('tags only Summons and Failed sessions at scale, small', () => {

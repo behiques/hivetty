@@ -237,7 +237,7 @@ describe('TheComb — the cells that fold others (decision D6)', () => {
     useHiveStore.setState({ entities: {}, order: [], agentOrder: [] });
     act(() => useHiveStore.getState().hydrateAgents(Array.from({ length: 16 }, (_, i) => agentSummary(`agent-${i}`))));
     render(<TheComb label="x" />);
-    fireEvent.click(screen.getByRole('button', { name: /^3 more agents/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^10 more agents/ }));
     expect(useUiStore.getState().place).toBe('agents');
   });
 
@@ -248,7 +248,7 @@ describe('TheComb — the cells that fold others (decision D6)', () => {
     useHiveStore.setState({ entities, order: Object.keys(entities), agentOrder: [] });
     act(() => useUiStore.getState().setSessionsProject('p0'));
     render(<TheComb label="x" />);
-    fireEvent.click(screen.getByRole('button', { name: /^2 more projects/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^4 more projects/ }));
     expect(useUiStore.getState()).toMatchObject({ place: 'sessions', sessionsProject: null });
   });
 
