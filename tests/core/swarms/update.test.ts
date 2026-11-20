@@ -131,7 +131,7 @@ describe('check', () => {
     expect(updater.pending('a1')).toBeNull();
   });
 
-  it('updates a bundled Standard like any other version: pending, then applied (HIVE-447)', async () => {
+  it('updates a bundled Dev Squad like any other version: pending, then applied (HIVE-447)', async () => {
     const row = rowFor({ version: '1.0.1' });
     const deps = harness([row], [heldFor({ version: 'bundled' })]);
     const updater = createSwarmUpdater(deps);
@@ -142,7 +142,7 @@ describe('check', () => {
     expect(deps.notify).toHaveBeenCalledWith({ swarmId: 'a1', title: 'Standard', version: '1.0.1' });
   });
 
-  it('holds a bundled Standard pending at the registry version while a run is live (HIVE-447)', async () => {
+  it('holds a bundled Dev Squad pending at the registry version while a run is live (HIVE-447)', async () => {
     const deps = harness([rowFor({ version: '1.0.1' })], [heldFor({ version: 'bundled' })]);
     deps.runsLive.mockReturnValue(true);
     const updater = createSwarmUpdater(deps);

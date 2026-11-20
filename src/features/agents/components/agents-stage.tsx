@@ -15,7 +15,7 @@ import { useAgentPageActions, useStallsShown } from '@stores/ui-store';
  * the last one, else the next, else the first), or "Pick an agent" when none is — Work's empty shape, for the same reason: the place
  * owns the stage either way, and an empty stage that says what to do beats
  * the Overmind showing through. With no agent defined it says agents come in
- * swarms and offers Install Standard, Browse swarms and New agent (HIVE-211, HIVE-447).
+ * swarms and offers Install Dev Squad, Browse swarms and New agent (HIVE-211, HIVE-447).
  *
  * Keyed by the agent, so moving to another one remounts the page: its notice,
  * and the editor's per-field state, belong to the agent they were about.
@@ -45,7 +45,7 @@ export function AgentsStage() {
             </>
           }
         >
-          Agents come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.
+          Agents come in swarms. Install Dev Squad for the ticket-to-merge workflow, or browse for others.
         </EmptyPlace>
       );
     }

@@ -5,6 +5,11 @@ version. HiveTTY publishes some, your organization can publish its own, and anyo
 swarm. Swarms are part of HiveTTY Pro, and everything a swarm installs is saved under `~/.hivetty`, beside your
 own agents and skills.
 
+HiveTTY itself ships no agents and no skills. **Dev Squad**, the ticket-to-merge workflow, is a swarm: a new
+install starts empty and offers **Install Dev Squad**. An install that had the built-in agents and skills keeps
+them, with your edits, as the installed Dev Squad. It reads "Bundled" until its first update, and until then
+shows no per-file edits.
+
 **On this page:** [Find a swarm](#find-a-swarm) · [What you agree to](#what-you-agree-to) ·
 [Your installed swarms](#your-installed-swarms) · [Updates](#updates) · [Files you edited](#files-you-edited) ·
 [Remove a swarm](#remove-a-swarm) · [Install from a link](#install-from-a-link) ·
@@ -53,7 +58,7 @@ publisher and the counts. The dot and the line beside it say where it stands:
 | No longer available | The swarm left the registry, or your organization withdrew it. It stays installed and won't update | **Remove** |
 
 **Check for updates** looks for new versions now, instead of waiting for the next automatic check. When an
-update is applied, the line beside the buttons says so: "Standard updated to v1.4.0".
+update is applied, the line beside the buttons says so: "Dev Squad updated to v1.4.0".
 
 ## Updates
 
@@ -100,6 +105,6 @@ itself: you still read the dialog and choose **Install**.
 
 ## The update notification
 
-When a swarm updates itself, with nobody clicking, HiveTTY raises a notification: "Standard updated to v1.4.0".
+When a swarm updates itself, with nobody clicking, HiveTTY raises a notification: "Dev Squad updated to v1.4.0".
 Turn it off, or choose where it appears, under **Settings › Notifications**, "When a swarm updates itself".
 Updates you start yourself raise no notification.

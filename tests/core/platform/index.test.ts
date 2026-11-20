@@ -9,7 +9,6 @@ const fake = (): Platform => ({
     decryptString: (data) => data.toString(),
   },
   paths: { stateDir: '/state', logsDir: '/logs' },
-  resources: '/resources',
   notify: () => undefined,
   processHost: () => {
     throw new Error('not in this test');

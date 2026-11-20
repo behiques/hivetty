@@ -17,7 +17,7 @@ const serve = (listing: SwarmsSnapshot['listing']): void => {
 };
 
 const PROVIDING = swarmListing([
-  swarmItem({ entry: swarmEntry({ id: 'std1', skills: [{ name: 'work-on', description: 'Work a ticket.' }] }) }),
+  swarmItem({ entry: swarmEntry({ id: 'std1', slug: 'dev-squad', title: 'Dev Squad', skills: [{ name: 'work-on', description: 'Work a ticket.' }] }) }),
 ]);
 
 beforeEach(() => {
@@ -29,8 +29,8 @@ describe('MissingSwarm (HIVE-447)', () => {
   it('names the providing swarm and installs it', () => {
     render(<MissingSwarm kind="skill" name="work-on" />);
 
-    expect(screen.getByRole('status')).toHaveTextContent('work-on comes with the Standard swarm.');
-    fireEvent.click(screen.getByRole('button', { name: 'Install Standard' }));
+    expect(screen.getByRole('status')).toHaveTextContent('work-on comes with the Dev Squad swarm.');
+    fireEvent.click(screen.getByRole('button', { name: 'Install Dev Squad' }));
     expect(actions.install).toHaveBeenCalledWith('std1');
     expect(actions.browse).not.toHaveBeenCalled();
   });
@@ -38,7 +38,7 @@ describe('MissingSwarm (HIVE-447)', () => {
   it('names an agent provider', () => {
     render(<MissingSwarm kind="agent" name="builder" />);
 
-    expect(screen.getByRole('status')).toHaveTextContent('builder comes with the Standard swarm.');
+    expect(screen.getByRole('status')).toHaveTextContent('builder comes with the Dev Squad swarm.');
   });
 
   it('with no provider, says it is not installed and offers Browse', () => {
@@ -67,6 +67,6 @@ describe('MissingSwarm (HIVE-447)', () => {
     );
 
     const buttons = screen.getAllByRole('button').map((button) => button.textContent);
-    expect(buttons).toEqual(['Install Standard', 'Start without it']);
+    expect(buttons).toEqual(['Install Dev Squad', 'Start without it']);
   });
 });

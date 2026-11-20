@@ -23,16 +23,17 @@ body that is its standing job. Each wake is one headless run of its CLI (`claude
 ## Agents from swarms
 
 Agents come in swarms: sets of agents and skills that install together and update when their
-publisher releases a new version ([Swarms](swarms.md)). An existing install already has the
-**Standard** swarm, which carries the ticket-to-merge workflow: **builder**, which builds an
+publisher releases a new version ([Swarms](swarms.md)). HiveTTY ships no agents of its own. The
+**Dev Squad** swarm carries the ticket-to-merge workflow: **builder**, which builds an
 approved plan in its own worktree and opens the draft PR, **shipper**, the PR endgame, **acr**,
 the reviewer it asks (named after the review tool it runs, `acr`, which is a command on the
 machine, not this agent), and **fixer**, which works through a PR's findings on the PR branch.
-Settings › Automation › Swarms installs, updates and removes swarms. With no agent installed at
+A new install starts with no agents; an install that had the built-in agents keeps them, edits
+intact, as Dev Squad. Settings › Automation › Swarms installs, updates and removes swarms. With no agent installed at
 all, the Agents place, Settings › Agents and Home say agents come in swarms and offer
-**Install Standard** and **Browse swarms**.
+**Install Dev Squad** and **Browse swarms**.
 
-None of Standard's agents has a budget: no `limits.budget_usd` and no `limits.daily_usd`, so they
+None of Dev Squad's agents has a budget: no `limits.budget_usd` and no `limits.daily_usd`, so they
 spend without a cap until you set one in Settings › Agents, and a cap you set stays set through
 updates. Your edits win, and updates still arrive around them: each setting and the prompt update
 on their own, so a `limits.parallel` you raised stays raised while a new prompt and new keys such

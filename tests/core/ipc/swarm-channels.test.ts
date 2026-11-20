@@ -98,16 +98,16 @@ const takeSwarmInstallRequest = vi.hoisted(() => vi.fn<() => string | null>(() =
 
 /** Two seed sets: the shipped one, `S`, and one installed swarm's, `W`, which owns `skills/tdd`. */
 const sets = vi.hoisted(() => {
-  const S = { source: '/r', target: '/h', manifestFile: '/h/.seed.json', exclude: new Set(['skills/tdd']) };
-  const W = { source: '/h/swarms/a1/repo/standard', target: '/h', manifestFile: '/h/swarms/a1/seed.json' };
-  return { S, W };
+  const W = { source: '/h/swarms/a1/repo/dev-squad', target: '/h', manifestFile: '/h/swarms/a1/seed.json' };
+  const K = { source: '/h/swarms/k1/repo', target: '/h', manifestFile: '/h/swarms/k1/seed.json' };
+  return { W, K };
 });
 const swarmSeedSets = vi.hoisted(() => vi.fn());
-/** HIVE-447: the boot seed's promise. The test holds it open to prove what waits for it. */
+/** HIVE-447: boot's promise, adoption alone since HIVE-448. The test holds it open to prove what waits for it. */
 const boot = vi.hoisted(() => ({ release: (): void => undefined }));
-const seedAndAdopt = vi.hoisted(() =>
+const adopt = vi.hoisted(() =>
   vi.fn(
-    (_seed: (exclude: ReadonlySet<string> | undefined) => Promise<unknown>) =>
+    () =>
       new Promise<void>((resolve) => {
         boot.release = resolve;
       }),
@@ -119,7 +119,7 @@ vi.mock('../../../core/swarms', () => ({
   setSwarmHooks,
   swarmSeedSets,
   swarmSeedSetFor,
-  seedAndAdopt,
+  adopt,
   startSwarmUpdates,
   swarmRunsIdle,
   swarmSessionChanged,
@@ -128,9 +128,8 @@ vi.mock('../../../core/swarms', () => ({
 
 /** `core/seed`'s actions, so the spec proves which set each one was handed. */
 const seed = vi.hoisted(() => ({
-  seedShippedIntoHive: vi.fn((_source?: string, _exclude?: ReadonlySet<string>) => Promise.resolve(null)),
   shippedStatus: vi.fn((options: { manifestFile: string }) =>
-    Promise.resolve(options.manifestFile === '/h/.seed.json' ? [{ name: 'from-S' }] : [{ name: 'from-W' }]),
+    Promise.resolve(options.manifestFile === '/h/swarms/a1/seed.json' ? [{ name: 'from-W' }] : [{ name: 'from-K' }]),
   ),
   resetShipped: vi.fn((_options: unknown, _request: unknown) => Promise.resolve([])),
   takeShippedPrompt: vi.fn((_options: unknown, _request: unknown) => Promise.resolve([])),
@@ -141,8 +140,8 @@ vi.mock('../../../core/seed', async (importOriginal) => ({
   ...seed,
 }));
 
-const ownerOf = (kind: string, name: string) =>
-  Promise.resolve(kind === 'skills' && name === 'tdd' ? sets.W : sets.S);
+/** `tdd` is the swarm's; no swarm owns anything else (HIVE-448: there is no shipped set to fall back to). */
+const ownerOf = (kind: string, name: string) => Promise.resolve(kind === 'skills' && name === 'tdd' ? sets.W : null);
 
 const { CH } = await import('../../../shared/ipc-contract');
 const { installDesktopPlatform } = await import('../../support/desktop-platform');
@@ -156,7 +155,7 @@ const invoke = (channel: string, payload: unknown) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  swarmSeedSets.mockResolvedValue({ shipped: sets.S, swarms: [sets.W] });
+  swarmSeedSets.mockResolvedValue([sets.W, sets.K]);
   swarmSeedSetFor.mockImplementation(ownerOf);
   installDesktopPlatform();
   handlers.clear();
@@ -280,27 +279,46 @@ describe('the install link channels (HIVE-442)', () => {
   });
 });
 
-describe('the shipped handlers over every seed set (HIVE-441)', () => {
-  const both = [{ name: 'from-S' }, { name: 'from-W' }];
+describe('the shipped handlers over every installed swarm (HIVE-441, HIVE-448)', () => {
+  const both = [{ name: 'from-W' }, { name: 'from-K' }];
 
-  it("shipped:status answers the shipped set's statuses, then each swarm's", async () => {
+  it("shipped:status answers every installed swarm's statuses", async () => {
     await expect(invoke(CH.shippedStatus, undefined)).resolves.toEqual(both);
-    expect(seed.shippedStatus).toHaveBeenCalledWith(sets.S);
     expect(seed.shippedStatus).toHaveBeenCalledWith(sets.W);
+    expect(seed.shippedStatus).toHaveBeenCalledWith(sets.K);
+    expect(seed.shippedStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('shipped:status answers an empty list when no swarm is installed', async () => {
+    swarmSeedSets.mockResolvedValue([]);
+
+    await expect(invoke(CH.shippedStatus, undefined)).resolves.toEqual([]);
+    expect(seed.shippedStatus).not.toHaveBeenCalled();
   });
 
   it.each([
     [CH.shippedReset, 'resetShipped'],
     [CH.shippedTakePrompt, 'takeShippedPrompt'],
     [CH.shippedKeepMine, 'keepMine'],
-  ] as const)('%s acts on the set that owns the skill, then answers every set', async (channel, act) => {
+  ] as const)('%s acts on the swarm that owns the skill, then answers every swarm', async (channel, act) => {
     const swarmOwned = { kind: 'skills', name: 'tdd' };
     await expect(invoke(channel, swarmOwned)).resolves.toEqual(both);
     expect(seed[act]).toHaveBeenLastCalledWith(sets.W, swarmOwned);
+  });
 
-    const shippedOwned = { kind: 'skills', name: 'other' };
-    await expect(invoke(channel, shippedOwned)).resolves.toEqual(both);
-    expect(seed[act]).toHaveBeenLastCalledWith(sets.S, shippedOwned);
+  it.each([
+    [CH.shippedReset, 'resetShipped'],
+    [CH.shippedTakePrompt, 'takeShippedPrompt'],
+    [CH.shippedKeepMine, 'keepMine'],
+  ] as const)('%s on a name no swarm owns acts on nothing and answers the statuses', async (channel, act) => {
+    await expect(invoke(channel, { kind: 'skills', name: 'mine' })).resolves.toEqual(both);
+    expect(seed[act]).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the act throws, as before', async () => {
+    seed.resetShipped.mockRejectedValueOnce(new Error('EACCES'));
+
+    await expect(invoke(CH.shippedReset, { kind: 'skills', name: 'tdd' })).rejects.toThrow('EACCES');
   });
 
   it('refuses a malformed request before it acts', async () => {
@@ -309,7 +327,7 @@ describe('the shipped handlers over every seed set (HIVE-441)', () => {
   });
 });
 
-describe('the boot seed (HIVE-441, HIVE-447)', () => {
+describe('boot (HIVE-441, HIVE-447, HIVE-448)', () => {
   /** Lets every pending step run, on fake time: AGENTS.md allows no real waits. */
   const settle = async (): Promise<void> => {
     vi.useFakeTimers();
@@ -323,20 +341,16 @@ describe('the boot seed (HIVE-441, HIVE-447)', () => {
   const restart = (): void => {
     resetIpcHandlers();
     vi.clearAllMocks();
-    swarmSeedSets.mockResolvedValue({ shipped: sets.S, swarms: [sets.W] });
+    swarmSeedSets.mockResolvedValue([sets.W, sets.K]);
     registerIpcHandlers();
   };
 
-  it('seeds and adopts through seedAndAdopt, whose seed is the shipped seed with the exclude set it is handed', async () => {
-    expect(seedAndAdopt).toHaveBeenCalledTimes(1);
-    const seedFn = seedAndAdopt.mock.calls[0]?.[0];
-
-    await seedFn?.(sets.S.exclude);
-
-    expect(seed.seedShippedIntoHive).toHaveBeenCalledWith(undefined, sets.S.exclude);
+  it('runs adoption once and seeds nothing', () => {
+    expect(adopt).toHaveBeenCalledTimes(1);
+    expect(adopt).toHaveBeenCalledWith();
   });
 
-  it('holds every swarm install until the seed and the adoption have finished', async () => {
+  it('holds every swarm install until the adoption has finished', async () => {
     restart();
     const hooksGiven = setSwarmHooks.mock.calls.at(-1)?.[0] as { ready: () => Promise<unknown> };
     let ready = false;

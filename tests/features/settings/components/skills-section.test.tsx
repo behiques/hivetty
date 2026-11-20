@@ -185,14 +185,14 @@ describe('SkillsSection', () => {
     }
   });
 
-  it('while empty, Install Standard is the one primary; + New skill uses the default variant (HIVE-447)', async () => {
+  it('while empty, Install Dev Squad is the one primary; + New skill uses the default variant (HIVE-447)', async () => {
     setSkillsForTest(snapshot());
     render(<SkillsSection />);
 
     const create = await screen.findByRole('button', { name: '+ New skill' });
     expect(create).not.toHaveClass('bg-brand-fill');
     expect(create).toHaveClass('border-edge');
-    expect(screen.getByRole('button', { name: 'Install Standard' })).toHaveClass('bg-brand-fill');
+    expect(screen.getByRole('button', { name: 'Install Dev Squad' })).toHaveClass('bg-brand-fill');
   });
 
   it('shows the empty state and the CTA with no skills', async () => {
@@ -201,13 +201,13 @@ describe('SkillsSection', () => {
     render(<SkillsSection />);
 
     const sentence = screen.getByText(
-      'Skills come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.',
+      'Skills come in swarms. Install Dev Squad for the ticket-to-merge workflow, or browse for others.',
     );
     expect(screen.queryByText('Write one and every session you start will have it.')).toBeNull();
     // HIVE-447: both starters sit inside the dashed card, beside the sentence.
     const card = sentence.closest('.border-dashed') as HTMLElement;
     expect(within(card).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Install Standard',
+      'Install Dev Squad',
       'Browse swarms',
     ]);
     await userEvent.click(within(card).getByRole('button', { name: 'Browse swarms' }));

@@ -870,7 +870,7 @@ export function SkillsSection() {
           <SwarmCreature creature="spire" size={120} className="mb-9" />
           <span className="text-ui-sm text-muted">{phrase}</span>
           <span className="text-ui-sm text-subtle">
-            Skills come in swarms. Install Standard for the ticket-to-merge workflow, or browse for others.
+            Skills come in swarms. Install Dev Squad for the ticket-to-merge workflow, or browse for others.
           </span>
           <div className="mt-3 flex flex-wrap justify-center gap-2">
             <SwarmStarters size="sm" />

@@ -48,7 +48,7 @@ test('each place with nothing to list draws no panel, and its stage says why (HI
     await expect(panel(page)).toHaveCount(0);
     if (name === 'Agents') {
       // HIVE-447: the empty Agents stage offers the swarm starters before New agent.
-      await expect(page.getByRole('button', { name: 'Install Standard' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Install Dev Squad' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Browse swarms' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'New agent', exact: true })).toBeVisible();
     }

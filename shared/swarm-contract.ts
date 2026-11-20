@@ -17,7 +17,7 @@ export const SWARM_TAG_MAX = 24;
 
 const SLUG = /^[a-z0-9-]+$/;
 const VERSION = /^\d+\.\d+\.\d+$/;
-/** The folder is slug segments: `swarm:pull` (HIVE-439 PR 2) joins it onto a path, so no `..`, no `//`, no leading `/`. */
+/** The folder is slug segments: an install joins it onto a path, so no `..`, no `//`, no leading `/`. */
 const TAG = /^(?:([a-z0-9-]+(?:\/[a-z0-9-]+)*)\/)?v(\d+\.\d+\.\d+)$/;
 
 export interface SwarmManifest {
@@ -160,7 +160,7 @@ export function compareVersions(a: string, b: string): number {
 }
 
 /**
- * The version of a Standard adopted from the built-ins (HIVE-447) until its first update. Compared by name through
+ * The version of a Dev Squad adopted from the built-ins (HIVE-447) until its first update. Compared by name through
  * `isBundled`, never through `compareVersions`.
  */
 export const BUNDLED_VERSION = 'bundled';

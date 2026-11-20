@@ -25,26 +25,7 @@ let target: string;
 let manifestFile: string;
 
 const seed = (): Promise<SeedReport> => seedShipped({ source, target, manifestFile });
-const historyFile = (): string => join(base, 'shipped-history.json');
-const seedWithHistory = (): Promise<SeedReport> =>
-  seedShipped({ source, target, manifestFile, history: historyFile() });
-
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
-
-/** A shipped-history index holding these past versions of each file. */
-const writeHistory = (versions: Record<string, string[]>): Promise<void> =>
-  writeFile(
-    historyFile(),
-    JSON.stringify(
-      Object.fromEntries(
-        Object.entries(versions).map(([rel, texts]) => [
-          rel,
-          texts.map((text) => ({ file: sha(text), ...baseOf(text) })),
-        ]),
-      ),
-    ),
-    'utf8',
-  );
 
 const ship = async (rel: string, body: string): Promise<void> => {
   const path = join(source, rel);
@@ -248,70 +229,16 @@ describe('seedShipped', () => {
     expect(after['agents/builder/AGENT.md']).toBe(before['agents/builder/AGENT.md']);
   });
 
-  it('merges a file a whole-file manifest recorded, through the shipped history', async () => {
-    const v1 = '---\nname: shipper\nmodel: opus\nlimits:\n  daily_usd: 40\n---\nPrompt v1.\n';
-    const v2 = '---\nname: shipper\nmodel: opus\nlimits:\n  daily_usd: 40\n---\nPrompt v2.\n';
-    await writeHistory({ 'agents/shipper/AGENT.md': [v1] });
-    await mkdir(join(target, 'agents/shipper'), { recursive: true });
-    // Edited: `daily_usd` deleted. The manifest is the old whole-file shape.
-    await writeFile(join(target, 'agents/shipper/AGENT.md'), '---\nname: shipper\nmodel: opus\n---\nPrompt v1.\n', 'utf8');
-    await writeFile(manifestFile, JSON.stringify({ files: { 'agents/shipper/AGENT.md': sha(v1) } }), 'utf8');
-    await ship('agents/shipper/AGENT.md', v2);
-
-    await seedWithHistory();
-
-    expect(await onDisk('agents/shipper/AGENT.md')).toBe('---\nname: shipper\nmodel: opus\n---\nPrompt v2.\n');
-  });
-
-  it('merges a file no manifest ever recorded, through the shipped history', async () => {
-    const v1 = '---\nname: fixer\nmodel: opus\n---\nPrompt v1.\n';
-    await writeHistory({ 'agents/fixer/AGENT.md': [v1] });
-    await mkdir(join(target, 'agents/fixer'), { recursive: true });
-    await writeFile(join(target, 'agents/fixer/AGENT.md'), v1.replace('opus', 'sonnet'), 'utf8');
-    await ship('agents/fixer/AGENT.md', '---\nname: fixer\nmodel: opus\nlane: thread\n---\nPrompt v2.\n');
-
-    await seedWithHistory();
-
-    expect(await onDisk('agents/fixer/AGENT.md')).toBe('---\nname: fixer\nmodel: sonnet\nlane: thread\n---\nPrompt v2.\n');
-  });
-
-  it('keeps a merged file deleted once the user deletes it', async () => {
-    const v1 = '---\nname: fixer\nmodel: opus\n---\nPrompt v1.\n';
-    await writeHistory({ 'agents/fixer/AGENT.md': [v1] });
-    await mkdir(join(target, 'agents/fixer'), { recursive: true });
-    await writeFile(join(target, 'agents/fixer/AGENT.md'), v1.replace('opus', 'sonnet'), 'utf8');
-    await ship('agents/fixer/AGENT.md', v1.replace('v1', 'v2'));
-    await seedWithHistory();
-
-    await rm(join(target, 'agents/fixer'), { recursive: true });
-    await seedWithHistory();
-
-    await expect(readFile(join(target, 'agents/fixer/AGENT.md'), 'utf8')).rejects.toThrow();
-  });
-
-  it('leaves a pre-existing file alone when the history has no base for it', async () => {
+  it('leaves a pre-existing file alone when the manifest has no base for it', async () => {
     const theirs = '---\nname: fixer\nmodel: sonnet\n---\nTheirs.\n';
     await mkdir(join(target, 'agents/fixer'), { recursive: true });
     await writeFile(join(target, 'agents/fixer/AGENT.md'), theirs, 'utf8');
     await ship('agents/fixer/AGENT.md', '---\nname: fixer\nmodel: opus\nlane: thread\n---\nShipped.\n');
 
-    const report = await seedWithHistory();
+    const report = await seed();
 
     expect(report.kept).toEqual(['agents/fixer/AGENT.md']);
     expect(await onDisk('agents/fixer/AGENT.md')).toBe(theirs);
-  });
-
-  it('survives a history entry that is not a version', async () => {
-    const v1 = '---\nname: fixer\nmodel: opus\n---\nPrompt v1.\n';
-    await writeFile(historyFile(), JSON.stringify({ 'agents/fixer/AGENT.md': [null, { file: 'x' }] }), 'utf8');
-    await mkdir(join(target, 'agents/fixer'), { recursive: true });
-    await writeFile(join(target, 'agents/fixer/AGENT.md'), v1, 'utf8');
-    await ship('agents/fixer/AGENT.md', v1.replace('v1', 'v2'));
-    await ship('skills/worktree/SKILL.md', skill('worktree'));
-
-    const report = await seedWithHistory();
-
-    expect(report.created).toEqual(['skills/worktree/SKILL.md']);
   });
 
   it('treats a file that existed before the first seed as the user\'s', async () => {
@@ -429,33 +356,6 @@ describe('seedShipped', () => {
 
     expect(report.kept).toEqual(['skills/worktree/SKILL.md']);
     expect(await onDisk('skills/worktree/SKILL.md')).toBe('theirs\n');
-  });
-});
-
-describe('exclude: folders a swarm owns (HIVE-441)', () => {
-  it('neither reads nor writes an excluded folder, and leaves it out of the manifest', async () => {
-    await ship('skills/a/SKILL.md', skill('a'));
-    await ship('skills/b/SKILL.md', skill('b'));
-
-    await seedShipped({ source, target, manifestFile, exclude: new Set(['skills/b']) });
-
-    expect(await onDisk('skills/a/SKILL.md')).toBe(skill('a'));
-    await expect(readFile(join(target, 'skills/b/SKILL.md'))).rejects.toThrow();
-    const manifest = JSON.parse(await readFile(manifestFile, 'utf8')) as {
-      files: Record<string, string>;
-      parts: Record<string, unknown>;
-    };
-    expect(Object.keys(manifest.files)).toEqual(['skills/a/SKILL.md']);
-    expect(Object.keys(manifest.parts)).toEqual(['skills/a/SKILL.md']);
-  });
-
-  it('seeds everything as before without exclude', async () => {
-    await ship('skills/a/SKILL.md', skill('a'));
-    await ship('skills/b/SKILL.md', skill('b'));
-
-    await seedShipped({ source, target, manifestFile });
-
-    expect(await onDisk('skills/b/SKILL.md')).toBe(skill('b'));
   });
 });
 

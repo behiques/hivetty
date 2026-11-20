@@ -38,19 +38,19 @@ vi.mock('../../../core/swarms/report', async (importOriginal) => ({
 }));
 const config = vi.hoisted(() => ({ path: '/h/config.json' }));
 vi.mock('../../../core/config/paths', () => ({ configPath: () => config.path }));
-vi.mock('../../../core/seed', () => ({
-  // Follows the config folder, so a test over a temp home seeds its manifest there (HIVE-447).
-  shippedOptions: () => {
-    const home = config.path.slice(0, config.path.lastIndexOf('/'));
-    return { source: '/r', target: home, manifestFile: `${home}/.seed.json` };
-  },
-}));
+vi.unmock('../../../core/swarms'); // tests/setup.ts stubs boot's adoption for every other spec
 vi.mock('../../../core/platform', () => ({ platform: () => ({ lifecycle: { version: '1.0.0' } }) }));
+const resetShipped = vi.hoisted(() => vi.fn((..._args: unknown[]) => Promise.resolve([])));
+vi.mock('../../../core/seed/actions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../core/seed/actions')>()),
+  resetShipped,
+}));
 
 const {
+  adopt,
   requestSwarmInstall,
+  resetOwnedFile,
   resetSwarms,
-  seedAndAdopt,
   setSwarmHooks,
   startSwarmUpdates,
   swarmCalls,
@@ -286,15 +286,14 @@ describe('before the hooks are set', () => {
   });
 });
 
-describe('the seed sets', () => {
-  const shipped = { source: '/r', target: '/h', manifestFile: '/h/.seed.json' };
+describe('the seed sets (HIVE-448: installed swarms only)', () => {
+  const set = { source: '/h/swarms/a1/repo/dev-squad', target: '/h', manifestFile: '/h/swarms/a1/seed.json' };
 
-  it('asks the engine with the shipped options', async () => {
-    const sets = { shipped, swarms: [] };
-    engine.seedSets.mockResolvedValue(sets);
+  it('asks the engine for one set per installed swarm', async () => {
+    engine.seedSets.mockResolvedValue([set]);
 
-    await expect(swarmSeedSets()).resolves.toBe(sets);
-    expect(engine.seedSets).toHaveBeenCalledWith(shipped);
+    await expect(swarmSeedSets()).resolves.toEqual([set]);
+    expect(engine.seedSets).toHaveBeenCalledWith();
   });
 
   it('asks the engine for every swarm manifest on disk', async () => {
@@ -303,11 +302,25 @@ describe('the seed sets', () => {
     await expect(swarmManifestFiles()).resolves.toEqual(['/h/swarms/a1/seed.json', '/h/swarms/a1/pending.json']);
   });
 
-  it('asks for the set that owns one skill by its folder', async () => {
-    engine.seedSetFor.mockResolvedValue(shipped);
+  it('settings sync resets a file through the swarm that owns it, and does nothing for a name no swarm owns', async () => {
+    engine.seedSetFor.mockResolvedValueOnce(set).mockResolvedValueOnce(null);
 
-    await expect(swarmSeedSetFor('skills', 'tdd')).resolves.toBe(shipped);
-    expect(engine.seedSetFor).toHaveBeenCalledWith(shipped, 'skills/tdd');
+    await resetOwnedFile('skills', 'tdd');
+    expect(resetShipped).toHaveBeenCalledWith(set, { kind: 'skills', name: 'tdd' });
+
+    resetShipped.mockClear();
+    await resetOwnedFile('agents', 'mine');
+    expect(engine.seedSetFor).toHaveBeenLastCalledWith('agents/mine');
+    expect(resetShipped).not.toHaveBeenCalled();
+  });
+
+  it('asks for the set that owns one skill by its folder, and answers null when no swarm owns it', async () => {
+    engine.seedSetFor.mockResolvedValueOnce(set).mockResolvedValueOnce(null);
+
+    await expect(swarmSeedSetFor('skills', 'tdd')).resolves.toBe(set);
+    expect(engine.seedSetFor).toHaveBeenCalledWith('skills/tdd');
+    await expect(swarmSeedSetFor('agents', 'mine')).resolves.toBeNull();
+    expect(engine.seedSetFor).toHaveBeenLastCalledWith('agents/mine');
   });
 });
 
@@ -411,11 +424,11 @@ describe('a removal (HIVE-442)', () => {
     expect(h.changed).toHaveBeenCalledWith({ updated: null });
   });
 
-  it('reports nothing for a bundled Standard, which was never reported as installed (HIVE-447)', async () => {
-    engine.installed.mockResolvedValue([heldAt('bundled-standard', 'bundled')]);
+  it('reports nothing for a bundled Dev Squad, which was never reported as installed (HIVE-447)', async () => {
+    engine.installed.mockResolvedValue([heldAt('bundled-dev-squad', 'bundled')]);
     engine.remove.mockResolvedValue({ ok: true });
 
-    await swarmCalls().remove({ swarmId: 'bundled-standard' });
+    await swarmCalls().remove({ swarmId: 'bundled-dev-squad' });
 
     expect(reportInstall).not.toHaveBeenCalled();
     expect(h.changed).toHaveBeenCalledWith({ updated: null });
@@ -636,7 +649,7 @@ describe('the install link request (HIVE-442)', () => {
   });
 });
 
-describe('the adopted Standard and the registry (HIVE-447)', () => {
+describe('the adopted Dev Squad and the registry (HIVE-447)', () => {
   const REAL = 'cmwn22bge000001jtss3qlz4i';
   let home: string;
 
@@ -651,13 +664,13 @@ describe('the adopted Standard and the registry (HIVE-447)', () => {
     );
     engine.installed.mockImplementation(() => readInstalled(join(home, 'swarms/installed.json')));
     const { mkdir, writeFile } = await import('node:fs/promises');
-    await mkdir(join(home, 'swarms/bundled-standard'), { recursive: true });
-    await writeFile(join(home, 'swarms/bundled-standard/seed.json'), JSON.stringify({ files: {}, parts: {} }));
+    await mkdir(join(home, 'swarms/bundled-dev-squad'), { recursive: true });
+    await writeFile(join(home, 'swarms/bundled-dev-squad/seed.json'), JSON.stringify({ files: {}, parts: {} }));
     await writeFile(
       join(home, 'swarms/installed.json'),
-      JSON.stringify([{ ...heldAt('bundled-standard', 'bundled'), autoUpdate: true }]),
+      JSON.stringify([{ ...heldAt('bundled-dev-squad', 'bundled'), autoUpdate: true }]),
     );
-    registry.readRegistry.mockResolvedValue({ source: 'cloud', swarms: [entry(REAL, { version: '1.0.1' })] });
+    registry.readRegistry.mockResolvedValue({ source: 'cloud', swarms: [entry(REAL, { version: '1.0.1', slug: 'dev-squad', folder: 'dev-squad', title: 'Dev Squad' })] });
   });
 
   afterEach(async () => {
@@ -704,7 +717,7 @@ describe('the adopted Standard and the registry (HIVE-447)', () => {
     await writeFile(installedJson, '[]'); // first launch: adoption has not written its entry yet
     let finishAdoption: () => void = () => undefined;
     const adopted = new Promise<void>((resolve) => (finishAdoption = resolve)).then(() =>
-      writeFile(installedJson, JSON.stringify([{ ...heldAt('bundled-standard', 'bundled'), autoUpdate: true }])),
+      writeFile(installedJson, JSON.stringify([{ ...heldAt('bundled-dev-squad', 'bundled'), autoUpdate: true }])),
     );
     h.ready.mockImplementation(() => adopted);
     // As the engine does: the queue waits for the seed and the adoption, then reads what it replaces.
@@ -720,7 +733,7 @@ describe('the adopted Standard and the registry (HIVE-447)', () => {
     finishAdoption();
     await clicked;
 
-    // Without the re-key the install finds nothing to replace and collides with bundled-standard's folders.
+    // Without the re-key the install finds nothing to replace and collides with bundled-dev-squad's folders.
     expect(replaced?.swarmId).toBe(REAL);
     expect(replaced?.version).toBe('bundled');
   });
@@ -734,11 +747,11 @@ describe('the adopted Standard and the registry (HIVE-447)', () => {
     const listing = await swarmCalls().list();
 
     expect(listing.items[0]?.entry?.id).toBe(REAL);
-    expect(listing.items.map((item) => item.installed?.swarmId ?? null)).toEqual([null, 'bundled-standard']);
+    expect(listing.items.map((item) => item.installed?.swarmId ?? null)).toEqual([null, 'bundled-dev-squad']);
   });
 });
 
-describe('seedAndAdopt: the boot seed, then adoption (HIVE-447)', () => {
+describe('adopt: boot, which seeds nothing since HIVE-448 (HIVE-447)', () => {
   let home: string;
   const at = (rel: string): string => join(home, rel);
   const exists = (rel: string): Promise<boolean> =>
@@ -746,21 +759,17 @@ describe('seedAndAdopt: the boot seed, then adoption (HIVE-447)', () => {
       () => true,
       () => false,
     );
-  const EXCLUDE = new Set(['skills/kit']);
   const AGENT = '---\nname: builder\ndescription: Builds.\nicon: Ghost\nskills: []\ntools: [Read]\n---\nBuild.\n';
-  /** What the shipped seed does on a fresh home: one agent, recorded in `.seed.json`. */
-  const seedBuiltIns = vi.fn(async (_exclude: ReadonlySet<string> | undefined): Promise<unknown> => {
+  /** A home an older release seeded: one agent, recorded in `.seed.json`. */
+  const seededHome = async (): Promise<void> => {
     await fs.mkdir(at('agents/builder'), { recursive: true });
     await fs.writeFile(at('agents/builder/AGENT.md'), AGENT);
     await fs.writeFile(at('.seed.json'), JSON.stringify({ files: { 'agents/builder/AGENT.md': 'h' }, parts: {} }));
-    return { created: ['agents/builder/AGENT.md'], upgraded: [], kept: [], merged: [], skipped: [] };
-  });
+  };
 
   beforeEach(async () => {
-    home = await fs.mkdtemp(join(tmpdir(), 'hive-seed-adopt-'));
+    home = await fs.mkdtemp(join(tmpdir(), 'hive-adopt-'));
     config.path = join(home, 'config.json');
-    const shipped = { source: '/r', target: home, manifestFile: at('.seed.json'), exclude: EXCLUDE };
-    engine.seedSets.mockResolvedValue({ shipped, swarms: [] });
   });
 
   afterEach(async () => {
@@ -768,95 +777,70 @@ describe('seedAndAdopt: the boot seed, then adoption (HIVE-447)', () => {
     vi.restoreAllMocks();
   });
 
-  it('seeds a first launch once with the swarm-owned folders excluded, adopts, and never seeds that home again', async () => {
-    await seedAndAdopt(seedBuiltIns);
+  it('adopts a seeded home once, reading the seed manifest in the home, and never again', async () => {
+    await seededHome();
 
-    expect(seedBuiltIns).toHaveBeenCalledTimes(1);
-    expect(seedBuiltIns).toHaveBeenCalledWith(EXCLUDE);
+    await adopt();
+
     expect(await exists('swarms/adopted')).toBe(true);
     const installed = JSON.parse(await fs.readFile(at('swarms/installed.json'), 'utf8')) as InstalledSwarm[];
-    expect(installed.map((held) => [held.swarmId, held.version])).toEqual([['bundled-standard', 'bundled']]);
+    expect(installed.map((held) => [held.swarmId, held.version])).toEqual([['bundled-dev-squad', 'bundled']]);
+    const written = await fs.readFile(at('swarms/installed.json'), 'utf8');
 
-    await seedAndAdopt(seedBuiltIns);
-    expect(seedBuiltIns).toHaveBeenCalledTimes(1);
+    await fs.writeFile(at('.seed.json'), JSON.stringify({ files: { 'agents/builder/AGENT.md': 'h' }, parts: {} }));
+    await adopt();
+    expect(await fs.readFile(at('swarms/installed.json'), 'utf8')).toBe(written);
   });
 
-  it('seeds with nothing excluded when the seed sets cannot be read', async () => {
-    engine.seedSets.mockRejectedValue(new Error('installed.json unreadable'));
+  it('writes only the marker for a fresh home: no agent, no skill, no entry', async () => {
+    await adopt();
 
-    await seedAndAdopt(seedBuiltIns);
-
-    expect(seedBuiltIns).toHaveBeenCalledWith(undefined);
-  });
-
-  it('seeds with nothing excluded when reading the seed sets throws outright, and never rejects', async () => {
-    engine.seedSets.mockImplementation(() => {
-      throw new TypeError('The "path" argument must be of type string');
-    });
-
-    await expect(seedAndAdopt(seedBuiltIns)).resolves.toBeUndefined();
-
-    expect(seedBuiltIns).toHaveBeenCalledWith(undefined);
-  });
-
-  it('never rejects when the shipped options cannot be read', async () => {
-    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
-    const seed = await import('../../../core/seed');
-    const shippedOptions = vi.spyOn(seed, 'shippedOptions').mockImplementation(() => {
-      throw new TypeError('no resources path');
-    });
-
-    await expect(seedAndAdopt(seedBuiltIns)).resolves.toBeUndefined();
-
-    expect(await exists('swarms/adopted')).toBe(false);
-    expect(info).toHaveBeenCalledWith(expect.stringContaining('no resources path'));
-    shippedOptions.mockRestore();
+    expect(await exists('swarms/adopted')).toBe(true);
+    expect(await exists('agents')).toBe(false);
+    expect(await exists('skills')).toBe(false);
+    expect(await exists('swarms/installed.json')).toBe(false);
   });
 
   it('logs a failed adoption, leaves no marker, and resolves, so the next launch tries again', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    await seededHome();
     await fs.mkdir(at('swarms'), { recursive: true });
     await fs.writeFile(at('swarms/installed.json'), 'not json');
 
-    await expect(seedAndAdopt(seedBuiltIns)).resolves.toBeUndefined();
+    await expect(adopt()).resolves.toBeUndefined();
 
     expect(await exists('swarms/adopted')).toBe(false);
-    expect(info).toHaveBeenCalledWith(expect.stringContaining('could not be adopted as the Standard swarm'));
-  });
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('could not be adopted as the Dev Squad swarm'));
 
-  it('leaves no marker when the seed reports failure with null, as seedShippedIntoHive does, and seeds again next launch', async () => {
-    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
-    const failing = vi.fn((_exclude: ReadonlySet<string> | undefined): Promise<unknown> => Promise.resolve(null));
-
-    await expect(seedAndAdopt(failing)).resolves.toBeUndefined();
-    expect(await exists('swarms/adopted')).toBe(false);
-    expect(info).toHaveBeenCalledWith(expect.stringContaining('could not be adopted as the Standard swarm'));
-
-    await seedAndAdopt(seedBuiltIns);
-    expect(seedBuiltIns).toHaveBeenCalledTimes(1);
+    await fs.writeFile(at('swarms/installed.json'), '[]');
+    await adopt();
     expect(await exists('swarms/adopted')).toBe(true);
   });
 
-  it('logs a seed that rejects, adopts nothing and resolves', async () => {
+  it('never rejects when the home cannot be named', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const paths = await import('../../../core/swarms/paths');
+    vi.spyOn(paths, 'swarmPaths').mockImplementation(() => {
+      throw new TypeError('no home');
+    });
 
-    await expect(seedAndAdopt(() => Promise.reject(new Error('EACCES')))).resolves.toBeUndefined();
+    await expect(adopt()).resolves.toBeUndefined();
 
-    expect(await exists('swarms/adopted')).toBe(false);
-    expect(info).toHaveBeenCalledWith(expect.stringContaining('EACCES'));
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('no home'));
   });
 
-  it('brings no built-in back after Standard is removed', async () => {
-    await seedAndAdopt(seedBuiltIns);
-    // What removing Standard leaves: no entry, no swarm folder, no agent file. The marker stays.
+  it('brings no built-in back after Dev Squad is removed', async () => {
+    await seededHome();
+    await adopt();
+    // What removing Dev Squad leaves: no entry, no swarm folder, no agent file. The marker stays.
     await fs.rm(at('agents'), { recursive: true });
-    await fs.rm(at('swarms/bundled-standard'), { recursive: true });
+    await fs.rm(at('swarms/bundled-dev-squad'), { recursive: true });
     await fs.writeFile(at('swarms/installed.json'), '[]');
 
-    await seedAndAdopt(seedBuiltIns);
+    await adopt();
 
-    expect(seedBuiltIns).toHaveBeenCalledTimes(1);
     expect(await exists('agents')).toBe(false);
     expect(await exists('skills')).toBe(false);
+    expect(await fs.readFile(at('swarms/installed.json'), 'utf8')).toBe('[]');
   });
 });

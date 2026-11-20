@@ -69,7 +69,7 @@ export async function validateRepo({ repoDir, tag, readSwarm, parseSwarmTag }) {
   return lines;
 }
 
-/** Load the reader and the tag rule from this checkout's TypeScript. PR 2's swarm-pull reuses it. */
+/** Load the reader and the tag rule from this checkout's TypeScript. */
 export async function loadSwarmModules() {
   const { runnerImport } = await import('vite');
   const { aliases } = await import('../vite.aliases.mjs');

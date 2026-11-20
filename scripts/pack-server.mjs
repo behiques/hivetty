@@ -106,9 +106,6 @@ async function main() {
   const helper = join(stage, 'app/node_modules/node-pty/build/Release/spawn-helper');
   if (existsSync(helper)) chmodSync(helper, 0o755);
 
-  for (const name of ['skills', 'agents', 'shipped-history.json']) {
-    cpSync(join(root, 'resources', name), join(stage, 'resources', name), { recursive: true });
-  }
   mkdirSync(join(stage, 'bin'));
   cpSync(join(root, 'server/bin/hivetty-server'), join(stage, 'bin/hivetty-server'));
   chmodSync(join(stage, 'bin/hivetty-server'), 0o755);

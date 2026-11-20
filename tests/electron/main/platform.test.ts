@@ -84,20 +84,6 @@ describe('createDesktopPlatform', () => {
     expect(createDesktopPlatform().secrets).toBe(safeStorage);
   });
 
-  it('points resources at the repository folder when unpackaged', () => {
-    expect(createDesktopPlatform().resources).toMatch(/[/\\]resources$/);
-  });
-
-  it('points resources at process.resourcesPath when packaged', () => {
-    electron.isPackaged = true;
-    const original = process.resourcesPath;
-    Object.defineProperty(process, 'resourcesPath', { value: '/Applications/X.app/Resources', configurable: true });
-    try {
-      expect(createDesktopPlatform().resources).toBe('/Applications/X.app/Resources');
-    } finally {
-      Object.defineProperty(process, 'resourcesPath', { value: original, configurable: true });
-    }
-  });
 
   it('calls no Electron function when it is built', async () => {
     vi.resetModules();

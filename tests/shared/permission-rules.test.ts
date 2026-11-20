@@ -1064,7 +1064,7 @@ describe('pr_merge on the fence (HIVE-409)', () => {
 describe('a merge is what a command runs, not what it mentions (HIVE-409 follow-up)', () => {
   it('runs under bare Bash when the text only mentions a merge: the builder cards of 12 Nov', () => {
     for (const command of [
-      'W=/x; grep -rn "gh pr merge" $W/resources/agents/ | head; git -C $W log --oneline -S"Bash(gh pr merge" -- resources/agents | head',
+      'W=/x; grep -rn "gh pr merge" $W/dev-squad/agents/ | head; git -C $W log --oneline -S"Bash(gh pr merge" -- dev-squad/agents | head',
       "cd /x && python3 - <<'EOF'\ns = 'gh pr merge 1 --repo a/b'\nEOF",
       'git commit -q -m "fix: a continued gh pr merge is still a merge" && git log --oneline -1',
       "cat >> progress.md <<'EOF'\nBash(gh pr merge …) is kept\nEOF",

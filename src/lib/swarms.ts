@@ -233,9 +233,9 @@ export function providerOf(
   return match?.entry ? { id: match.entry.id, title: match.entry.title } : null;
 }
 
-/** HIVE-447: the registry's native Standard row, and whether it is installed; null when the listing has none. */
-export function standardOf(listing: SwarmListing | null): { id: string; installed: boolean } | null {
-  const row = listing?.items.find((item) => item.entry?.kind === 'native' && item.entry.slug === 'standard');
+/** HIVE-447: the registry's native Dev Squad row, and whether it is installed; null when the listing has none. */
+export function devSquadOf(listing: SwarmListing | null): { id: string; installed: boolean } | null {
+  const row = listing?.items.find((item) => item.entry?.kind === 'native' && item.entry.slug === 'dev-squad');
 
   return row?.entry ? { id: row.entry.id, installed: row.installed !== null } : null;
 }

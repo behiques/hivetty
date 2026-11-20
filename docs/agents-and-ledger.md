@@ -2710,34 +2710,30 @@ hand-edit has broken the promise that it is *their* file. That is what makes
 the editor's Form and Source tabs two views of one buffer in the strict sense:
 switching between them cannot change a byte.
 
-### What the app seeds into this folder (HIVE-162)
+### What a swarm seeds into this folder (HIVE-162, HIVE-448)
 
-`resources/agents/<name>/AGENT.md` and `resources/skills/<name>/` ship with the
-app and are copied into `~/.hivetty` at registration by `core/seed/`.
-The rule is one line and every branch of `seed.ts` serves it: **the user's
-edits win.** A file is copied when absent and never seeded before, left absent
-when the manifest says it was seeded once (a deletion is an edit), overwritten
-only when the copy on disk is byte-identical to what the last seed wrote
-(`~/.hivetty/.seed.json` holds that hash per file), and otherwise left alone. A
-shipped file that is later dropped from `resources/` is never deleted.
+The app ships no agents and no skills (HIVE-448). They come from swarms
+(below); Dev Squad is the ticket-to-merge workflow, and its source is
+`behiques/hivetty-swarms`. An install copies a swarm's
+`agents/<name>/AGENT.md` and `skills/<name>/` into `~/.hivetty` through
+`core/seed/`. The rule is one line and every branch of `seed.ts` serves it:
+**the user's edits win.** A file is copied when absent and never seeded
+before, left absent when the swarm's manifest says it was seeded once (a
+deletion is an edit), overwritten only when the copy on disk is
+byte-identical to what the last seed wrote (the manifest holds that hash per
+file), and otherwise left alone. A file a later version drops is never
+deleted.
 
-Those two folders are not edited in this repo (HIVE-439). The Standard swarm's
-source is `behiques/hivetty-swarms`: change an agent or a skill there, tag it,
-and bring the tag in with `pnpm swarm:pull <tag>`, which replaces both folders
-and writes `resources/swarm.lock.json`, a sha256 per file.
-`tests/resources/swarm-lock.test.ts` fails on any file that differs from the
-lock.
-
-Agents and skills now come from swarms. The built-ins in `resources/` are
-seeded once more and then adopted as the installed swarm Standard (HIVE-447):
-`seedAndAdopt` in `core/swarms/index.ts` is the boot seed's promise. It seeds
-from `resources/` as above, then `adoptBuiltIns` (`core/swarms/adopt.ts`)
-writes Standard's entry at the version `bundled`, moves every built-in entry
-from `.seed.json` to that swarm's manifest, and writes the marker
-`~/.hivetty/swarms/adopted` last. A home with the marker is never seeded from
-`resources/` again, so removing Standard stays removed. Adoption needs no
-network, no Git and no registry. A failed seed or a failed adoption is logged,
-leaves no marker, and is tried again at the next launch.
+Boot seeds nothing. `adopt` in `core/swarms/index.ts` is boot's promise, and
+all it does is adoption (HIVE-447): a home an older release seeded, never
+adopted, has its built-ins taken as the installed swarm Dev Squad.
+`adoptBuiltIns` (`core/swarms/adopt.ts`) writes Dev Squad's entry at the
+version `bundled`, moves every built-in entry from `~/.hivetty/.seed.json` to
+that swarm's manifest, and writes the marker `~/.hivetty/swarms/adopted` last.
+Their files stay as they are, edits included. A fresh home gets only the
+marker: no agents, no skills, and its empty states offer **Install Dev
+Squad**. Adoption needs no network, no Git and no registry. A failed adoption
+is logged, leaves no marker, and is tried again at the next launch.
 
 `AGENT.md` and `SKILL.md` are the exception to "left alone": an edited one is
 **merged**, because one edited key used to freeze a whole agent, prompt and
@@ -2759,34 +2755,32 @@ A flagged part keeps its old base, so it stays flagged until the user resolves
 it in Settings (`seed/actions.ts`, over `shipped:*`): **Reset to shipped**
 rewrites the folder's shipped files, **Take shipped prompt** swaps the body
 under the user's frontmatter, **Keep mine** moves the base to the shipped
-value without touching the file. A file seeded before `parts` existed takes
-its base from `resources/shipped-history.json`, every shipped version of every
-definition as part hashes, generated from git by `pnpm seed:history`: the
-version its old whole-file hash names, else the best-matching one, with any
-value matching some shipped version counted as untouched. A file with no base
+value without touching the file. A file seeded before `parts` existed has no
+base (HIVE-448 deleted the shipped history that once supplied one). A file with no base
 at all stays the user's. `files` in the manifest only ever names shipped
 bytes, so an older build still reads a merged file as the user's. Nothing
 is written through a symlink at any depth below `~/.hivetty`; a linked `skills/`,
 a linked skill folder or a linked folder inside one each stop the write. A
 file's mode travels with it.
 
-The seed is started, not awaited, in `registerIpcHandlers`: the skills runtime
+Adoption is started, not awaited, in `registerIpcHandlers`: the skills runtime
 waits for it before its first regeneration (`ready` in `createSkillsRuntime`),
-and this registry needs nothing — it watches the folder, and a definition the
-seed writes reaches `knownAgents` through the same `onChange` a hand-written
-one does. Packaged, the two trees ride `extraResources` beside the tray icon;
-`shippedRoot` in `seed/paths.ts` names both locations.
+and this registry needs nothing — it watches the folder, and a definition an
+install writes reaches `knownAgents` through the same `onChange` a hand-written
+one does. The packaged app carries no `agents`, `skills` or
+`shipped-history.json` in `Contents/Resources`; `pnpm verify:bundle` fails the
+build if one appears.
 
 ### Installed swarms (HIVE-441)
 
 A swarm is a set of agents and skills from a Git repository, installed by
-`core/swarms/` beside the built-ins. Its own state lives under
+`core/swarms/`. Its own state lives under
 `~/.hivetty/swarms`: `installed.json` (what is installed, at which version and
 commit), `registry.json` (the cloud's last list, for offline use),
 `askpass.sh`, and per swarm `<id>/repo` (the clone, only a source) and
 `<id>/seed.json` (its seed manifest).
 
-An install runs the same seeder as the built-ins, from `<id>/repo/<folder>`
+An install runs the seeder from `<id>/repo/<folder>`
 into `~/.hivetty`, with the swarm's own manifest. So everything the section
 above says holds for a swarm's file: an untouched one upgrades, an edited one
 is merged or kept, and Settings' *edited*, **Keep mine** and **Reset to
@@ -2794,9 +2788,8 @@ shipped** act on it through the same `shipped:*` channels, on whichever set
 owns the name.
 
 A swarm may not ship a name another swarm owns: that refuses the install
-before anything is written. A name a built-in owns is taken over: its entries
-move from `.seed.json` to the swarm's manifest, and from then on the boot seed
-passes over that folder, so `resources/` never writes over a swarm's file.
+before anything is written. A name an older release's built-in still owns in
+`.seed.json` is taken over: its entries move to the swarm's manifest.
 
 A folder the person already has, that no manifest owns, is kept (HIVE-447). The
 install goes on, their bytes stay as they are, and each of their files that
@@ -2806,25 +2799,30 @@ and **Reset to shipped**. A first install that fails never takes out a file
 that was on disk before it.
 
 Remove deletes the files the swarm wrote that are still byte-identical to what
-it wrote, and keeps the edited ones as the person's. On an adopted home the
-marker outlives the entry, so a removed swarm's taken-over built-ins do not
-come back from `resources/`.
+it wrote, and keeps the edited ones as the person's. Nothing brings a removed swarm's
+files back: the app ships no copy of them.
 
-#### The adopted Standard (HIVE-447)
+#### The adopted Dev Squad (HIVE-447)
 
-Adoption writes Standard's entry under the local id `bundled-standard` (a
+Adoption writes Dev Squad's entry under the local id `bundled-dev-squad` (a
 registry id is a cuid, which holds no `-`). The first registry read that
-returns a native row with slug `standard` re-keys it: `rekeyAdopted` moves
-`seed.json` to `swarms/<id>/`, removes `swarms/bundled-standard/`, then
-rewrites the entry's `swarmId`, inside the install queue and after the boot
-seed. The `registry()` wrapper in `core/swarms/index.ts` asks first, outside
+returns a native row with slug `dev-squad` re-keys it: `rekeyAdopted` moves
+`seed.json` to `swarms/<id>/`, removes `swarms/bundled-dev-squad/`, then
+rewrites the entry's `swarmId`, inside the install queue and after boot's
+adoption. The `registry()` wrapper in `core/swarms/index.ts` asks first, outside
 the queue, so a read with nothing to re-key never waits behind an install. From
 then on the listing, install and the updater match it by id like any other
 swarm.
 
-An entry at the version `bundled` has no clone, so its seed set reads its
-files against the shipped tree and history in `resources/`, with the swarm's
-own manifest: Settings shows its edited files as it did the built-ins'.
+HIVE-448 renamed the swarm from Standard before any release carried it, so
+nothing migrates the old name. A development build of `main` between HIVE-447
+and HIVE-448 left its home with `swarms/bundled-standard/`: remove that swarm
+in Settings › Swarms and install Dev Squad.
+
+An entry at the version `bundled` has no clone and, since HIVE-448, no shipped
+tree to read its files against, so it has no seed set: Settings shows no
+per-file status for it, and **Reset to shipped** and **Keep mine** do nothing,
+until its first update installs a real version.
 Removing it sends no `removed` report, since it was never reported as
 installed. `isBundled` is the only check for that version; nothing compares it
 with `compareVersions`.
@@ -2836,8 +2834,8 @@ Only `https://`, `ssh://` and `user@host:path` URLs reach Git, and
 `swarms:install` takes a registry id, never a URL: the app looks the
 repository up in the registry itself.
 
-Settings sync reads every seed manifest, so a swarm's untouched files are not
-uploaded as the person's, and it never uploads `~/.hivetty/swarms`.
+Settings sync reads every swarm's seed manifest, so a swarm's untouched files
+are not uploaded as the person's, and it never uploads `~/.hivetty/swarms`.
 `swarms:list`, `swarms:install` and `swarms:remove` are process-local: a window
 attached to a server still installs on its own machine. The screen is HIVE-442.
 
@@ -2879,10 +2877,10 @@ older version, so the Swarms pane reads the list again.
 swarm calls, and `swarms:changed` is a local-only push: a server never sends
 its swarms to an attached window.
 
-### The agents the app ships (HIVE-168)
+### The Dev Squad agents (HIVE-168)
 
-`resources/agents/{builder,shipper,acr,fixer}/AGENT.md`, seeded like the
-skills. The shipper is a patrol: a thirty-minute safety-net wake with
+`agents/{builder,shipper,acr,fixer}/AGENT.md` in the Dev Squad swarm
+(`behiques/hivetty-swarms`), installed like its skills. The shipper is a patrol: a thirty-minute safety-net wake with
 `check: always`, ledger wakes, and a post within a minute of a held PR moving
 on GitHub (HIVE-412), `prs.json` in its work dir as memory, one
 `ledger_ask` per wake because an ask ends the wake. It holds all of Bash but
@@ -2892,7 +2890,7 @@ and no Bash rule reaches Claude's `--allowedTools`, so `approve` decides each
 command. A push, to any branch, is ordinary Bash: the HIVE-395 default-branch
 push fence is gone, since a once-only card on every push cost the agents their
 autonomy and the agent's own `tools:` already decides who holds Bash. HIVE-166's grant or the fence's card decides each merge, and
-`tests/resources/agents/shipped-agents.test.ts` proves it against the real
+`tests/swarm/agents.test.ts` proves it against the real
 `matches`, and pins every shipped icon to the Settings list so none draws as
 a question mark. The builder (HIVE-170) takes a plan by `ledger_ask` from the
 session that planned it, builds it task by task in a worktree under
@@ -2955,8 +2953,10 @@ and checks still pending 60 minutes later, or a `pull_request` workflow that
 has reported nothing by then (a path filter can skip a PR), make a stuck row
 that asks `reply-to` once, naming the pending checks. hivetty's own
 `.github/workflows/ci.yml` runs on every PR, and its `ci` job is required on
-main. `tests/resources/agents/shipped-agents.test.ts` parses every shipped definition against
-the shipped skills, so a definition the registry would refuse fails here.
+main. `tests/swarm/agents.test.ts` parses every Dev Squad definition against
+its skills, so a definition the registry would refuse fails here. `pnpm
+test:swarm` runs `tests/swarm` against the checkout `HIVE_SWARM_DIR` names, in
+this repository's CI and in hivetty-swarms'.
 
 ### Run contract (HIVE-413)
 

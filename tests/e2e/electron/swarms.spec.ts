@@ -31,15 +31,15 @@ const row = (over: Record<string, unknown>): Record<string, unknown> => ({
 
 const ROWS = [
   row({
-    id: 'standard',
-    slug: 'standard',
+    id: 'dev-squad',
+    slug: 'dev-squad',
     kind: 'native',
-    title: 'Standard',
+    title: 'Dev Squad',
     description: 'The agents and skills most work needs.',
     publisher: 'HiveTTY',
     version: '1.4.0',
     repoUrl: 'https://example.invalid/hivetty/swarms.git',
-    folder: 'standard',
+    folder: 'dev-squad',
     agents: [
       { name: 'builder', description: 'Builds approved plans, task by task.', tools: ['Read', 'Edit', 'Bash'] },
       { name: 'reviewer', description: 'Reviews a branch before it ships.', tools: ['Read', 'Grep', 'Glob'] },
@@ -86,7 +86,7 @@ async function openLink(app: ElectronApplication, link: string): Promise<void> {
 
 let stub: StubCloud;
 test.beforeEach(async ({}, testInfo) => {
-  // HIVE-447: a seeded home is adopted as the Standard swarm on its first launch. These cases test the pane on a
+  // HIVE-447: a seeded home is adopted as the Dev Squad swarm on its first launch. These cases test the pane on a
   // home with nothing installed, so the home is pre-marked as adopted: no boot seed, no adoption. None of them uses
   // a built-in agent or skill. The adopted home's pane is covered by unit tests and by PR 3's Playwright case.
   mkdirSync(testInfo.outputPath('swarms'), { recursive: true });
@@ -123,7 +123,7 @@ test('signed in: Swarms is first in Automation, Browse lists the registry, conse
 
     const native = page.getByRole('region', { name: 'Native' });
     await native.getByRole('button', { name: 'Install' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Install Standard' });
+    const dialog = page.getByRole('dialog', { name: 'Install Dev Squad' });
     await expect(dialog).toBeVisible();
     for (const tool of ['Read', 'Edit', 'Bash', 'Grep', 'Glob']) {
       await expect(dialog.getByText(tool, { exact: true }).first()).toBeVisible();
@@ -291,7 +291,7 @@ test('signed out: an install link opens Swarms and asks to sign in', async ({}, 
       page.getByRole('navigation', { name: 'Places' }).getByRole('button', { name: 'Settings', exact: true }),
     ).toBeVisible({ timeout: 15_000 });
 
-    await openLink(app, 'hivetty-dev://swarms/install?id=standard');
+    await openLink(app, 'hivetty-dev://swarms/install?id=dev-squad');
 
     await expect(page.getByText('Sign in to install this swarm.')).toBeVisible({ timeout: 15_000 });
     await expectPane(page, 'swarms');

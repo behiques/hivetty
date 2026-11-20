@@ -106,8 +106,6 @@ export interface Desktop {
 export interface Platform {
   secrets: Secrets;
   paths: { stateDir: string; logsDir: string };
-  /** The folder holding the shipped skills/, agents/ and shipped-history.json. */
-  resources: string;
   /** Show one notification on this machine. */
   notify(toast: { title: string; body: string; onClick: () => void }): void;
   /** Fork the PTY host child. */

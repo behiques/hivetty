@@ -8,7 +8,6 @@ import type {
   ShippedStatus,
 } from '@shared/shipped-contract';
 
-import { legacyBase, readHistory } from './history';
 import {
   alignShapes,
   baseOf,
@@ -65,7 +64,6 @@ async function locate(
   options: SeedOptions,
   folder: string,
   manifest: Manifest,
-  history: () => Promise<Parameters<typeof legacyBase>[3]>,
 ): Promise<Located | null> {
   if (await throughLink(options.target, folder)) return null;
   // A linked definition file is one the seed keeps and never merges.
@@ -78,7 +76,7 @@ async function locate(
   if (shipped === null || current === null) return null;
   if (parseParts(shipped) === null || parseParts(current) === null) return null;
 
-  const base = manifest.parts[rel] ?? legacyBase(rel, current, manifest.files[rel], await history());
+  const base = manifest.parts[rel] ?? null;
   const merge = mergeParts(current, shipped, base);
 
   /*
@@ -93,12 +91,6 @@ async function locate(
     merge: base === null ? { ...merge, moved: [], held: false } : merge,
   };
 }
-
-const historyLoader = (options: SeedOptions) => {
-  let loaded: Promise<Parameters<typeof legacyBase>[3]> | null = null;
-
-  return () => (loaded ??= options.history === undefined ? Promise.resolve({}) : readHistory(options.history));
-};
 
 /** Every shipped folder's other files that differ from the shipped copy. */
 async function editedFiles(options: SeedOptions, folder: string): Promise<string[]> {
@@ -120,11 +112,10 @@ async function editedFiles(options: SeedOptions, folder: string): Promise<string
 
 export async function shippedStatus(options: SeedOptions): Promise<ShippedStatus[]> {
   const manifest = await readManifest(options.manifestFile);
-  const history = historyLoader(options);
   const statuses: ShippedStatus[] = [];
 
-  for (const folder of await shippedFolders(options.source, options.exclude)) {
-    const located = await locate(options, folder, manifest, history);
+  for (const folder of await shippedFolders(options.source)) {
+    const located = await locate(options, folder, manifest);
 
     if (located === null) continue;
 
@@ -165,7 +156,7 @@ export function serial<T>(run: () => Promise<T>): Promise<T> {
 async function shippedFolder(options: SeedOptions, request: ShippedRequest): Promise<string> {
   const folder = `${request.kind}/${request.name}`;
 
-  if (!(await shippedFolders(options.source, options.exclude)).includes(folder)) {
+  if (!(await shippedFolders(options.source)).includes(folder)) {
     throw new Error(`HiveTTY does not ship ${folder}.`);
   }
   if (await throughLink(options.target, folder)) {
@@ -218,7 +209,7 @@ async function takeShippedPromptNow(
 ): Promise<ShippedStatus[]> {
   const folder = await shippedFolder(options, request);
   const manifest = await readManifest(options.manifestFile);
-  const located = await locate(options, folder, manifest, historyLoader(options));
+  const located = await locate(options, folder, manifest);
 
   if (located === null) return shippedStatus(options);
 
@@ -244,7 +235,7 @@ async function keepMineNow(
 ): Promise<ShippedStatus[]> {
   const folder = await shippedFolder(options, request);
   const manifest = await readManifest(options.manifestFile);
-  const located = await locate(options, folder, manifest, historyLoader(options));
+  const located = await locate(options, folder, manifest);
 
   if (located === null) return shippedStatus(options);
 

@@ -164,26 +164,30 @@ Unpacking also preserves the executable bit, which matters because the published
 is why CI's build step comes after a plain `pnpm install` rather than an
 `--ignore-scripts` one.
 
-## The built-in agents and skills become the Standard swarm (HIVE-447)
+## The app ships no agents or skills; the built-ins become Dev Squad (HIVE-447, HIVE-448)
 
-Agents and skills still ship in `resources/agents` and `resources/skills` in
-this release. On the first launch of it they are seeded into `~/.hivetty` as
-before, then adopted as the installed swarm Standard, in the same launch and
-with no network: Standard appears in Settings › Swarms, and the files the
-person edited stay edited.
+The app carries no agents and no skills: they come from swarms, and Dev Squad
+is the ticket-to-merge workflow. A new install starts empty, and its empty
+states offer **Install Dev Squad**. `pnpm verify:bundle` (also electron-builder's
+`afterPack`) fails a build whose `Contents/Resources` holds `agents`, `skills`
+or `shipped-history.json`.
 
-`~/.hivetty/swarms/adopted` marks an adopted home. With it the boot seed from
-`resources/` never runs there again, so a home that removes Standard does not
-get the built-ins back. A failed seed or adoption leaves no marker, and the next
-launch tries again.
+An install that had the built-ins keeps them. On its first launch of this
+release they are adopted as the installed swarm Dev Squad, with no network: Dev
+Squad appears in Settings › Swarms, and the files the person edited stay
+edited. `~/.hivetty/swarms/adopted` marks an adopted home, and a fresh home gets
+the marker alone. A failed adoption leaves no marker, and the next launch tries
+again. Nothing brings removed built-ins back: the app has no copy of them.
 
-`bundled` is the version of an adopted Standard until its first update. Settings
+`bundled` is the version of an adopted Dev Squad until its first update. Settings
 shows it as "Bundled" ("Bundled · v1.0.1 available", and "Bundled → v1.0.1" in
 the update dialog). It is compared by name through `isBundled`, never as a
 version number. The updater treats it like any other installed version: the
 registry's `1.0.1` differs from `bundled`, so the update is held pending and
 applied at the next check when "Update automatically" is on (the adopted
-entry's default) and no agent run is live.
+entry's default) and no agent run is live. Until then an adopted Dev Squad has
+no per-file status in Settings: there is no shipped copy to compare its files
+against.
 
 ## The modules that must be in the bundle, and one that was not
 

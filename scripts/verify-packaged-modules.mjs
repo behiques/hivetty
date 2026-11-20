@@ -104,6 +104,14 @@ export function verifyArchive(archive) {
   return { ok, message, packageCount: closure.packages.length };
 }
 
+/** What the app must not ship (HIVE-448): agents and skills come from swarms, and nothing reads a shipped history. */
+const FORBIDDEN_RESOURCES = ['agents', 'skills', 'shipped-history.json'];
+
+/** The names among `agents`, `skills` and `shipped-history.json` that exist in `resourcesDir`. */
+export function forbiddenResources(resourcesDir) {
+  return FORBIDDEN_RESOURCES.filter((name) => existsSync(path.join(resourcesDir, name)));
+}
+
 /** `dist/mac-arm64/HiveTTY Pro.app` → the archive inside it. */
 function archiveFor(target) {
   if (target.endsWith('.asar')) return target;
@@ -114,6 +122,12 @@ function run(target) {
   const archive = archiveFor(target);
   if (!existsSync(archive)) {
     throw new Error(`No app.asar at ${archive} — nothing to verify.`);
+  }
+
+  // The built app, not the source tree: `Contents/Resources` is the folder app.asar sits in.
+  const forbidden = forbiddenResources(path.dirname(archive));
+  if (forbidden.length > 0) {
+    throw new Error(forbidden.map((name) => `Contents/Resources/${name} must not ship (HIVE-448)`).join('\n'));
   }
 
   const { ok, message, packageCount } = verifyArchive(archive);

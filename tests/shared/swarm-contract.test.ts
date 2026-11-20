@@ -117,7 +117,7 @@ describe('parseSwarmTag and swarmTag', () => {
     '/v1.2.0',
     'standard/v1.2.0-rc.1',
     '',
-    // The folder becomes a path in swarm:pull, so it is slug segments only.
+    // The folder becomes a path in an install, so it is slug segments only.
     '../v1.0.0',
     '../../x/v1.0.0',
     'a//v1.0.0',

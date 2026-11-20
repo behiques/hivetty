@@ -696,7 +696,6 @@ hivetty-server/
   node/bin/node  node/LICENSE
   app/server/               # out/server/, every dependency bundled in
   app/node_modules/node-pty/
-  resources/skills/  resources/agents/  resources/shipped-history.json
   LICENSE  NOTICE  VERSION
 ```
 
@@ -743,7 +742,7 @@ blank:
 | Path | What it holds |
 | --- | --- |
 | `config.json` | The same workspace config the desktop reads, `server` block included. `HIVE_CONFIG_PATH` overrides it. |
-| `ledger/`, `skills/`, `agents/` | As on the desktop. |
+| `ledger/`, `skills/`, `agents/` | As on the desktop. A new server starts with no agents and no skills: the app ships none (HIVE-448). An existing server keeps what it has. |
 | `goals/` | Goal briefs. `HIVE_GOALS_DIR` overrides it. |
 | `audit/` | The audit trail, one file per day (see [The audit trail](#the-audit-trail)). |
 | `data/` | What the desktop keeps in its `userData`: the lease, session history, the heartbeat. Created private to its owner. |
@@ -862,6 +861,7 @@ you get by signing in with `--login`.
 | Missing | Ticket |
 | --- | --- |
 | Images | HIVE-426 |
+| Loading swarms, so a new server gets agents and skills | HIVE-451 |
 
 ## Troubleshooting
 

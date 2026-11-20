@@ -64,7 +64,7 @@ test('a quiet session whose ask an agent holds reads idle (sweeper), with who in
       projects: [{ id: PROJECT, name: PROJECT, path: REAL_DIRECTORY, icon: 'ph-cube' }],
     }),
   );
-  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath, unseeded: true });
+  const app = await launchHive({ userDataDir: testInfo.outputPath('user-data'), configPath });
   const page = await app.firstWindow();
   let posts = 0;
   const post = async (session: string, path: string, payload: unknown, code: string) => {
