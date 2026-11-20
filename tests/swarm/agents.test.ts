@@ -1,16 +1,16 @@
 // @vitest-environment node
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseAgent } from '../../../core/agents/definition';
+import { parseAgent } from '../../core/agents/definition';
 import { AGENT_ICON_NAMES } from '@features/shared/components/agent-form';
-import { matches } from '../../../shared/permission-rules';
-import { createScheduler } from '../../../core/agents/scheduler';
-import { createAgentState } from '../../../core/agents/state';
-import type { LedgerEntry } from '../../../shared/ledger-contract';
+import { matches } from '../../shared/permission-rules';
+import { createScheduler } from '../../core/agents/scheduler';
+import { createAgentState } from '../../core/agents/state';
+import type { LedgerEntry } from '../../shared/ledger-contract';
+import { HAS_SWARM, SWARM_DIR } from '../support/swarm-tree';
 
 /**
  * Every agent the app ships parses against the skills the app ships
@@ -18,21 +18,23 @@ import type { LedgerEntry } from '../../../shared/ledger-contract';
  * definition the registry refuses is listed with its problem and never wakes,
  * which would be a shipped agent that does nothing on a fresh machine.
  */
-const resources = fileURLToPath(new URL('../../../resources', import.meta.url));
-const shippedSkills = readdirSync(join(resources, 'skills'), { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name);
-const shippedAgents = readdirSync(join(resources, 'agents'), { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name);
+const swarm = SWARM_DIR;
+const folders = (name: string): string[] =>
+  HAS_SWARM
+    ? readdirSync(join(swarm, name), { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+    : [];
+const shippedSkills = folders('skills');
+const shippedAgents = folders('agents');
 
-describe('shipped agents', () => {
+describe.skipIf(!HAS_SWARM)('shipped agents', () => {
   it('ships shipper, acr, fixer and builder', () => {
     expect(shippedAgents.sort()).toEqual(['acr', 'builder', 'fixer', 'shipper']);
   });
 
   it.each(shippedAgents)('%s parses against the shipped skills', (name) => {
-    const source = readFileSync(join(resources, 'agents', name, 'AGENT.md'), 'utf8');
+    const source = readFileSync(join(swarm, 'agents', name, 'AGENT.md'), 'utf8');
     const result = parseAgent(source, {
       folder: name,
       skillNames: shippedSkills,
@@ -48,7 +50,7 @@ describe('shipped agents', () => {
   });
 
   it('never grants the shipper a merge, by gh pr merge, by REST or by a GraphQL mutation', () => {
-    const source = readFileSync(join(resources, 'agents', 'shipper', 'AGENT.md'), 'utf8');
+    const source = readFileSync(join(swarm, 'agents', 'shipper', 'AGENT.md'), 'utf8');
     const result = parseAgent(source, {
       folder: 'shipper',
       skillNames: shippedSkills,
@@ -74,7 +76,7 @@ describe('shipped agents', () => {
   });
 
   it('wakes the shipper every thirty minutes, a safety net under its GitHub and ledger wakes (HIVE-412)', () => {
-    const source = readFileSync(join(resources, 'agents', 'shipper', 'AGENT.md'), 'utf8');
+    const source = readFileSync(join(swarm, 'agents', 'shipper', 'AGENT.md'), 'utf8');
     const result = parseAgent(source, {
       folder: 'shipper',
       skillNames: shippedSkills,
@@ -85,11 +87,11 @@ describe('shipped agents', () => {
 
     expect(result.def.wake.everyMs).toBe(30 * 60_000);
     expect(source).not.toMatch(/ten.minute|ten minutes/);
-    expect(readFileSync(join(resources, 'skills', 'ship', 'SKILL.md'), 'utf8')).not.toMatch(/ten.minute|ten minutes/);
+    expect(readFileSync(join(swarm, 'skills', 'ship', 'SKILL.md'), 'utf8')).not.toMatch(/ten.minute|ten minutes/);
   });
 
   it('lets the shipper push to any branch with its Bash grant, the default branch included', () => {
-    const source = readFileSync(join(resources, 'agents', 'shipper', 'AGENT.md'), 'utf8');
+    const source = readFileSync(join(swarm, 'agents', 'shipper', 'AGENT.md'), 'utf8');
     const result = parseAgent(source, {
       folder: 'shipper',
       skillNames: shippedSkills,
@@ -107,7 +109,7 @@ describe('shipped agents', () => {
   });
 
   it('gives the shipper a gather it can run: the ship skill names no gh api, no jq and no prefetch script', () => {
-    const source = readFileSync(join(resources, 'agents', 'shipper', 'AGENT.md'), 'utf8');
+    const source = readFileSync(join(swarm, 'agents', 'shipper', 'AGENT.md'), 'utf8');
     const result = parseAgent(source, {
       folder: 'shipper',
       skillNames: shippedSkills,
@@ -117,7 +119,7 @@ describe('shipped agents', () => {
     if (!('def' in result)) throw new Error('shipper does not parse');
     const allows = (command: string) =>
       result.def.tools.some((rule) => matches(rule, 'Bash', { command }));
-    const ship = readFileSync(join(resources, 'skills', 'ship', 'SKILL.md'), 'utf8');
+    const ship = readFileSync(join(swarm, 'skills', 'ship', 'SKILL.md'), 'utf8');
     const row = (stage: string) => {
       const line = ship.split('\n').find((l) => l.startsWith(`| \`${stage}\` |`));
       if (!line) throw new Error(`ship has no ${stage} row`);
@@ -142,9 +144,9 @@ describe('shipped agents', () => {
  * standing grants; the two agents that move tickets name it. The builder also
  * comments (HIVE-409 follow-up: it runs spec-deviation, card a100 of the audit).
  */
-describe('the Jira writes are consented, not standing', () => {
+describe.skipIf(!HAS_SWARM)('the Jira writes are consented, not standing', () => {
   const toolsOf = (name: string): readonly string[] => {
-    const source = readFileSync(join(resources, 'agents', name, 'AGENT.md'), 'utf8');
+    const source = readFileSync(join(swarm, 'agents', name, 'AGENT.md'), 'utf8');
     const result = parseAgent(source, {
       folder: name,
       skillNames: shippedSkills,
@@ -190,7 +192,7 @@ describe('the Jira writes are consented, not standing', () => {
     ['fixer', 'thread', 2],
     ['acr', 'thread', 3],
   ] as const)('%s lanes by %s with parallel %i (HIVE-189)', (name, lane, parallel) => {
-    const source = readFileSync(join(resources, 'agents', name, 'AGENT.md'), 'utf8');
+    const source = readFileSync(join(swarm, 'agents', name, 'AGENT.md'), 'utf8');
     const result = parseAgent(source, { folder: name, skillNames: shippedSkills, hiveSkillNames: shippedSkills, integrations: ['slack'] });
     if (!('def' in result)) throw new Error(`${name} does not parse`);
     expect(result.def.lane).toBe(lane);
@@ -199,7 +201,7 @@ describe('the Jira writes are consented, not standing', () => {
 
   // A fresh install spends without a cap; a budget is the user's to set, and the seed keeps one they set.
   it.each(['shipper', 'builder', 'fixer', 'acr'])('%s ships with no daily cap and no per-run budget', (name) => {
-    const source = readFileSync(join(resources, 'agents', name, 'AGENT.md'), 'utf8');
+    const source = readFileSync(join(swarm, 'agents', name, 'AGENT.md'), 'utf8');
     const result = parseAgent(source, { folder: name, skillNames: shippedSkills, hiveSkillNames: shippedSkills, integrations: ['slack'] });
     if (!('def' in result)) throw new Error(`${name} does not parse`);
     expect(result.def.limits.dailyUsd).toBeUndefined();
@@ -207,9 +209,9 @@ describe('the Jira writes are consented, not standing', () => {
   });
 });
 
-describe('the shipped agents in lanes, through the scheduler (HIVE-189)', () => {
+describe.skipIf(!HAS_SWARM)('the shipped agents in lanes, through the scheduler (HIVE-189)', () => {
   const parsed = (name: string) => {
-    const source = readFileSync(join(resources, 'agents', name, 'AGENT.md'), 'utf8');
+    const source = readFileSync(join(swarm, 'agents', name, 'AGENT.md'), 'utf8');
     const result = parseAgent(source, { folder: name, skillNames: shippedSkills, hiveSkillNames: shippedSkills, integrations: ['slack'] });
     if (!('def' in result)) throw new Error(`${name} does not parse`);
     return result.def;
@@ -278,8 +280,8 @@ describe('the shipped agents in lanes, through the scheduler (HIVE-189)', () => 
  * claim; an old fixer `clean` is history, and a bodyless review is a finding
  * only when it can hold inline comments nobody answered.
  */
-describe('the shipper merge gate', () => {
-  const read = (...path: string[]): string => readFileSync(join(resources, ...path), 'utf8');
+describe.skipIf(!HAS_SWARM)('the shipper merge gate', () => {
+  const read = (...path: string[]): string => readFileSync(join(swarm, ...path), 'utf8');
   const shipRow = (stage: string): string => {
     const line = read('skills', 'ship', 'SKILL.md')
       .split('\n')

@@ -4,15 +4,17 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import { HAS_SWARM, SWARM_DIR } from '../../support/swarm-tree';
+
 /**
  * The goal-on Stop verifier ships inside the skill as plain Node
- * (`resources/skills/goal-on/scripts/verify-goal.mjs`), because a hook process
+ * (`skills/goal-on/scripts/verify-goal.mjs` in the swarm), because a hook process
  * has no vitest and no TypeScript. Its own suite is `node:test`, ported from
  * claude-kit with the Hive's changes (HIVE-163): the brief under
  * `~/.hivetty/goals`, and the ledger receipt. This wrapper is what makes
  * `pnpm test` run it.
  */
-describe('goal-on verifier', () => {
+describe.skipIf(!HAS_SWARM)('goal-on verifier', () => {
   it('passes its node:test suite', () => {
     const suite = fileURLToPath(new URL('./test-verify-goal.mjs', import.meta.url));
     /*
@@ -22,7 +24,7 @@ describe('goal-on verifier', () => {
     */
     const run = spawnSync(process.execPath, ['--test', '--test-reporter=tap', suite], {
       encoding: 'utf8',
-      env: { ...process.env, HIVE_GOALS_DIR: '', HIVE_RECEIVER_URL: '' },
+      env: { ...process.env, HIVE_GOALS_DIR: '', HIVE_RECEIVER_URL: '', HIVE_SWARM_DIR: SWARM_DIR },
     });
 
     // `# fail 0` and exit 0 are also what an empty file prints; the pass count

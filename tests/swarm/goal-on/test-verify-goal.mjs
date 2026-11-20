@@ -10,9 +10,11 @@ import { mkdtempSync, writeFileSync, utimesSync, readFileSync, chmodSync } from 
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 
-import {
+/** The verifier, from the swarm checkout `HIVE_SWARM_DIR` names (HIVE-448). */
+const SCRIPT = join(process.env.HIVE_SWARM_DIR, 'skills/goal-on/scripts/verify-goal.mjs');
+const {
   decide,
   harnessOf,
   briefDir,
@@ -33,7 +35,7 @@ import {
   headerValue,
   isSubagent,
   findBrief,
-} from '../../../../resources/skills/goal-on/scripts/verify-goal.mjs';
+} = await import(pathToFileURL(SCRIPT).href);
 
 const brief = ({
   status = 'ACTIVE',
@@ -437,7 +439,6 @@ test('Copilot keeps its agentStop shape unchanged', () => {
 
 // --- subagents ---------------------------------------------------------------
 
-const SCRIPT = fileURLToPath(new URL('../../../../resources/skills/goal-on/scripts/verify-goal.mjs', import.meta.url));
 /** The script as a CLI runs it: payload on stdin, no receiver. */
 const runHook = (payload, { env = {}, args = [] } = {}) =>
   spawnSync(process.execPath, [SCRIPT, ...args], {

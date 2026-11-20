@@ -4,15 +4,16 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { fillIncludes } from '../../../shared/skill-fragments';
+import { fillIncludes } from '../../shared/skill-fragments';
+import { HAS_SWARM, SWARM_DIR } from '../support/swarm-tree';
 
-const read = (path: string): string => readFileSync(join(process.cwd(), 'resources', path), 'utf8');
+const read = (path: string): string => readFileSync(join(SWARM_DIR, path), 'utf8');
 const ship = () => read('skills/ship/SKILL.md');
 const mergePr = () => read('skills/merge-pr/SKILL.md');
 const agent = (name: string) => read(`agents/${name}/AGENT.md`);
 const words = (text: string) => text.replace(/^---[\s\S]*?\n---\n/, '').split(/\s+/).filter(Boolean).length;
 
-describe('shipped text agrees (HIVE-413)', () => {
+describe.skipIf(!HAS_SWARM)('shipped text agrees (HIVE-413)', () => {
   it('ship is short enough to follow', () => {
     // HIVE-416: the limit is on the stage table plus its numbered steps (about 1,200 words);
     // the whole file is held under 1,450 so the prose around them cannot grow unseen
@@ -66,7 +67,7 @@ describe('shipped text agrees (HIVE-413)', () => {
   });
 });
 
-describe('the builder and the skills it loads agree (HIVE-414)', () => {
+describe.skipIf(!HAS_SWARM)('the builder and the skills it loads agree (HIVE-414)', () => {
   const builder = () => agent('builder');
   const execute = () => read('skills/execute/SKILL.md');
   it('name one progress file, ignored where it is written', () => {
@@ -83,7 +84,7 @@ describe('the builder and the skills it loads agree (HIVE-414)', () => {
   });
 });
 
-describe('one copy of each shared rule (HIVE-413 PR 2)', () => {
+describe.skipIf(!HAS_SWARM)('one copy of each shared rule (HIVE-413 PR 2)', () => {
   const uses = (text: string, name: string) => text.includes(`{{include:${name}}}`);
   it('ship and the builder include the intake; neither restates it', () => {
     for (const text of [ship(), agent('builder')]) {
@@ -107,7 +108,7 @@ describe('one copy of each shared rule (HIVE-413 PR 2)', () => {
   });
 });
 
-describe('the session skills (HIVE-415)', () => {
+describe.skipIf(!HAS_SWARM)('the session skills (HIVE-415)', () => {
   const workOn = () => read('skills/work-on/SKILL.md');
   it('work-on names jira-tracker, stops only when a decision is needed, and has no timer', () => {
     expect(workOn()).not.toMatch(/jira-writer|Two stops|30 minutes/);
@@ -186,7 +187,7 @@ describe('the session skills (HIVE-415)', () => {
   });
 });
 
-describe('the review path (HIVE-416)', () => {
+describe.skipIf(!HAS_SWARM)('the review path (HIVE-416)', () => {
   const one = (text: string) => text.replace(/\s+/g, ' ');
   const scorer = () => read('skills/pr-review/prompts/confidence-scorer.md');
   it('the verifier returns confidence and severity, never one score', () => {
