@@ -76,7 +76,9 @@ text is still there. **Revert** puts it back to what is on disk. For your own ag
 **+ New agent**, and the same editor opens beside the list behind **Form | Source** tabs,
 with Settings still open. It shares the page's unsaved text, so an edit made in one shows
 in the other. A file you write by hand shows up without a restart, and a broken one is
-listed with its problem.
+listed with its problem. The list has one folding section per swarm, such as **Dev Squad**
+with "4 of 5 on", in Settings order, with the agents you wrote under **My swarm** last, as in
+the Agents place.
 
 ![Settings › Agents with builder's form, open at its Runs on group](../assets/guide/21-agent-form.png)
 

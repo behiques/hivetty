@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 import { loadAgents } from '@/lib/agents';
 import { loadShipped } from '@/lib/shipped';
-import { swarmOwnerOf } from '@/lib/swarms';
+import { agentGroups, onCounts, swarmOwnerOf } from '@/lib/swarms';
 import { cn } from '@/lib/utils';
 
 import { Button } from '@components/ui/button';
@@ -14,6 +14,7 @@ import { UpgradeLink } from '@components/ui/lock';
 import { SelectField } from '@components/ui/select-field';
 import { SwarmCreature } from '@components/ui/swarm-creature';
 import { SettingsSectionHeader } from '@features/settings/components/settings-section-header';
+import { SwarmGroup } from '@features/settings/components/swarm-group';
 import { AgentDefinition } from '@features/shared/components/agent-definition';
 import { ShippedDot } from '@features/shared/components/shipped-marker';
 import { SwarmStarters } from '@features/shared/components/swarm-starters';
@@ -196,6 +197,61 @@ export function AgentsSection() {
     );
   }
 
+  /** One folding section per installed swarm, in Settings order, then the person's own under My swarm (HIVE-454). */
+  const byName = new Map(agents.map((agent) => [agent.name, agent]));
+  const sections = agentGroups(swarmListing, agents.map((agent) => agent.name));
+
+  const renderRow = (agent: (typeof agents)[number]) => {
+    const broken = agent.invalid !== undefined;
+    const active = open?.name === agent.name;
+    // HIVE-453: a swarm agent turned off reads "off", not the sleep it is held in.
+    const off = swarmOwnerOf(swarmListing, 'agents', agent.name)?.on === false;
+
+    return (
+      <Hint key={agent.name} label={broken ? agent.invalid : undefined}>
+        <button
+          type="button"
+          onClick={() => setOpen({ name: agent.name })}
+          aria-current={active ? 'true' : undefined}
+          /*
+            Not `justify-between`. The identity is one group pinned left —
+            glyph then name — and the status is what floats to the far edge.
+          */
+          className={cn(
+            'flex items-center gap-2 border-b border-border-soft py-1.5 pr-2.5 pl-7 text-left text-control last:border-b-0 hover:bg-hover hover:text-ink',
+            active ? 'bg-hover text-ink' : 'text-muted',
+          )}
+        >
+          {/*
+            The agent's own glyph, from `icon:` in its frontmatter, already
+            on `AgentSummary`. It is what makes the list scannable rather
+            than read: a fleet of five agents is five shapes before it is
+            five names.
+          */}
+          <Icon name={agent.icon} size={14} className="shrink-0 text-brand" />
+          <span className="truncate tabular-nums">{agent.name}</span>
+          <ShippedDot status={shipped.get(agent.name)} />
+          <RunsOn clis={agent.harness ?? [defaultCli]} locks={cliLocks} />
+          {broken ? (
+            <span className="ml-auto shrink-0 text-micro text-amber-text">invalid</span>
+          ) : (
+            <Hint label={
+              agent.wake.everyMs === undefined && agent.wake.on.length === 0
+                ? 'Manual only — no schedule and no triggers.'
+                : undefined
+            }>
+            <span
+                className="ml-auto shrink-0 text-micro text-subtle"
+              >
+                {off ? 'off' : agent.status}
+              </span>
+          </Hint>
+          )}
+        </button>
+      </Hint>
+    );
+  };
+
   return (
     <div className="@container flex min-h-0 flex-1 flex-col gap-3.5 overflow-hidden px-5 py-4">
       <SettingsSectionHeader title="Agents" description={description} />
@@ -203,54 +259,18 @@ export function AgentsSection() {
 
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,10rem)_minmax(0,1fr)] gap-3 @min-[520px]:grid-cols-[190px_minmax(0,1fr)] @min-[520px]:grid-rows-1">
         <div className="flex min-h-0 flex-col overflow-y-auto rounded-lg border border-border">
-          {agents.map((agent) => {
-            const broken = agent.invalid !== undefined;
-            const active = open?.name === agent.name;
-            // HIVE-453: a swarm agent turned off reads "off", not the sleep it is held in.
-            const off = swarmOwnerOf(swarmListing, 'agents', agent.name)?.on === false;
+          {sections.map((section) => {
+            const item = swarmListing?.items.find((candidate) => candidate.installed?.swarmId === section.id);
+            const on = item === undefined ? null : onCounts(item);
+            const counts = on === null ? String(section.names.length) : `${String(on.agentsOn)} of ${String(on.agents)} on`;
 
             return (
-              <Hint key={agent.name} label={broken ? agent.invalid : undefined}>
-                <button
-                  type="button"
-                  onClick={() => setOpen({ name: agent.name })}
-                  aria-current={active ? 'true' : undefined}
-                  /*
-                    Not `justify-between`. The identity is one group pinned left —
-                    glyph then name — and the status is what floats to the far edge.
-                  */
-                  className={cn(
-                    'flex items-center gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-control last:border-b-0 hover:bg-hover hover:text-ink',
-                    active ? 'bg-hover text-ink' : 'text-muted',
-                  )}
-                >
-                  {/*
-                    The agent's own glyph, from `icon:` in its frontmatter, already
-                    on `AgentSummary`. It is what makes the list scannable rather
-                    than read: a fleet of five agents is five shapes before it is
-                    five names.
-                  */}
-                  <Icon name={agent.icon} size={14} className="shrink-0 text-brand" />
-                  <span className="truncate tabular-nums">{agent.name}</span>
-                  <ShippedDot status={shipped.get(agent.name)} />
-                  <RunsOn clis={agent.harness ?? [defaultCli]} locks={cliLocks} />
-                  {broken ? (
-                    <span className="ml-auto shrink-0 text-micro text-amber-text">invalid</span>
-                  ) : (
-                    <Hint label={
-                      agent.wake.everyMs === undefined && agent.wake.on.length === 0
-                        ? 'Manual only — no schedule and no triggers.'
-                        : undefined
-                    }>
-                    <span
-                        className="ml-auto shrink-0 text-micro text-subtle"
-                      >
-                        {off ? 'off' : agent.status}
-                      </span>
-                  </Hint>
-                  )}
-                </button>
-              </Hint>
+              <SwarmGroup key={section.id} title={section.title} counts={counts}>
+                {section.names.map((name) => {
+                  const agent = byName.get(name);
+                  return agent === undefined ? null : renderRow(agent);
+                })}
+              </SwarmGroup>
             );
           })}
 

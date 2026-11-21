@@ -175,6 +175,56 @@ describe('AgentsSection', () => {
     resetSwarmsState();
   });
 
+  describe('grouped by swarm', () => {
+    const useDevSquad = (): void => {
+      resetSwarmsState();
+      stub([agent('acr'), agent('builder'), agent('standup')]);
+      const squad = swarmListing([
+        swarmItem({
+          installed: installedSwarm({
+            title: 'Dev Squad',
+            contents: { agents: ['acr', 'builder'].map((name) => ({ name, description: '', tools: [] })), skills: [] },
+            disabled: { agents: ['acr'], skills: [] },
+          }),
+        }),
+      ]);
+      (window as unknown as { hive: { swarms: unknown } }).hive.swarms = {
+        list: vi.fn(async () => squad),
+        onChanged: vi.fn(() => () => {}),
+      };
+    };
+
+    it('groups agents by swarm, Dev Squad first and yours under My swarm', async () => {
+      useDevSquad();
+      render(<AgentsSection />);
+
+      const squad = await screen.findByRole('region', { name: 'Dev Squad' });
+      expect(screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'))).toEqual([
+        'Dev Squad',
+        'My swarm',
+      ]);
+      expect(within(squad).getByRole('button', { name: /Dev Squad/ })).toHaveTextContent('1 of 2 on');
+      expect(within(squad).getByRole('button', { name: /^acr/ })).toBeInTheDocument();
+      expect(within(squad).getByRole('button', { name: /^builder/ })).toBeInTheDocument();
+      const mine = screen.getByRole('region', { name: 'My swarm' });
+      expect(within(mine).getByRole('button', { name: /My swarm/ })).toHaveTextContent(/My swarm\s*1$/);
+      expect(within(mine).getByRole('button', { name: /^standup/ })).toBeInTheDocument();
+      resetSwarmsState();
+    });
+
+    it('folding a swarm section hides its agents', async () => {
+      useDevSquad();
+      render(<AgentsSection />);
+
+      const squad = await screen.findByRole('region', { name: 'Dev Squad' });
+      await userEvent.click(within(squad).getByRole('button', { name: /Dev Squad/ }));
+
+      expect(screen.queryByRole('button', { name: /^acr/ })).toBeNull();
+      expect(screen.getByRole('button', { name: /^standup/ })).toBeInTheDocument();
+      resetSwarmsState();
+    });
+  });
+
   it('stacks its list above the editor below a 520px section (HIVE-225)', async () => {
     stub([agent('slack-watcher')]);
     render(<AgentsSection />);

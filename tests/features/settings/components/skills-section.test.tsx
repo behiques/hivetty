@@ -1300,8 +1300,9 @@ describe('SkillsSection', () => {
     render(<SkillsSection />);
     const target = await screen.findByRole('button', { name: '/standup' });
 
-    // From a 520px section; below it the list stacks above the editor (HIVE-225).
-    expect(target.parentElement?.parentElement).toHaveClass(
+    // From a 520px section; below it the list stacks above the editor (HIVE-225). The row sits in its
+    // swarm section (My swarm), inside the list, inside the grid.
+    expect(target.parentElement?.parentElement?.parentElement).toHaveClass(
       '@min-[520px]:grid-cols-[190px_minmax(0,1fr)]',
     );
   });
@@ -1834,13 +1835,42 @@ describe('SkillsSection — a swarm\'s skills are turned off, not deleted (HIVE-
     setSkillsForTest(withSkills('deploy', ...SQUAD_SKILLS));
     render(<SkillsSection />);
 
-    expect(await screen.findByText('Dev Squad · 13 of 14 on')).toBeInTheDocument();
+    const squad = await screen.findByRole('region', { name: 'Dev Squad' });
+    expect(within(squad).getByRole('button', { name: /Dev Squad/ })).toHaveTextContent('13 of 14 on');
     const row = screen.getByRole('button', { name: /^\/spec-deviation/ });
     expect(within(row).getByText('off')).toBeInTheDocument();
     expect(within(row).getByText('/spec-deviation')).toHaveClass('line-through');
 
     await openSkill(/^\/spec-deviation/);
     expect(screen.getByRole('status')).toHaveTextContent(/is off/);
+  });
+
+  it('lists swarm sections first and your own skills under My swarm, last', async () => {
+    useSquad();
+    setSkillsForTest(withSkills('deploy', ...SQUAD_SKILLS));
+    render(<SkillsSection />);
+
+    const squad = await screen.findByRole('region', { name: 'Dev Squad' });
+    expect(screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'))).toEqual([
+      'Dev Squad',
+      'My swarm',
+    ]);
+    const mine = screen.getByRole('region', { name: 'My swarm' });
+    expect(within(mine).getByRole('button', { name: /^\/deploy/ })).toBeInTheDocument();
+    expect(within(mine).getByRole('button', { name: /My swarm/ })).toHaveTextContent(/My swarm\s*1$/);
+    expect(within(squad).getByRole('button', { name: /^\/tdd/ })).toBeInTheDocument();
+  });
+
+  it('folding a swarm section hides its skills', async () => {
+    useSquad();
+    setSkillsForTest(withSkills('deploy', ...SQUAD_SKILLS));
+    render(<SkillsSection />);
+
+    const squad = await screen.findByRole('region', { name: 'Dev Squad' });
+    await userEvent.click(within(squad).getByRole('button', { name: /Dev Squad/ }));
+
+    expect(screen.queryByRole('button', { name: /^\/tdd/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^\/deploy/ })).toBeInTheDocument();
   });
 
   it('a failed write says so in the editor', async () => {
