@@ -107,8 +107,9 @@ skill amber and holds the new body back until you choose to **Compare**, **Take 
 **Keep mine**. A blue dot means you changed something, and **Reset to shipped** puts the
 swarm's files back. Other files in a skill update only if you never edited them.
 
-A swarm's skill has no **Delete**. It has an **Enabled** switch instead, and Settings › Skills groups
-it under its swarm with a count such as "Dev Squad · 13 of 14 on". Turn a skill **Off** and every new
+A swarm's skill has no **Delete**. It has an **Enabled** switch instead. Settings › Skills groups a
+swarm's skills under its swarm, such as **Dev Squad** with "13 of 14 on", and lists your own skills
+last under **My swarm**. Each section folds. Turn a skill **Off** and every new
 session leaves it out of its `/` menu; sessions already running keep it until they end. It still
 updates with the swarm, so turning it back on gives you the current version. If enabled agents list
 the skill in their `skills:`, Settings names them and asks first, since their runs carry on without

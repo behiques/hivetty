@@ -24,7 +24,7 @@ import {
   skillNameProblem,
   writeSkillFile,
 } from '@/lib/skills';
-import { andList, onCounts, setSwarmItemEnabled, skillUsers, swarmOwnerOf } from '@/lib/swarms';
+import { MY_SWARM, andList, onCounts, setSwarmItemEnabled, skillUsers, swarmOwnerOf } from '@/lib/swarms';
 
 import { Button } from '@components/ui/button';
 import { Hint } from '@components/ui/hint';
@@ -37,6 +37,7 @@ import { SkillBundle } from '@features/settings/components/skill-bundle';
 import { SkillEditor } from '@features/settings/components/skill-editor';
 import { SkillPathPrompt } from '@features/settings/components/skill-path-prompt';
 import { SkillPortability } from '@features/settings/components/skill-portability';
+import { SwarmGroup } from '@features/settings/components/swarm-group';
 import { InlineConfirm } from '@features/shared/components/inline-confirm';
 import {
   HeldBanner,
@@ -826,11 +827,11 @@ export function SkillsSection() {
   ].map((row) => ({ ...row, owner: swarmOwnerOf(swarmListing, 'skills', row.name) }));
 
   /**
-   * The list in groups (HIVE-453): the person's own skills first, then one group per installed swarm under a
-   * header that counts what is on.
+   * The list in groups (HIVE-453): one folding section per installed swarm, in Settings order, counting what is
+   * on; then the person's own skills, last, under My swarm. A group with no rows is dropped.
    */
+  const ownRows = rows.filter((row) => row.owner === null);
   const groups = [
-    { key: 'own', header: null as string | null, rows: rows.filter((row) => row.owner === null) },
     ...(swarmListing?.items ?? []).flatMap((item) => {
       const installed = item.installed;
       if (installed === null) return [];
@@ -840,11 +841,15 @@ export function SkillsSection() {
       return [
         {
           key: installed.swarmId,
-          header: `${installed.title} · ${String(counts.skillsOn)} of ${String(counts.skills)} on`,
+          title: installed.title,
+          counts: `${String(counts.skillsOn)} of ${String(counts.skills)} on`,
           rows: owned,
         },
       ];
     }),
+    ...(ownRows.length === 0
+      ? []
+      : [{ key: MY_SWARM.id, title: MY_SWARM.title, counts: String(ownRows.length), rows: ownRows }]),
   ];
 
   /** The drilled skill's own summary, or `undefined` when showing the list. */
@@ -1046,16 +1051,9 @@ export function SkillsSection() {
           />
         ) : (
         <div className="flex flex-col overflow-y-auto rounded-lg border border-border">
-          {groups.map((group) => [
-            group.header === null ? null : (
-              <div
-                key={`${group.key}-header`}
-                className="border-b border-border-soft bg-hover px-2.5 py-1 text-micro font-semibold text-subtle"
-              >
-                {group.header}
-              </div>
-            ),
-            ...group.rows.map((row) => {
+          {groups.map((group) => (
+            <SwarmGroup key={group.key} title={group.title} counts={group.counts}>
+            {group.rows.map((row) => {
             const active = row.name === open;
             const broken = row.reason !== null;
             const off = row.owner?.on === false;
@@ -1073,7 +1071,7 @@ export function SkillsSection() {
                 onClick={() => {
                   drillInto(row.name);
                 }}
-                className={`flex items-center justify-between gap-2 border-b border-border-soft px-2.5 py-1.5 text-left text-control last:border-b-0 ${
+                className={`flex items-center justify-between gap-2 border-b border-border-soft py-1.5 pr-2.5 pl-7 text-left text-control last:border-b-0 ${
                   active ? 'bg-active text-ink' : 'text-muted'
                 } ${broken ? 'cursor-default' : 'hover:bg-hover hover:text-ink'}`}
               >
@@ -1093,8 +1091,9 @@ export function SkillsSection() {
                 ) : null}
               </button>
             );
-            }),
-          ])}
+            })}
+            </SwarmGroup>
+          ))}
 
           <button
             type="button"
